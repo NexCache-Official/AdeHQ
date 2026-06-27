@@ -30,7 +30,9 @@ function LoginForm() {
 
   useEffect(() => {
     if (searchParams.get("confirmed") === "1") {
-      setInfo("Your email is confirmed. Sign in to continue.");
+      setInfo("Your email is already confirmed. Sign in with your password below.");
+      setShowResend(false);
+      setNeedsConfirmation(false);
     }
   }, [searchParams]);
 
@@ -64,10 +66,9 @@ function LoginForm() {
       const parsed = parseAuthError(err);
       setError(parsed.message);
       setNeedsConfirmation(parsed.needsEmailConfirmation);
-      if (parsed.needsEmailConfirmation) setShowResend(true);
+      setShowResend(parsed.needsEmailConfirmation);
       if (parsed.alreadyConfirmedHint) {
         setInfo("Your email is already confirmed. Sign in with your password.");
-        setShowResend(false);
       }
     } finally {
       setLoading(false);
@@ -136,13 +137,13 @@ function LoginForm() {
         </p>
       )}
 
-      {(needsConfirmation || showResend) && (
+      {(needsConfirmation || showResend) && !error?.toLowerCase().includes("incorrect email") && !error?.toLowerCase().includes("invalid api key") && (
         <div className="mt-4">
           <ResendConfirmation email={email} showEmailInput={false} />
         </div>
       )}
 
-      {!showResend && (
+      {!showResend && !needsConfirmation && (
         <button
           type="button"
           className="mt-4 w-full text-center text-xs text-slate-500 hover:text-slate-700"

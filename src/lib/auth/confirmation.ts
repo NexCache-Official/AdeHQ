@@ -1,19 +1,18 @@
-import { supabase } from "@/lib/supabase/client";
-import { getEmailRedirectUrl } from "@/lib/auth/callback-session";
-
 export async function resendSignupConfirmation(email: string): Promise<void> {
   const trimmed = email.trim();
   if (!trimmed) throw new Error("Enter your email address.");
 
-  const { error } = await supabase.auth.resend({
-    type: "signup",
-    email: trimmed,
-    options: {
-      emailRedirectTo: getEmailRedirectUrl(),
-    },
+  const response = await fetch("/api/auth/resend-confirmation", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email: trimmed }),
   });
 
-  if (error) throw error;
+  const payload = (await response.json().catch(() => null)) as { error?: string } | null;
+
+  if (!response.ok) {
+    throw new Error(payload?.error ?? "Unable to resend confirmation email.");
+  }
 }
 
 type AuthLikeError = {
@@ -54,6 +53,16 @@ export function parseAuthError(error: unknown): {
   if (msg.includes("invalid login credentials") || code === "invalid_credentials") {
     return {
       message: "Incorrect email or password.",
+      needsEmailConfirmation: false,
+      linkExpired: false,
+      alreadyConfirmedHint: false,
+    };
+  }
+
+  if (msg.includes("invalid api key")) {
+    return {
+      message:
+        "Supabase connection is misconfigured (Invalid API key). The app will retry with the default project key after redeploy — or remove NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY from Vercel if it is wrong.",
       needsEmailConfirmation: false,
       linkExpired: false,
       alreadyConfirmedHint: false,
