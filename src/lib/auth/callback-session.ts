@@ -1,14 +1,12 @@
 import { supabase } from "@/lib/supabase/client";
 import { getSiteUrl } from "@/lib/site-url";
+import { isConfirmationLinkError } from "@/lib/auth/confirmation";
 
 export const AUTH_NEXT_KEY = "adehq_auth_next";
 
 /** Where Supabase sends users after they click the email link. Must match an allowed redirect URL. */
 export function getEmailRedirectUrl(): string {
-  // Site URL is always allowed in Supabase. Subpaths like /auth/callback require
-  // an explicit Redirect URL entry — set NEXT_PUBLIC_AUTH_REDIRECT_PATH=/auth/callback
-  // only after adding it in Supabase → Authentication → URL Configuration.
-  const path = process.env.NEXT_PUBLIC_AUTH_REDIRECT_PATH ?? "/";
+  const path = process.env.NEXT_PUBLIC_AUTH_REDIRECT_PATH ?? "/auth/callback";
   if (path === "/") return getSiteUrl();
   return `${getSiteUrl()}${path.startsWith("/") ? path : `/${path}`}`;
 }
@@ -42,6 +40,12 @@ function hasAuthParamsInUrl(): boolean {
   );
 }
 
+async function getExistingSession() {
+  const { data, error } = await supabase.auth.getSession();
+  if (error) throw error;
+  return data.session;
+}
+
 function waitForAuthSession(timeoutMs = 8000): Promise<boolean> {
   return new Promise((resolve) => {
     let settled = false;
@@ -70,56 +74,118 @@ function waitForAuthSession(timeoutMs = 8000): Promise<boolean> {
   });
 }
 
-/** Parse PKCE code, token_hash, or hash tokens from the current URL and create a session. */
+/**
+ * Parse PKCE code, token_hash, or hash tokens from the current URL and create a session.
+ * Single code path — detectSessionInUrl is disabled on the Supabase client to avoid races.
+ */
 export async function establishSessionFromUrl(): Promise<boolean> {
   if (typeof window === "undefined") return false;
+
+  const existing = await getExistingSession();
+  if (existing?.user) {
+    clearAuthParamsFromUrl();
+    return true;
+  }
+
+  if (!hasAuthParamsInUrl()) {
+    return false;
+  }
 
   const searchParams = new URLSearchParams(window.location.search);
   const tokenHash = searchParams.get("token_hash");
   const type = searchParams.get("type");
-
-  if (tokenHash && type) {
-    const { error } = await supabase.auth.verifyOtp({
-      token_hash: tokenHash,
-      type: type as "signup" | "email" | "recovery" | "invite" | "email_change",
-    });
-    if (error) throw error;
-    clearAuthParamsFromUrl();
-    return true;
-  }
-
   const code = searchParams.get("code");
-  if (code) {
-    const { error } = await supabase.auth.exchangeCodeForSession(code);
-    if (error) throw error;
-    clearAuthParamsFromUrl();
-    return true;
-  }
-
   const hash = window.location.hash.replace(/^#/, "");
-  if (hash) {
-    const hashParams = new URLSearchParams(hash);
-    const accessToken = hashParams.get("access_token");
-    const refreshToken = hashParams.get("refresh_token");
 
-    if (accessToken && refreshToken) {
-      const { error } = await supabase.auth.setSession({
-        access_token: accessToken,
-        refresh_token: refreshToken,
+  try {
+    if (tokenHash && type) {
+      const { error } = await supabase.auth.verifyOtp({
+        token_hash: tokenHash,
+        type: type as "signup" | "email" | "recovery" | "invite" | "email_change",
       });
       if (error) throw error;
       clearAuthParamsFromUrl();
       return true;
     }
+
+    if (code) {
+      const { error } = await supabase.auth.exchangeCodeForSession(code);
+      if (error) throw error;
+      clearAuthParamsFromUrl();
+      return true;
+    }
+
+    if (hash) {
+      const hashParams = new URLSearchParams(hash);
+      const accessToken = hashParams.get("access_token");
+      const refreshToken = hashParams.get("refresh_token");
+
+      if (accessToken && refreshToken) {
+        const { error } = await supabase.auth.setSession({
+          access_token: accessToken,
+          refresh_token: refreshToken,
+        });
+        if (error) throw error;
+        clearAuthParamsFromUrl();
+        return true;
+      }
+    }
+  } catch (error) {
+    // Link may have been consumed already — session might exist in another tab or from a prior click.
+    const sessionAfterError = await getExistingSession();
+    if (sessionAfterError?.user) {
+      clearAuthParamsFromUrl();
+      return true;
+    }
+    throw error;
   }
 
-  // detectSessionInUrl may still be processing — wait briefly.
-  if (hasAuthParamsInUrl()) {
-    return waitForAuthSession();
+  const waited = await waitForAuthSession(4000);
+  if (waited) {
+    clearAuthParamsFromUrl();
+    return true;
   }
 
-  const { data } = await supabase.auth.getSession();
-  return Boolean(data.session);
+  return Boolean(await getExistingSession());
+}
+
+export async function completeAuthRedirect(nextPath?: string): Promise<{
+  ok: true;
+  next: string;
+  email: string;
+} | {
+  ok: false;
+  error: unknown;
+  linkError: boolean;
+}> {
+  try {
+    const established = await establishSessionFromUrl();
+    const session = await getExistingSession();
+
+    if (!session?.user) {
+      if (established) {
+        throw new Error("Session could not be loaded after confirmation.");
+      }
+      throw new Error(
+        "No login session was created. Add your site URL under Supabase → Authentication → Redirect URLs, then request a new confirmation email.",
+      );
+    }
+
+    const next =
+      nextPath ??
+      (typeof window !== "undefined"
+        ? new URLSearchParams(window.location.search).get("next") ?? consumeAuthNextPath("/onboarding")
+        : "/onboarding");
+    const safeNext = next.startsWith("/") && !next.startsWith("//") ? next : "/onboarding";
+
+    return { ok: true, next: safeNext, email: session.user.email ?? "" };
+  } catch (error) {
+    return {
+      ok: false,
+      error,
+      linkError: isConfirmationLinkError(error),
+    };
+  }
 }
 
 export { hasAuthParamsInUrl };

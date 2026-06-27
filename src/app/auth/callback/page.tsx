@@ -4,10 +4,7 @@ import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase/client";
-import {
-  consumeAuthNextPath,
-  establishSessionFromUrl,
-} from "@/lib/auth/callback-session";
+import { completeAuthRedirect } from "@/lib/auth/callback-session";
 import { parseAuthError } from "@/lib/auth/confirmation";
 import { ResendConfirmation } from "@/components/auth/ResendConfirmation";
 import { loadWorkspaceState } from "@/lib/supabase/persistence";
@@ -20,59 +17,59 @@ function AuthCallbackInner() {
   const [message, setMessage] = useState("Confirming your email…");
   const [failed, setFailed] = useState(false);
   const [needsResend, setNeedsResend] = useState(false);
+  const [alreadyConfirmed, setAlreadyConfirmed] = useState(false);
   const [emailHint, setEmailHint] = useState("");
 
   useEffect(() => {
     let active = true;
 
     const finish = async () => {
+      const errorCode = searchParams.get("error");
       const authError =
         searchParams.get("error_description") ??
-        searchParams.get("error") ??
-        (searchParams.get("error") === "missing_session"
+        (errorCode === "missing_session"
           ? "No session tokens arrived. Request a new confirmation email."
-          : null);
+          : errorCode === "link_used"
+            ? "Email link already used"
+            : null);
 
-      if (authError && authError !== "confirmation_failed") {
+      if (authError && errorCode !== "confirmation_failed") {
         if (!active) return;
         const parsed = parseAuthError({ message: decodeURIComponent(authError) });
         setFailed(true);
-        setNeedsResend(true);
+        setNeedsResend(parsed.needsEmailConfirmation);
+        setAlreadyConfirmed(parsed.alreadyConfirmedHint || errorCode === "link_used");
         setMessage(parsed.message);
         return;
       }
 
       try {
-        const established = await establishSessionFromUrl();
+        const result = await completeAuthRedirect(searchParams.get("next") ?? undefined);
 
-        if (!established) {
-          // Give detectSessionInUrl extra time (slow mobile networks).
-          await new Promise((r) => setTimeout(r, 1200));
+        if (!result.ok) {
+          const parsed = parseAuthError(result.error);
+          if (!active) return;
+          setFailed(true);
+          setNeedsResend(parsed.needsEmailConfirmation);
+          setAlreadyConfirmed(parsed.alreadyConfirmedHint || result.linkError);
+          setMessage(parsed.message);
+          return;
         }
 
-        const { data, error: sessionError } = await supabase.auth.getSession();
-        if (sessionError) throw sessionError;
-
-        if (!data.session?.user) {
-          throw new Error(
-            "No login session was created. Your Supabase redirect URL may not be configured — request a new confirmation email after deploying the latest version.",
-          );
+        setEmailHint(result.email);
+        const { data: userData } = await supabase.auth.getUser();
+        if (userData.user) {
+          await loadWorkspaceState(userData.user);
         }
-
-        setEmailHint(data.session.user.email ?? "");
-
-        await loadWorkspaceState(data.session.user);
 
         if (!active) return;
-
-        const next = searchParams.get("next") ?? consumeAuthNextPath("/onboarding");
-        const safeNext = next.startsWith("/") && !next.startsWith("//") ? next : "/onboarding";
-        router.replace(safeNext);
+        router.replace(result.next);
       } catch (err) {
         if (!active) return;
         const parsed = parseAuthError(err);
         setFailed(true);
-        setNeedsResend(true);
+        setNeedsResend(parsed.needsEmailConfirmation);
+        setAlreadyConfirmed(parsed.alreadyConfirmedHint);
         setMessage(parsed.message);
       }
     };
@@ -93,18 +90,18 @@ function AuthCallbackInner() {
         {message}
       </p>
 
-      {failed && (
+      {failed && !alreadyConfirmed && (
         <div className="mt-4 max-w-md rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-left text-xs text-amber-900">
           <p className="font-semibold">Supabase redirect setup</p>
           <p className="mt-1">
             In Supabase → Authentication → URL Configuration, set Site URL to{" "}
             <span className="font-mono">{getSiteUrl()}</span> and add Redirect URL{" "}
-            <span className="font-mono">{getSiteUrl()}/**</span> (optional but recommended).
+            <span className="font-mono">{getSiteUrl()}/**</span>
           </p>
         </div>
       )}
 
-      {failed && needsResend && (
+      {failed && needsResend && !alreadyConfirmed && (
         <div className="mt-6 w-full max-w-sm">
           <ResendConfirmation email={emailHint} />
         </div>
@@ -112,12 +109,14 @@ function AuthCallbackInner() {
 
       {failed && (
         <div className="mt-6 flex flex-col items-center gap-2 text-sm">
-          <Link href="/login" className="font-medium text-accent-600 hover:text-accent-700">
-            Back to login
+          <Link href="/login?confirmed=1" className="font-medium text-accent-600 hover:text-accent-700">
+            {alreadyConfirmed ? "Sign in to your workspace" : "Back to login"}
           </Link>
-          <Link href="/signup" className="text-slate-500 hover:text-slate-700">
-            Create a new account
-          </Link>
+          {!alreadyConfirmed && (
+            <Link href="/signup" className="text-slate-500 hover:text-slate-700">
+              Create a new account
+            </Link>
+          )}
         </div>
       )}
     </div>

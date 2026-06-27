@@ -9,7 +9,8 @@ export const supabase = createClient(
   {
     auth: {
       autoRefreshToken: true,
-      detectSessionInUrl: true,
+      // Handled explicitly in AuthConfirmHandler + /auth/callback (avoids double token consumption).
+      detectSessionInUrl: false,
       persistSession: true,
     },
     realtime: {

@@ -1,29 +1,51 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { AuthShell } from "@/components/AuthShell";
 import { ResendConfirmation } from "@/components/auth/ResendConfirmation";
 import { Button } from "@/components/ui";
 import { useStore } from "@/lib/demo-store";
 import { parseAuthError } from "@/lib/auth/confirmation";
 import { ENABLE_DEMO_MODE } from "@/lib/config/features";
+import { supabase } from "@/lib/supabase/client";
 import { ArrowRight, Sparkles } from "lucide-react";
 
-export default function LoginPage() {
-  const { state, actions, error: storeError } = useStore();
+function LoginForm() {
+  const { state, actions, error: storeError, hydrated } = useStore();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [email, setEmail] = useState(state.user?.email ?? "");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [needsConfirmation, setNeedsConfirmation] = useState(false);
   const [showResend, setShowResend] = useState(false);
+  const [info, setInfo] = useState<string | null>(null);
 
   useEffect(() => {
     actions.clearError();
   }, [actions]);
+
+  useEffect(() => {
+    if (searchParams.get("confirmed") === "1") {
+      setInfo("Your email is confirmed. Sign in to continue.");
+    }
+  }, [searchParams]);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    if (state.user) {
+      router.replace(state.onboardingComplete ? "/" : "/onboarding");
+      return;
+    }
+    void supabase.auth.getSession().then(({ data }) => {
+      if (data.session?.user) {
+        router.replace("/onboarding");
+      }
+    });
+  }, [hydrated, state.user, state.onboardingComplete, router]);
 
   const enter = async () => {
     setError(null);
@@ -43,6 +65,10 @@ export default function LoginPage() {
       setError(parsed.message);
       setNeedsConfirmation(parsed.needsEmailConfirmation);
       if (parsed.needsEmailConfirmation) setShowResend(true);
+      if (parsed.alreadyConfirmedHint) {
+        setInfo("Your email is already confirmed. Sign in with your password.");
+        setShowResend(false);
+      }
     } finally {
       setLoading(false);
     }
@@ -98,6 +124,12 @@ export default function LoginPage() {
         </Button>
       </form>
 
+      {info && (
+        <p className="mt-3 rounded-lg bg-emerald-500/10 px-3 py-2 text-sm text-emerald-800">
+          {info}
+        </p>
+      )}
+
       {(error || storeError) && (
         <p className={`mt-3 rounded-lg px-3 py-2 text-sm ${needsConfirmation ? "bg-amber-500/10 text-amber-900" : "bg-rose-500/10 text-rose-700"}`}>
           {error ?? storeError}
@@ -150,5 +182,13 @@ export default function LoginPage() {
         </Link>
       </p>
     </AuthShell>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<div className="flex min-h-screen items-center justify-center text-sm text-slate-500">Loading…</div>}>
+      <LoginForm />
+    </Suspense>
   );
 }

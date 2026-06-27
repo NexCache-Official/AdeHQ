@@ -3,16 +3,11 @@
 import { useEffect, useRef } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase/client";
-import {
-  consumeAuthNextPath,
-  establishSessionFromUrl,
-  hasAuthParamsInUrl,
-} from "@/lib/auth/callback-session";
+import { completeAuthRedirect, hasAuthParamsInUrl } from "@/lib/auth/callback-session";
 import { loadWorkspaceState } from "@/lib/supabase/persistence";
 
 /**
- * Catches email-confirmation tokens when Supabase redirects to the Site URL
- * (e.g. https://ade-hq-eight.vercel.app#access_token=...).
+ * Handles email-confirmation tokens when Supabase redirects to the site root or another page.
  */
 export function AuthConfirmHandler() {
   const router = useRouter();
@@ -39,16 +34,21 @@ export function AuthConfirmHandler() {
           return;
         }
 
-        const established = await establishSessionFromUrl();
-        const { data } = await supabase.auth.getSession();
-
-        if (!established || !data.session?.user) {
-          router.replace("/auth/callback?error=missing_session");
+        const result = await completeAuthRedirect();
+        if (!result.ok) {
+          if (result.linkError) {
+            router.replace("/login?confirmed=1");
+            return;
+          }
+          router.replace("/auth/callback?error=confirmation_failed");
           return;
         }
 
-        await loadWorkspaceState(data.session.user);
-        router.replace(consumeAuthNextPath("/onboarding"));
+        const { data: userData } = await supabase.auth.getUser();
+        if (userData.user) {
+          await loadWorkspaceState(userData.user);
+        }
+        router.replace(result.next);
       } catch {
         router.replace("/auth/callback?error=confirmation_failed");
       } finally {

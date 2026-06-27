@@ -22,14 +22,43 @@ type AuthLikeError = {
   status?: number;
 };
 
+/** True when Supabase rejected a one-time email link (used or timed out). */
+export function isConfirmationLinkError(error: unknown): boolean {
+  const e = (error ?? {}) as AuthLikeError;
+  const msg = (e.message ?? "").toLowerCase();
+  const code = e.code ?? "";
+
+  return (
+    code === "otp_expired" ||
+    code === "flow_state_expired" ||
+    code === "otp_disabled" ||
+    msg.includes("email link is invalid") ||
+    msg.includes("link is invalid or has expired") ||
+    msg.includes("one-time token not found") ||
+    msg.includes("token has expired") ||
+    msg.includes("otp expired")
+  );
+}
+
 export function parseAuthError(error: unknown): {
   message: string;
   needsEmailConfirmation: boolean;
   linkExpired: boolean;
+  alreadyConfirmedHint: boolean;
 } {
   const e = (error ?? {}) as AuthLikeError;
-  const msg = (e.message ?? "Something went wrong.").toLowerCase();
+  const rawMessage = e.message ?? "Something went wrong.";
+  const msg = rawMessage.toLowerCase();
   const code = e.code ?? "";
+
+  if (msg.includes("invalid login credentials") || code === "invalid_credentials") {
+    return {
+      message: "Incorrect email or password.",
+      needsEmailConfirmation: false,
+      linkExpired: false,
+      alreadyConfirmedHint: false,
+    };
+  }
 
   if (
     code === "email_not_confirmed" ||
@@ -40,33 +69,24 @@ export function parseAuthError(error: unknown): {
       message: "Confirm your email before logging in. We can send you a new link.",
       needsEmailConfirmation: true,
       linkExpired: false,
+      alreadyConfirmedHint: false,
     };
   }
 
-  if (
-    msg.includes("expired") ||
-    msg.includes("invalid") ||
-    code === "otp_expired" ||
-    code === "flow_state_expired"
-  ) {
+  if (isConfirmationLinkError(error)) {
     return {
-      message: "That confirmation link expired. Request a new one below.",
-      needsEmailConfirmation: true,
-      linkExpired: true,
-    };
-  }
-
-  if (msg.includes("invalid login credentials") || code === "invalid_credentials") {
-    return {
-      message: "Incorrect email or password.",
+      message:
+        "That confirmation link was already used or has expired. If you already confirmed your email, sign in below.",
       needsEmailConfirmation: false,
-      linkExpired: false,
+      linkExpired: true,
+      alreadyConfirmedHint: true,
     };
   }
 
   return {
-    message: e.message ?? "Something went wrong.",
+    message: rawMessage,
     needsEmailConfirmation: false,
     linkExpired: false,
+    alreadyConfirmedHint: false,
   };
 }
