@@ -79,9 +79,28 @@ function buildSignedOutState(): DemoState {
 }
 
 function errorMessage(error: unknown): string {
-  if (error instanceof Error) return error.message;
-  if (typeof error === "string") return error;
+  if (error instanceof Error) return formatSupabaseError(error.message, error);
+  if (typeof error === "string") return formatSupabaseError(error);
+  if (error && typeof error === "object") {
+    const e = error as { message?: string; details?: string; hint?: string; code?: string };
+    const parts = [e.message, e.details, e.hint].filter(Boolean);
+    if (parts.length) return formatSupabaseError(parts.join(" — "));
+  }
   return "Something went wrong.";
+}
+
+function formatSupabaseError(message: string, cause?: unknown): string {
+  const lower = message.toLowerCase();
+  if (lower.includes("workspace_mode") && lower.includes("schema cache")) {
+    return "Database schema is out of date. In Supabase SQL Editor, run supabase/migrations/20250627120000_align_production_schema.sql then try again.";
+  }
+  if (lower.includes("schema cache") && lower.includes("could not find")) {
+    return `Database schema mismatch: ${message}. Run the latest migration SQL in Supabase, then reload the app.`;
+  }
+  if (cause instanceof Error && cause.message !== message) {
+    return message;
+  }
+  return message;
 }
 
 // ---------------------------------------------------------------------------
@@ -96,6 +115,7 @@ type StoreActions = {
   login: (email: string, password: string) => Promise<void>;
   loginDemo: () => void;
   logout: () => Promise<void>;
+  clearError: () => void;
   completeOnboarding: () => void;
   updateProfile: (patch: { name?: string; email?: string; workspaceName?: string }) => void;
 
@@ -232,9 +252,14 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         setError(null);
       } catch (err) {
         if (!active) return;
-        setError(errorMessage(err));
+        const message = errorMessage(err);
+        setError(message);
         setBackend("demo");
         setState(buildSignedOutState());
+        if (message.includes("schema") || message.includes("workspace_mode")) {
+          void supabase.auth.signOut();
+          authUserRef.current = null;
+        }
       } finally {
         if (active) setHydrated(true);
       }
@@ -411,6 +436,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           authBusyRef.current = false;
         }
       },
+
+      clearError: () => setError(null),
 
       completeOnboarding: () => {
         set((s) => ({ ...s, onboardingComplete: true }));

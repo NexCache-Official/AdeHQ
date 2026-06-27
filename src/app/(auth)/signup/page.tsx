@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AuthShell } from "@/components/AuthShell";
@@ -21,8 +21,13 @@ export default function SignupPage() {
   const [confirmationSent, setConfirmationSent] = useState(false);
   const [confirmationEmail, setConfirmationEmail] = useState("");
 
+  useEffect(() => {
+    actions.clearError();
+  }, [actions]);
+
   const create = async () => {
     setError(null);
+    actions.clearError();
     if (!email.trim() || !password) {
       setError("Enter an email and password to create a workspace.");
       return;

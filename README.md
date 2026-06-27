@@ -36,6 +36,8 @@ npm run dev      # http://localhost:3000
 | Missing RLS / future | `workspace_settings` table not yet created; Vault encryption TODO for BYOK |
 
 Run `supabase/schema.sql` in your Supabase SQL editor before using real auth.
+If the project already exists, run the idempotent patch in
+`supabase/migrations/20250627120000_align_production_schema.sql` instead.
 
 
 Real workspaces start empty. Onboarding creates the first room and AI employee;

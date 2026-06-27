@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AuthShell } from "@/components/AuthShell";
@@ -20,8 +20,13 @@ export default function LoginPage() {
   const [needsConfirmation, setNeedsConfirmation] = useState(false);
   const [showResend, setShowResend] = useState(false);
 
+  useEffect(() => {
+    actions.clearError();
+  }, [actions]);
+
   const enter = async () => {
     setError(null);
+    actions.clearError();
     setNeedsConfirmation(false);
     if (!email.trim() || !password) {
       setError("Enter your email and password.");
