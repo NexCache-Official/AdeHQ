@@ -17,6 +17,8 @@ export default function SignupPage() {
   const [workspace, setWorkspace] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [confirmationSent, setConfirmationSent] = useState(false);
+  const [confirmationEmail, setConfirmationEmail] = useState("");
 
   const create = async () => {
     setError(null);
@@ -31,11 +33,16 @@ export default function SignupPage() {
 
     setLoading(true);
     try {
-      await actions.signup(
+      const result = await actions.signup(
         { name: name || "Workspace Owner", email: email.trim() },
         workspace || "My AI Workspace",
         password,
       );
+      if (result.needsEmailConfirmation) {
+        setConfirmationEmail(email.trim());
+        setConfirmationSent(true);
+        return;
+      }
       router.replace("/onboarding");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to create workspace.");
@@ -67,6 +74,28 @@ export default function SignupPage() {
         Create a real workspace, invite your team, and hire your first AI employee.
       </p>
 
+      {confirmationSent ? (
+        <div className="mt-7 rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-4 text-left">
+          <h2 className="text-sm font-semibold text-emerald-900">Check your email</h2>
+          <p className="mt-2 text-sm text-emerald-800">
+            We sent a confirmation link to{" "}
+            <span className="font-medium">{confirmationEmail}</span>. Click it to activate your
+            account and continue to onboarding.
+          </p>
+          <p className="mt-3 text-xs text-emerald-700">
+            The link returns you to{" "}
+            <span className="font-medium">ade-hq-eight.vercel.app</span>. If it expires, log in and
+            request a new confirmation email from Supabase or sign up again.
+          </p>
+          <Link
+            href="/login"
+            className="mt-4 inline-flex text-sm font-medium text-accent-600 hover:text-accent-700"
+          >
+            Already confirmed? Enter workspace →
+          </Link>
+        </div>
+      ) : (
+      <>
       <form
         className="mt-7 space-y-4"
         onSubmit={(e) => {
@@ -142,6 +171,8 @@ export default function SignupPage() {
           Enter workspace
         </Link>
       </p>
+      </>
+      )}
     </AuthShell>
   );
 }

@@ -49,7 +49,15 @@ code, with these optional deployment overrides:
 ```bash
 NEXT_PUBLIC_SUPABASE_URL=...
 NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=...
+NEXT_PUBLIC_SITE_URL=https://ade-hq-eight.vercel.app
 ```
+
+`NEXT_PUBLIC_SITE_URL` is used for Supabase email confirmation links. Also add
+these URLs in Supabase → Authentication → URL configuration:
+
+- **Site URL:** `https://ade-hq-eight.vercel.app`
+- **Redirect URLs:** `https://ade-hq-eight.vercel.app/auth/callback` and
+  `https://ade-hq-eight.vercel.app/**`
 
 Server-only secrets go in your deployment environment, not in client code:
 

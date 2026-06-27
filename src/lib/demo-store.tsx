@@ -26,6 +26,7 @@ import {
   WorkspaceMemberRole,
   WorkLogEvent,
 } from "./types";
+import { getAuthCallbackUrl } from "./site-url";
 import { nowISO, uid } from "./utils";
 import { SUPABASE_WORKSPACE_TABLES } from "./supabase/config";
 import { supabase } from "./supabase/client";
@@ -91,7 +92,7 @@ type StoreActions = {
     user: { name: string; email: string },
     workspaceName: string,
     password: string,
-  ) => Promise<void>;
+  ) => Promise<{ needsEmailConfirmation: boolean }>;
   login: (email: string, password: string) => Promise<void>;
   loginDemo: () => void;
   logout: () => Promise<void>;
@@ -340,6 +341,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
             email: user.email,
             password,
             options: {
+              emailRedirectTo: getAuthCallbackUrl("/onboarding"),
               data: {
                 name: user.name,
                 workspace_name: workspaceName,
@@ -347,8 +349,10 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
             },
           });
           if (signupError) throw signupError;
-          if (!data.user || !data.session) {
-            throw new Error("Check your email to confirm your account, then log in.");
+          if (!data.user) throw new Error("Unable to create account.");
+
+          if (!data.session) {
+            return { needsEmailConfirmation: true };
           }
 
           authUserRef.current = data.user;
@@ -360,6 +364,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           setBackend("supabase");
           setHydrated(true);
           setError(null);
+          return { needsEmailConfirmation: false };
         } finally {
           authBusyRef.current = false;
         }
