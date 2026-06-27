@@ -122,7 +122,7 @@ export const TOOL_STATUS_META: Record<
   { label: string; color: string; dot: string }
 > = {
   connected: { label: "Connected", color: "text-emerald-700", dot: "bg-emerald-400" },
-  mock: { label: "Mock mode", color: "text-sky-700", dot: "bg-sky-400" },
+  mock: { label: "Simulated", color: "text-sky-700", dot: "bg-sky-400" },
   not_connected: { label: "Not connected", color: "text-slate-400", dot: "bg-slate-500" },
 };
 

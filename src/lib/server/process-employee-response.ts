@@ -70,13 +70,6 @@ export async function processEmployeeResponse(
   );
 
   const effect = enforceEmployeePermissions(employee, response.effect);
-  if (aiMode === "fallback") {
-    effect.workLog.push({
-      action: "Model fallback",
-      summary: "Live model unavailable; used scripted fallback.",
-      status: "failed",
-    });
-  }
 
   const { aiMessage } = await persistEmployeeEffects(
     client,

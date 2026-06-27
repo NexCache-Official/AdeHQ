@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { DEFAULT_OPENAI_MODEL, ENABLE_DEMO_MODE } from "@/lib/config/features";
 import { Button, Modal, ModalHeader, Toggle } from "./ui";
 import { useStore } from "@/lib/demo-store";
 import {
@@ -57,7 +58,7 @@ export function HireEmployeeModal({
   const [name, setName] = useState("");
   const [roleTitle, setRoleTitle] = useState("");
   const [seniority, setSeniority] = useState("Senior");
-  const [provider, setProvider] = useState("Anthropic");
+  const [provider, setProvider] = useState("openai");
   const [instructions, setInstructions] = useState("");
   const [roomId, setRoomId] = useState<string>(presetRoom ?? "");
   const [tools, setTools] = useState<Record<string, ToolAccess["permission"]>>({});
@@ -70,7 +71,7 @@ export function HireEmployeeModal({
     setName("");
     setRoleTitle("");
     setSeniority("Senior");
-    setProvider("Anthropic");
+    setProvider("openai");
     setInstructions("");
     setRoomId(presetRoom ?? "");
     setTools({});
@@ -87,7 +88,7 @@ export function HireEmployeeModal({
     setTemplate(tpl);
     setName(tpl.name);
     setRoleTitle(tpl.role);
-    setProvider(tpl.suggestedProvider);
+    setProvider(tpl.suggestedProvider.toLowerCase() === "anthropic" ? "openai" : tpl.suggestedProvider.toLowerCase());
     setInstructions(tpl.instructions);
     const initialTools: Record<string, ToolAccess["permission"]> = {};
     tpl.suggestedTools.forEach((t) => (initialTools[t] = "read"));
@@ -126,8 +127,8 @@ export function HireEmployeeModal({
       name: name || template.name,
       role: roleTitle || template.role,
       roleKey: template.key,
-      provider,
-      model: template.suggestedModel,
+      provider: provider === "mock" ? "mock" : provider.toLowerCase() === "openai" ? "openai" : "openai",
+      model: provider.toLowerCase() === "openai" ? DEFAULT_OPENAI_MODEL : template.suggestedModel,
       seniority,
       status: "idle",
       currentTask: undefined,
@@ -273,9 +274,8 @@ export function HireEmployeeModal({
                   </Field>
                   <Field label="Provider / model">
                     <select className="input-field" value={provider} onChange={(e) => setProvider(e.target.value)}>
-                      {["Anthropic", "OpenAI", "Gemini", "Perplexity", "Mock"].map((p) => (
-                        <option key={p} value={p}>{p}</option>
-                      ))}
+                      <option value="openai">OpenAI · {DEFAULT_OPENAI_MODEL}</option>
+                      {ENABLE_DEMO_MODE && <option value="mock">Mock (scripted)</option>}
                     </select>
                   </Field>
                 </div>
@@ -300,7 +300,7 @@ export function HireEmployeeModal({
             {step === 2 && (
               <div className="space-y-3">
                 <p className="text-sm text-slate-500">
-                  Pick the tools for this employee&apos;s backpack. Tools run in mock mode for the demo.
+                  Pick the tools for this employee&apos;s backpack. Unconnected integrations show as not connected until wired up.
                 </p>
                 <div className="grid gap-2 sm:grid-cols-2">
                   {TOOL_CATALOG.filter((t) => t.category !== "Model providers").map((tool) => {

@@ -95,6 +95,9 @@ export default function EmployeeProfilePage() {
             <p className="mt-0.5 text-sm text-slate-500">{employee.role} · {employee.seniority}</p>
             <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-500">
               <span className="chip">{employee.provider} · {employee.model}</span>
+              {employee.provider.toLowerCase() === "openai" && (
+                <span className="chip bg-emerald-50 text-emerald-700">Live AI</span>
+              )}
               {room && <span className="chip">{room.name}</span>}
               <span className="text-slate-500">Active {timeAgo(employee.lastActiveAt)}</span>
             </div>
@@ -273,9 +276,18 @@ function EditEmployeeModal({ open, onClose, employeeId }: { open: boolean; onClo
   const [role, setRole] = useState(employee.role);
   const [instructions, setInstructions] = useState(employee.instructions);
   const [statusVal, setStatusVal] = useState<EmployeeStatus>(employee.status);
+  const [provider, setProvider] = useState(employee.provider);
+  const [model, setModel] = useState(employee.model);
 
   const save = () => {
-    actions.updateEmployee(employeeId, { name, role, instructions, status: statusVal });
+    actions.updateEmployee(employeeId, {
+      name,
+      role,
+      instructions,
+      status: statusVal,
+      provider: provider.toLowerCase(),
+      model,
+    });
     onClose();
   };
 
@@ -304,6 +316,16 @@ function EditEmployeeModal({ open, onClose, employeeId }: { open: boolean; onClo
               <option key={s} value={s}>{s.replace("_", " ")}</option>
             ))}
           </select>
+        </label>
+        <label className="block space-y-1.5">
+          <span className="text-xs font-medium text-slate-500">AI provider</span>
+          <select className="input-field" value={provider} onChange={(e) => setProvider(e.target.value)}>
+            <option value="openai">OpenAI</option>
+          </select>
+        </label>
+        <label className="block space-y-1.5 sm:col-span-2">
+          <span className="text-xs font-medium text-slate-500">Model</span>
+          <input className="input-field" value={model} onChange={(e) => setModel(e.target.value)} placeholder="gpt-5.4-mini" />
         </label>
       </div>
       <div className="flex justify-end gap-2 border-t border-slate-200 px-5 py-4">

@@ -64,7 +64,7 @@ export function AuthShell({ children }: { children: React.ReactNode }) {
 
         <div className="flex items-center gap-2 text-xs text-slate-500">
           <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-          Supabase-backed workspace · demo mode available
+          Supabase-backed workspace · real-time collaboration
         </div>
       </div>
 

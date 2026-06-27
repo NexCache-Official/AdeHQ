@@ -80,7 +80,7 @@ export function RoomChat({ room }: { room: ProjectRoom }) {
         body: JSON.stringify({
           content: text,
           clientMessageId: messageId,
-          mode: state.settings.mode,
+          mode: "live",
         }),
       });
       if (!response.ok) {

@@ -21,11 +21,13 @@ import {
 } from "lucide-react";
 
 const PROVIDERS: { id: ProviderId; name: string; desc: string; accent: string }[] = [
-  { id: "anthropic", name: "Anthropic Claude", desc: "Claude models for reasoning and writing.", accent: "#d97757" },
   { id: "openai", name: "OpenAI", desc: "GPT models for reasoning and writing.", accent: "#10a37f" },
-  { id: "gemini", name: "Google Gemini", desc: "Multimodal models from Google.", accent: "#4285f4" },
-  { id: "perplexity", name: "Perplexity", desc: "Answer engine for cited research.", accent: "#22d3ee" },
-  { id: "mock", name: "Local / Mock Mode", desc: "Deterministic scripted responses. Default for the demo.", accent: "#f97316" },
+  { id: "anthropic", name: "Anthropic Claude", desc: "Claude models — coming soon.", accent: "#d97757" },
+  { id: "gemini", name: "Google Gemini", desc: "Multimodal models — coming soon.", accent: "#4285f4" },
+  { id: "perplexity", name: "Perplexity", desc: "Answer engine — coming soon.", accent: "#22d3ee" },
+  ...(ENABLE_DEMO_MODE
+    ? [{ id: "mock" as ProviderId, name: "Local / Mock Mode", desc: "Scripted responses for local demo only.", accent: "#f97316" }]
+    : []),
 ];
 
 export default function SettingsPage() {

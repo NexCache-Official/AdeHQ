@@ -1,10 +1,8 @@
-import { openai } from "@ai-sdk/openai";
-import { generateObject } from "ai";
-import { DEFAULT_OPENAI_MODEL } from "@/lib/config/features";
+import { ENABLE_DEMO_MODE, DEFAULT_OPENAI_MODEL } from "@/lib/config/features";
 import { recordAiRuntime } from "@/lib/ai/runtime-log";
+import { callOpenAiEmployee } from "@/lib/ai/openai-call";
 import { sendMessageToEmployee } from "./employee-engine";
 import { buildEmployeeSystemPrompt, buildEmployeeUserPrompt } from "./prompts";
-import { ModelResponseSchema } from "./schemas";
 import type { EmployeeResponse, SendMessageInput } from "./types";
 import type { ModelProvider } from "./types";
 
@@ -23,15 +21,7 @@ function toEmployeeResponse(
   employeeId: string,
   employeeName: string,
   reply: string,
-  effects: {
-    workLog?: EmployeeResponse["effect"]["workLog"];
-    tasks?: EmployeeResponse["effect"]["tasks"];
-    memory?: EmployeeResponse["effect"]["memory"];
-    approvals?: EmployeeResponse["effect"]["approvals"];
-    statusChange?: EmployeeResponse["effect"]["statusChange"];
-    handoffTo?: unknown;
-    currentTask?: string;
-  },
+  effects: EmployeeResponse["effect"],
 ): EmployeeResponse {
   return {
     employeeId,
@@ -49,7 +39,52 @@ function toEmployeeResponse(
   };
 }
 
-async function fallbackResponse(
+function errorResponse(
+  input: SendMessageInput,
+  reason: string,
+  ctx: RouteContext,
+  provider: string,
+  model: string,
+  error?: string,
+): { response: EmployeeResponse; aiMode: string } {
+  recordAiRuntime({
+    workspaceId: ctx.workspaceId,
+    roomId: ctx.roomId,
+    employeeId: input.employee.id,
+    provider,
+    model,
+    mode: "fallback",
+    fallbackReason: reason,
+    error,
+  });
+
+  return {
+    response: {
+      employeeId: input.employee.id,
+      employeeName: input.employee.name,
+      reply:
+        `I couldn't complete a live model response right now.\n\n` +
+        `**Reason:** ${error ?? reason}\n\n` +
+        `Check **Settings → AI Runtime** to verify \`OPENAI_API_KEY\` and the model (\`${model}\`) are configured on the server.`,
+      effect: {
+        workLog: [
+          {
+            action: "OpenAI error",
+            summary: error ?? reason,
+            status: "failed",
+          },
+        ],
+        tasks: [],
+        memory: [],
+        approvals: [],
+        statusChange: "idle",
+      },
+    },
+    aiMode: "error",
+  };
+}
+
+async function scriptedFallback(
   input: SendMessageInput,
   reason: string,
   ctx: RouteContext,
@@ -76,6 +111,13 @@ async function fallbackResponse(
   return { response: resolved, aiMode: "fallback" };
 }
 
+function normalizeProvider(raw?: string): ModelProvider {
+  const value = (raw ?? "mock").toLowerCase();
+  if (value === "openai") return "openai";
+  if (value === "mock") return "mock";
+  return value as ModelProvider;
+}
+
 export async function routeEmployeeResponse(
   input: SendMessageInput & {
     workspaceName: string;
@@ -85,16 +127,25 @@ export async function routeEmployeeResponse(
   options: { mode?: "mock" | "live"; provider?: string; context?: RouteContext } = {},
 ): Promise<{ response: EmployeeResponse; aiMode: string }> {
   const ctx = options.context ?? {};
-  const providerRaw = (input.employee.provider ?? "mock").toLowerCase();
-  const provider = (
-    providerRaw === "openai" ? "openai" : providerRaw === "mock" ? "mock" : providerRaw
-  ) as ModelProvider;
+  const provider = normalizeProvider(input.employee.provider);
   const model =
     input.employee.model?.trim() ||
     process.env.ADEHQ_OPENAI_MODEL ||
     DEFAULT_OPENAI_MODEL;
 
-  if (provider === "mock") {
+  const promptContext = {
+    employee: input.employee,
+    workspace: { id: "", name: input.workspaceName, plan: "founder", workspaceMode: "real" as const },
+    room: input.room,
+    recentMessages: input.room.messages,
+    recentMemory: input.recentMemory,
+    openTasks: input.openTasks,
+    roomEmployees: input.allEmployees.map((e) => ({ id: e.id, name: e.name, role: e.role })),
+    humanParticipants: input.humanParticipants,
+    userMessage: input.message,
+  };
+
+  if (provider === "mock" || options.mode === "mock") {
     const response = await sendMessageToEmployee(input);
     recordAiRuntime({
       workspaceId: ctx.workspaceId,
@@ -108,19 +159,29 @@ export async function routeEmployeeResponse(
   }
 
   if (provider !== "openai") {
-    return fallbackResponse(
+    if (ENABLE_DEMO_MODE) {
+      return scriptedFallback(
+        input,
+        "Provider unsupported; used fallback response.",
+        ctx,
+        provider,
+        model,
+      );
+    }
+    return errorResponse(
       input,
-      "Provider unsupported; used fallback response.",
+      "Provider unsupported.",
       ctx,
       provider,
       model,
+      `Employee provider "${input.employee.provider}" is not supported. Set provider to openai.`,
     );
   }
 
   if (!process.env.OPENAI_API_KEY) {
-    return fallbackResponse(
+    return errorResponse(
       input,
-      "OpenAI call failed; used fallback response. (OPENAI_API_KEY not configured)",
+      "OPENAI_API_KEY is not configured on the server.",
       ctx,
       provider,
       model,
@@ -129,64 +190,47 @@ export async function routeEmployeeResponse(
 
   const started = Date.now();
   try {
-    const system = buildEmployeeSystemPrompt({
-      employee: input.employee,
-      workspace: { id: "", name: input.workspaceName, plan: "founder", workspaceMode: "real" },
-      room: input.room,
-      recentMessages: input.room.messages,
-      recentMemory: input.recentMemory,
-      openTasks: input.openTasks,
-      roomEmployees: input.allEmployees.map((e) => ({ id: e.id, name: e.name, role: e.role })),
-      humanParticipants: input.humanParticipants,
-      userMessage: input.message,
-    });
+    const system = buildEmployeeSystemPrompt(promptContext);
+    const prompt = buildEmployeeUserPrompt(promptContext);
 
-    const prompt = buildEmployeeUserPrompt({
-      employee: input.employee,
-      workspace: { id: "", name: input.workspaceName, plan: "founder", workspaceMode: "real" },
-      room: input.room,
-      recentMessages: input.room.messages,
-      recentMemory: input.recentMemory,
-      openTasks: input.openTasks,
-      roomEmployees: input.allEmployees.map((e) => ({ id: e.id, name: e.name, role: e.role })),
-      humanParticipants: input.humanParticipants,
-      userMessage: input.message,
-    });
-
-    const result = await generateObject({
-      model: openai(model),
-      schema: ModelResponseSchema,
-      system,
-      prompt,
-      temperature: 0.45,
-    });
+    const result = await callOpenAiEmployee(system, prompt, model);
 
     recordAiRuntime({
       workspaceId: ctx.workspaceId,
       roomId: ctx.roomId,
       employeeId: input.employee.id,
       provider: "openai",
-      model,
+      model: result.model,
       mode: "live",
       durationMs: Date.now() - started,
-      inputTokens: result.usage?.inputTokens,
-      outputTokens: result.usage?.outputTokens,
+      inputTokens: result.inputTokens,
+      outputTokens: result.outputTokens,
     });
 
     return {
       response: toEmployeeResponse(
         input.employee.id,
         input.employee.name,
-        result.object.reply,
-        result.object.effects,
+        result.response.reply,
+        result.response.effect,
       ),
       aiMode: "openai",
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : "OpenAI request failed";
-    return fallbackResponse(
+    if (ENABLE_DEMO_MODE) {
+      return scriptedFallback(
+        input,
+        "OpenAI call failed; used fallback response.",
+        ctx,
+        provider,
+        model,
+        message,
+      );
+    }
+    return errorResponse(
       input,
-      "OpenAI call failed; used fallback response.",
+      "OpenAI call failed.",
       ctx,
       provider,
       model,

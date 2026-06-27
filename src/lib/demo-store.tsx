@@ -82,7 +82,7 @@ function buildSignedOutState(): DemoState {
     workLog: [],
     tools: TOOL_CATALOG.map((tool) => ({ ...tool })),
     calls: [],
-    settings: { mode: "mock", activeProvider: "mock" },
+    settings: { mode: "live", activeProvider: "openai" },
   };
 }
 

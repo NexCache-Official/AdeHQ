@@ -133,7 +133,7 @@ export function buildWorkspaceStateFromDemo(
           : line,
       ),
     })),
-    settings: { mode: "mock", activeProvider: "mock" },
+    settings: { mode: "live", activeProvider: "openai" },
   };
 }
 
@@ -168,7 +168,7 @@ export function buildFreshWorkspaceState(
     workLog: [],
     tools: TOOL_CATALOG.map((tool) => ({ ...tool })),
     calls: [],
-    settings: { mode: "mock", activeProvider: "mock" },
+    settings: { mode: "live", activeProvider: "openai" },
   };
 }
 
@@ -475,7 +475,7 @@ export async function loadWorkspaceState(
     workLog,
     tools,
     calls,
-    settings: { mode: "mock", activeProvider: "mock" },
+    settings: { mode: "live", activeProvider: "openai" },
   };
 }
 
