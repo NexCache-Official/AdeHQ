@@ -3,7 +3,9 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useStore } from "@/lib/demo-store";
+import { ENABLE_DEMO_MODE } from "@/lib/config/features";
 import { useShellUI } from "./AppShell";
+import { WorkspaceSwitcher } from "./WorkspaceSwitcher";
 import { Button, Kbd } from "./ui";
 import { HumanAvatar } from "./EmployeeAvatar";
 import {
@@ -27,10 +29,7 @@ export function Topbar() {
     <header className="z-20 flex h-16 shrink-0 items-center gap-4 border-b border-slate-200 bg-white px-4 sm:px-6">
       {/* Left — workspace */}
       <div className="flex shrink-0 items-center">
-        <div className="flex h-9 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm">
-          <span className="h-2 w-2 rounded-full bg-emerald-400" />
-          <span className="font-medium text-slate-700">{state.workspace.name}</span>
-        </div>
+        <WorkspaceSwitcher />
       </div>
 
       {/* Center — search */}
@@ -91,7 +90,7 @@ export function Topbar() {
                     >
                       <Settings className="h-4 w-4" /> Settings
                     </button>
-                    {backend === "demo" && (
+                    {backend === "demo" && ENABLE_DEMO_MODE && (
                       <button
                         onClick={() => {
                           if (confirm("Reset all demo data? This restores the original demo workspace.")) {

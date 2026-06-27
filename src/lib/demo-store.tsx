@@ -11,6 +11,12 @@ import {
 } from "react";
 import type { User } from "@supabase/supabase-js";
 import { buildDemoState, TOOL_CATALOG } from "@/lib/demo";
+import { ENABLE_DEMO_MODE } from "@/lib/config/features";
+import {
+  clearActiveWorkspaceId,
+  getActiveWorkspaceId,
+  setActiveWorkspaceId,
+} from "@/lib/active-workspace";
 import {
   AIEmployee,
   Approval,
@@ -40,6 +46,7 @@ import {
   deleteEmployee,
   deleteRoomMember,
   loadWorkspaceState,
+  listUserWorkspaces,
   persistApproval,
   persistCall,
   persistCallTranscriptLine,
@@ -54,6 +61,7 @@ import {
   persistWorkspace,
   persistWorkspaceToolStatus,
   resetWorkspaceToState,
+  type UserWorkspaceSummary,
 } from "./supabase/persistence";
 
 type BackendMode = "supabase" | "demo";
@@ -134,6 +142,8 @@ type StoreActions = {
 
   // messages
   addMessage: (roomId: string, msg: Omit<RoomMessage, "id" | "roomId" | "createdAt"> & { id?: string; createdAt?: string }) => RoomMessage;
+  addLocalMessage: (roomId: string, msg: Omit<RoomMessage, "id" | "roomId" | "createdAt"> & { id?: string; createdAt?: string }) => RoomMessage;
+  removeLocalMessage: (roomId: string, messageId: string) => void;
   updateMessage: (roomId: string, messageId: string, patch: Partial<RoomMessage>) => void;
 
   // tasks
@@ -171,6 +181,8 @@ type StoreActions = {
 
   // misc
   resetDemoData: () => void;
+  clearWorkspaceData: () => void;
+  switchWorkspace: (workspaceId: string) => Promise<void>;
 };
 
 type StoreValue = {
@@ -178,6 +190,7 @@ type StoreValue = {
   hydrated: boolean;
   backend: BackendMode;
   error: string | null;
+  userWorkspaces: UserWorkspaceSummary[];
   actions: StoreActions;
 };
 
@@ -188,6 +201,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const [hydrated, setHydrated] = useState(false);
   const [backend, setBackend] = useState<BackendMode>("demo");
   const [error, setError] = useState<string | null>(null);
+  const [userWorkspaces, setUserWorkspaces] = useState<UserWorkspaceSummary[]>([]);
   const stateRef = useRef(state);
   const backendRef = useRef<BackendMode>(backend);
   const authUserRef = useRef<User | null>(null);
@@ -205,9 +219,13 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const loadRemote = useCallback(
-    async (user: User) => {
+    async (user: User, preferredWorkspaceId?: string) => {
       authUserRef.current = user;
-      const loaded = await loadWorkspaceState(user);
+      const workspaceId = preferredWorkspaceId ?? getActiveWorkspaceId() ?? undefined;
+      const loaded = await loadWorkspaceState(user, workspaceId);
+      if (loaded.workspace.id) setActiveWorkspaceId(loaded.workspace.id);
+      const workspaces = await listUserWorkspaces(user.id);
+      setUserWorkspaces(workspaces);
       setRemoteState(loaded);
       setBackend("supabase");
       setHydrated(true);
@@ -239,8 +257,12 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 
         if (data.session?.user) {
           authUserRef.current = data.session.user;
-          const loaded = await loadWorkspaceState(data.session.user);
+          const preferredId = getActiveWorkspaceId() ?? undefined;
+          const loaded = await loadWorkspaceState(data.session.user, preferredId);
           if (!active) return;
+          if (loaded.workspace.id) setActiveWorkspaceId(loaded.workspace.id);
+          const workspaces = await listUserWorkspaces(data.session.user.id);
+          setUserWorkspaces(workspaces);
           setRemoteState(loaded);
           setBackend("supabase");
         } else {
@@ -412,6 +434,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       },
 
       loginDemo: () => {
+        if (!ENABLE_DEMO_MODE) return;
         authBusyRef.current = true;
         authUserRef.current = null;
         setBackend("demo");
@@ -429,6 +452,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           await supabase.auth.signOut();
           authUserRef.current = null;
           setBackend("demo");
+          setUserWorkspaces([]);
+          clearActiveWorkspaceId();
           setState(buildSignedOutState());
           setHydrated(true);
           setError(null);
@@ -541,7 +566,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           dmEmployeeId: room.dmEmployeeId,
           description: room.description ?? "",
           brief: room.brief ?? "",
-          humans: room.humans ?? [stateRef.current.user?.id ?? "user-shubham"],
+          humans: room.humans ?? (stateRef.current.user?.id ? [stateRef.current.user.id] : []),
           aiEmployees: room.aiEmployees ?? [],
           messages: room.messages ?? [
             {
@@ -577,7 +602,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         const existing = s.rooms.find((r) => r.kind === "dm" && r.dmEmployeeId === employeeId);
         if (existing) return existing;
         const employee = s.employees.find((e) => e.id === employeeId);
-        const userId = s.user?.id ?? "user-shubham";
+        const userId = s.user?.id;
+        if (!userId) throw new Error("Sign in to open a direct message.");
         const id = uid("dm");
         const timestamp = nowISO();
         const created: ProjectRoom = {
@@ -709,6 +735,48 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         });
 
         return created;
+      },
+
+      addLocalMessage: (roomId, msg) => {
+        const created: RoomMessage = {
+          id: msg.id ?? uid("msg"),
+          roomId,
+          senderType: msg.senderType,
+          senderId: msg.senderId,
+          senderName: msg.senderName,
+          content: msg.content,
+          mentions: msg.mentions,
+          artifacts: msg.artifacts,
+          pending: msg.pending,
+          failed: msg.failed,
+          createdAt: msg.createdAt ?? nowISO(),
+        };
+        const currentRoom = stateRef.current.rooms.find((room) => room.id === roomId);
+        const updatedRoom = currentRoom
+          ? {
+              ...currentRoom,
+              messages: [...currentRoom.messages, created],
+              updatedAt: nowISO(),
+            }
+          : undefined;
+
+        set((s) => ({
+          ...s,
+          rooms: s.rooms.map((r) => (r.id === roomId && updatedRoom ? updatedRoom : r)),
+        }));
+
+        return created;
+      },
+
+      removeLocalMessage: (roomId, messageId) => {
+        set((s) => ({
+          ...s,
+          rooms: s.rooms.map((r) =>
+            r.id === roomId
+              ? { ...r, messages: r.messages.filter((m) => m.id !== messageId) }
+              : r,
+          ),
+        }));
       },
 
       updateMessage: (roomId, messageId, patch) => {
@@ -1057,6 +1125,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       },
 
       resetDemoData: () => {
+        if (!ENABLE_DEMO_MODE && backendRef.current !== "supabase") return;
         const current = stateRef.current;
         const fresh =
           backendRef.current === "supabase" && current.user
@@ -1072,12 +1141,33 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         setState(fresh);
         runRemote((workspaceId) => resetWorkspaceToState({ ...fresh, workspace: { ...fresh.workspace, id: workspaceId } }));
       },
+
+      clearWorkspaceData: () => {
+        const current = stateRef.current;
+        if (!current.user || backendRef.current !== "supabase") return;
+        const fresh = buildFreshWorkspaceState(
+          current.user,
+          current.workspace,
+          false,
+          current.workspaceMembers,
+          current.workspaceInvitations,
+        );
+        setState(fresh);
+        runRemote((workspaceId) => resetWorkspaceToState({ ...fresh, workspace: { ...fresh.workspace, id: workspaceId } }));
+      },
+
+      switchWorkspace: async (workspaceId: string) => {
+        const user = authUserRef.current;
+        if (!user || backendRef.current !== "supabase") return;
+        setActiveWorkspaceId(workspaceId);
+        await loadRemote(user, workspaceId);
+      },
     };
   }, [loadRemote, runRemote, setRemoteState]);
 
   const value = useMemo<StoreValue>(
-    () => ({ state, hydrated, backend, error, actions }),
-    [state, hydrated, backend, error, actions],
+    () => ({ state, hydrated, backend, error, userWorkspaces, actions }),
+    [state, hydrated, backend, error, userWorkspaces, actions],
   );
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;

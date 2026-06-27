@@ -258,6 +258,39 @@ async function fetchWorkspaceIdForUser(
   return data?.[0]?.workspace_id ?? null;
 }
 
+export type UserWorkspaceSummary = {
+  id: string;
+  name: string;
+  role: WorkspaceMemberRole;
+  workspaceMode: Workspace["workspaceMode"];
+};
+
+export async function listUserWorkspaces(userId: string): Promise<UserWorkspaceSummary[]> {
+  const { data, error } = await supabase
+    .from("workspace_members")
+    .select("role, workspaces ( id, name, workspace_mode )")
+    .eq("user_id", userId);
+
+  if (error) throw error;
+
+  return (data ?? [])
+    .map((row) => {
+      const joined = row.workspaces as
+        | { id: string; name: string; workspace_mode: string }
+        | { id: string; name: string; workspace_mode: string }[]
+        | null;
+      const ws = Array.isArray(joined) ? joined[0] : joined;
+      if (!ws) return null;
+      return {
+        id: ws.id,
+        name: ws.name,
+        role: row.role as WorkspaceMemberRole,
+        workspaceMode: ws.workspace_mode === "demo" ? "demo" : "real",
+      } satisfies UserWorkspaceSummary;
+    })
+    .filter((row): row is UserWorkspaceSummary => row !== null);
+}
+
 export async function loadWorkspaceState(
   user: User,
   preferredWorkspaceId?: string,

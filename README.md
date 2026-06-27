@@ -2,17 +2,9 @@
 
 > The easiest way to create and manage your AI workforce.
 
-AdeHQ is a futuristic workspace where humans and AI employees work together in
-project rooms. Hire AI employees, give them tools, chat with them like coworkers,
-assign tasks, watch their work logs, review approvals, and watch them collaborate
-with each other — all in one calm, premium command center.
-
-AdeHQ now uses Supabase as its core workspace backend: auth, workspace records,
-workspace members/invitations, AI employees, rooms, messages, tasks, memory,
-approvals, work logs, tools, calls, and call transcripts are persisted in
-Postgres with workspace-scoped RLS.
-Scripted AI still exists as the safe default, and a server API route can use
-OpenAI through the Vercel AI SDK when configured.
+AdeHQ is a workspace where humans and AI employees collaborate in project rooms.
+Hire AI employees, chat in channels, assign tasks, review approvals, and inspect work logs —
+all backed by Supabase with optional OpenAI-powered employee replies.
 
 ## Quick start
 
@@ -21,132 +13,116 @@ npm install
 npm run dev      # http://localhost:3000
 ```
 
-## Implementation map (Phase 1 + 2)
-
-| Concern | Location |
-| --- | --- |
-| Real workspace creation | `createWorkspaceForUser()` in `src/lib/supabase/persistence.ts` — empty state, `workspace_mode: real` |
-| Demo workspace | `loginDemo()` in `src/lib/demo-store.tsx` → `buildDemoState()` in `src/lib/demo/` (in-memory only) |
-| Onboarding writes | `OnboardingFlow.tsx` → store actions → Supabase persistence |
-| Invites stored/accepted | `workspace_invitations` table; `createWorkspaceInvitation` / `acceptWorkspaceInvitation` in persistence |
-| Message + AI runtime | `POST /api/rooms/[roomId]/messages`, `POST /api/employees/[employeeId]/respond` |
-| Model routing | `src/lib/ai/model-router.ts` (OpenAI + scripted fallback) |
-| Permission enforcement | `src/lib/ai/enforce-permissions.ts` before side effects persist |
-| RLS | All workspace tables in `supabase/schema.sql`; admin-only `model_provider_configs` |
-| Missing RLS / future | `workspace_settings` table not yet created; Vault encryption TODO for BYOK |
-
 Run `supabase/schema.sql` in your Supabase SQL editor before using real auth.
 If the project already exists, run the idempotent patch in
-`supabase/migrations/20250627120000_align_production_schema.sql` instead.
+`supabase/migrations/20250627120000_align_production_schema.sql`.
 
+## Production vs demo separation
 
-Real workspaces start empty. Onboarding creates the first room and AI employee;
-demo rooms such as Forgefield and Stripe are only loaded through the demo button.
-If an older workspace was created before this split and contains demo rows, go
-to **Settings -> Clear workspace** to wipe the workspace data and rerun onboarding.
+**Demo mode is disabled by default.** Production users sign up, complete onboarding,
+and work in real empty workspaces — no Forgefield, Stripe, or seeded demo data.
 
-Public Supabase config is already wired to the project URL/publishable key in
-code, with these optional deployment overrides:
+To enable demo locally:
+
+```bash
+NEXT_PUBLIC_ENABLE_DEMO_MODE=true
+npm run dev
+```
+
+With the flag enabled, login/signup show a demo workspace option and in-memory
+`loginDemo()` loads seeded data from `src/lib/demo/`.
+
+To inspect demo seed data in development:
+
+```bash
+npm run dev
+npm run db:seed-demo   # hits POST /api/dev/seed-demo (development only)
+```
+
+## Environment variables
+
+Public (browser):
 
 ```bash
 NEXT_PUBLIC_SUPABASE_URL=...
 NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=...
 NEXT_PUBLIC_SITE_URL=https://ade-hq-eight.vercel.app
+NEXT_PUBLIC_ENABLE_DEMO_MODE=false   # default
 ```
 
-`NEXT_PUBLIC_SITE_URL` is used for Supabase email confirmation links. Also add
-these URLs in Supabase → Authentication → URL configuration:
-
-- **Site URL:** `https://ade-hq-eight.vercel.app`
-- **Redirect URLs:** `https://ade-hq-eight.vercel.app/auth/callback` and
-  `https://ade-hq-eight.vercel.app/**`
-
-Server-only secrets go in your deployment environment, not in client code:
+Server-only:
 
 ```bash
-SUPABASE_SERVICE_ROLE_KEY=...   # only needed for future admin/server tasks
-OPENAI_API_KEY=...              # enables live OpenAI replies
-ADEHQ_OPENAI_MODEL=gpt-4o-mini  # optional
+OPENAI_API_KEY=...
+ADEHQ_OPENAI_MODEL=gpt-5.4-mini
 ```
 
-```bash
-npm run build    # production build (typechecked)
-npm start        # serve the production build
-```
+Add redirect URLs in Supabase → Authentication → URL configuration:
 
-## The magic moment
+- **Site URL:** your deployment URL
+- **Redirect URLs:** `https://your-app/**`
 
-In a real account, finish onboarding, open the room it created, and mention the
-AI employee you hired:
+## OpenAI setup
 
-```
-@Research Employee research competitors for our launch plan.
-```
+1. Set `OPENAI_API_KEY` in your deployment environment.
+2. Optionally set `ADEHQ_OPENAI_MODEL=gpt-5.4-mini` (default).
+3. Hire or onboard an AI employee with provider `openai`.
+4. Mention the employee in a room, or use **Settings → AI Runtime → Test OpenAI employee reply**.
 
-The employee replies like a coworker, writes findings to memory, creates work
-logs, and can produce tasks or approval requests. In demo mode, open the
-preloaded Forgefield room to see richer seed data.
+When the key is missing or a model call fails, AdeHQ falls back to scripted responses
+and records a work log / runtime event — the app does not crash.
 
-```
-Owners/admins can invite real teammates from **Settings -> Workspace humans**.
-Invitations are stored by email, so someone can be invited before signing up and
-accept it during onboarding after they create an account with that email.
+## Manual model test
 
-## Tech stack
+1. Create an account and confirm email.
+2. Complete onboarding (creates workspace, employee, and room).
+3. Open **Settings → AI Runtime** as owner/admin.
+4. Confirm **OpenAI configured: Yes**.
+5. Run **Test OpenAI employee reply** or mention the employee in the room.
+6. Check work log and runtime status for `live` vs `fallback`.
 
-- **Next.js 14** (App Router) + **TypeScript**
-- **Tailwind CSS** (dark-first, glassy, custom theme)
-- **Framer Motion** for polish
-- **Lucide** icons
-- **Supabase** Auth, Postgres, RLS, and Realtime
-- **Vercel AI SDK** route for live OpenAI replies when enabled
+## Messaging test
+
+1. Open a room and send a normal human message (no `@mention`).
+2. Refresh — the message should persist.
+3. Open a second tab — send from tab A; tab B should update via Supabase Realtime.
+4. Send `@Employee Name …` — server saves your message, then runs the AI runtime.
+
+Human messaging works without AI configured. AI is additive when employees are mentioned.
+
+## Clear polluted workspace data
+
+**Settings → Clear workspace data** (owners/admins). Type `CLEAR WORKSPACE` to confirm.
+This removes rooms, employees, messages, tasks, memory, approvals, work logs, and calls
+while preserving the workspace, owner, and members.
 
 ## Architecture
 
 ```
 src/
   app/
-    (auth)/login, (auth)/signup     # public auth screens
+    (auth)/login, signup
     onboarding/                     # first-run flow
-    (app)/                          # authenticated shell (sidebar + topbar)
-      page.tsx                      # Home — "My AI Workforce"
-      rooms/ , rooms/[roomId]/      # project rooms + room chat
-      workforce/ , [employeeId]/    # directory + employee profiles
-      tasks/ memory/ approvals/
-      work-log/ tools/ calls/ settings/
-  components/                       # AppShell, RoomChat, cards, modals, ...
+    (app)/                          # authenticated shell
+    api/rooms/[roomId]/messages     # human + mention-triggered AI
+    api/employees/[employeeId]/respond
+    api/ai/runtime                  # admin runtime status
   lib/
-    types.ts                        # domain + workspace membership types
-    demo-data.ts                    # rich seed data + role templates
-    demo-store.tsx                  # Context store + Supabase-backed actions
-    supabase/                       # Supabase clients + persistence adapter
-    ai/employee-engine.ts           # sendMessageToEmployee() — the AI seam
-    ai/use-responder.ts             # orchestrates replies → side effects
-  app/api/employees/[employeeId]/respond
-                                    # AI response API route
-supabase/schema.sql                 # tables, invitations, seed tool catalog, RLS policies
+    config/features.ts              # ENABLE_DEMO_MODE, default model
+    demo/                           # dev-only demo seed
+    demo-store.tsx                  # Supabase-backed workspace store
+    ai/model-router.ts              # OpenAI + fallback + logging
+    server/room-access.ts           # room membership checks
 ```
 
-### Live AI route
+## Build
 
-`src/app/api/employees/[employeeId]/respond/route.ts` returns the same shape as
-the existing scripted engine:
-
-```ts
-{
-  employeeId,
-  employeeName,
-  reply,
-  effect: { workLog, tasks, memory, approvals, statusChange, handoffTo, currentTask }
-}
+```bash
+npm run build
+npm start
 ```
 
-When Settings is in Mock Mode, or `OPENAI_API_KEY` is missing, the route falls
-back to deterministic scripted responses. When Live Mode + OpenAI are selected
-and `OPENAI_API_KEY` is present server-side, it uses the Vercel AI SDK.
+## Intentionally not built
 
-## What's intentionally not built
-
-Real email delivery for invitations, OAuth/integrations (Slack, GitHub, Cursor,
-Unity, Godot, Figma...), MCP, billing, and LiveKit calls. Those remain later
-phases.
+Browserbase, virtual computers, MCP, ChatGPT App, real Slack/GitHub integrations,
+billing, real calls, external OAuth, BYOK encryption, multi-model marketplace.

@@ -2,9 +2,9 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { useStore } from "@/lib/demo-store";
 import { OnboardingFlow } from "@/components/OnboardingFlow";
 import { LoadingState } from "@/components/States";
+import { useStore } from "@/lib/demo-store";
 
 export default function OnboardingPage() {
   const { state, hydrated } = useStore();
@@ -16,9 +16,11 @@ export default function OnboardingPage() {
     else if (state.onboardingComplete) router.replace("/");
   }, [hydrated, state.user, state.onboardingComplete, router]);
 
-  if (!hydrated || !state.user || state.onboardingComplete) {
-    return <LoadingState full />;
-  }
+  if (!hydrated || !state.user) return <LoadingState full label="Loading…" />;
 
-  return <OnboardingFlow />;
+  return (
+    <div className="min-h-screen bg-slate-50">
+      <OnboardingFlow />
+    </div>
+  );
 }

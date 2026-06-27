@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { AuthError, requireAuthUser, requireWorkspaceMembership } from "@/lib/supabase/auth-server";
 import {
+  assertCanSendRoomMessage,
+} from "@/lib/server/room-access";
+import {
   getWorkspaceIdForRoom,
   insertHumanMessage,
   loadRoomContext,
@@ -33,7 +36,8 @@ export async function POST(
       return NextResponse.json({ error: "Room not found." }, { status: 404 });
     }
 
-    await requireWorkspaceMembership(client, workspaceId, user.id);
+    const { role } = await requireWorkspaceMembership(client, workspaceId, user.id);
+    await assertCanSendRoomMessage(client, workspaceId, params.roomId, user.id, role);
 
     const ctx = await loadRoomContext(client, workspaceId, params.roomId);
 
@@ -43,7 +47,8 @@ export async function POST(
       .eq("id", user.id)
       .maybeSingle();
 
-    const mentions = parseEmployeeMentions(body.content.trim(), ctx.employees).map((e) => e.id);
+    const trimmed = body.content.trim();
+    const mentions = parseEmployeeMentions(trimmed, ctx.employees).map((e) => e.id);
 
     const humanMessage = await insertHumanMessage(
       client,
@@ -53,11 +58,10 @@ export async function POST(
         id: user.id,
         name: profile.data?.name ?? user.email?.split("@")[0] ?? "You",
       },
-      body.content.trim(),
+      trimmed,
       body.clientMessageId,
     );
 
-    // Patch mentions on saved message
     if (mentions.length) {
       await client
         .from("messages")
@@ -67,8 +71,7 @@ export async function POST(
       humanMessage.mentions = mentions;
     }
 
-    const mentioned = parseEmployeeMentions(body.content, ctx.employees);
-
+    const mentioned = parseEmployeeMentions(trimmed, ctx.employees);
     const isDM = ctx.room.kind === "dm";
     const dmEmployee =
       isDM && ctx.room.dmEmployeeId
@@ -82,11 +85,15 @@ export async function POST(
           ? [dmEmployee]
           : [];
 
+    if (responders.length === 0) {
+      return NextResponse.json({ humanMessage, aiResponses: [], aiMessages: [] });
+    }
+
     const aiResponses = [];
     const aiMessages = [];
 
     for (const employee of responders) {
-      const response = await processEmployeeResponse(client, ctx, employee.id, body.content, {
+      const response = await processEmployeeResponse(client, ctx, employee.id, trimmed, {
         mode: body.mode,
         triggerMessageId: humanMessage.id,
       });

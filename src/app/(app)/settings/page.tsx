@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useStore } from "@/lib/demo-store";
+import { ENABLE_DEMO_MODE } from "@/lib/config/features";
+import { AiRuntimePanel } from "@/components/AiRuntimePanel";
 import { PageContainer, PageHeader } from "@/components/Page";
 import { Card, Button, Toggle } from "@/components/ui";
 import { HumanAvatar } from "@/components/EmployeeAvatar";
@@ -36,6 +38,7 @@ export default function SettingsPage() {
   const [inviteRole, setInviteRole] = useState<WorkspaceMemberRole>("member");
   const [inviteBusy, setInviteBusy] = useState(false);
   const [inviteError, setInviteError] = useState<string | null>(null);
+  const [clearConfirm, setClearConfirm] = useState("");
   const currentMember = state.workspaceMembers.find((m) => m.userId === state.user?.id);
   const canInvite = backend === "supabase" && (currentMember?.role === "owner" || currentMember?.role === "admin");
   const isRealWorkspace = state.workspace.workspaceMode !== "demo";
@@ -188,21 +191,25 @@ export default function SettingsPage() {
           )}
         </Card>
 
-        {/* Demo mode */}
-        <Card className="p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-sm font-semibold text-slate-900">Demo mode</h2>
-              <p className="mt-0.5 text-sm text-slate-500">
-                Run on deterministic mock responses. Turn off only when you&apos;ve wired a real model API route.
-              </p>
+        {/* Demo mode — dev only */}
+        {ENABLE_DEMO_MODE && (
+          <Card className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-sm font-semibold text-slate-900">Demo mode</h2>
+                <p className="mt-0.5 text-sm text-slate-500">
+                  Run on deterministic mock responses when demo mode is enabled locally.
+                </p>
+              </div>
+              <Toggle
+                checked={state.settings.mode === "mock"}
+                onChange={(v) => actions.updateSettings({ mode: v ? "mock" : "live" })}
+              />
             </div>
-            <Toggle
-              checked={state.settings.mode === "mock"}
-              onChange={(v) => actions.updateSettings({ mode: v ? "mock" : "live" })}
-            />
-          </div>
-        </Card>
+          </Card>
+        )}
+
+        <AiRuntimePanel />
 
         {/* Model providers */}
         <Card className="p-6">
@@ -266,17 +273,29 @@ export default function SettingsPage() {
           <Card className="border-rose-500/20 p-6">
             <h2 className="text-sm font-semibold text-slate-900">Clear workspace data</h2>
             <p className="mt-0.5 text-sm text-slate-500">
-              Remove rooms, AI employees, messages, tasks, memory, approvals, work logs, and calls from this workspace, then run onboarding again.
+              Remove rooms, AI employees, messages, tasks, memory, approvals, work logs, and calls.
+              Workspace members and invites are preserved.
             </p>
+            <label className="mt-4 block space-y-1.5">
+              <span className="text-xs font-medium text-slate-500">
+                Type <span className="font-mono text-slate-700">CLEAR WORKSPACE</span> to confirm
+              </span>
+              <input
+                className="input-field"
+                value={clearConfirm}
+                onChange={(e) => setClearConfirm(e.target.value)}
+                placeholder="CLEAR WORKSPACE"
+              />
+            </label>
             <Button
               variant="danger"
               size="sm"
               className="mt-4"
+              disabled={clearConfirm !== "CLEAR WORKSPACE"}
               onClick={() => {
-                if (confirm("Clear this workspace and rerun onboarding? This cannot be undone.")) {
-                  actions.resetDemoData();
-                  router.push("/onboarding");
-                }
+                actions.clearWorkspaceData();
+                setClearConfirm("");
+                router.push("/onboarding");
               }}
             >
               <RotateCcw className="h-4 w-4" /> Clear workspace
@@ -284,7 +303,7 @@ export default function SettingsPage() {
           </Card>
         )}
 
-        {backend === "demo" && (
+        {backend === "demo" && ENABLE_DEMO_MODE && (
           <Card className="border-rose-500/20 p-6">
             <h2 className="text-sm font-semibold text-slate-900">Reset demo data</h2>
             <p className="mt-0.5 text-sm text-slate-500">

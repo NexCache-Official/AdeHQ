@@ -14,7 +14,7 @@ export async function processEmployeeResponse(
   employeeId: string,
   content: string,
   options: { mode?: "mock" | "live"; triggerMessageId?: string } = {},
-): Promise<EmployeeResponse & { aiMessageId: string }> {
+): Promise<EmployeeResponse & { aiMessageId: string; aiMode: string }> {
   const employee = ctx.employees.find((e) => e.id === employeeId);
   if (!employee) {
     throw new Error("Employee not found in this room.");
@@ -62,11 +62,15 @@ export async function processEmployeeResponse(
       })),
       humanParticipants: ctx.humanParticipants,
     },
-    { mode: options.mode, provider: employee.provider },
+    {
+      mode: options.mode,
+      provider: employee.provider,
+      context: { workspaceId: ctx.workspaceId, roomId: ctx.room.id },
+    },
   );
 
   const effect = enforceEmployeePermissions(employee, response.effect);
-  if (aiMode === "mock-fallback") {
+  if (aiMode === "fallback") {
     effect.workLog.push({
       action: "Model fallback",
       summary: "Live model unavailable; used scripted fallback.",
@@ -88,5 +92,6 @@ export async function processEmployeeResponse(
     ...response,
     effect,
     aiMessageId: aiMessage.id,
+    aiMode,
   };
 }

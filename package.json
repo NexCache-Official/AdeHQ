@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "db:seed-demo": "node -e \"fetch('http://localhost:3000/api/dev/seed-demo',{method:'POST'}).then(r=>r.json()).then(console.log).catch(()=>console.log('Start npm run dev first, then run db:seed-demo'))\""
   },
   "dependencies": {
     "@ai-sdk/openai": "^4.0.0",

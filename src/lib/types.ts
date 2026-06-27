@@ -143,7 +143,8 @@ export type RoomMessage = {
   mentions?: string[];
   createdAt: string;
   artifacts?: MessageArtifact[];
-  pending?: boolean; // typing indicator placeholder
+  pending?: boolean;
+  failed?: boolean;
 };
 
 export type RoomKind = "channel" | "dm";

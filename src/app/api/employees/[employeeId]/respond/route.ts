@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { AuthError, requireAuthUser, requireWorkspaceMembership } from "@/lib/supabase/auth-server";
+import { assertCanSendRoomMessage } from "@/lib/server/room-access";
 import {
   getWorkspaceIdForRoom,
   loadRoomContext,
@@ -32,7 +33,8 @@ export async function POST(
       return NextResponse.json({ error: "Room not found." }, { status: 404 });
     }
 
-    await requireWorkspaceMembership(client, workspaceId, user.id);
+    const { role } = await requireWorkspaceMembership(client, workspaceId, user.id);
+    await assertCanSendRoomMessage(client, workspaceId, body.roomId, user.id, role);
 
     const ctx = await loadRoomContext(client, workspaceId, body.roomId);
     const employee = ctx.employees.find((e) => e.id === params.employeeId);
@@ -51,9 +53,10 @@ export async function POST(
         employeeName: response.employeeName,
         reply: response.reply,
         effect: response.effect,
+        aiMode: response.aiMode,
       },
       {
-        headers: { "x-adehq-ai-mode": body.mode === "live" ? "live" : "mock" },
+        headers: { "x-adehq-ai-mode": response.aiMode },
       },
     );
   } catch (error) {

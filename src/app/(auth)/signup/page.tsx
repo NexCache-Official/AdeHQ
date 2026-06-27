@@ -7,6 +7,7 @@ import { AuthShell } from "@/components/AuthShell";
 import { Button } from "@/components/ui";
 import { useStore } from "@/lib/demo-store";
 import { ResendConfirmation } from "@/components/auth/ResendConfirmation";
+import { ENABLE_DEMO_MODE } from "@/lib/config/features";
 import { ArrowRight, Sparkles } from "lucide-react";
 
 export default function SignupPage() {
@@ -55,11 +56,6 @@ export default function SignupPage() {
     } finally {
       setLoading(false);
     }
-  };
-
-  const demo = () => {
-    actions.loginDemo();
-    router.replace("/");
   };
 
   return (
@@ -164,16 +160,28 @@ export default function SignupPage() {
         </p>
       )}
 
-      <div className="my-5 flex items-center gap-3 text-xs text-slate-600">
-        <span className="h-px flex-1 bg-slate-100" />
-        or
-        <span className="h-px flex-1 bg-slate-100" />
-      </div>
+      {ENABLE_DEMO_MODE && (
+        <>
+          <div className="my-5 flex items-center gap-3 text-xs text-slate-600">
+            <span className="h-px flex-1 bg-slate-100" />
+            or
+            <span className="h-px flex-1 bg-slate-100" />
+          </div>
 
-      <Button variant="secondary" size="lg" className="w-full" onClick={demo}>
-        <Sparkles className="h-4 w-4" />
-        Continue with demo workspace
-      </Button>
+          <Button
+            variant="secondary"
+            size="lg"
+            className="w-full"
+            onClick={() => {
+              actions.loginDemo();
+              router.replace("/");
+            }}
+          >
+            <Sparkles className="h-4 w-4" />
+            Continue with demo workspace
+          </Button>
+        </>
+      )}
 
       <p className="mt-6 text-center text-sm text-slate-500">
         Already have a workspace?{" "}

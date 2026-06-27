@@ -69,12 +69,20 @@ export function RoomMessageItem({ message }: { message: RoomMessage }) {
       <div className="min-w-0 flex-1">
         <div className="flex items-baseline gap-2">
           <span className="text-sm font-semibold text-slate-900">{message.senderName}</span>
+          {!isHuman && (
+            <span className="rounded-md bg-accent-500/10 px-1.5 py-0.5 text-[10px] font-medium text-accent-700">
+              AI
+            </span>
+          )}
           {!isHuman && employee && (
             <span className="rounded-md bg-slate-50 px-1.5 py-0.5 text-[10px] text-slate-500">
               {employee.role}
             </span>
           )}
           <span className="text-[11px] text-slate-500">{formatTime(message.createdAt)}</span>
+          {message.failed && (
+            <span className="text-[11px] font-medium text-rose-600">Failed to send</span>
+          )}
         </div>
 
         {message.pending ? (

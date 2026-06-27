@@ -8,6 +8,7 @@ import { ResendConfirmation } from "@/components/auth/ResendConfirmation";
 import { Button } from "@/components/ui";
 import { useStore } from "@/lib/demo-store";
 import { parseAuthError } from "@/lib/auth/confirmation";
+import { ENABLE_DEMO_MODE } from "@/lib/config/features";
 import { ArrowRight, Sparkles } from "lucide-react";
 
 export default function LoginPage() {
@@ -45,11 +46,6 @@ export default function LoginPage() {
     } finally {
       setLoading(false);
     }
-  };
-
-  const continueDemo = () => {
-    actions.loginDemo();
-    router.replace("/");
   };
 
   return (
@@ -124,16 +120,28 @@ export default function LoginPage() {
         </button>
       )}
 
-      <div className="my-5 flex items-center gap-3 text-xs text-slate-600">
-        <span className="h-px flex-1 bg-slate-100" />
-        or
-        <span className="h-px flex-1 bg-slate-100" />
-      </div>
+      {ENABLE_DEMO_MODE && (
+        <>
+          <div className="my-5 flex items-center gap-3 text-xs text-slate-600">
+            <span className="h-px flex-1 bg-slate-100" />
+            or
+            <span className="h-px flex-1 bg-slate-100" />
+          </div>
 
-      <Button variant="secondary" size="lg" className="w-full" onClick={continueDemo}>
-        <Sparkles className="h-4 w-4" />
-        Continue as Demo Founder
-      </Button>
+          <Button
+            variant="secondary"
+            size="lg"
+            className="w-full"
+            onClick={() => {
+              actions.loginDemo();
+              router.replace("/");
+            }}
+          >
+            <Sparkles className="h-4 w-4" />
+            Continue as Demo Founder
+          </Button>
+        </>
+      )}
 
       <p className="mt-6 text-center text-sm text-slate-500">
         New here?{" "}

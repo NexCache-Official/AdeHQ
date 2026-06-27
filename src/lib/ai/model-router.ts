@@ -1,10 +1,17 @@
 import { openai } from "@ai-sdk/openai";
 import { generateObject } from "ai";
+import { DEFAULT_OPENAI_MODEL } from "@/lib/config/features";
+import { recordAiRuntime } from "@/lib/ai/runtime-log";
 import { sendMessageToEmployee } from "./employee-engine";
 import { buildEmployeeSystemPrompt, buildEmployeeUserPrompt } from "./prompts";
 import { ModelResponseSchema } from "./schemas";
 import type { EmployeeResponse, SendMessageInput } from "./types";
 import type { ModelProvider } from "./types";
+
+type RouteContext = {
+  workspaceId?: string;
+  roomId?: string;
+};
 
 function normalizeHandoff(value: unknown): string[] | undefined {
   if (Array.isArray(value)) return value.filter((v) => typeof v === "string");
@@ -42,28 +49,86 @@ function toEmployeeResponse(
   };
 }
 
+async function fallbackResponse(
+  input: SendMessageInput,
+  reason: string,
+  ctx: RouteContext,
+  provider: string,
+  model: string,
+  error?: string,
+): Promise<{ response: EmployeeResponse; aiMode: string }> {
+  const resolved = await sendMessageToEmployee(input);
+  resolved.effect.workLog.push({
+    action: "Model fallback",
+    summary: reason,
+    status: "failed",
+  });
+  recordAiRuntime({
+    workspaceId: ctx.workspaceId,
+    roomId: ctx.roomId,
+    employeeId: input.employee.id,
+    provider,
+    model,
+    mode: "fallback",
+    fallbackReason: reason,
+    error,
+  });
+  return { response: resolved, aiMode: "fallback" };
+}
+
 export async function routeEmployeeResponse(
   input: SendMessageInput & {
     workspaceName: string;
     openTasks: { id: string; title: string; status: string; priority: string }[];
     humanParticipants: { id: string; name: string }[];
   },
-  options: { mode?: "mock" | "live"; provider?: string } = {},
+  options: { mode?: "mock" | "live"; provider?: string; context?: RouteContext } = {},
 ): Promise<{ response: EmployeeResponse; aiMode: string }> {
-  const provider = (input.employee.provider ?? "mock") as ModelProvider;
-  const wantsLive = options.mode === "live" || provider === "openai";
-  const useOpenAI = wantsLive && provider === "openai" && Boolean(process.env.OPENAI_API_KEY);
+  const ctx = options.context ?? {};
+  const providerRaw = (input.employee.provider ?? "mock").toLowerCase();
+  const provider = (
+    providerRaw === "openai" ? "openai" : providerRaw === "mock" ? "mock" : providerRaw
+  ) as ModelProvider;
+  const model =
+    input.employee.model?.trim() ||
+    process.env.ADEHQ_OPENAI_MODEL ||
+    DEFAULT_OPENAI_MODEL;
 
-  if (provider === "mock" || !useOpenAI) {
+  if (provider === "mock") {
     const response = await sendMessageToEmployee(input);
-    return {
-      response,
-      aiMode: provider === "mock" ? "mock" : "mock-fallback",
-    };
+    recordAiRuntime({
+      workspaceId: ctx.workspaceId,
+      roomId: ctx.roomId,
+      employeeId: input.employee.id,
+      provider: "mock",
+      model: "scripted",
+      mode: "mock",
+    });
+    return { response, aiMode: "mock" };
   }
 
+  if (provider !== "openai") {
+    return fallbackResponse(
+      input,
+      "Provider unsupported; used fallback response.",
+      ctx,
+      provider,
+      model,
+    );
+  }
+
+  if (!process.env.OPENAI_API_KEY) {
+    return fallbackResponse(
+      input,
+      "OpenAI call failed; used fallback response. (OPENAI_API_KEY not configured)",
+      ctx,
+      provider,
+      model,
+    );
+  }
+
+  const started = Date.now();
   try {
-    const model = input.employee.model || process.env.ADEHQ_OPENAI_MODEL || "gpt-4o-mini";
     const system = buildEmployeeSystemPrompt({
       employee: input.employee,
       workspace: { id: "", name: input.workspaceName, plan: "founder", workspaceMode: "real" },
@@ -96,6 +161,18 @@ export async function routeEmployeeResponse(
       temperature: 0.45,
     });
 
+    recordAiRuntime({
+      workspaceId: ctx.workspaceId,
+      roomId: ctx.roomId,
+      employeeId: input.employee.id,
+      provider: "openai",
+      model,
+      mode: "live",
+      durationMs: Date.now() - started,
+      inputTokens: result.usage?.inputTokens,
+      outputTokens: result.usage?.outputTokens,
+    });
+
     return {
       response: toEmployeeResponse(
         input.employee.id,
@@ -106,13 +183,14 @@ export async function routeEmployeeResponse(
       aiMode: "openai",
     };
   } catch (error) {
-    console.error("[AdeHQ model-router] OpenAI failed, using scripted fallback", error);
-    const response = await sendMessageToEmployee(input);
-    response.effect.workLog.push({
-      action: "Model fallback",
-      summary: "Live model failed, used scripted fallback.",
-      status: "failed",
-    });
-    return { response, aiMode: "mock-fallback" };
+    const message = error instanceof Error ? error.message : "OpenAI request failed";
+    return fallbackResponse(
+      input,
+      "OpenAI call failed; used fallback response.",
+      ctx,
+      provider,
+      model,
+      message,
+    );
   }
 }
