@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { AuthShell } from "@/components/AuthShell";
 import { Button } from "@/components/ui";
 import { useStore } from "@/lib/demo-store";
+import { ResendConfirmation } from "@/components/auth/ResendConfirmation";
 import { ArrowRight, Sparkles } from "lucide-react";
 
 export default function SignupPage() {
@@ -93,6 +94,10 @@ export default function SignupPage() {
           >
             Already confirmed? Enter workspace →
           </Link>
+          <div className="mt-5 border-t border-emerald-200 pt-4">
+            <p className="mb-3 text-xs text-emerald-800">Link expired or didn&apos;t arrive?</p>
+            <ResendConfirmation email={confirmationEmail} showEmailInput={false} />
+          </div>
         </div>
       ) : (
       <>

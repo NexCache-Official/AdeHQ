@@ -26,7 +26,7 @@ import {
   WorkspaceMemberRole,
   WorkLogEvent,
 } from "./types";
-import { getAuthCallbackUrl } from "./site-url";
+import { getEmailRedirectUrl, setAuthNextPath } from "@/lib/auth/callback-session";
 import { nowISO, uid } from "./utils";
 import { SUPABASE_WORKSPACE_TABLES } from "./supabase/config";
 import { supabase } from "./supabase/client";
@@ -337,11 +337,12 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         if (!password) throw new Error("Password is required.");
         authBusyRef.current = true;
         try {
+          setAuthNextPath("/onboarding");
           const { data, error: signupError } = await supabase.auth.signUp({
             email: user.email,
             password,
             options: {
-              emailRedirectTo: getAuthCallbackUrl("/onboarding"),
+              emailRedirectTo: getEmailRedirectUrl(),
               data: {
                 name: user.name,
                 workspace_name: workspaceName,

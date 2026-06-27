@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Inter, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { StoreProvider } from "@/lib/demo-store";
+import { AuthConfirmHandler } from "@/components/auth/AuthConfirmHandler";
 
 const sans = Inter({
   subsets: ["latin"],
@@ -29,7 +30,10 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${sans.variable} ${mono.variable}`}>
       <body className="font-sans">
-        <StoreProvider>{children}</StoreProvider>
+        <StoreProvider>
+          <AuthConfirmHandler />
+          {children}
+        </StoreProvider>
       </body>
     </html>
   );

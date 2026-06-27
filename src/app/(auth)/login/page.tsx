@@ -4,8 +4,10 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AuthShell } from "@/components/AuthShell";
+import { ResendConfirmation } from "@/components/auth/ResendConfirmation";
 import { Button } from "@/components/ui";
 import { useStore } from "@/lib/demo-store";
+import { parseAuthError } from "@/lib/auth/confirmation";
 import { ArrowRight, Sparkles } from "lucide-react";
 
 export default function LoginPage() {
@@ -15,9 +17,12 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [needsConfirmation, setNeedsConfirmation] = useState(false);
+  const [showResend, setShowResend] = useState(false);
 
   const enter = async () => {
     setError(null);
+    setNeedsConfirmation(false);
     if (!email.trim() || !password) {
       setError("Enter your email and password.");
       return;
@@ -28,7 +33,10 @@ export default function LoginPage() {
       await actions.login(email.trim(), password);
       router.replace("/");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to log in.");
+      const parsed = parseAuthError(err);
+      setError(parsed.message);
+      setNeedsConfirmation(parsed.needsEmailConfirmation);
+      if (parsed.needsEmailConfirmation) setShowResend(true);
     } finally {
       setLoading(false);
     }
@@ -90,9 +98,25 @@ export default function LoginPage() {
       </form>
 
       {(error || storeError) && (
-        <p className="mt-3 rounded-lg bg-rose-500/10 px-3 py-2 text-sm text-rose-700">
+        <p className={`mt-3 rounded-lg px-3 py-2 text-sm ${needsConfirmation ? "bg-amber-500/10 text-amber-900" : "bg-rose-500/10 text-rose-700"}`}>
           {error ?? storeError}
         </p>
+      )}
+
+      {(needsConfirmation || showResend) && (
+        <div className="mt-4">
+          <ResendConfirmation email={email} showEmailInput={false} />
+        </div>
+      )}
+
+      {!showResend && (
+        <button
+          type="button"
+          className="mt-4 w-full text-center text-xs text-slate-500 hover:text-slate-700"
+          onClick={() => setShowResend(true)}
+        >
+          Didn&apos;t get your confirmation email?
+        </button>
       )}
 
       <div className="my-5 flex items-center gap-3 text-xs text-slate-600">

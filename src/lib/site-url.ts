@@ -12,7 +12,7 @@ export function getSiteUrl(): string {
   return DEFAULT_SITE_URL;
 }
 
-export function getAuthCallbackUrl(nextPath = "/onboarding"): string {
-  const next = nextPath.startsWith("/") ? nextPath : `/${nextPath}`;
-  return `${getSiteUrl()}/auth/callback?next=${encodeURIComponent(next)}`;
+/** @deprecated Use getEmailRedirectUrl from @/lib/auth/callback-session */
+export function getAuthCallbackUrl(_nextPath = "/onboarding"): string {
+  return `${getSiteUrl()}/auth/callback`;
 }
