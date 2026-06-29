@@ -1,20 +1,30 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { enforceEmployeePermissions } from "@/lib/ai/enforce-permissions";
 import { routeEmployeeResponse } from "@/lib/ai/model-router";
-import type { EmployeeResponse } from "@/lib/types";
+import { beginAiRun, finalizeAiRun } from "@/lib/ai/cost-guard";
 import {
-  loadRoomContext,
-  persistEmployeeEffects,
-  type RoomContext,
-} from "@/lib/server/room-messages";
+  defaultModelModeForRole,
+  getOutputTokenCap,
+  getTimeoutMs,
+  type ModelMode,
+} from "@/lib/ai/model-catalog";
+import { appendRunStep } from "@/lib/supabase/ai-runtime";
+import type { EmployeeResponse } from "@/lib/types";
+import { persistEmployeeEffects, type RoomContext } from "@/lib/server/room-messages";
+
+export type ProcessEmployeeOptions = {
+  mode?: "mock" | "live";
+  triggerMessageId?: string;
+  skipCostGuard?: boolean;
+};
 
 export async function processEmployeeResponse(
   client: SupabaseClient,
   ctx: RoomContext,
   employeeId: string,
   content: string,
-  options: { mode?: "mock" | "live"; triggerMessageId?: string } = {},
-): Promise<EmployeeResponse & { aiMessageId: string; aiMode: string }> {
+  options: ProcessEmployeeOptions = {},
+): Promise<EmployeeResponse & { aiMessageId: string; aiMode: string; agentRunId?: string }> {
   const employee = ctx.employees.find((e) => e.id === employeeId);
   if (!employee) {
     throw new Error("Employee not found in this room.");
@@ -46,7 +56,71 @@ export async function processEmployeeResponse(
     ],
   };
 
-  const { response, aiMode } = await routeEmployeeResponse(
+  const isLive = options.mode !== "mock" && employee.provider.toLowerCase() !== "mock";
+  const modelMode: ModelMode = employee.modelMode ?? defaultModelModeForRole(employee.roleKey);
+  const provider = employee.provider.toLowerCase();
+
+  let runId: string | undefined;
+  let usageId: string | undefined;
+  let maxOutputTokens: number | undefined;
+
+  if (isLive && !options.skipCostGuard && options.triggerMessageId) {
+    const begun = await beginAiRun({
+      client,
+      workspaceId: ctx.workspaceId,
+      employeeId,
+      roomId: ctx.room.id,
+      triggerMessageId: options.triggerMessageId,
+      provider,
+      modelMode,
+      promptLength: content.length,
+      explicitModel: employee.model,
+    });
+
+    if (!begun.ok) {
+      const blockedReply: EmployeeResponse = {
+        employeeId: employee.id,
+        employeeName: employee.name,
+        reply: `I couldn't run right now.\n\n**Reason:** ${begun.reason}`,
+        effect: {
+          workLog: [{ action: "Run blocked", summary: begun.reason, status: "failed" }],
+          tasks: [],
+          memory: [],
+          approvals: [],
+          statusChange: "idle",
+        },
+      };
+
+      const { aiMessage } = await persistEmployeeEffects(
+        client,
+        ctx.workspaceId,
+        ctx.room.id,
+        employee,
+        blockedReply.reply,
+        blockedReply.effect,
+        options.triggerMessageId,
+      );
+
+      return { ...blockedReply, aiMessageId: aiMessage.id, aiMode: "blocked" };
+    }
+
+    runId = begun.runId;
+    usageId = begun.usageId;
+    maxOutputTokens = begun.maxOutputTokens;
+
+    await appendRunStep(client, {
+      workspaceId: ctx.workspaceId,
+      agentRunId: runId,
+      roomId: ctx.room.id,
+      employeeId,
+      stepType: "thinking",
+      title: "Preparing response",
+      summary: `${provider} · ${modelMode}`,
+      status: "running",
+    });
+  }
+
+  const { response, aiMode, metrics, failed, errorMessage } = await routeEmployeeResponse(
     {
       employee,
       room: roomWithMessages,
@@ -65,11 +139,56 @@ export async function processEmployeeResponse(
     {
       mode: options.mode,
       provider: employee.provider,
-      context: { workspaceId: ctx.workspaceId, roomId: ctx.room.id },
+      modelMode,
+      maxOutputTokens: maxOutputTokens ?? getOutputTokenCap(modelMode),
+      timeoutMs: getTimeoutMs(modelMode),
+      context: {
+        workspaceId: ctx.workspaceId,
+        roomId: ctx.room.id,
+        agentRunId: runId,
+        client,
+      },
     },
   );
 
   const effect = enforceEmployeePermissions(employee, response.effect);
+
+  if (runId && effect.memory.length) {
+    await appendRunStep(client, {
+      workspaceId: ctx.workspaceId,
+      agentRunId: runId,
+      roomId: ctx.room.id,
+      employeeId,
+      stepType: "memory_write",
+      title: "Saving memory",
+      summary: `${effect.memory.length} entr${effect.memory.length === 1 ? "y" : "ies"}`,
+      status: "success",
+    });
+  }
+  if (runId && effect.tasks.length) {
+    await appendRunStep(client, {
+      workspaceId: ctx.workspaceId,
+      agentRunId: runId,
+      roomId: ctx.room.id,
+      employeeId,
+      stepType: "task_create",
+      title: "Creating tasks",
+      summary: `${effect.tasks.length} task(s)`,
+      status: "success",
+    });
+  }
+  if (runId && effect.approvals.length) {
+    await appendRunStep(client, {
+      workspaceId: ctx.workspaceId,
+      agentRunId: runId,
+      roomId: ctx.room.id,
+      employeeId,
+      stepType: "approval_request",
+      title: "Requesting approval",
+      summary: effect.approvals.map((a) => a.title).join(", "),
+      status: "success",
+    });
+  }
 
   const { aiMessage } = await persistEmployeeEffects(
     client,
@@ -79,12 +198,32 @@ export async function processEmployeeResponse(
     response.reply,
     effect,
     options.triggerMessageId,
+    runId,
   );
+
+  if (isLive && runId && usageId && !options.skipCostGuard) {
+    await finalizeAiRun({
+      client,
+      workspaceId: ctx.workspaceId,
+      runId,
+      usageId,
+      responseMessageId: aiMessage.id,
+      inputTokens: metrics?.inputTokens,
+      outputTokens: metrics?.outputTokens,
+      cachedTokens: metrics?.cachedTokens,
+      actualCostUsd: metrics?.estimatedCostUsd,
+      latencyMs: metrics?.durationMs,
+      fallbackUsed: metrics?.fallbackUsed,
+      failed: failed || aiMode === "error",
+      errorMessage,
+    });
+  }
 
   return {
     ...response,
     effect,
     aiMessageId: aiMessage.id,
     aiMode,
+    agentRunId: runId,
   };
 }

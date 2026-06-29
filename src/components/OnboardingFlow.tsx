@@ -4,7 +4,8 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import { useStore } from "@/lib/demo-store";
-import { DEFAULT_OPENAI_MODEL } from "@/lib/config/features";
+import { defaultModelModeForRole } from "@/lib/ai/model-catalog";
+import { DEFAULT_SILICONFLOW_MODEL } from "@/lib/config/features";
 import {
   ROLE_TEMPLATES,
   RoleTemplate,
@@ -131,8 +132,9 @@ export function OnboardingFlow() {
         name: employeeName || template.name,
         role: template.role,
         roleKey: template.key,
-        provider: "openai",
-        model: DEFAULT_OPENAI_MODEL,
+        provider: "siliconflow",
+        model: "",
+        modelMode: defaultModelModeForRole(template.key),
         seniority: "Senior",
         status: "idle",
         instructions: template.instructions,
@@ -316,7 +318,7 @@ export function OnboardingFlow() {
                       <FeatureCard
                         icon={Rocket}
                         title="Powered by OpenAI"
-                        description={`Live replies via ${DEFAULT_OPENAI_MODEL} when your server key is configured.`}
+                        description={`Live replies via SiliconFlow (${DEFAULT_SILICONFLOW_MODEL}) when your server key is configured.`}
                       />
                       <p className="sm:col-span-2 rounded-2xl bg-accent-50 px-4 py-3 text-sm text-accent-900">
                         Welcome, {state.user?.name?.split(" ")[0] ?? "there"}. This takes about two
@@ -522,7 +524,7 @@ export function OnboardingFlow() {
                           <div className="text-lg font-semibold text-slate-900">{employeeName}</div>
                           <div className="text-sm text-slate-500">{template.role}</div>
                           <div className="mt-1 flex flex-wrap gap-1.5">
-                            <span className="chip text-accent-700">OpenAI · {DEFAULT_OPENAI_MODEL}</span>
+                            <span className="chip text-accent-700">SiliconFlow · {DEFAULT_SILICONFLOW_MODEL}</span>
                             <span className="chip">{roomName}</span>
                             <span className="chip">{selectedTools.length} tools</span>
                           </div>

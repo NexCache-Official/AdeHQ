@@ -1,7 +1,6 @@
 import { openai } from "@ai-sdk/openai";
-import { generateObject, generateText } from "ai";
 import { DEFAULT_OPENAI_MODEL } from "@/lib/config/features";
-import { ModelResponseSchema } from "./schemas";
+import { callStructuredLlm, type StructuredLlmResult } from "./structured-llm-call";
 import type { EmployeeResponse } from "./types";
 
 const MODEL_FALLBACKS = [
@@ -17,90 +16,33 @@ function uniqueModels(preferred?: string) {
   return [...new Set(list)];
 }
 
-function extractJson(text: string): unknown {
-  const trimmed = text.trim();
-  const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i);
-  const candidate = fenced?.[1]?.trim() ?? trimmed;
-  const start = candidate.indexOf("{");
-  const end = candidate.lastIndexOf("}");
-  if (start === -1 || end === -1) throw new Error("Model did not return JSON.");
-  return JSON.parse(candidate.slice(start, end + 1));
-}
-
-export type OpenAiCallResult = {
-  response: Pick<EmployeeResponse, "reply" | "effect">;
+export type OpenAiCallResult = StructuredLlmResult & {
   model: string;
-  inputTokens?: number;
-  outputTokens?: number;
+  response: Pick<EmployeeResponse, "reply" | "effect">;
 };
 
 export async function callOpenAiEmployee(
   system: string,
   prompt: string,
   preferredModel?: string,
+  maxTokens = 2000,
+  timeoutMs = 45_000,
 ): Promise<OpenAiCallResult> {
   const models = uniqueModels(preferredModel);
   let lastError: Error | null = null;
 
   for (const model of models) {
     try {
-      const result = await generateObject({
+      const result = await callStructuredLlm({
         model: openai(model),
-        schema: ModelResponseSchema,
         system,
         prompt,
-        temperature: 0.45,
+        maxTokens,
+        timeoutMs,
       });
-
-      return {
-        response: {
-          reply: result.object.reply,
-          effect: {
-            workLog: result.object.effects.workLog ?? [],
-            tasks: result.object.effects.tasks ?? [],
-            memory: result.object.effects.memory ?? [],
-            approvals: result.object.effects.approvals ?? [],
-            statusChange: result.object.effects.statusChange,
-            handoffTo: result.object.effects.handoffTo,
-            currentTask: result.object.effects.currentTask,
-          },
-        },
-        model,
-        inputTokens: result.usage?.inputTokens,
-        outputTokens: result.usage?.outputTokens,
-      };
-    } catch (objectError) {
-      lastError = objectError instanceof Error ? objectError : new Error(String(objectError));
-
-      try {
-        const textResult = await generateText({
-          model: openai(model),
-          system: `${system}\n\nReturn ONLY valid JSON matching this shape:\n{"reply":"string","effects":{"workLog":[],"tasks":[],"memory":[],"approvals":[]}}`,
-          prompt,
-          temperature: 0.45,
-        });
-
-        const parsed = ModelResponseSchema.parse(extractJson(textResult.text));
-        return {
-          response: {
-            reply: parsed.reply,
-            effect: {
-              workLog: parsed.effects.workLog ?? [],
-              tasks: parsed.effects.tasks ?? [],
-              memory: parsed.effects.memory ?? [],
-              approvals: parsed.effects.approvals ?? [],
-              statusChange: parsed.effects.statusChange,
-              handoffTo: parsed.effects.handoffTo,
-              currentTask: parsed.effects.currentTask,
-            },
-          },
-          model,
-          inputTokens: textResult.usage?.inputTokens,
-          outputTokens: textResult.usage?.outputTokens,
-        };
-      } catch (textError) {
-        lastError = textError instanceof Error ? textError : lastError;
-      }
+      return { ...result, model };
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
     }
   }
 

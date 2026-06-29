@@ -54,7 +54,11 @@ export function RoomChat({ room }: { room: ProjectRoom }) {
 
   const useServerApi = backend === "supabase";
 
-  const sendViaServer = async (text: string, clientMessageId?: string) => {
+  const sendViaServer = async (
+    text: string,
+    clientMessageId?: string,
+    mentionsJson?: import("@/lib/types").MentionRef[],
+  ) => {
     setBusy(true);
     setFailedSend(null);
     const messageId = clientMessageId ?? uid("msg");
@@ -80,6 +84,7 @@ export function RoomChat({ room }: { room: ProjectRoom }) {
         body: JSON.stringify({
           content: text,
           clientMessageId: messageId,
+          mentionsJson,
           mode: "live",
         }),
       });
@@ -119,9 +124,9 @@ export function RoomChat({ room }: { room: ProjectRoom }) {
     setBusy(false);
   };
 
-  const handleSend = async (text: string) => {
+  const handleSend = async (text: string, mentionsJson?: import("@/lib/types").MentionRef[]) => {
     if (useServerApi) {
-      await sendViaServer(text);
+      await sendViaServer(text, undefined, mentionsJson);
       return;
     }
     if (ENABLE_DEMO_MODE) {

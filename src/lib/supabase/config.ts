@@ -81,4 +81,8 @@ export const SUPABASE_WORKSPACE_TABLES = [
   "call_transcripts",
   "workspace_tools",
   "workspace_invitations",
+  "workspace_ai_settings",
+  "ai_usage_events",
+  "agent_runs",
+  "agent_run_steps",
 ] as const;

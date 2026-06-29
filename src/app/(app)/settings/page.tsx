@@ -1,14 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useStore } from "@/lib/demo-store";
 import { ENABLE_DEMO_MODE } from "@/lib/config/features";
+import { authHeaders } from "@/lib/api/auth-client";
 import { AiRuntimePanel } from "@/components/AiRuntimePanel";
 import { PageContainer, PageHeader } from "@/components/Page";
 import { Card, Button, Toggle } from "@/components/ui";
 import { HumanAvatar } from "@/components/EmployeeAvatar";
-import { ProviderId, WorkspaceMemberRole } from "@/lib/types";
+import { ProviderId, WorkspaceAiSettings, WorkspaceMemberRole } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import {
   Brain,
@@ -21,6 +22,7 @@ import {
 } from "lucide-react";
 
 const PROVIDERS: { id: ProviderId; name: string; desc: string; accent: string }[] = [
+  { id: "siliconflow", name: "SiliconFlow", desc: "Primary provider — DeepSeek, Qwen, Kimi, and more.", accent: "#6366f1" },
   { id: "openai", name: "OpenAI", desc: "GPT models for reasoning and writing.", accent: "#10a37f" },
   { id: "anthropic", name: "Anthropic Claude", desc: "Claude models — coming soon.", accent: "#d97757" },
   { id: "gemini", name: "Google Gemini", desc: "Multimodal models — coming soon.", accent: "#4285f4" },
@@ -43,6 +45,7 @@ export default function SettingsPage() {
   const [clearConfirm, setClearConfirm] = useState("");
   const currentMember = state.workspaceMembers.find((m) => m.userId === state.user?.id);
   const canInvite = backend === "supabase" && (currentMember?.role === "owner" || currentMember?.role === "admin");
+  const canAdmin = canInvite;
   const isRealWorkspace = state.workspace.workspaceMode !== "demo";
 
   const [saved, setSaved] = useState(false);
@@ -213,6 +216,10 @@ export default function SettingsPage() {
 
         <AiRuntimePanel />
 
+        {backend === "supabase" && canAdmin && (
+          <WorkspaceCostControls workspaceId={state.workspace.id} />
+        )}
+
         {/* Model providers */}
         <Card className="p-6">
           <div className="mb-1 flex items-center gap-2">
@@ -220,7 +227,8 @@ export default function SettingsPage() {
             <h2 className="text-sm font-semibold text-slate-900">Model providers</h2>
           </div>
           <p className="mb-4 text-sm text-slate-500">
-            Model keys are server-only. Workspace BYOK is coming soon — for now set OPENAI_API_KEY in your deployment environment.
+            Model keys are server-only. Set <code className="text-xs">SILICONFLOW_API_KEY</code> and/or{" "}
+            <code className="text-xs">OPENAI_API_KEY</code> in your deployment environment.
           </p>
           <div className="space-y-3">
             {PROVIDERS.map((p) => {
@@ -253,7 +261,9 @@ export default function SettingsPage() {
                           placeholder={
                             p.id === "openai"
                               ? "Set OPENAI_API_KEY on the server"
-                              : "Server-side key support coming later"
+                              : p.id === "siliconflow"
+                                ? "Set SILICONFLOW_API_KEY on the server"
+                                : "Server-side key support coming later"
                           }
                           value=""
                           disabled
@@ -328,5 +338,142 @@ export default function SettingsPage() {
         )}
       </div>
     </PageContainer>
+  );
+}
+
+function WorkspaceCostControls({ workspaceId }: { workspaceId: string }) {
+  const [settings, setSettings] = useState<WorkspaceAiSettings | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    void (async () => {
+      try {
+        const headers = await authHeaders();
+        const res = await fetch(`/api/workspaces/${workspaceId}/ai-settings`, { headers });
+        if (!res.ok) return;
+        const data = (await res.json()) as WorkspaceAiSettings;
+        if (active) setSettings(data);
+      } catch {
+        /* migration may not be applied yet */
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [workspaceId]);
+
+  const save = async () => {
+    if (!settings) return;
+    setBusy(true);
+    try {
+      const headers = await authHeaders();
+      const res = await fetch(`/api/workspaces/${workspaceId}/ai-settings`, {
+        method: "PATCH",
+        headers: { ...headers, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          aiEnabled: settings.aiEnabled,
+          dailyTokenLimit: settings.dailyTokenLimit,
+          dailyCostLimitUsd: settings.dailyCostLimitUsd,
+          employeeDailyTokenLimit: settings.employeeDailyTokenLimit,
+          maxParallelRuns: settings.maxParallelRuns,
+          maxOutputTokens: settings.maxOutputTokens,
+        }),
+      });
+      if (!res.ok) throw new Error("Save failed");
+      const data = (await res.json()) as WorkspaceAiSettings;
+      setSettings(data);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } catch {
+      /* ignore */
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (!settings) return null;
+
+  return (
+    <Card className="p-6">
+      <div className="mb-4 flex items-center justify-between">
+        <div>
+          <h2 className="text-sm font-semibold text-slate-900">AI cost controls</h2>
+          <p className="mt-0.5 text-sm text-slate-500">
+            Kill switch and daily limits. Reserved usage rows prevent parallel overruns.
+          </p>
+        </div>
+        <Toggle
+          checked={settings.aiEnabled}
+          onChange={(v) => setSettings((s) => (s ? { ...s, aiEnabled: v } : s))}
+        />
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <label className="block space-y-1">
+          <span className="text-xs text-slate-500">Daily token limit</span>
+          <input
+            type="number"
+            className="input-field"
+            value={settings.dailyTokenLimit}
+            onChange={(e) =>
+              setSettings((s) => (s ? { ...s, dailyTokenLimit: Number(e.target.value) } : s))
+            }
+          />
+        </label>
+        <label className="block space-y-1">
+          <span className="text-xs text-slate-500">Daily cost limit (USD)</span>
+          <input
+            type="number"
+            step="0.01"
+            className="input-field"
+            value={settings.dailyCostLimitUsd}
+            onChange={(e) =>
+              setSettings((s) => (s ? { ...s, dailyCostLimitUsd: Number(e.target.value) } : s))
+            }
+          />
+        </label>
+        <label className="block space-y-1">
+          <span className="text-xs text-slate-500">Per-employee daily tokens</span>
+          <input
+            type="number"
+            className="input-field"
+            value={settings.employeeDailyTokenLimit}
+            onChange={(e) =>
+              setSettings((s) =>
+                s ? { ...s, employeeDailyTokenLimit: Number(e.target.value) } : s,
+              )
+            }
+          />
+        </label>
+        <label className="block space-y-1">
+          <span className="text-xs text-slate-500">Max parallel runs</span>
+          <input
+            type="number"
+            min={1}
+            max={3}
+            className="input-field"
+            value={settings.maxParallelRuns}
+            onChange={(e) =>
+              setSettings((s) => (s ? { ...s, maxParallelRuns: Number(e.target.value) } : s))
+            }
+          />
+        </label>
+        <label className="block space-y-1 sm:col-span-2">
+          <span className="text-xs text-slate-500">Max output tokens per call</span>
+          <input
+            type="number"
+            className="input-field"
+            value={settings.maxOutputTokens}
+            onChange={(e) =>
+              setSettings((s) => (s ? { ...s, maxOutputTokens: Number(e.target.value) } : s))
+            }
+          />
+        </label>
+      </div>
+      <Button className="mt-4" size="sm" onClick={save} disabled={busy}>
+        {saved ? "Saved" : busy ? "Saving…" : "Save cost controls"}
+      </Button>
+    </Card>
   );
 }

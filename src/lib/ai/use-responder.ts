@@ -13,13 +13,16 @@ function truncate(s: string, n = 40) {
 async function requestEmployeeResponse(
   input: SendMessageInput,
   mode: "mock" | "live",
-  provider: string,
 ): Promise<EmployeeResponse> {
   try {
     const response = await fetch(`/api/employees/${input.employee.id}/respond`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...input, mode, provider }),
+      body: JSON.stringify({
+        roomId: input.room.id,
+        content: input.message,
+        mode,
+      }),
     });
 
     if (!response.ok) throw new Error(await response.text());
@@ -67,11 +70,7 @@ export function useResponder() {
         allEmployees: s.employees,
         recentMemory: s.memory.filter((m) => m.roomId === roomId).slice(0, 6),
       };
-      const resp = await requestEmployeeResponse(
-        input,
-        s.settings.mode,
-        s.settings.activeProvider,
-      );
+      const resp = await requestEmployeeResponse(input, s.settings.mode);
 
       const artifacts: MessageArtifact[] = [];
 

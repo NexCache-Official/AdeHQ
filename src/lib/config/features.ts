@@ -4,3 +4,31 @@ export const ENABLE_DEMO_MODE =
 
 export const DEFAULT_OPENAI_MODEL =
   process.env.ADEHQ_OPENAI_MODEL ?? "gpt-5.4-mini";
+
+export const DEFAULT_SILICONFLOW_MODEL =
+  process.env.ADEHQ_SILICONFLOW_MODEL ?? "deepseek-ai/DeepSeek-V4-Flash";
+
+export const SILICONFLOW_MODEL = DEFAULT_SILICONFLOW_MODEL;
+
+export const SILICONFLOW_CHEAP_MODEL =
+  process.env.ADEHQ_SILICONFLOW_CHEAP_MODEL ?? "Qwen/Qwen3.5-9B";
+
+export const SILICONFLOW_CODER_MODEL =
+  process.env.ADEHQ_SILICONFLOW_CODER_MODEL ?? "moonshotai/Kimi-K2.7-Code";
+
+export const SILICONFLOW_LONG_CONTEXT_MODEL =
+  process.env.ADEHQ_SILICONFLOW_LONG_CONTEXT_MODEL ?? "MiniMaxAI/MiniMax-M3";
+
+export const SILICONFLOW_STRONG_MODEL =
+  process.env.ADEHQ_SILICONFLOW_STRONG_MODEL ?? "deepseek-ai/DeepSeek-V4-Pro";
+
+export const DEFAULT_PROVIDER =
+  (process.env.ADEHQ_DEFAULT_PROVIDER ?? "siliconflow").toLowerCase();
+
+export function isSiliconFlowConfigured(): boolean {
+  return Boolean(process.env.SILICONFLOW_API_KEY?.trim());
+}
+
+export function isOpenAiConfigured(): boolean {
+  return Boolean(process.env.OPENAI_API_KEY?.trim());
+}

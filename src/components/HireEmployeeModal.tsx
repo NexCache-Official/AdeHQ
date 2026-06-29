@@ -3,6 +3,11 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { DEFAULT_OPENAI_MODEL, ENABLE_DEMO_MODE } from "@/lib/config/features";
+import {
+  defaultModelModeForRole,
+  MODEL_MODE_LABELS,
+  type ModelMode,
+} from "@/lib/ai/model-catalog";
 import { Button, Modal, ModalHeader, Toggle } from "./ui";
 import { useStore } from "@/lib/demo-store";
 import {
@@ -58,7 +63,8 @@ export function HireEmployeeModal({
   const [name, setName] = useState("");
   const [roleTitle, setRoleTitle] = useState("");
   const [seniority, setSeniority] = useState("Senior");
-  const [provider, setProvider] = useState("openai");
+  const [provider, setProvider] = useState("siliconflow");
+  const [modelMode, setModelMode] = useState<ModelMode>("balanced");
   const [instructions, setInstructions] = useState("");
   const [roomId, setRoomId] = useState<string>(presetRoom ?? "");
   const [tools, setTools] = useState<Record<string, ToolAccess["permission"]>>({});
@@ -71,7 +77,8 @@ export function HireEmployeeModal({
     setName("");
     setRoleTitle("");
     setSeniority("Senior");
-    setProvider("openai");
+    setProvider("siliconflow");
+    setModelMode("balanced");
     setInstructions("");
     setRoomId(presetRoom ?? "");
     setTools({});
@@ -88,7 +95,8 @@ export function HireEmployeeModal({
     setTemplate(tpl);
     setName(tpl.name);
     setRoleTitle(tpl.role);
-    setProvider(tpl.suggestedProvider.toLowerCase() === "anthropic" ? "openai" : tpl.suggestedProvider.toLowerCase());
+    setProvider("siliconflow");
+    setModelMode(defaultModelModeForRole(tpl.key));
     setInstructions(tpl.instructions);
     const initialTools: Record<string, ToolAccess["permission"]> = {};
     tpl.suggestedTools.forEach((t) => (initialTools[t] = "read"));
@@ -127,8 +135,9 @@ export function HireEmployeeModal({
       name: name || template.name,
       role: roleTitle || template.role,
       roleKey: template.key,
-      provider: provider === "mock" ? "mock" : provider.toLowerCase() === "openai" ? "openai" : "openai",
-      model: provider.toLowerCase() === "openai" ? DEFAULT_OPENAI_MODEL : template.suggestedModel,
+      provider: provider === "mock" ? "mock" : provider.toLowerCase(),
+      model: provider === "openai" ? DEFAULT_OPENAI_MODEL : "",
+      modelMode,
       seniority,
       status: "idle",
       currentTask: undefined,
@@ -272,11 +281,29 @@ export function HireEmployeeModal({
                       ))}
                     </select>
                   </Field>
-                  <Field label="Provider / model">
-                    <select className="input-field" value={provider} onChange={(e) => setProvider(e.target.value)}>
-                      <option value="openai">OpenAI · {DEFAULT_OPENAI_MODEL}</option>
-                      {ENABLE_DEMO_MODE && <option value="mock">Mock (scripted)</option>}
-                    </select>
+                  <Field label="Provider / intelligence">
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      <select className="input-field" value={provider} onChange={(e) => setProvider(e.target.value)}>
+                        <option value="siliconflow">SiliconFlow (recommended)</option>
+                        <option value="openai">OpenAI · {DEFAULT_OPENAI_MODEL}</option>
+                        {ENABLE_DEMO_MODE && <option value="mock">Mock (scripted)</option>}
+                      </select>
+                      {provider !== "mock" && (
+                        <select
+                          className="input-field"
+                          value={modelMode}
+                          onChange={(e) => setModelMode(e.target.value as ModelMode)}
+                        >
+                          {(Object.keys(MODEL_MODE_LABELS) as ModelMode[])
+                            .filter((m) => m !== "creative")
+                            .map((m) => (
+                              <option key={m} value={m}>
+                                {MODEL_MODE_LABELS[m]}
+                              </option>
+                            ))}
+                        </select>
+                      )}
+                    </div>
                   </Field>
                 </div>
                 <Field label="Standing instructions">
@@ -382,7 +409,7 @@ export function HireEmployeeModal({
                   </div>
                   <div>
                     <div className="text-lg font-semibold text-slate-900">{name}</div>
-                    <div className="text-sm text-slate-500">{roleTitle} · {seniority} · {provider}</div>
+                    <div className="text-sm text-slate-500">{roleTitle} · {seniority} · {provider}{provider !== "mock" ? ` · ${modelMode}` : ""}</div>
                   </div>
                 </div>
                 <ReviewRow label="Standing instructions" value={instructions} />

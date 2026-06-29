@@ -96,6 +96,7 @@ export type AIEmployee = {
   roleKey: EmployeeRoleKey;
   provider: string;
   model: string;
+  modelMode?: ModelMode;
   seniority: string;
   status: EmployeeStatus;
   currentTask?: string;
@@ -127,6 +128,20 @@ export type EmployeeRoleKey =
   | "sales"
   | "support";
 
+export type ModelMode =
+  | "cheap"
+  | "balanced"
+  | "strong"
+  | "long_context"
+  | "coding"
+  | "creative";
+
+export type MentionRef = {
+  type: "ai_employee";
+  id: string;
+  label: string;
+};
+
 export type MessageArtifact = {
   type: "task" | "memory" | "approval" | "work_log";
   id: string;
@@ -141,6 +156,9 @@ export type RoomMessage = {
   senderName: string;
   content: string;
   mentions?: string[];
+  mentionsJson?: MentionRef[];
+  agentRunId?: string;
+  triggerMessageId?: string;
   createdAt: string;
   artifacts?: MessageArtifact[];
   pending?: boolean;
@@ -185,6 +203,7 @@ export type Task = {
   assigneeType: "human" | "ai";
   assigneeId: string;
   createdFrom?: string;
+  createdByRunId?: string;
   dueDate?: string;
   createdAt: string;
   updatedAt: string;
@@ -208,6 +227,7 @@ export type MemoryEntry = {
   status: MemoryStatus;
   createdByType: "human" | "ai" | "system";
   createdById: string;
+  createdByRunId?: string;
   createdAt: string;
 };
 
@@ -228,6 +248,7 @@ export type Approval = {
   risk: ApprovalRisk;
   status: ApprovalStatus;
   actionType: ApprovalActionType;
+  createdByRunId?: string;
   createdAt: string;
   resolvedAt?: string;
 };
@@ -244,6 +265,7 @@ export type WorkLogEvent = {
   status: WorkLogStatus;
   relatedEntityType?: "task" | "memory" | "approval" | "message";
   relatedEntityId?: string;
+  agentRunId?: string;
   createdAt: string;
 };
 
@@ -267,11 +289,114 @@ export type Tool = {
 };
 
 export type ProviderId =
+  | "siliconflow"
   | "openai"
   | "anthropic"
   | "gemini"
   | "perplexity"
   | "mock";
+
+export type WorkspaceAiSettings = {
+  workspaceId: string;
+  aiEnabled: boolean;
+  defaultProvider: "siliconflow" | "openai" | "mock";
+  dailyTokenLimit: number;
+  dailyCostLimitUsd: number;
+  employeeDailyTokenLimit: number;
+  maxParallelRuns: number;
+  maxOutputTokens: number;
+  maxToolRunsPerTask: number;
+  maxHandoffDepth: number;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
+export type AgentRunStatus =
+  | "queued"
+  | "running"
+  | "waiting_approval"
+  | "completed"
+  | "failed"
+  | "blocked";
+
+export type AgentRun = {
+  workspaceId: string;
+  id: string;
+  employeeId: string;
+  roomId: string;
+  taskId?: string;
+  triggerMessageId: string;
+  responseMessageId?: string;
+  status: AgentRunStatus;
+  provider: string;
+  model: string;
+  modelMode: ModelMode;
+  estimatedCostUsd: number;
+  actualCostUsd?: number;
+  latencyMs?: number;
+  parentRunId?: string;
+  handoffDepth: number;
+  errorMessage?: string;
+  startedAt: string;
+  completedAt?: string;
+};
+
+export type AgentRunStepType =
+  | "thinking"
+  | "model_call"
+  | "tool_call"
+  | "memory_write"
+  | "task_create"
+  | "approval_request"
+  | "error";
+
+export type AgentRunStep = {
+  id: string;
+  workspaceId: string;
+  agentRunId: string;
+  roomId: string;
+  employeeId: string;
+  stepType: AgentRunStepType;
+  title: string;
+  summary: string;
+  status: "running" | "success" | "failed" | "skipped";
+  metadata?: Record<string, unknown>;
+  startedAt: string;
+  completedAt?: string;
+};
+
+export type AiUsageEventStatus =
+  | "reserved"
+  | "success"
+  | "failed"
+  | "blocked"
+  | "fallback";
+
+export type AiUsageEvent = {
+  id: string;
+  workspaceId: string;
+  agentRunId?: string;
+  employeeId?: string;
+  roomId?: string;
+  triggerMessageId?: string;
+  responseMessageId?: string;
+  provider: string;
+  model: string;
+  modelMode?: ModelMode;
+  status: AiUsageEventStatus;
+  inputTokens: number;
+  outputTokens: number;
+  cachedTokens: number;
+  estimatedInputTokens?: number;
+  estimatedMaxOutputTokens?: number;
+  estimatedCostUsd: number;
+  actualCostUsd?: number;
+  latencyMs?: number;
+  fallbackUsed: boolean;
+  errorMessage?: string;
+  createdAt: string;
+  finalizedAt?: string;
+};
 
 export type Settings = {
   mode: "mock" | "live";

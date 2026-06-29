@@ -53,21 +53,41 @@ NEXT_PUBLIC_ENABLE_DEMO_MODE=false   # default
 Server-only:
 
 ```bash
+# SiliconFlow (primary live provider)
+SILICONFLOW_API_KEY=...
+ADEHQ_SILICONFLOW_MODEL=deepseek-ai/DeepSeek-V4-Flash
+ADEHQ_SILICONFLOW_CHEAP_MODEL=Qwen/Qwen3.5-9B
+ADEHQ_SILICONFLOW_CODER_MODEL=moonshotai/Kimi-K2.7-Code
+ADEHQ_SILICONFLOW_LONG_CONTEXT_MODEL=MiniMaxAI/MiniMax-M3
+ADEHQ_DEFAULT_PROVIDER=siliconflow
+
+# OpenAI (optional)
 OPENAI_API_KEY=...
 ADEHQ_OPENAI_MODEL=gpt-5.4-mini
 ```
+
+Apply `supabase/migrations/20250629120000_ai_runtime_and_work_graph.sql` (or the synced
+`supabase/schema.sql`) for AI runtime tables, cost controls, and work-graph linking.
 
 Add redirect URLs in Supabase → Authentication → URL configuration:
 
 - **Site URL:** your deployment URL
 - **Redirect URLs:** `https://your-app/**`
 
-## OpenAI setup
+## SiliconFlow setup (recommended)
+
+1. Set `SILICONFLOW_API_KEY` in your deployment environment.
+2. Optionally tune `ADEHQ_SILICONFLOW_*` model env vars (see above).
+3. Apply the AI runtime migration (`20250629120000_ai_runtime_and_work_graph.sql`).
+4. Hire or onboard an employee with provider `siliconflow` and an intelligence level.
+5. **Settings → AI Runtime → Test provider** — confirm `ok: true` before room debugging.
+
+## OpenAI setup (optional)
 
 1. Set `OPENAI_API_KEY` in your deployment environment.
 2. Optionally set `ADEHQ_OPENAI_MODEL=gpt-5.4-mini` (default).
-3. Hire or onboard an AI employee with provider `openai`.
-4. Mention the employee in a room, or use **Settings → AI Runtime → Test OpenAI employee reply**.
+3. Hire or onboard an AI employee with provider `openai` or `siliconflow`.
+4. Mention the employee in a room, or use **Settings → AI Runtime → Test provider** then **Test employee reply**.
 
 When the key is missing or a model call fails, AdeHQ falls back to scripted responses
 and records a work log / runtime event — the app does not crash.
@@ -77,8 +97,8 @@ and records a work log / runtime event — the app does not crash.
 1. Create an account and confirm email.
 2. Complete onboarding (creates workspace, employee, and room).
 3. Open **Settings → AI Runtime** as owner/admin.
-4. Confirm **OpenAI configured: Yes**.
-5. Run **Test OpenAI employee reply** or mention the employee in the room.
+4. Confirm **SiliconFlow configured: Yes** (or OpenAI if using that provider).
+5. Run **Test provider**, then **Test employee reply**, or mention the employee in a room.
 6. Check work log and runtime status for `live` vs `fallback`.
 
 ## Messaging test

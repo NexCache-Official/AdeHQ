@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { AIEmployee } from "@/lib/types";
+import { AIEmployee, MentionRef } from "@/lib/types";
 import { EmployeeAvatar } from "./EmployeeAvatar";
 import { cn } from "@/lib/utils";
 import {
@@ -28,13 +28,14 @@ export function ChatComposer({
   placeholder,
 }: {
   employees: AIEmployee[];
-  onSend: (text: string) => void;
+  onSend: (text: string, mentionsJson?: MentionRef[]) => void;
   disabled?: boolean;
   placeholder?: string;
 }) {
   const [value, setValue] = useState("");
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
   const [showCommands, setShowCommands] = useState(false);
+  const [trackedMentions, setTrackedMentions] = useState<MentionRef[]>([]);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
   const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -48,6 +49,10 @@ export function ChatComposer({
 
   const insertMention = (emp: AIEmployee) => {
     setValue((prev) => prev.replace(/@(\w*)$/, `@${emp.name} `));
+    setTrackedMentions((prev) => {
+      if (prev.some((m) => m.id === emp.id)) return prev;
+      return [...prev, { type: "ai_employee", id: emp.id, label: emp.name }];
+    });
     setMentionQuery(null);
     inputRef.current?.focus();
   };
@@ -55,9 +60,10 @@ export function ChatComposer({
   const send = () => {
     const text = value.trim();
     if (!text || disabled) return;
-    onSend(text);
+    onSend(text, trackedMentions.length ? trackedMentions : undefined);
     setValue("");
     setMentionQuery(null);
+    setTrackedMentions([]);
   };
 
   const filteredMentions = employees.filter((e) =>
@@ -108,6 +114,10 @@ export function ChatComposer({
                 key={e.id}
                 onClick={() => {
                   setValue(`@${e.name} `);
+                  setTrackedMentions((prev) => {
+                    if (prev.some((m) => m.id === e.id)) return prev;
+                    return [...prev, { type: "ai_employee", id: e.id, label: e.name }];
+                  });
                   setShowCommands(false);
                   inputRef.current?.focus();
                 }}

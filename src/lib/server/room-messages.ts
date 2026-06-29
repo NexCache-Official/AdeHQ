@@ -4,6 +4,7 @@ import type {
   Approval,
   EmployeePermissions,
   MemoryEntry,
+  MentionRef,
   MessageArtifact,
   ProjectRoom,
   RoomMessage,
@@ -11,6 +12,7 @@ import type {
   ToolAccess,
   WorkLogEvent,
 } from "@/lib/types";
+import { defaultModelModeForRole, normalizeModelMode } from "@/lib/ai/model-catalog";
 import { extractMentions, nowISO, uid } from "@/lib/utils";
 
 type DbRow = Record<string, unknown>;
@@ -33,6 +35,9 @@ function employeeFromRow(row: DbRow, tools: ToolAccess[]): AIEmployee {
     roleKey: row.role_key as AIEmployee["roleKey"],
     provider: String(row.provider),
     model: String(row.model),
+    modelMode: normalizeModelMode(
+      row.model_mode ? String(row.model_mode) : defaultModelModeForRole(row.role_key as AIEmployee["roleKey"]),
+    ),
     seniority: String(row.seniority),
     status: row.status as AIEmployee["status"],
     currentTask: row.current_task ? String(row.current_task) : undefined,
@@ -63,6 +68,11 @@ function messageFromRow(row: DbRow): RoomMessage {
     senderName: String(row.sender_name),
     content: String(row.content),
     mentions: jsonArray<string>(row.mentions),
+    mentionsJson: row.mentions_json
+      ? (jsonArray(row.mentions_json) as MentionRef[])
+      : undefined,
+    agentRunId: row.agent_run_id ? String(row.agent_run_id) : undefined,
+    triggerMessageId: row.trigger_message_id ? String(row.trigger_message_id) : undefined,
     artifacts: row.artifacts ? (jsonArray(row.artifacts) as MessageArtifact[]) : undefined,
     pending: Boolean(row.pending),
     createdAt: String(row.created_at ?? nowISO()),
@@ -221,7 +231,15 @@ export async function loadRoomContext(
 export function parseEmployeeMentions(
   content: string,
   employees: AIEmployee[],
+  mentionsJson?: MentionRef[],
 ): AIEmployee[] {
+  if (mentionsJson?.length) {
+    const ids = mentionsJson
+      .filter((m) => m.type === "ai_employee")
+      .map((m) => m.id);
+    return employees.filter((e) => ids.includes(e.id));
+  }
+
   const ids = extractMentions(
     content,
     employees.map((e) => ({ id: e.id, name: e.name })),
@@ -236,8 +254,11 @@ export async function insertHumanMessage(
   user: { id: string; name: string },
   content: string,
   clientMessageId?: string,
+  mentionsJson?: MentionRef[],
 ): Promise<RoomMessage> {
-  const mentions = extractMentions(content, []);
+  const legacyMentions = mentionsJson?.length
+    ? mentionsJson.map((m) => m.id)
+    : extractMentions(content, []);
   const message: RoomMessage = {
     id: clientMessageId ?? uid("msg"),
     roomId,
@@ -245,7 +266,8 @@ export async function insertHumanMessage(
     senderId: user.id,
     senderName: user.name,
     content,
-    mentions,
+    mentions: legacyMentions,
+    mentionsJson,
     createdAt: nowISO(),
   };
 
@@ -258,6 +280,7 @@ export async function insertHumanMessage(
     sender_name: message.senderName,
     content: message.content,
     mentions: message.mentions,
+    mentions_json: mentionsJson ?? [],
     pending: false,
     created_at: message.createdAt,
   });
@@ -281,6 +304,7 @@ export async function persistEmployeeEffects(
     currentTask?: string;
   },
   triggerMessageId?: string,
+  agentRunId?: string,
 ): Promise<{ aiMessage: RoomMessage; artifacts: MessageArtifact[] }> {
   const artifacts: MessageArtifact[] = [];
   const createdTaskIds: string[] = [];
@@ -309,6 +333,7 @@ export async function persistEmployeeEffects(
       status: entry.status,
       created_by_type: entry.createdByType,
       created_by_id: entry.createdById,
+      created_by_run_id: agentRunId ?? null,
       created_at: entry.createdAt,
     });
     if (error) throw error;
@@ -341,6 +366,7 @@ export async function persistEmployeeEffects(
       assignee_type: task.assigneeType,
       assignee_id: task.assigneeId,
       created_from: task.createdFrom ?? null,
+      created_by_run_id: agentRunId ?? null,
       due_date: task.dueDate ?? null,
       created_at: task.createdAt,
       updated_at: task.updatedAt,
@@ -379,6 +405,7 @@ export async function persistEmployeeEffects(
       risk: approval.risk,
       status: approval.status,
       action_type: approval.actionType,
+      created_by_run_id: agentRunId ?? null,
       created_at: approval.createdAt,
     });
     if (error) throw error;
@@ -425,6 +452,7 @@ export async function persistEmployeeEffects(
       status: event.status,
       related_entity_type: event.relatedEntityType ?? null,
       related_entity_id: event.relatedEntityId ?? null,
+      agent_run_id: agentRunId ?? null,
       created_at: event.createdAt,
     });
     if (error) throw error;
@@ -458,7 +486,10 @@ export async function persistEmployeeEffects(
     sender_name: aiMessage.senderName,
     content: aiMessage.content,
     mentions: [],
+    mentions_json: [],
     artifacts: aiMessage.artifacts ?? null,
+    agent_run_id: agentRunId ?? null,
+    trigger_message_id: triggerMessageId ?? null,
     pending: false,
     created_at: aiMessage.createdAt,
   });

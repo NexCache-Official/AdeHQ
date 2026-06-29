@@ -82,7 +82,7 @@ function buildSignedOutState(): DemoState {
     workLog: [],
     tools: TOOL_CATALOG.map((tool) => ({ ...tool })),
     calls: [],
-    settings: { mode: "live", activeProvider: "openai" },
+    settings: { mode: "live", activeProvider: "siliconflow" },
   };
 }
 

@@ -13,7 +13,11 @@ import { WorkLogTimeline } from "@/components/WorkLogTimeline";
 import { EmptyState } from "@/components/States";
 import { toolIcon, TOOL_STATUS_META } from "@/lib/icons";
 import { cn, timeAgo } from "@/lib/utils";
-import { EmployeeStatus } from "@/lib/types";
+import { EmployeeStatus, ModelMode } from "@/lib/types";
+import {
+  defaultModelModeForRole,
+  MODEL_MODE_LABELS,
+} from "@/lib/ai/model-catalog";
 import {
   ArrowLeft,
   Bot,
@@ -278,6 +282,9 @@ function EditEmployeeModal({ open, onClose, employeeId }: { open: boolean; onClo
   const [statusVal, setStatusVal] = useState<EmployeeStatus>(employee.status);
   const [provider, setProvider] = useState(employee.provider);
   const [model, setModel] = useState(employee.model);
+  const [modelMode, setModelMode] = useState<ModelMode>(
+    employee.modelMode ?? defaultModelModeForRole(employee.roleKey),
+  );
 
   const save = () => {
     actions.updateEmployee(employeeId, {
@@ -287,6 +294,7 @@ function EditEmployeeModal({ open, onClose, employeeId }: { open: boolean; onClo
       status: statusVal,
       provider: provider.toLowerCase(),
       model,
+      modelMode,
     });
     onClose();
   };
@@ -320,12 +328,32 @@ function EditEmployeeModal({ open, onClose, employeeId }: { open: boolean; onClo
         <label className="block space-y-1.5">
           <span className="text-xs font-medium text-slate-500">AI provider</span>
           <select className="input-field" value={provider} onChange={(e) => setProvider(e.target.value)}>
+            <option value="siliconflow">SiliconFlow</option>
             <option value="openai">OpenAI</option>
+            <option value="mock">Mock</option>
           </select>
         </label>
+        {provider !== "mock" && (
+          <label className="block space-y-1.5">
+            <span className="text-xs font-medium text-slate-500">Intelligence level</span>
+            <select
+              className="input-field"
+              value={modelMode}
+              onChange={(e) => setModelMode(e.target.value as ModelMode)}
+            >
+              {(Object.keys(MODEL_MODE_LABELS) as ModelMode[])
+                .filter((m) => m !== "creative")
+                .map((m) => (
+                  <option key={m} value={m}>
+                    {MODEL_MODE_LABELS[m]}
+                  </option>
+                ))}
+            </select>
+          </label>
+        )}
         <label className="block space-y-1.5 sm:col-span-2">
-          <span className="text-xs font-medium text-slate-500">Model</span>
-          <input className="input-field" value={model} onChange={(e) => setModel(e.target.value)} placeholder="gpt-5.4-mini" />
+          <span className="text-xs font-medium text-slate-500">Model override (optional)</span>
+          <input className="input-field" value={model} onChange={(e) => setModel(e.target.value)} placeholder="Leave blank for role-based default" />
         </label>
       </div>
       <div className="flex justify-end gap-2 border-t border-slate-200 px-5 py-4">

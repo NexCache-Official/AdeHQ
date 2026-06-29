@@ -133,7 +133,7 @@ export function buildWorkspaceStateFromDemo(
           : line,
       ),
     })),
-    settings: { mode: "live", activeProvider: "openai" },
+    settings: { mode: "live", activeProvider: "siliconflow" },
   };
 }
 
@@ -168,7 +168,7 @@ export function buildFreshWorkspaceState(
     workLog: [],
     tools: TOOL_CATALOG.map((tool) => ({ ...tool })),
     calls: [],
-    settings: { mode: "live", activeProvider: "openai" },
+    settings: { mode: "live", activeProvider: "siliconflow" },
   };
 }
 
@@ -475,7 +475,7 @@ export async function loadWorkspaceState(
     workLog,
     tools,
     calls,
-    settings: { mode: "live", activeProvider: "openai" },
+    settings: { mode: "live", activeProvider: "siliconflow" },
   };
 }
 
@@ -606,6 +606,7 @@ function employeeFromRow(row: DbRow, tools: ToolAccess[]): AIEmployee {
     roleKey: row.role_key,
     provider: row.provider,
     model: row.model,
+    modelMode: row.model_mode ?? undefined,
     seniority: row.seniority,
     status: row.status,
     currentTask: row.current_task ?? undefined,
@@ -662,6 +663,9 @@ function messageFromRow(row: DbRow): RoomMessage {
     senderName: row.sender_name,
     content: row.content,
     mentions: jsonArray<string>(row.mentions),
+    mentionsJson: jsonArray(row.mentions_json),
+    agentRunId: row.agent_run_id ?? undefined,
+    triggerMessageId: row.trigger_message_id ?? undefined,
     artifacts: row.artifacts ? jsonArray(row.artifacts) : undefined,
     pending: row.pending,
     createdAt: row.created_at ?? nowISO(),
@@ -752,6 +756,7 @@ function employeeRow(workspaceId: string, employee: AIEmployee): DbRow {
     role_key: employee.roleKey,
     provider: employee.provider,
     model: employee.model,
+    model_mode: employee.modelMode ?? "balanced",
     seniority: employee.seniority,
     status: employee.status,
     current_task: employee.currentTask ?? null,

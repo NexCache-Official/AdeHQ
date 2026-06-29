@@ -1,6 +1,16 @@
-import { ENABLE_DEMO_MODE, DEFAULT_OPENAI_MODEL } from "@/lib/config/features";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { ENABLE_DEMO_MODE } from "@/lib/config/features";
+import { isOpenAiConfigured, isSiliconFlowConfigured } from "@/lib/config/features";
 import { recordAiRuntime } from "@/lib/ai/runtime-log";
 import { callOpenAiEmployee } from "@/lib/ai/openai-call";
+import { callSiliconFlowEmployee } from "@/lib/ai/siliconflow-call";
+import {
+  estimateCost,
+  normalizeModelMode,
+  resolveModel,
+  type ModelMode,
+} from "@/lib/ai/model-catalog";
+import { appendRunStep } from "@/lib/supabase/ai-runtime";
 import { sendMessageToEmployee } from "./employee-engine";
 import { buildEmployeeSystemPrompt, buildEmployeeUserPrompt } from "./prompts";
 import type { EmployeeResponse, SendMessageInput } from "./types";
@@ -9,6 +19,17 @@ import type { ModelProvider } from "./types";
 type RouteContext = {
   workspaceId?: string;
   roomId?: string;
+  agentRunId?: string;
+  client?: SupabaseClient;
+};
+
+export type RouteOptions = {
+  mode?: "mock" | "live";
+  provider?: string;
+  modelMode?: ModelMode;
+  maxOutputTokens?: number;
+  timeoutMs?: number;
+  context?: RouteContext;
 };
 
 function normalizeHandoff(value: unknown): string[] | undefined {
@@ -45,14 +66,17 @@ function errorResponse(
   ctx: RouteContext,
   provider: string,
   model: string,
+  modelMode: string,
   error?: string,
 ): { response: EmployeeResponse; aiMode: string } {
   recordAiRuntime({
     workspaceId: ctx.workspaceId,
     roomId: ctx.roomId,
     employeeId: input.employee.id,
+    agentRunId: ctx.agentRunId,
     provider,
     model,
+    modelMode,
     mode: "fallback",
     fallbackReason: reason,
     error,
@@ -65,11 +89,11 @@ function errorResponse(
       reply:
         `I couldn't complete a live model response right now.\n\n` +
         `**Reason:** ${error ?? reason}\n\n` +
-        `Check **Settings → AI Runtime** to verify \`OPENAI_API_KEY\` and the model (\`${model}\`) are configured on the server.`,
+        `Check **Settings → AI Runtime** to verify provider keys and model configuration.`,
       effect: {
         workLog: [
           {
-            action: "OpenAI error",
+            action: "Model error",
             summary: error ?? reason,
             status: "failed",
           },
@@ -90,6 +114,7 @@ async function scriptedFallback(
   ctx: RouteContext,
   provider: string,
   model: string,
+  modelMode: string,
   error?: string,
 ): Promise<{ response: EmployeeResponse; aiMode: string }> {
   const resolved = await sendMessageToEmployee(input);
@@ -102,8 +127,10 @@ async function scriptedFallback(
     workspaceId: ctx.workspaceId,
     roomId: ctx.roomId,
     employeeId: input.employee.id,
+    agentRunId: ctx.agentRunId,
     provider,
     model,
+    modelMode,
     mode: "fallback",
     fallbackReason: reason,
     error,
@@ -115,7 +142,50 @@ function normalizeProvider(raw?: string): ModelProvider {
   const value = (raw ?? "mock").toLowerCase();
   if (value === "openai") return "openai";
   if (value === "mock") return "mock";
+  if (value === "siliconflow") return "siliconflow";
   return value as ModelProvider;
+}
+
+export type LiveCallMetrics = {
+  model: string;
+  inputTokens: number;
+  outputTokens: number;
+  cachedTokens?: number;
+  fallbackTier?: number;
+  fallbackUsed: boolean;
+  estimatedCostUsd: number;
+  durationMs: number;
+};
+
+async function dispatchLiveCall(
+  provider: ModelProvider,
+  system: string,
+  prompt: string,
+  model: string,
+  maxOutputTokens: number,
+  timeoutMs: number,
+): Promise<{
+  response: Pick<EmployeeResponse, "reply" | "effect">;
+  model: string;
+  inputTokens?: number;
+  outputTokens?: number;
+  cachedTokens?: number;
+  fallbackTier?: number;
+  structuredOutputUsed: boolean;
+}> {
+  if (provider === "siliconflow") {
+    const result = await callSiliconFlowEmployee(
+      system,
+      prompt,
+      model,
+      maxOutputTokens,
+      timeoutMs,
+    );
+    return result;
+  }
+
+  const result = await callOpenAiEmployee(system, prompt, model, maxOutputTokens, timeoutMs);
+  return result;
 }
 
 export async function routeEmployeeResponse(
@@ -124,14 +194,22 @@ export async function routeEmployeeResponse(
     openTasks: { id: string; title: string; status: string; priority: string }[];
     humanParticipants: { id: string; name: string }[];
   },
-  options: { mode?: "mock" | "live"; provider?: string; context?: RouteContext } = {},
-): Promise<{ response: EmployeeResponse; aiMode: string }> {
+  options: RouteOptions = {},
+): Promise<{
+  response: EmployeeResponse;
+  aiMode: string;
+  metrics?: LiveCallMetrics;
+  failed?: boolean;
+  errorMessage?: string;
+}> {
   const ctx = options.context ?? {};
   const provider = normalizeProvider(input.employee.provider);
-  const model =
-    input.employee.model?.trim() ||
-    process.env.ADEHQ_OPENAI_MODEL ||
-    DEFAULT_OPENAI_MODEL;
+  const modelMode = normalizeModelMode(
+    options.modelMode ?? input.employee.modelMode,
+  );
+  const model = resolveModel(provider, modelMode, input.employee.model);
+  const maxOutputTokens = options.maxOutputTokens ?? 2000;
+  const timeoutMs = options.timeoutMs ?? 45_000;
 
   const promptContext = {
     employee: input.employee,
@@ -151,14 +229,38 @@ export async function routeEmployeeResponse(
       workspaceId: ctx.workspaceId,
       roomId: ctx.roomId,
       employeeId: input.employee.id,
+      agentRunId: ctx.agentRunId,
       provider: "mock",
       model: "scripted",
+      modelMode,
       mode: "mock",
     });
     return { response, aiMode: "mock" };
   }
 
-  if (provider !== "openai") {
+  if (provider === "siliconflow" && !isSiliconFlowConfigured()) {
+    return errorResponse(
+      input,
+      "SILICONFLOW_API_KEY is not configured on the server.",
+      ctx,
+      provider,
+      model,
+      modelMode,
+    );
+  }
+
+  if (provider === "openai" && !isOpenAiConfigured()) {
+    return errorResponse(
+      input,
+      "OPENAI_API_KEY is not configured on the server.",
+      ctx,
+      provider,
+      model,
+      modelMode,
+    );
+  }
+
+  if (provider !== "openai" && provider !== "siliconflow") {
     if (ENABLE_DEMO_MODE) {
       return scriptedFallback(
         input,
@@ -166,6 +268,7 @@ export async function routeEmployeeResponse(
         ctx,
         provider,
         model,
+        modelMode,
       );
     }
     return errorResponse(
@@ -174,17 +277,8 @@ export async function routeEmployeeResponse(
       ctx,
       provider,
       model,
-      `Employee provider "${input.employee.provider}" is not supported. Set provider to openai.`,
-    );
-  }
-
-  if (!process.env.OPENAI_API_KEY) {
-    return errorResponse(
-      input,
-      "OPENAI_API_KEY is not configured on the server.",
-      ctx,
-      provider,
-      model,
+      modelMode,
+      `Employee provider "${input.employee.provider}" is not supported. Set provider to siliconflow or openai.`,
     );
   }
 
@@ -193,19 +287,63 @@ export async function routeEmployeeResponse(
     const system = buildEmployeeSystemPrompt(promptContext);
     const prompt = buildEmployeeUserPrompt(promptContext);
 
-    const result = await callOpenAiEmployee(system, prompt, model);
+    if (ctx.client && ctx.agentRunId && ctx.workspaceId && ctx.roomId) {
+      await appendRunStep(ctx.client, {
+        workspaceId: ctx.workspaceId,
+        agentRunId: ctx.agentRunId,
+        roomId: ctx.roomId,
+        employeeId: input.employee.id,
+        stepType: "model_call",
+        title: "Calling model",
+        summary: `${provider}/${model}`,
+        status: "running",
+      });
+    }
+
+    const result = await dispatchLiveCall(
+      provider,
+      system,
+      prompt,
+      model,
+      maxOutputTokens,
+      timeoutMs,
+    );
+
+    const durationMs = Date.now() - started;
+    const inputTokens = result.inputTokens ?? 0;
+    const outputTokens = result.outputTokens ?? 0;
+    const estimatedCostUsd = estimateCost(result.model, inputTokens, outputTokens);
+    const fallbackUsed = !result.structuredOutputUsed || (result.fallbackTier ?? 1) > 1;
 
     recordAiRuntime({
       workspaceId: ctx.workspaceId,
       roomId: ctx.roomId,
       employeeId: input.employee.id,
-      provider: "openai",
+      agentRunId: ctx.agentRunId,
+      provider,
       model: result.model,
+      modelMode,
       mode: "live",
-      durationMs: Date.now() - started,
-      inputTokens: result.inputTokens,
-      outputTokens: result.outputTokens,
+      durationMs,
+      inputTokens,
+      outputTokens,
+      cachedTokens: result.cachedTokens,
+      estimatedCostUsd,
+      fallbackTier: result.fallbackTier,
     });
+
+    if (result.response.effect.handoffTo?.length && ctx.client && ctx.agentRunId) {
+      await appendRunStep(ctx.client, {
+        workspaceId: ctx.workspaceId!,
+        agentRunId: ctx.agentRunId,
+        roomId: ctx.roomId!,
+        employeeId: input.employee.id,
+        stepType: "thinking",
+        title: "Handoff suggested",
+        summary: `Suggested: ${result.response.effect.handoffTo.join(", ")} (not auto-executed)`,
+        status: "skipped",
+      });
+    }
 
     return {
       response: toEmployeeResponse(
@@ -214,27 +352,32 @@ export async function routeEmployeeResponse(
         result.response.reply,
         result.response.effect,
       ),
-      aiMode: "openai",
+      aiMode: provider,
+      metrics: {
+        model: result.model,
+        inputTokens,
+        outputTokens,
+        cachedTokens: result.cachedTokens,
+        fallbackTier: result.fallbackTier,
+        fallbackUsed,
+        estimatedCostUsd,
+        durationMs,
+      },
     };
   } catch (error) {
-    const message = error instanceof Error ? error.message : "OpenAI request failed";
+    const message = error instanceof Error ? error.message : "Model request failed";
     if (ENABLE_DEMO_MODE) {
       return scriptedFallback(
         input,
-        "OpenAI call failed; used fallback response.",
+        "Live call failed; used fallback response.",
         ctx,
         provider,
         model,
+        modelMode,
         message,
       );
     }
-    return errorResponse(
-      input,
-      "OpenAI call failed.",
-      ctx,
-      provider,
-      model,
-      message,
-    );
+    const err = errorResponse(input, "Model call failed.", ctx, provider, model, modelMode, message);
+    return { ...err, failed: true, errorMessage: message };
   }
 }

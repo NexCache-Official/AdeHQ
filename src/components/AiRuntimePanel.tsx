@@ -3,12 +3,20 @@
 import { useEffect, useState } from "react";
 import { useStore } from "@/lib/demo-store";
 import { authHeaders } from "@/lib/api/auth-client";
-import { DEFAULT_OPENAI_MODEL, ENABLE_DEMO_MODE } from "@/lib/config/features";
+import {
+  DEFAULT_OPENAI_MODEL,
+  DEFAULT_SILICONFLOW_MODEL,
+  ENABLE_DEMO_MODE,
+} from "@/lib/config/features";
+import { MODEL_MODE_LABELS, type ModelMode } from "@/lib/ai/model-catalog";
 import { Button, Card } from "./ui";
-import { Activity, Bot, Sparkles } from "lucide-react";
+import { Activity, Bot, Sparkles, Zap } from "lucide-react";
 
 type RuntimeSnapshot = {
+  siliconflowConfigured?: boolean;
   openAiConfigured: boolean;
+  defaultProvider?: string;
+  defaultSiliconflowModel?: string;
   defaultModel: string;
   environment: string;
   demoModeEnabled: boolean;
@@ -16,14 +24,20 @@ type RuntimeSnapshot = {
     at: string;
     provider: string;
     model: string;
+    modelMode?: string;
     mode: string;
     fallbackReason?: string;
     error?: string;
+    inputTokens?: number;
+    outputTokens?: number;
+    estimatedCostUsd?: number;
+    durationMs?: number;
   };
   recent: {
     at: string;
     provider: string;
     model: string;
+    modelMode?: string;
     mode: string;
     fallbackReason?: string;
     error?: string;
@@ -40,6 +54,11 @@ export function AiRuntimePanel() {
   const [testResult, setTestResult] = useState<string | null>(null);
   const [testMode, setTestMode] = useState<string | null>(null);
   const [testBusy, setTestBusy] = useState(false);
+  const [providerTestProvider, setProviderTestProvider] = useState("siliconflow");
+  const [providerTestMode, setProviderTestMode] = useState<ModelMode>("cheap");
+  const [providerTestPrompt, setProviderTestPrompt] = useState("Reply with one short sentence.");
+  const [providerTestResult, setProviderTestResult] = useState<string | null>(null);
+  const [providerTestBusy, setProviderTestBusy] = useState(false);
 
   const canAdmin =
     backend === "supabase" &&
@@ -47,6 +66,14 @@ export function AiRuntimePanel() {
       (m) =>
         m.userId === state.user?.id && (m.role === "owner" || m.role === "admin"),
     );
+
+  const refreshSnapshot = async () => {
+    if (!state.workspace.id) return;
+    const headers = await authHeaders();
+    const res = await fetch(`/api/ai/runtime?workspaceId=${state.workspace.id}`, { headers });
+    if (!res.ok) throw new Error("Unable to load runtime status.");
+    return (await res.json()) as RuntimeSnapshot;
+  };
 
   useEffect(() => {
     if (!canAdmin || !state.workspace.id) {
@@ -57,11 +84,8 @@ export function AiRuntimePanel() {
     let active = true;
     void (async () => {
       try {
-        const headers = await authHeaders();
-        const res = await fetch(`/api/ai/runtime?workspaceId=${state.workspace.id}`, { headers });
-        if (!res.ok) throw new Error("Unable to load runtime status.");
-        const data = (await res.json()) as RuntimeSnapshot;
-        if (active) setSnapshot(data);
+        const data = await refreshSnapshot();
+        if (active) setSnapshot(data ?? null);
       } catch {
         if (active) setSnapshot(null);
       } finally {
@@ -79,7 +103,7 @@ export function AiRuntimePanel() {
     if (!testRoomId && state.rooms[0]) setTestRoomId(state.rooms[0].id);
   }, [state.employees, state.rooms, testEmployeeId, testRoomId]);
 
-  const runTest = async () => {
+  const runEmployeeTest = async () => {
     if (!testEmployeeId || !testRoomId || !testPrompt.trim()) return;
     setTestBusy(true);
     setTestResult(null);
@@ -99,10 +123,42 @@ export function AiRuntimePanel() {
       if (!res.ok) throw new Error(data.error ?? "Test failed.");
       setTestResult(data.reply);
       setTestMode(data.aiMode ?? res.headers.get("x-adehq-ai-mode") ?? "unknown");
+      const snap = await refreshSnapshot();
+      setSnapshot(snap ?? null);
     } catch (err) {
       setTestResult(err instanceof Error ? err.message : "Test failed.");
     } finally {
       setTestBusy(false);
+    }
+  };
+
+  const runProviderTest = async () => {
+    if (!state.workspace.id || !providerTestPrompt.trim()) return;
+    setProviderTestBusy(true);
+    setProviderTestResult(null);
+    try {
+      const headers = await authHeaders();
+      const res = await fetch(`/api/ai/test-provider`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({
+            workspaceId: state.workspace.id,
+            provider: providerTestProvider,
+            modelMode: providerTestMode,
+            prompt: providerTestPrompt.trim(),
+          }),
+        });
+      const data = await res.json();
+      if (!res.ok || !data.ok) throw new Error(data.error ?? "Provider test failed.");
+      setProviderTestResult(
+        `${data.reply}\n\n(${data.provider}/${data.model} · ${data.latencyMs}ms · tier ${data.fallbackTier})`,
+      );
+      const snap = await refreshSnapshot();
+      setSnapshot(snap ?? null);
+    } catch (err) {
+      setProviderTestResult(err instanceof Error ? err.message : "Provider test failed.");
+    } finally {
+      setProviderTestBusy(false);
     }
   };
 
@@ -119,8 +175,11 @@ export function AiRuntimePanel() {
         <p className="text-sm text-slate-500">Loading runtime status…</p>
       ) : (
         <dl className="grid gap-2 text-sm sm:grid-cols-2">
+          <Stat label="SiliconFlow configured" value={snapshot?.siliconflowConfigured ? "Yes" : "No"} />
           <Stat label="OpenAI configured" value={snapshot?.openAiConfigured ? "Yes" : "No"} />
-          <Stat label="Default model" value={snapshot?.defaultModel ?? DEFAULT_OPENAI_MODEL} />
+          <Stat label="Default provider" value={snapshot?.defaultProvider ?? "siliconflow"} />
+          <Stat label="SiliconFlow model" value={snapshot?.defaultSiliconflowModel ?? DEFAULT_SILICONFLOW_MODEL} />
+          <Stat label="OpenAI model" value={snapshot?.defaultModel ?? DEFAULT_OPENAI_MODEL} />
           <Stat label="Environment" value={snapshot?.environment ?? "unknown"} />
           <Stat label="Demo mode enabled" value={ENABLE_DEMO_MODE ? "Yes" : "No"} />
           <Stat
@@ -131,6 +190,12 @@ export function AiRuntimePanel() {
                 : "None yet"
             }
           />
+          {snapshot?.last?.modelMode && (
+            <Stat label="Last mode" value={snapshot.last.modelMode} />
+          )}
+          {snapshot?.last?.estimatedCostUsd !== undefined && (
+            <Stat label="Last est. cost" value={`$${snapshot.last.estimatedCostUsd.toFixed(6)}`} />
+          )}
           {snapshot?.last?.fallbackReason && (
             <Stat label="Last fallback reason" value={snapshot.last.fallbackReason} />
           )}
@@ -144,10 +209,11 @@ export function AiRuntimePanel() {
             Recent runtime events
           </h3>
           <div className="max-h-40 space-y-1 overflow-y-auto rounded-xl border border-slate-200 bg-slate-50 p-2">
-            {snapshot.recent.map((entry) => (
-              <div key={entry.at + entry.model} className="text-xs text-slate-600">
+            {snapshot.recent.map((entry, i) => (
+              <div key={entry.at + entry.model + i} className="text-xs text-slate-600">
                 <Activity className="mr-1 inline h-3 w-3" />
                 {entry.mode} · {entry.provider}/{entry.model}
+                {entry.modelMode ? ` · ${entry.modelMode}` : ""}
                 {entry.fallbackReason ? ` · ${entry.fallbackReason}` : ""}
               </div>
             ))}
@@ -157,7 +223,52 @@ export function AiRuntimePanel() {
 
       <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4">
         <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-900">
-          <Bot className="h-4 w-4 text-accent-600" /> Test OpenAI employee reply
+          <Zap className="h-4 w-4 text-accent-600" /> Test provider (isolated)
+        </div>
+        <p className="mb-3 text-xs text-slate-500">
+          Health-check SiliconFlow or OpenAI without room context. Run this before debugging employee replies.
+        </p>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <select
+            className="input-field"
+            value={providerTestProvider}
+            onChange={(e) => setProviderTestProvider(e.target.value)}
+          >
+            <option value="siliconflow">SiliconFlow</option>
+            <option value="openai">OpenAI</option>
+          </select>
+          <select
+            className="input-field"
+            value={providerTestMode}
+            onChange={(e) => setProviderTestMode(e.target.value as ModelMode)}
+          >
+            {(Object.keys(MODEL_MODE_LABELS) as ModelMode[])
+              .filter((m) => m !== "creative")
+              .map((m) => (
+                <option key={m} value={m}>
+                  {MODEL_MODE_LABELS[m]}
+                </option>
+              ))}
+          </select>
+        </div>
+        <textarea
+          className="input-field mt-3 min-h-[60px]"
+          value={providerTestPrompt}
+          onChange={(e) => setProviderTestPrompt(e.target.value)}
+        />
+        <Button className="mt-3" size="sm" onClick={runProviderTest} disabled={providerTestBusy}>
+          {providerTestBusy ? "Testing…" : "Test provider"}
+        </Button>
+        {providerTestResult && (
+          <div className="mt-3 rounded-xl bg-white p-3 text-sm text-slate-700 whitespace-pre-wrap">
+            {providerTestResult}
+          </div>
+        )}
+      </div>
+
+      <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+        <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-900">
+          <Bot className="h-4 w-4 text-accent-600" /> Test employee reply
         </div>
         <div className="grid gap-3 sm:grid-cols-2">
           <select
@@ -167,7 +278,7 @@ export function AiRuntimePanel() {
           >
             {state.employees.map((e) => (
               <option key={e.id} value={e.id}>
-                {e.name} ({e.provider}/{e.model})
+                {e.name} ({e.provider}/{e.modelMode ?? "balanced"})
               </option>
             ))}
           </select>
@@ -188,8 +299,8 @@ export function AiRuntimePanel() {
           value={testPrompt}
           onChange={(e) => setTestPrompt(e.target.value)}
         />
-        <Button className="mt-3" size="sm" onClick={runTest} disabled={testBusy || !state.employees.length}>
-          {testBusy ? "Testing…" : "Run test"}
+        <Button className="mt-3" size="sm" onClick={runEmployeeTest} disabled={testBusy || !state.employees.length}>
+          {testBusy ? "Testing…" : "Run employee test"}
         </Button>
         {testResult && (
           <div className="mt-3 rounded-xl bg-white p-3 text-sm text-slate-700">
