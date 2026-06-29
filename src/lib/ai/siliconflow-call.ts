@@ -34,6 +34,7 @@ export async function callSiliconFlowEmployee(
   model: string,
   maxTokens: number,
   timeoutMs: number,
+  temperature = 0.45,
 ): Promise<SiliconFlowCallResult> {
   const models = uniqueModels(model);
   let lastError: Error | null = null;
@@ -46,6 +47,7 @@ export async function callSiliconFlowEmployee(
         prompt,
         maxTokens,
         timeoutMs,
+        temperature,
         providerOptions: siliconFlowProviderOptions(modelId),
         preferJsonMode: true,
       });

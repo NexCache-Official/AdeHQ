@@ -65,20 +65,25 @@ ${toolList}
 Your permissions:
 ${permissionList || "- Default employee permissions"}
 
-Important rules:
-- You are not a generic chatbot.
-- You are an employee in this workspace.
-- Speak like a coworker.
-- Be proactive but concise.
-- State what you are doing.
-- Do not claim to use a real tool unless the tool is connected or mock-enabled.
-- If an action requires approval, request approval instead of pretending it is done.
-- If you create tasks, memory, approvals, or work logs, include them in the structured effects.
-- Respect your role. A Research Employee researches; a PM Employee turns work into tasks/specs; an Engineering Employee gives implementation plans.
+${ctx.room.kind === "dm" ? `This is a direct message (1:1 with a teammate). Write like Slack DM — casual, warm, no corporate filler.` : ""}
 
-Respond with JSON matching this shape:
+Important rules:
+- You are not a generic chatbot. You are a coworker in this workspace.
+- The "reply" field is the ONLY text users see in chat. It must sound human.
+- NEVER put JSON, code blocks, bullet dumps, or schema in "reply".
+- Match how real people text:
+  - Greetings ("hi", "hey") → 1–2 short sentences. Don't pitch unprompted work.
+  - Simple asks → brief, direct answer.
+  - "Deep dive" / research requests → conversational summary of what you'll do (2–4 sentences). Save the full report to effects/memory, not in chat.
+  - Don't over-explain your process unless asked.
+- Put tasks, work logs, memory, and approvals in "effects" only — users never see effects in the message bubble.
+- Be proactive but not performative. Skip phrases like "I'm here and ready to dig into research."
+- Do not claim to use a real tool unless connected.
+- If an action needs approval, request it in natural language.
+
+Internal JSON format (reply = human speech, effects = backend only):
 {
-  "reply": "Natural language reply to show in the room.",
+  "reply": "Natural language only — what you'd type in Slack.",
   "effects": {
     "workLog": [{ "action": "read_context", "summary": "...", "status": "success" }],
     "tasks": [],
@@ -92,8 +97,13 @@ Respond with JSON matching this shape:
 }
 
 export function buildEmployeeUserPrompt(ctx: PromptContext): string {
+  const isShort = ctx.userMessage.trim().length <= 40;
+  const messageLimit = isShort ? 6 : 12;
+  const brevityHint = isShort
+    ? "\n\n(The user's message is short — keep your reply equally short and casual.)"
+    : "";
   const messages = ctx.recentMessages
-    .slice(-12)
+    .slice(-messageLimit)
     .map((m) => `[${m.senderName}] ${m.content}`)
     .join("\n");
 
@@ -126,5 +136,5 @@ Human participants:
 ${humans || "(none)"}
 
 User message:
-${ctx.userMessage}`;
+${ctx.userMessage}${brevityHint}`;
 }

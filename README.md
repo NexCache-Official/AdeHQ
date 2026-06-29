@@ -6,6 +6,15 @@ AdeHQ is a workspace where humans and AI employees collaborate in project rooms.
 Hire AI employees, chat in channels, assign tasks, review approvals, and inspect work logs —
 all backed by Supabase with SiliconFlow-powered employee replies.
 
+## Documentation
+
+Product and developer docs live in a separate Mintlify repo:
+
+**[github.com/NexCache-Official/docs](https://github.com/NexCache-Official/docs)**
+
+- **Documentation** tab — user guides, concepts, quickstart
+- **Developer** tab — PRDs, architecture, API reference, database schema
+
 ## Quick start
 
 ```bash

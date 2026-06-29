@@ -8,6 +8,11 @@ import {
 import { recordAiRuntime } from "@/lib/ai/runtime-log";
 import { callSiliconFlowEmployee } from "@/lib/ai/siliconflow-call";
 import {
+  inferOutputTokenCap,
+  inferTemperature,
+  sanitizeReplyForChat,
+} from "@/lib/ai/normalize-model-response";
+import {
   estimateCost,
   normalizeModelMode,
   resolveModel,
@@ -174,7 +179,9 @@ export async function routeEmployeeResponse(
     options.modelMode ?? input.employee.modelMode,
   );
   const model = resolveModel(provider, modelMode, input.employee.model);
-  const maxOutputTokens = options.maxOutputTokens ?? 2000;
+  const baseMaxTokens = options.maxOutputTokens ?? 2000;
+  const maxOutputTokens = inferOutputTokenCap(input.message, baseMaxTokens);
+  const temperature = inferTemperature(input.message);
   const timeoutMs = options.timeoutMs ?? 45_000;
 
   const promptContext = {
@@ -240,6 +247,7 @@ export async function routeEmployeeResponse(
       model,
       maxOutputTokens,
       timeoutMs,
+      temperature,
     );
 
     const durationMs = Date.now() - started;
@@ -282,7 +290,7 @@ export async function routeEmployeeResponse(
       response: toEmployeeResponse(
         input.employee.id,
         input.employee.name,
-        result.response.reply,
+        sanitizeReplyForChat(result.response.reply),
         result.response.effect,
       ),
       aiMode: provider,

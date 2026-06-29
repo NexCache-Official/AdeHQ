@@ -16,6 +16,7 @@ import type {
 import { refreshTopicStats } from "@/lib/server/topic-stats";
 import { ensureGeneralTopic, topicFromRow } from "@/lib/server/topic-helpers";
 import { defaultModelModeForRole, normalizeModelMode } from "@/lib/ai/model-catalog";
+import { sanitizeReplyForChat } from "@/lib/ai/normalize-model-response";
 import { extractMentions, nowISO, uid } from "@/lib/utils";
 
 type DbRow = Record<string, unknown>;
@@ -417,6 +418,7 @@ export async function persistEmployeeEffects(
   triggerMessageId?: string,
   agentRunId?: string,
 ): Promise<{ aiMessage: RoomMessage; artifacts: MessageArtifact[] }> {
+  reply = sanitizeReplyForChat(reply);
   const artifacts: MessageArtifact[] = [];
   const createdTaskIds: string[] = [];
   const createdMemoryIds: string[] = [];

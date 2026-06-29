@@ -2,6 +2,7 @@ import { generateObject, generateText, type LanguageModel } from "ai";
 import type { ProviderOptions } from "@ai-sdk/provider-utils";
 import { ModelResponseSchema } from "./schemas";
 import type { EmployeeResponse } from "./types";
+import { parseModelResponseText, sanitizeReplyForChat } from "./normalize-model-response";
 
 export type StructuredLlmResult = {
   response: Pick<EmployeeResponse, "reply" | "effect">;
@@ -35,7 +36,7 @@ function toEffect(parsed: {
   };
 }): Pick<EmployeeResponse, "reply" | "effect"> {
   return {
-    reply: parsed.reply,
+    reply: sanitizeReplyForChat(parsed.reply),
     effect: {
       workLog: parsed.effects.workLog ?? [],
       tasks: parsed.effects.tasks ?? [],
@@ -49,8 +50,16 @@ function toEffect(parsed: {
 }
 
 function tier3Fallback(text: string): Pick<EmployeeResponse, "reply" | "effect"> {
+  const parsed = parseModelResponseText(text);
+  if (parsed) {
+    return {
+      reply: sanitizeReplyForChat(parsed.reply),
+      effect: parsed.effect,
+    };
+  }
+
   return {
-    reply: text.trim() || "I processed your request but could not structure the full response.",
+    reply: sanitizeReplyForChat(text) || "Got it — working on that.",
     effect: {
       workLog: [
         {
@@ -145,14 +154,40 @@ export async function callStructuredLlm(
           providerOptions: jsonModeOptions,
         });
 
-        const parsed = ModelResponseSchema.parse(extractJson(textResult.text));
+        const parsed = parseModelResponseText(textResult.text);
+        if (parsed) {
+          return {
+            response: {
+              reply: sanitizeReplyForChat(parsed.reply),
+              effect: parsed.effect,
+            },
+            inputTokens: textResult.usage?.inputTokens,
+            outputTokens: textResult.usage?.outputTokens,
+            cachedTokens: (textResult.usage as { cachedInputTokens?: number } | undefined)?.cachedInputTokens,
+            structuredOutputUsed: true,
+            fallbackTier: 2,
+          };
+        }
+
+        const strict = ModelResponseSchema.safeParse(extractJson(textResult.text));
+        if (strict.success) {
+          return {
+            response: toEffect(strict.data),
+            inputTokens: textResult.usage?.inputTokens,
+            outputTokens: textResult.usage?.outputTokens,
+            cachedTokens: (textResult.usage as { cachedInputTokens?: number } | undefined)?.cachedInputTokens,
+            structuredOutputUsed: true,
+            fallbackTier: 2,
+          };
+        }
+
         return {
-          response: toEffect(parsed),
+          response: tier3Fallback(textResult.text),
           inputTokens: textResult.usage?.inputTokens,
           outputTokens: textResult.usage?.outputTokens,
           cachedTokens: (textResult.usage as { cachedInputTokens?: number } | undefined)?.cachedInputTokens,
-          structuredOutputUsed: true,
-          fallbackTier: 2,
+          structuredOutputUsed: false,
+          fallbackTier: 3,
         };
       } catch {
         try {
