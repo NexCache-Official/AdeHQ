@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { enforceEmployeePermissions } from "@/lib/ai/enforce-permissions";
-import { routeEmployeeResponse } from "@/lib/ai/model-router";
+import { routeEmployeeResponse, type LiveCallMetrics } from "@/lib/ai/model-router";
 import { finalizeAiRun } from "@/lib/ai/cost-guard";
 import {
   defaultModelModeForRole,
@@ -26,6 +26,13 @@ export async function processQueuedAgentRun(
   aiMode: string;
   employeeId: string;
   employeeName: string;
+  artifacts?: import("@/lib/types").MessageArtifact[];
+  metrics?: LiveCallMetrics & {
+    provider: string;
+    modelMode: string;
+    usageId?: string;
+    agentRunId: string;
+  };
 }> {
   const { data: runRow, error: runError } = await client
     .from("agent_runs")
@@ -67,7 +74,9 @@ export async function processQueuedAgentRun(
     .eq("id", runId);
 
   try {
-    const ctx = await loadTopicContext(client, workspaceId, roomId, topicId);
+    const ctx = await loadTopicContext(client, workspaceId, roomId, topicId, {
+      lean: true,
+    });
     const employee = ctx.employees.find((e) => e.id === employeeId);
     if (!employee) throw new Error("Employee not found in this room.");
 
@@ -120,7 +129,7 @@ export async function processQueuedAgentRun(
 
     if (!isLive || !usageId) {
       const reply = `I'm ${employee.name}. Live AI is not configured for this employee.`;
-      const { aiMessage } = await persistEmployeeEffects(
+      const { aiMessage, artifacts } = await persistEmployeeEffects(
         client,
         workspaceId,
         roomId,
@@ -141,6 +150,19 @@ export async function processQueuedAgentRun(
         aiMode: "mock",
         employeeId,
         employeeName: employee.name,
+        artifacts,
+        metrics: {
+          provider: employee.provider,
+          model: "mock",
+          modelMode,
+          inputTokens: 0,
+          outputTokens: 0,
+          fallbackUsed: false,
+          estimatedCostUsd: 0,
+          durationMs: 0,
+          usageId,
+          agentRunId: runId,
+        },
       };
     }
 
@@ -194,7 +216,7 @@ export async function processQueuedAgentRun(
 
     const effect = enforceEmployeePermissions(employee, response.effect);
 
-    const { aiMessage } = await persistEmployeeEffects(
+    const { aiMessage, artifacts } = await persistEmployeeEffects(
       client,
       workspaceId,
       roomId,
@@ -234,6 +256,16 @@ export async function processQueuedAgentRun(
       aiMode,
       employeeId,
       employeeName: employee.name,
+      artifacts,
+      metrics: metrics
+        ? {
+            ...metrics,
+            provider: employee.provider,
+            modelMode,
+            usageId,
+            agentRunId: runId,
+          }
+        : undefined,
     };
   } catch (error) {
     const message = serializeUnknownError(error);

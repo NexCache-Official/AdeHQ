@@ -148,7 +148,6 @@ export function RoomChat({
             ),
           );
 
-          await new Promise((r) => setTimeout(r, 300));
           setActiveRuns((prev) =>
             prev.map((r) =>
               r.runId === run.runId ? { ...r, phase: "thinking" } : r,
@@ -190,9 +189,25 @@ export function RoomChat({
 
             trace("agent-run", "success", `${run.employeeName} replied (${ms}ms)`, {
               runId: run.runId,
+              agentRunId: run.runId,
+              usageId: data.metrics?.usageId,
               aiMode: data.aiMode,
+              provider: data.metrics?.provider,
+              model: data.metrics?.model,
+              modelMode: data.metrics?.modelMode,
+              inputTokens: data.metrics?.inputTokens,
+              outputTokens: data.metrics?.outputTokens,
+              cachedTokens: data.metrics?.cachedTokens,
+              estimatedCostUsd: data.metrics?.estimatedCostUsd,
+              latencyMs: data.metrics?.durationMs ?? ms,
+              fallbackUsed: data.metrics?.fallbackUsed,
+              fallbackTier: data.metrics?.fallbackTier,
               aiMessageId: data.aiMessage?.id,
               replyPreview: data.aiMessage?.content?.slice(0, 120),
+              artifacts: data.aiMessage?.artifacts?.map((a: { type: string; label: string }) => ({
+                type: a.type,
+                label: a.label,
+              })),
             });
 
             if (data.aiMessage) {
@@ -203,6 +218,7 @@ export function RoomChat({
                 senderId: data.aiMessage.senderId,
                 senderName: data.aiMessage.senderName,
                 content: data.aiMessage.content,
+                artifacts: data.aiMessage.artifacts,
                 agentRunId: run.runId,
               });
             }

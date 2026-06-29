@@ -1,4 +1,5 @@
 import type { AIEmployee, MemoryEntry, ProjectRoom, RoomMessage, RoomTopic, Workspace } from "@/lib/types";
+import type { EmployeeRoleKey } from "@/lib/types";
 
 type PromptContext = {
   employee: AIEmployee;
@@ -12,6 +13,24 @@ type PromptContext = {
   humanParticipants: { id: string; name: string }[];
   userMessage: string;
 };
+
+function roleWorkflowRules(roleKey: EmployeeRoleKey): string {
+  switch (roleKey) {
+    case "sales":
+      return `Sales employee workflow — you create work objects, not just chat:
+- When you learn lead details (name, role, company, referral source), add effects.memory.
+- When drafting outreach, put the full email in effects.emailDrafts (subject + body). Keep reply to 1–3 sentences pointing at the draft.
+- After drafting, create effects.tasks for follow-ups (e.g. "Follow up with Neil if no reply by Friday") with assigneeType "ai".
+- Log substantive actions in effects.workLog.
+- Offer 2–3 subject line options in reply when helpful; full email body goes in emailDrafts only.`;
+    case "research":
+      return `Research workflow: save findings to effects.memory, create tasks for deeper dives, log research steps in workLog.`;
+    case "pm":
+      return `PM workflow: break requests into effects.tasks, capture decisions in memory, log planning in workLog.`;
+    default:
+      return `When you do substantive work, always populate effects: memory for facts learned, tasks for follow-ups, workLog for actions taken.`;
+  }
+}
 
 export function buildEmployeeSystemPrompt(ctx: PromptContext): string {
   const toolList =
@@ -80,14 +99,18 @@ Important rules:
 - Be proactive but not performative. Skip phrases like "I'm here and ready to dig into research."
 - Do not claim to use a real tool unless connected.
 - If an action needs approval, request it in natural language.
+- Whenever you complete meaningful work (drafts, research, outreach), you MUST populate effects — memory, tasks, workLog. Chat-only replies are for greetings and clarifying questions.
+
+${roleWorkflowRules(ctx.employee.roleKey)}
 
 Internal JSON format (reply = human speech, effects = backend only):
 {
   "reply": "Natural language only — what you'd type in Slack.",
   "effects": {
     "workLog": [{ "action": "read_context", "summary": "...", "status": "success" }],
-    "tasks": [],
-    "memory": [],
+    "tasks": [{ "title": "Follow up with Neil", "status": "open", "assigneeType": "ai", "priority": "medium" }],
+    "memory": [{ "type": "general", "title": "Lead: Neil @ Green Cutting", "content": "Warm referral from Mike at exhibition." }],
+    "emailDrafts": [{ "subject": "...", "body": "...", "recipient": "Neil", "company": "Green Cutting Inc." }],
     "approvals": [],
     "statusChange": "working",
     "handoffTo": [],

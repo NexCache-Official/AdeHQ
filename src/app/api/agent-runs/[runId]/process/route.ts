@@ -78,8 +78,10 @@ export async function POST(
         senderId: result.employeeId,
         senderName: result.employeeName,
         content: result.reply,
+        artifacts: result.artifacts,
         agentRunId: params.runId,
       },
+      metrics: result.metrics,
     });
   } catch (error) {
     if (error instanceof AuthError) {

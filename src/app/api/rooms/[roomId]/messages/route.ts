@@ -4,7 +4,7 @@ import { assertCanSendRoomMessage } from "@/lib/server/room-access";
 import {
   getWorkspaceIdForRoom,
   insertHumanMessage,
-  loadTopicContext,
+  loadRespondersContext,
   parseEmployeeMentions,
 } from "@/lib/server/room-messages";
 import { assertTopicInRoom, ensureGeneralTopic } from "@/lib/server/topic-helpers";
@@ -12,7 +12,7 @@ import { decideResponders } from "@/lib/server/decide-responders";
 import { queueAgentRuns } from "@/lib/server/queue-agent-runs";
 import { loadMaxParallelRuns } from "@/lib/ai/cost-guard";
 import { messageError } from "@/lib/server/message-errors";
-import type { MentionRef } from "@/lib/types";
+import type { MentionRef, ProjectRoom } from "@/lib/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -25,6 +25,18 @@ type MessageBody = {
   mentionsJson?: MentionRef[];
   slashCommand?: string;
 };
+
+function displayNameFromUser(user: {
+  email?: string;
+  user_metadata?: Record<string, unknown>;
+}): string {
+  const meta = user.user_metadata;
+  const fromMeta =
+    (typeof meta?.full_name === "string" && meta.full_name) ||
+    (typeof meta?.name === "string" && meta.name);
+  if (fromMeta) return fromMeta;
+  return user.email?.split("@")[0] ?? "You";
+}
 
 export async function POST(
   request: NextRequest,
@@ -73,38 +85,37 @@ export async function POST(
       return messageError("topic_not_in_room", msg, 404, { topicId });
     }
 
-    const ctx = await loadTopicContext(client, workspaceId, params.roomId, topicId);
-
-    const profile = await client
-      .from("profiles")
-      .select("name")
-      .eq("id", user.id)
-      .maybeSingle();
-
     const trimmed = body.content.trim();
     const mentionsJson = body.mentionsJson?.length ? body.mentionsJson : undefined;
+    const senderName = displayNameFromUser(user);
 
-    const humanMessage = await insertHumanMessage(
-      client,
-      workspaceId,
-      params.roomId,
-      {
-        id: user.id,
-        name: profile.data?.name ?? user.email?.split("@")[0] ?? "You",
-      },
-      trimmed,
-      topicId,
-      body.clientMessageId,
-      mentionsJson,
-    );
+    const [respondersCtx, humanMessage] = await Promise.all([
+      loadRespondersContext(client, workspaceId, params.roomId),
+      insertHumanMessage(
+        client,
+        workspaceId,
+        params.roomId,
+        { id: user.id, name: senderName },
+        trimmed,
+        topicId,
+        body.clientMessageId,
+        mentionsJson,
+      ),
+    ]);
     humanMessageSaved = true;
     humanMessageId = humanMessage.id;
 
-    const mentioned = parseEmployeeMentions(trimmed, ctx.employees, mentionsJson);
+    const roomForDecisions = {
+      id: respondersCtx.room.id,
+      kind: respondersCtx.room.kind,
+      dmEmployeeId: respondersCtx.room.dmEmployeeId,
+    } as ProjectRoom;
+
+    const mentioned = parseEmployeeMentions(trimmed, respondersCtx.employees, mentionsJson);
     const mentions = mentioned.map((e) => e.id);
 
     if (mentions.length && !mentionsJson) {
-      await client
+      void client
         .from("messages")
         .update({ mentions })
         .eq("workspace_id", workspaceId)
@@ -117,8 +128,8 @@ export async function POST(
     const decisions = decideResponders(
       trimmed,
       topic,
-      ctx.room,
-      ctx.employees,
+      roomForDecisions,
+      respondersCtx.employees,
       mentionsJson,
       { maxParallel },
     );

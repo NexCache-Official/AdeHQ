@@ -61,6 +61,7 @@ function toEmployeeResponse(
       tasks: effects.tasks ?? [],
       memory: effects.memory ?? [],
       approvals: effects.approvals ?? [],
+      emailDrafts: effects.emailDrafts ?? [],
       statusChange: effects.statusChange,
       handoffTo: normalizeHandoff(effects.handoffTo),
       currentTask: effects.currentTask,

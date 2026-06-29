@@ -143,9 +143,15 @@ export type MentionRef = {
 };
 
 export type MessageArtifact = {
-  type: "task" | "memory" | "approval" | "work_log";
+  type: "task" | "memory" | "approval" | "work_log" | "email_draft";
   id: string;
   label: string;
+  meta?: {
+    subject?: string;
+    body?: string;
+    recipient?: string;
+    company?: string;
+  };
 };
 
 export type AiParticipationMode = "manual_only" | "smart_assist" | "active_team";
@@ -496,6 +502,12 @@ export type EmployeeResponseEffect = {
   tasks: Array<Partial<Task>>;
   memory: Array<Partial<MemoryEntry>>;
   approvals: Array<Partial<Approval>>;
+  emailDrafts?: Array<{
+    subject: string;
+    body: string;
+    recipient?: string;
+    company?: string;
+  }>;
   statusChange?: EmployeeStatus;
   handoffTo?: string[];
   currentTask?: string;

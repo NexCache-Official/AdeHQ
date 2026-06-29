@@ -30,6 +30,7 @@ function toEffect(parsed: {
     tasks?: EmployeeResponse["effect"]["tasks"];
     memory?: EmployeeResponse["effect"]["memory"];
     approvals?: EmployeeResponse["effect"]["approvals"];
+    emailDrafts?: EmployeeResponse["effect"]["emailDrafts"];
     statusChange?: EmployeeResponse["effect"]["statusChange"];
     handoffTo?: EmployeeResponse["effect"]["handoffTo"];
     currentTask?: EmployeeResponse["effect"]["currentTask"];
@@ -42,6 +43,7 @@ function toEffect(parsed: {
       tasks: parsed.effects.tasks ?? [],
       memory: parsed.effects.memory ?? [],
       approvals: parsed.effects.approvals ?? [],
+      emailDrafts: parsed.effects.emailDrafts ?? [],
       statusChange: parsed.effects.statusChange,
       handoffTo: parsed.effects.handoffTo,
       currentTask: parsed.effects.currentTask,

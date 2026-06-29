@@ -90,6 +90,19 @@ function normalizeApprovals(raw: unknown): ParsedEffects["approvals"] {
     }));
 }
 
+function normalizeEmailDrafts(raw: unknown): NonNullable<ParsedEffects["emailDrafts"]> {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter((item): item is Record<string, unknown> => !!item && typeof item === "object")
+    .map((item) => ({
+      subject: String(item.subject ?? "Draft"),
+      body: String(item.body ?? ""),
+      recipient: item.recipient ? String(item.recipient) : undefined,
+      company: item.company ? String(item.company) : undefined,
+    }))
+    .filter((d) => d.body.trim().length > 0);
+}
+
 function normalizeEffects(raw: unknown): ParsedEffects {
   const effects =
     raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
@@ -99,6 +112,7 @@ function normalizeEffects(raw: unknown): ParsedEffects {
     tasks: normalizeTasks(effects.tasks),
     memory: normalizeMemory(effects.memory),
     approvals: normalizeApprovals(effects.approvals),
+    emailDrafts: normalizeEmailDrafts(effects.emailDrafts),
     statusChange: effects.statusChange as ParsedEffects["statusChange"],
     handoffTo: Array.isArray(handoff)
       ? handoff.filter((v): v is string => typeof v === "string")
@@ -131,6 +145,7 @@ export function parseModelResponseText(
           tasks: validated.data.effects.tasks,
           memory: validated.data.effects.memory,
           approvals: validated.data.effects.approvals,
+          emailDrafts: validated.data.effects.emailDrafts,
           statusChange: validated.data.effects.statusChange,
           handoffTo: validated.data.effects.handoffTo,
           currentTask: validated.data.effects.currentTask,

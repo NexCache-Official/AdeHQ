@@ -9,6 +9,7 @@ export function enforceEmployeePermissions(
     tasks: [...effect.tasks],
     memory: [...effect.memory],
     approvals: [...effect.approvals],
+    emailDrafts: effect.emailDrafts ? [...effect.emailDrafts] : undefined,
     statusChange: effect.statusChange,
     handoffTo: effect.handoffTo,
     currentTask: effect.currentTask,

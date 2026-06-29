@@ -34,11 +34,19 @@ export const ApprovalEffectSchema = z.object({
   actionType: z.enum(["tool_access", "memory_pin", "task_creation", "external_action"]).optional(),
 });
 
+export const EmailDraftEffectSchema = z.object({
+  subject: z.string(),
+  body: z.string(),
+  recipient: z.string().optional(),
+  company: z.string().optional(),
+});
+
 export const EmployeeEffectsSchema = z.object({
   workLog: z.array(WorkLogEffectSchema).default([]),
   tasks: z.array(TaskEffectSchema).default([]),
   memory: z.array(MemoryEffectSchema).default([]),
   approvals: z.array(ApprovalEffectSchema).default([]),
+  emailDrafts: z.array(EmailDraftEffectSchema).default([]),
   statusChange: z.enum(["idle", "working", "waiting_approval", "on_call", "blocked"]).optional(),
   handoffTo: z.array(z.string()).optional(),
   currentTask: z.string().optional(),

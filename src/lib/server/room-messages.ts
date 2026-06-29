@@ -112,102 +112,14 @@ export type RoomContext = {
   humanParticipants: { id: string; name: string }[];
 };
 
-export async function loadTopicContext(
-  client: SupabaseClient,
-  workspaceId: string,
-  roomId: string,
-  topicId: string,
-): Promise<RoomContext> {
-  const topicResult = await client
-    .from("room_topics")
-    .select("*")
-    .eq("workspace_id", workspaceId)
-    .eq("room_id", roomId)
-    .eq("id", topicId)
-    .single();
-  if (topicResult.error) throw topicResult.error;
-  const topic = topicFromRow(topicResult.data as DbRow);
+export type RespondersContext = {
+  room: Pick<ProjectRoom, "id" | "kind" | "dmEmployeeId">;
+  employees: AIEmployee[];
+};
 
-  const [
-    workspaceResult,
-    roomResult,
-    membersResult,
-    messagesResult,
-    employeesResult,
-    employeeToolsResult,
-    topicMemoryResult,
-    roomPinnedMemoryResult,
-    tasksResult,
-    approvalsResult,
-    workLogsResult,
-    profilesResult,
-  ] = await Promise.all([
-    client.from("workspaces").select("id, name").eq("id", workspaceId).single(),
-    client.from("project_rooms").select("*").eq("workspace_id", workspaceId).eq("id", roomId).single(),
-    client.from("room_members").select("*").eq("workspace_id", workspaceId).eq("room_id", roomId),
-    client
-      .from("messages")
-      .select("*")
-      .eq("workspace_id", workspaceId)
-      .eq("room_id", roomId)
-      .eq("topic_id", topicId)
-      .order("created_at", { ascending: true })
-      .limit(50),
-    client.from("ai_employees").select("*").eq("workspace_id", workspaceId),
-    client.from("employee_tools").select("*").eq("workspace_id", workspaceId),
-    client
-      .from("memory_entries")
-      .select("*")
-      .eq("workspace_id", workspaceId)
-      .eq("topic_id", topicId)
-      .order("created_at", { ascending: false })
-      .limit(12),
-    client
-      .from("memory_entries")
-      .select("*")
-      .eq("workspace_id", workspaceId)
-      .eq("room_id", roomId)
-      .in("status", ["pinned", "approved"])
-      .is("topic_id", null)
-      .order("created_at", { ascending: false })
-      .limit(6),
-    client
-      .from("tasks")
-      .select("*")
-      .eq("workspace_id", workspaceId)
-      .eq("topic_id", topicId)
-      .in("status", ["open", "in_progress", "waiting_approval", "blocked"]),
-    client
-      .from("approvals")
-      .select("*")
-      .eq("workspace_id", workspaceId)
-      .eq("topic_id", topicId)
-      .eq("status", "pending")
-      .order("created_at", { ascending: false })
-      .limit(10),
-    client
-      .from("work_log_events")
-      .select("*")
-      .eq("workspace_id", workspaceId)
-      .eq("topic_id", topicId)
-      .order("created_at", { ascending: false })
-      .limit(15),
-    client.from("profiles").select("id, name"),
-  ]);
-
-  if (workspaceResult.error) throw workspaceResult.error;
-  if (roomResult.error) throw roomResult.error;
-
-  const members = (membersResult.data as DbRow[] | null) ?? [];
-  const humanIds = members.filter((m) => m.member_type === "human").map((m) => String(m.member_id));
-  const aiIds = members.filter((m) => m.member_type === "ai").map((m) => String(m.member_id));
-
-  const profiles = new Map(
-    ((profilesResult.data as DbRow[] | null) ?? []).map((p) => [String(p.id), String(p.name)]),
-  );
-
+function buildToolsByEmployee(toolsRows: DbRow[]): Map<string, ToolAccess[]> {
   const toolsByEmployee = new Map<string, ToolAccess[]>();
-  for (const row of (employeeToolsResult.data as DbRow[] | null) ?? []) {
+  for (const row of toolsRows) {
     const employeeId = String(row.employee_id);
     const access: ToolAccess = {
       toolId: String(row.tool_id),
@@ -221,25 +133,204 @@ export async function loadTopicContext(
     list.push(access);
     toolsByEmployee.set(employeeId, list);
   }
+  return toolsByEmployee;
+}
 
-  const roomRow = roomResult.data as DbRow;
-
-  const employees = ((employeesResult.data as DbRow[] | null) ?? [])
+function employeesInRoom(
+  roomRow: DbRow,
+  members: DbRow[],
+  employeeRows: DbRow[],
+  toolsByEmployee: Map<string, ToolAccess[]>,
+): AIEmployee[] {
+  const aiIds = members.filter((m) => m.member_type === "ai").map((m) => String(m.member_id));
+  const employees = employeeRows
     .filter((row) => aiIds.includes(String(row.id)))
     .map((row) => employeeFromRow(row, toolsByEmployee.get(String(row.id)) ?? []));
 
-  // DM rooms: always include the DM employee even if room_members is stale.
   if (roomRow.kind === "dm" && roomRow.dm_employee_id) {
     const dmId = String(roomRow.dm_employee_id);
     if (!employees.some((e) => e.id === dmId)) {
-      const dmRow = ((employeesResult.data as DbRow[] | null) ?? []).find(
-        (row) => String(row.id) === dmId,
-      );
+      const dmRow = employeeRows.find((row) => String(row.id) === dmId);
       if (dmRow) {
         employees.push(employeeFromRow(dmRow, toolsByEmployee.get(dmId) ?? []));
       }
     }
   }
+
+  return employees;
+}
+
+/** Lightweight load for the message POST route — room employees only, no AI context. */
+export async function loadRespondersContext(
+  client: SupabaseClient,
+  workspaceId: string,
+  roomId: string,
+): Promise<RespondersContext> {
+  const [roomResult, membersResult, employeesResult, toolsResult] = await Promise.all([
+    client
+      .from("project_rooms")
+      .select("id, kind, dm_employee_id")
+      .eq("workspace_id", workspaceId)
+      .eq("id", roomId)
+      .single(),
+    client
+      .from("room_members")
+      .select("member_type, member_id")
+      .eq("workspace_id", workspaceId)
+      .eq("room_id", roomId),
+    client.from("ai_employees").select("*").eq("workspace_id", workspaceId),
+    client.from("employee_tools").select("*").eq("workspace_id", workspaceId),
+  ]);
+
+  if (roomResult.error) throw roomResult.error;
+
+  const roomRow = roomResult.data as DbRow;
+  const toolsByEmployee = buildToolsByEmployee((toolsResult.data as DbRow[] | null) ?? []);
+  const employees = employeesInRoom(
+    roomRow,
+    (membersResult.data as DbRow[] | null) ?? [],
+    (employeesResult.data as DbRow[] | null) ?? [],
+    toolsByEmployee,
+  );
+
+  return {
+    room: {
+      id: String(roomRow.id),
+      kind: roomRow.kind as ProjectRoom["kind"],
+      dmEmployeeId: roomRow.dm_employee_id ? String(roomRow.dm_employee_id) : undefined,
+    },
+    employees,
+  };
+}
+
+export type LoadTopicContextOptions = {
+  /** Smaller fetches for DM threads — faster model calls. */
+  lean?: boolean;
+};
+
+export async function loadTopicContext(
+  client: SupabaseClient,
+  workspaceId: string,
+  roomId: string,
+  topicId: string,
+  options: LoadTopicContextOptions = {},
+): Promise<RoomContext> {
+  const topicResult = await client
+    .from("room_topics")
+    .select("*")
+    .eq("workspace_id", workspaceId)
+    .eq("room_id", roomId)
+    .eq("id", topicId)
+    .single();
+  if (topicResult.error) throw topicResult.error;
+  const topic = topicFromRow(topicResult.data as DbRow);
+
+  const roomResult = await client
+    .from("project_rooms")
+    .select("*")
+    .eq("workspace_id", workspaceId)
+    .eq("id", roomId)
+    .single();
+  if (roomResult.error) throw roomResult.error;
+  const roomRow = roomResult.data as DbRow;
+  const lean = options.lean ?? roomRow.kind === "dm";
+  const messageLimit = lean ? 12 : 50;
+  const memoryLimit = lean ? 6 : 12;
+  const pinnedLimit = lean ? 3 : 6;
+
+  const membersResult = await client
+    .from("room_members")
+    .select("*")
+    .eq("workspace_id", workspaceId)
+    .eq("room_id", roomId);
+
+  const members = (membersResult.data as DbRow[] | null) ?? [];
+  const humanIds = members.filter((m) => m.member_type === "human").map((m) => String(m.member_id));
+  const aiIds = members.filter((m) => m.member_type === "ai").map((m) => String(m.member_id));
+
+  const [
+    workspaceResult,
+    messagesResult,
+    employeesResult,
+    employeeToolsResult,
+    topicMemoryResult,
+    roomPinnedMemoryResult,
+    tasksResult,
+    approvalsResult,
+    workLogsResult,
+    profilesResult,
+  ] = await Promise.all([
+    client.from("workspaces").select("id, name").eq("id", workspaceId).single(),
+    client
+      .from("messages")
+      .select("*")
+      .eq("workspace_id", workspaceId)
+      .eq("room_id", roomId)
+      .eq("topic_id", topicId)
+      .order("created_at", { ascending: true })
+      .limit(messageLimit),
+    client.from("ai_employees").select("*").eq("workspace_id", workspaceId),
+    client.from("employee_tools").select("*").eq("workspace_id", workspaceId),
+    client
+      .from("memory_entries")
+      .select("*")
+      .eq("workspace_id", workspaceId)
+      .eq("topic_id", topicId)
+      .order("created_at", { ascending: false })
+      .limit(memoryLimit),
+    client
+      .from("memory_entries")
+      .select("*")
+      .eq("workspace_id", workspaceId)
+      .eq("room_id", roomId)
+      .in("status", ["pinned", "approved"])
+      .is("topic_id", null)
+      .order("created_at", { ascending: false })
+      .limit(pinnedLimit),
+    client
+      .from("tasks")
+      .select("*")
+      .eq("workspace_id", workspaceId)
+      .eq("topic_id", topicId)
+      .in("status", ["open", "in_progress", "waiting_approval", "blocked"])
+      .limit(lean ? 8 : 50),
+    lean
+      ? Promise.resolve({ data: [], error: null })
+      : client
+          .from("approvals")
+          .select("*")
+          .eq("workspace_id", workspaceId)
+          .eq("topic_id", topicId)
+          .eq("status", "pending")
+          .order("created_at", { ascending: false })
+          .limit(10),
+    lean
+      ? Promise.resolve({ data: [], error: null })
+      : client
+          .from("work_log_events")
+          .select("*")
+          .eq("workspace_id", workspaceId)
+          .eq("topic_id", topicId)
+          .order("created_at", { ascending: false })
+          .limit(15),
+    humanIds.length
+      ? client.from("profiles").select("id, name").in("id", humanIds)
+      : Promise.resolve({ data: [], error: null }),
+  ]);
+
+  if (workspaceResult.error) throw workspaceResult.error;
+
+  const profiles = new Map(
+    ((profilesResult.data as DbRow[] | null) ?? []).map((p) => [String(p.id), String(p.name)]),
+  );
+
+  const toolsByEmployee = buildToolsByEmployee((employeeToolsResult.data as DbRow[] | null) ?? []);
+  const employees = employeesInRoom(
+    roomRow,
+    members,
+    (employeesResult.data as DbRow[] | null) ?? [],
+    toolsByEmployee,
+  );
 
   const messages = ((messagesResult.data as DbRow[] | null) ?? []).map(messageFromRow);
   const topicMemory = ((topicMemoryResult.data as DbRow[] | null) ?? []).map(memoryFromRow);
@@ -396,7 +487,9 @@ export async function insertHumanMessage(
   });
 
   if (error) throw error;
-  await refreshTopicStats(client, topicId);
+  void refreshTopicStats(client, topicId).catch((err) => {
+    console.error("[AdeHQ] topic stats refresh failed", err);
+  });
   return message;
 }
 
@@ -412,6 +505,12 @@ export async function persistEmployeeEffects(
     tasks: Array<Partial<Task>>;
     memory: Array<Partial<MemoryEntry>>;
     approvals: Array<Partial<Approval>>;
+    emailDrafts?: Array<{
+      subject: string;
+      body: string;
+      recipient?: string;
+      company?: string;
+    }>;
     statusChange?: AIEmployee["status"];
     currentTask?: string;
   },
@@ -497,6 +596,31 @@ export async function persistEmployeeEffects(
       type: "task",
       id: createdTaskIds[0],
       label: `${createdTaskIds.length} task${createdTaskIds.length === 1 ? "" : "s"} created`,
+    });
+  }
+
+  if (createdMemoryIds.length) {
+    const firstTitle = effect.memory[0]?.title ?? "Note";
+    artifacts.push({
+      type: "memory",
+      id: createdMemoryIds[0],
+      label: `Saved to memory: ${firstTitle.slice(0, 40)}`,
+    });
+  }
+
+  for (const draft of effect.emailDrafts ?? []) {
+    artifacts.push({
+      type: "email_draft",
+      id: uid("draft"),
+      label: draft.recipient
+        ? `Email draft: ${draft.recipient}${draft.company ? ` @ ${draft.company}` : ""}`
+        : `Email draft: ${draft.subject.slice(0, 48)}`,
+      meta: {
+        subject: draft.subject,
+        body: draft.body,
+        recipient: draft.recipient,
+        company: draft.company,
+      },
     });
   }
 
