@@ -596,6 +596,10 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 
         runRemote(async (workspaceId) => {
           await persistRoom(workspaceId, created);
+          await Promise.all([
+            ...created.humans.map((id) => persistRoomMember(workspaceId, created.id, "human", id)),
+            ...created.aiEmployees.map((id) => persistRoomMember(workspaceId, created.id, "ai", id)),
+          ]);
           await Promise.all(created.messages.map((message) => persistMessage(workspaceId, message)));
         });
 
@@ -643,6 +647,10 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 
         runRemote(async (workspaceId) => {
           await persistRoom(workspaceId, created);
+          await Promise.all([
+            ...created.humans.map((id) => persistRoomMember(workspaceId, created.id, "human", id)),
+            ...created.aiEmployees.map((id) => persistRoomMember(workspaceId, created.id, "ai", id)),
+          ]);
           await persistMessage(workspaceId, created.messages[0]);
         });
 
@@ -711,12 +719,16 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         const created: RoomMessage = {
           id: msg.id ?? uid("msg"),
           roomId,
+          topicId: msg.topicId,
           senderType: msg.senderType,
           senderId: msg.senderId,
           senderName: msg.senderName,
           content: msg.content,
           mentions: msg.mentions,
+          mentionsJson: msg.mentionsJson,
           artifacts: msg.artifacts,
+          agentRunId: msg.agentRunId,
+          triggerMessageId: msg.triggerMessageId,
           pending: msg.pending,
           createdAt: msg.createdAt ?? nowISO(),
         };
@@ -746,12 +758,16 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         const created: RoomMessage = {
           id: msg.id ?? uid("msg"),
           roomId,
+          topicId: msg.topicId,
           senderType: msg.senderType,
           senderId: msg.senderId,
           senderName: msg.senderName,
           content: msg.content,
           mentions: msg.mentions,
+          mentionsJson: msg.mentionsJson,
           artifacts: msg.artifacts,
+          agentRunId: msg.agentRunId,
+          triggerMessageId: msg.triggerMessageId,
           pending: msg.pending,
           failed: msg.failed,
           createdAt: msg.createdAt ?? nowISO(),

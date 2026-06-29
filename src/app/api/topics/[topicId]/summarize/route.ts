@@ -9,6 +9,14 @@ import { nowISO, uid } from "@/lib/utils";
 
 export const runtime = "nodejs";
 
+function cleanSummary(text: string): string {
+  return text
+    .trim()
+    .replace(/^#{1,6}\s*/gm, "")
+    .replace(/\*\*(.*?)\*\*/g, "$1")
+    .replace(/\n{3,}/g, "\n\n");
+}
+
 export async function POST(
   request: NextRequest,
   { params }: { params: { topicId: string } },
@@ -91,18 +99,18 @@ export async function POST(
     const model = siliconFlowChatModel(resolveModel("siliconflow", "balanced"));
     const { text } = await generateText({
       model,
-      system: `You summarize AdeHQ work topics. Produce a concise summary with sections:
-## What happened
-## Current decision
-## Open questions
-## Next tasks
-## Risks
+      system: `You summarize AdeHQ work topics. Produce a concise plain-text summary with these labels and no Markdown heading markers:
+What happened:
+Current decision:
+Open questions:
+Next tasks:
+Risks:
 Stay focused only on this topic. Do not invent facts.`,
       prompt: contextBlock,
       maxOutputTokens: 1200,
     });
 
-    const summary = text.trim();
+    const summary = cleanSummary(text);
     const { data: updated, error: updateError } = await client
       .from("room_topics")
       .update({ summary, updated_at: nowISO() })

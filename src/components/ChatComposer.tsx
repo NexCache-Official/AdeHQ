@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AIEmployee, MentionRef } from "@/lib/types";
 import { EmployeeAvatar } from "./EmployeeAvatar";
 import { cn } from "@/lib/utils";
@@ -26,17 +26,29 @@ export function ChatComposer({
   onSend,
   disabled,
   placeholder,
+  draftText,
+  onDraftConsumed,
 }: {
   employees: AIEmployee[];
   onSend: (text: string, mentionsJson?: MentionRef[]) => void;
   disabled?: boolean;
   placeholder?: string;
+  draftText?: string;
+  onDraftConsumed?: () => void;
 }) {
   const [value, setValue] = useState("");
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
   const [showCommands, setShowCommands] = useState(false);
   const [trackedMentions, setTrackedMentions] = useState<MentionRef[]>([]);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    if (!draftText) return;
+    setValue(draftText);
+    setMentionQuery(null);
+    inputRef.current?.focus();
+    onDraftConsumed?.();
+  }, [draftText, onDraftConsumed]);
 
   const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const v = e.target.value;
@@ -48,13 +60,25 @@ export function ChatComposer({
   };
 
   const insertMention = (emp: AIEmployee) => {
-    setValue((prev) => prev.replace(/@(\w*)$/, `@${emp.name} `));
+    const input = inputRef.current;
+    const caret = input?.selectionStart ?? value.length;
+    const before = value.slice(0, caret);
+    const after = value.slice(caret);
+    const match = before.match(/@([\w\s-]*)$/);
+    const start = match ? before.length - match[0].length : before.length;
+    const next = `${value.slice(0, start)}@${emp.name} ${after}`;
+    const nextCaret = start + emp.name.length + 2;
+
+    setValue(next);
     setTrackedMentions((prev) => {
       if (prev.some((m) => m.id === emp.id)) return prev;
       return [...prev, { type: "ai_employee", id: emp.id, label: emp.name }];
     });
     setMentionQuery(null);
-    inputRef.current?.focus();
+    requestAnimationFrame(() => {
+      inputRef.current?.focus();
+      inputRef.current?.setSelectionRange(nextCaret, nextCaret);
+    });
   };
 
   const send = () => {
@@ -85,6 +109,7 @@ export function ChatComposer({
             </div>
             {filteredMentions.map((e) => (
               <button
+                type="button"
                 key={e.id}
                 onClick={() => insertMention(e)}
                 className="flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left transition-colors hover:bg-slate-100"
@@ -111,6 +136,7 @@ export function ChatComposer({
             </div>
             {employees.slice(0, 3).map((e) => (
               <button
+                type="button"
                 key={e.id}
                 onClick={() => {
                   setValue(`@${e.name} `);
@@ -128,6 +154,7 @@ export function ChatComposer({
             ))}
             {QUICK_COMMANDS.map((c) => (
               <button
+                type="button"
                 key={c.label}
                 onClick={() => {
                   setValue(c.text);
@@ -176,6 +203,7 @@ export function ChatComposer({
           <ComposerButton icon={Paperclip} label="Attach" onClick={() => {}} />
           <ComposerButton icon={Mic} label="Voice" onClick={() => {}} />
           <button
+            type="button"
             onClick={send}
             disabled={!value.trim() || disabled}
             className="ml-auto flex h-9 items-center gap-1.5 rounded-xl bg-accent-600 px-3.5 text-sm font-medium text-white transition-all hover:bg-accent-500 disabled:opacity-40 active:scale-95"
@@ -201,6 +229,7 @@ function ComposerButton({
 }) {
   return (
     <button
+      type="button"
       onClick={onClick}
       title={label}
       className={cn(

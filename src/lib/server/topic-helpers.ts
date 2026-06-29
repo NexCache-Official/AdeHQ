@@ -94,7 +94,11 @@ export async function ensureGeneralTopic(
     .ilike("title", "general")
     .maybeSingle();
   if (findError) throw findError;
-  if (existing) return topicFromRow(existing as DbRow);
+  if (existing) {
+    const topic = topicFromRow(existing as DbRow);
+    await ensureTopicMembersFromRoom(client, workspaceId, roomId, topic.id);
+    return topic;
+  }
 
   const { data: created, error: createError } = await client
     .from("room_topics")
@@ -108,7 +112,55 @@ export async function ensureGeneralTopic(
     .select("*")
     .single();
   if (createError) throw createError;
-  return topicFromRow(created as DbRow);
+  const topic = topicFromRow(created as DbRow);
+  await ensureTopicMembersFromRoom(client, workspaceId, roomId, topic.id);
+  return topic;
+}
+
+async function ensureTopicMembersFromRoom(
+  client: SupabaseClient,
+  workspaceId: string,
+  roomId: string,
+  topicId: string,
+): Promise<void> {
+  const [roomMembersResult, topicMembersResult] = await Promise.all([
+    client
+      .from("room_members")
+      .select("member_type, member_id")
+      .eq("workspace_id", workspaceId)
+      .eq("room_id", roomId),
+    client
+      .from("topic_members")
+      .select("member_type, member_id")
+      .eq("workspace_id", workspaceId)
+      .eq("room_id", roomId)
+      .eq("topic_id", topicId),
+  ]);
+
+  if (roomMembersResult.error) throw roomMembersResult.error;
+  if (topicMembersResult.error) throw topicMembersResult.error;
+
+  const existing = new Set(
+    ((topicMembersResult.data as DbRow[] | null) ?? []).map(
+      (m) => `${String(m.member_type)}:${String(m.member_id)}`,
+    ),
+  );
+  const missing = ((roomMembersResult.data as DbRow[] | null) ?? [])
+    .filter((m) => !existing.has(`${String(m.member_type)}:${String(m.member_id)}`))
+    .map((m) => ({
+      workspace_id: workspaceId,
+      room_id: roomId,
+      topic_id: topicId,
+      member_type: String(m.member_type),
+      member_id: String(m.member_id),
+      role: m.member_type === "human" ? "owner" : "participant",
+    }));
+
+  if (!missing.length) return;
+  const { error } = await client.from("topic_members").upsert(missing, {
+    onConflict: "topic_id,member_type,member_id",
+  });
+  if (error) throw error;
 }
 
 export function slugifyTopicTitle(title: string): string {

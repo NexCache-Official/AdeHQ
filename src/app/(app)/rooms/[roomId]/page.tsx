@@ -30,6 +30,7 @@ export default function RoomDetailPage() {
   const [newTopicOpen, setNewTopicOpen] = useState(false);
   const [summarizing, setSummarizing] = useState(false);
   const [creatingTopic, setCreatingTopic] = useState(false);
+  const [composerDraft, setComposerDraft] = useState("");
 
   const room = state.rooms.find((r) => r.id === roomId);
   const roomTopics = useMemo(
@@ -54,11 +55,17 @@ export default function RoomDetailPage() {
   }, [roomId, backend]);
 
   useEffect(() => {
-    if (!selectedTopicId && roomTopics.length > 0) {
+    if (roomTopics.length === 0) return;
+    const selectedExists = selectedTopicId
+      ? roomTopics.some((t) => t.id === selectedTopicId)
+      : false;
+    if (!selectedExists) {
       const general = generalTopicForRoom(roomTopics, roomId);
-      setSelectedTopicId(general?.id ?? roomTopics[0].id);
+      const nextId = general?.id ?? roomTopics[0].id;
+      setSelectedTopicId(nextId);
+      router.replace(`/rooms/${roomId}?topic=${nextId}`, { scroll: false });
     }
-  }, [roomTopics, roomId, selectedTopicId]);
+  }, [roomTopics, roomId, selectedTopicId, router]);
 
   const selectTopic = useCallback(
     (topicId: string) => {
@@ -166,9 +173,7 @@ export default function RoomDetailPage() {
     const pm = roomEmployees.find((e) => e?.roleKey === "pm") ?? roomEmployees[0];
     if (!pm || !selectedTopic) return;
     const text = `@${pm.name} summarize the current state of this topic and suggest next steps.`;
-    void document.querySelector<HTMLTextAreaElement>("textarea")?.focus();
-    // User can paste via composer quick command — trigger via custom event would be overkill
-    navigator.clipboard?.writeText(text).catch(() => {});
+    setComposerDraft(text);
   };
 
   const saveSummaryToMemory = () => {
@@ -222,6 +227,18 @@ export default function RoomDetailPage() {
           <p className="truncate text-xs text-slate-500">
             {roomTopics.length} topic{roomTopics.length === 1 ? "" : "s"} · {room.humans.length + roomEmployees.length} participants
           </p>
+          {roomEmployees.length > 0 && (
+            <div className="mt-1 flex flex-wrap items-center gap-1.5">
+              {roomEmployees.slice(0, 4).map((employee) => (
+                <span key={employee?.id} className="chip bg-white">
+                  {employee?.name}
+                </span>
+              ))}
+              {roomEmployees.length > 4 && (
+                <span className="text-[11px] text-slate-500">+{roomEmployees.length - 4} more</span>
+              )}
+            </div>
+          )}
         </div>
         <div className="hidden items-center gap-2 sm:flex">
           <Button variant="ghost" size="sm" onClick={() => setNewTopicOpen(true)}>
@@ -247,7 +264,12 @@ export default function RoomDetailPage() {
         </div>
 
         <div className="min-w-0 flex-1 border-r border-slate-200">
-          <RoomChat room={room} topic={selectedTopic} />
+          <RoomChat
+            room={room}
+            topic={selectedTopic}
+            draftText={composerDraft}
+            onDraftConsumed={() => setComposerDraft("")}
+          />
         </div>
 
         <div className="hidden w-[300px] shrink-0 xl:block xl:w-[340px]">

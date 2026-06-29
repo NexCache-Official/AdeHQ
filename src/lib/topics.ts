@@ -8,6 +8,10 @@ export function topicsForRoom(topics: RoomTopic[], roomId: string): RoomTopic[] 
 
 export function sortTopics(topics: RoomTopic[]): RoomTopic[] {
   return [...topics].sort((a, b) => {
+    const aGeneral = a.title.toLowerCase() === "general" ? 1 : 0;
+    const bGeneral = b.title.toLowerCase() === "general" ? 1 : 0;
+    if (aGeneral !== bGeneral) return bGeneral - aGeneral;
+
     const aRunning = a.agentRunCount > 0 ? 1 : 0;
     const bRunning = b.agentRunCount > 0 ? 1 : 0;
     if (aRunning !== bRunning) return bRunning - aRunning;

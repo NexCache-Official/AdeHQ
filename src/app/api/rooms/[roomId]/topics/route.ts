@@ -2,7 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { AuthError, requireAuthUser, requireWorkspaceMembership } from "@/lib/supabase/auth-server";
 import { assertCanAccessRoom } from "@/lib/server/room-access";
 import { getWorkspaceIdForRoom } from "@/lib/server/room-messages";
-import { topicFromRow, topicMemberFromRow, slugifyTopicTitle } from "@/lib/server/topic-helpers";
+import {
+  ensureGeneralTopic,
+  topicFromRow,
+  topicMemberFromRow,
+  slugifyTopicTitle,
+} from "@/lib/server/topic-helpers";
 import { refreshTopicStats } from "@/lib/server/topic-stats";
 import { nowISO, uid } from "@/lib/utils";
 import type { TopicPriority } from "@/lib/types";
@@ -30,6 +35,8 @@ export async function GET(
 
     const { role } = await requireWorkspaceMembership(client, workspaceId, user.id);
     await assertCanAccessRoom(client, workspaceId, params.roomId, user.id, role);
+
+    await ensureGeneralTopic(client, workspaceId, params.roomId);
 
     const [topicsResult, membersResult] = await Promise.all([
       client

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useStore } from "@/lib/demo-store";
 import { authHeaders } from "@/lib/api/auth-client";
 import {
@@ -62,6 +62,13 @@ export function AiRuntimePanel() {
       (m) =>
         m.userId === state.user?.id && (m.role === "owner" || m.role === "admin"),
     );
+  const roomsForSelectedEmployee = useMemo(
+    () =>
+      testEmployeeId
+        ? state.rooms.filter((r) => r.aiEmployees.includes(testEmployeeId))
+        : state.rooms,
+    [state.rooms, testEmployeeId],
+  );
 
   const refreshSnapshot = async () => {
     if (!state.workspace.id) return;
@@ -96,8 +103,18 @@ export function AiRuntimePanel() {
 
   useEffect(() => {
     if (!testEmployeeId && state.employees[0]) setTestEmployeeId(state.employees[0].id);
-    if (!testRoomId && state.rooms[0]) setTestRoomId(state.rooms[0].id);
-  }, [state.employees, state.rooms, testEmployeeId, testRoomId]);
+  }, [state.employees, testEmployeeId]);
+
+  useEffect(() => {
+    if (!roomsForSelectedEmployee.length) {
+      setTestRoomId("");
+      return;
+    }
+    if (!testRoomId || !roomsForSelectedEmployee.some((r) => r.id === testRoomId)) {
+      const preferred = roomsForSelectedEmployee.find((r) => r.id === state.employees.find((e) => e.id === testEmployeeId)?.defaultRoomId);
+      setTestRoomId((preferred ?? roomsForSelectedEmployee[0]).id);
+    }
+  }, [roomsForSelectedEmployee, testRoomId, state.employees, testEmployeeId]);
 
   const runEmployeeTest = async () => {
     if (!testEmployeeId || !testRoomId || !testPrompt.trim()) return;
@@ -288,11 +305,14 @@ export function AiRuntimePanel() {
             value={testRoomId}
             onChange={(e) => setTestRoomId(e.target.value)}
           >
-            {state.rooms.map((r) => (
+            {roomsForSelectedEmployee.map((r) => (
               <option key={r.id} value={r.id}>
                 {r.name}
               </option>
             ))}
+            {!roomsForSelectedEmployee.length && (
+              <option value="">No rooms contain this employee</option>
+            )}
           </select>
         </div>
         <textarea
@@ -300,7 +320,7 @@ export function AiRuntimePanel() {
           value={testPrompt}
           onChange={(e) => setTestPrompt(e.target.value)}
         />
-        <Button className="mt-3" size="sm" onClick={runEmployeeTest} disabled={testBusy || !state.employees.length}>
+        <Button className="mt-3" size="sm" onClick={runEmployeeTest} disabled={testBusy || !state.employees.length || !testRoomId}>
           {testBusy ? "Testing…" : "Run employee test"}
         </Button>
         {testResult && (

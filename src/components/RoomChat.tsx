@@ -29,15 +29,20 @@ type PendingSend = {
 export function RoomChat({
   room,
   topic,
+  draftText,
+  onDraftConsumed,
 }: {
   room: ProjectRoom;
   topic?: RoomTopic;
+  draftText?: string;
+  onDraftConsumed?: () => void;
 }) {
   const { state, actions, backend } = useStore();
   const respond = useResponder();
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [failedSend, setFailedSend] = useState<PendingSend | null>(null);
+  const [sendError, setSendError] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   const topicMessages = topic
@@ -89,6 +94,7 @@ export function RoomChat({
     if (!topic) return;
     setBusy(true);
     setFailedSend(null);
+    setSendError(null);
     const messageId = clientMessageId ?? uid("msg");
     const mentions = extractMentions(
       text,
@@ -143,6 +149,7 @@ export function RoomChat({
     } catch (error) {
       actions.removeLocalMessage(room.id, messageId);
       setFailedSend({ clientMessageId: messageId, content: text });
+      setSendError(error instanceof Error ? error.message : "Unable to send message.");
       console.error("[AdeHQ RoomChat]", error);
     } finally {
       setBusy(false);
@@ -204,6 +211,12 @@ export function RoomChat({
     );
   }
 
+  const placeholder = isDM && dmEmployee
+    ? `Message ${dmEmployee.name} directly…`
+    : topic.title.toLowerCase() === "general"
+      ? `Message #${room.name} general chat…`
+      : `Discuss ${topic.title}… mention an employee with @ when you need help`;
+
   return (
     <div className="flex h-full flex-col">
       <div className="shrink-0 border-b border-slate-200 bg-white px-4 py-2.5 sm:px-6">
@@ -250,7 +263,9 @@ export function RoomChat({
         <div className="border-t border-rose-200 bg-rose-50 px-4 py-2 sm:px-6">
           <div className="mx-auto flex max-w-3xl items-center gap-3 text-sm text-rose-800">
             <AlertCircle className="h-4 w-4 shrink-0" />
-            <span className="flex-1">Message failed to send.</span>
+            <span className="flex-1">
+              Message failed to send{sendError ? `: ${sendError}` : "."}
+            </span>
             <Button size="sm" variant="secondary" onClick={retryFailed}>
               <RotateCcw className="h-3.5 w-3.5" /> Retry
             </Button>
@@ -264,7 +279,9 @@ export function RoomChat({
             employees={roomEmployees}
             onSend={handleSend}
             disabled={busy || !topic}
-            placeholder={`Message ${topic.title}… use @ to mention an employee`}
+            placeholder={placeholder}
+            draftText={draftText}
+            onDraftConsumed={onDraftConsumed}
           />
           {useServerApi && roomEmployees.length > 0 && (
             <p className="mt-2 px-1 text-[11px] text-slate-600">

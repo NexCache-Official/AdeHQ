@@ -856,7 +856,10 @@ function messageRow(workspaceId: string, message: RoomMessage): DbRow {
     sender_name: message.senderName,
     content: message.content,
     mentions: message.mentions ?? [],
+    mentions_json: message.mentionsJson ?? [],
     artifacts: message.artifacts ?? null,
+    agent_run_id: message.agentRunId ?? null,
+    trigger_message_id: message.triggerMessageId ?? null,
     pending: message.pending ?? false,
     created_at: message.createdAt,
   };
