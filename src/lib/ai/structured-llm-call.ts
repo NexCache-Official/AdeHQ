@@ -1,4 +1,5 @@
 import { generateObject, generateText, type LanguageModel } from "ai";
+import type { ProviderOptions } from "@ai-sdk/provider-utils";
 import { ModelResponseSchema } from "./schemas";
 import type { EmployeeResponse } from "./types";
 
@@ -72,12 +73,36 @@ export type StructuredLlmOptions = {
   maxTokens: number;
   timeoutMs: number;
   temperature?: number;
+  providerOptions?: ProviderOptions;
+  /** Use OpenAI-compatible json_object mode for tier 2 (SiliconFlow, etc.). */
+  preferJsonMode?: boolean;
 };
+
+function mergeProviderOptions(
+  base: ProviderOptions | undefined,
+  extra: ProviderOptions,
+): ProviderOptions {
+  const openaiBase = base?.openai ?? {};
+  const openaiExtra = extra.openai ?? {};
+  return {
+    ...base,
+    openai: { ...openaiBase, ...openaiExtra },
+  };
+}
 
 export async function callStructuredLlm(
   options: StructuredLlmOptions,
 ): Promise<StructuredLlmResult> {
-  const { model, system, prompt, maxTokens, timeoutMs, temperature = 0.45 } = options;
+  const {
+    model,
+    system,
+    prompt,
+    maxTokens,
+    timeoutMs,
+    temperature = 0.45,
+    providerOptions,
+    preferJsonMode = false,
+  } = options;
   const abortController = new AbortController();
   const timer = setTimeout(() => abortController.abort(), timeoutMs);
 
@@ -91,6 +116,7 @@ export async function callStructuredLlm(
         temperature,
         maxOutputTokens: maxTokens,
         abortSignal: abortController.signal,
+        providerOptions,
       });
 
       return {
@@ -103,6 +129,12 @@ export async function callStructuredLlm(
       };
     } catch {
       try {
+        const jsonModeOptions = preferJsonMode
+          ? mergeProviderOptions(providerOptions, {
+              openai: { responseFormat: { type: "json_object" } },
+            })
+          : providerOptions;
+
         const textResult = await generateText({
           model,
           system: `${system}\n\nReturn ONLY valid JSON matching this shape:\n{"reply":"string","effects":{"workLog":[],"tasks":[],"memory":[],"approvals":[]}}`,
@@ -110,6 +142,7 @@ export async function callStructuredLlm(
           temperature,
           maxOutputTokens: maxTokens,
           abortSignal: abortController.signal,
+          providerOptions: jsonModeOptions,
         });
 
         const parsed = ModelResponseSchema.parse(extractJson(textResult.text));
@@ -122,23 +155,29 @@ export async function callStructuredLlm(
           fallbackTier: 2,
         };
       } catch {
-        const textResult = await generateText({
-          model,
-          system,
-          prompt,
-          temperature,
-          maxOutputTokens: maxTokens,
-          abortSignal: abortController.signal,
-        });
+        try {
+          const textResult = await generateText({
+            model,
+            system,
+            prompt,
+            temperature,
+            maxOutputTokens: maxTokens,
+            abortSignal: abortController.signal,
+            providerOptions,
+          });
 
-        return {
-          response: tier3Fallback(textResult.text),
-          inputTokens: textResult.usage?.inputTokens,
-          outputTokens: textResult.usage?.outputTokens,
-          cachedTokens: (textResult.usage as { cachedInputTokens?: number } | undefined)?.cachedInputTokens,
-          structuredOutputUsed: false,
-          fallbackTier: 3,
-        };
+          return {
+            response: tier3Fallback(textResult.text),
+            inputTokens: textResult.usage?.inputTokens,
+            outputTokens: textResult.usage?.outputTokens,
+            cachedTokens: (textResult.usage as { cachedInputTokens?: number } | undefined)
+              ?.cachedInputTokens,
+            structuredOutputUsed: false,
+            fallbackTier: 3,
+          };
+        } catch (tier3Error) {
+          throw tier3Error;
+        }
       }
     }
   } finally {

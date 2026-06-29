@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createOpenAI } from "@ai-sdk/openai";
 import { openai } from "@ai-sdk/openai";
 import { AuthError, requireAuthUser, requireWorkspaceMembership } from "@/lib/supabase/auth-server";
 import { recordAiRuntime } from "@/lib/ai/runtime-log";
+import {
+  siliconFlowChatModel,
+  siliconFlowProviderOptions,
+} from "@/lib/ai/siliconflow-client";
 import {
   siliconFlowModelsForMode,
 } from "@/lib/ai/siliconflow-call";
@@ -15,7 +18,6 @@ import {
 import {
   isOpenAiConfigured,
   isSiliconFlowConfigured,
-  SILICONFLOW_API_BASE_URL,
   DEFAULT_OPENAI_MODEL,
 } from "@/lib/config/features";
 import {
@@ -87,14 +89,6 @@ export async function POST(request: NextRequest) {
         ? siliconFlowModelsForMode(resolvedModel, modelMode)
         : [...new Set([resolvedModel, ...OPENAI_HEALTH_FALLBACKS])];
 
-    const siliconflowClient =
-      provider === "siliconflow"
-        ? createOpenAI({
-            apiKey: process.env.SILICONFLOW_API_KEY,
-            baseURL: SILICONFLOW_API_BASE_URL,
-          })
-        : null;
-
     const result = await callProviderHealthCheck(
       provider,
       models,
@@ -104,8 +98,8 @@ export async function POST(request: NextRequest) {
       timeoutMs,
       (modelId) =>
         provider === "siliconflow"
-          ? siliconflowClient!(modelId)
-          : openai(modelId),
+          ? siliconFlowChatModel(modelId)
+          : openai.chat(modelId),
     );
 
     const inputTokens = result.inputTokens ?? 0;

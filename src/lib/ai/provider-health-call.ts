@@ -1,6 +1,8 @@
 import { generateText, type LanguageModel } from "ai";
+import type { ProviderOptions } from "@ai-sdk/provider-utils";
 import { estimateCost } from "./model-catalog";
 import { formatProviderError } from "./provider-errors";
+import { siliconFlowProviderOptions } from "./siliconflow-client";
 
 export type ProviderHealthResult = {
   model: string;
@@ -38,6 +40,8 @@ export async function callProviderHealthCheck(
         maxOutputTokens: maxTokens,
         temperature: 0.3,
         abortSignal: abortController.signal,
+        providerOptions:
+          provider === "siliconflow" ? siliconFlowProviderOptions(modelId) : undefined,
       });
 
       clearTimeout(timer);

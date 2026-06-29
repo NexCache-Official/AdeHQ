@@ -10,8 +10,8 @@ export const DEFAULT_SILICONFLOW_MODEL =
 
 export const SILICONFLOW_MODEL = DEFAULT_SILICONFLOW_MODEL;
 
-/** Verified on SiliconFlow API; Qwen3.5-9B may 404 on some accounts. */
-export const SILICONFLOW_CHEAP_MODEL_FALLBACK = "Qwen/Qwen3-8B";
+/** Verified on SiliconFlow API — reliable, low cost, no reasoning-token burn. */
+export const SILICONFLOW_CHEAP_MODEL_FALLBACK = "deepseek-ai/DeepSeek-V3";
 
 export const SILICONFLOW_CHEAP_MODEL =
   process.env.ADEHQ_SILICONFLOW_CHEAP_MODEL ?? SILICONFLOW_CHEAP_MODEL_FALLBACK;
