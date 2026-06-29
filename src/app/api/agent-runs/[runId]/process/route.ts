@@ -3,6 +3,7 @@ import { AuthError, requireAuthUser, requireWorkspaceMembership } from "@/lib/su
 import { assertCanAccessRoom } from "@/lib/server/room-access";
 import { processQueuedAgentRun } from "@/lib/server/process-queued-run";
 import { createServiceRoleClient } from "@/lib/supabase/server";
+import { debugErrorPayload, serializeUnknownError } from "@/lib/server/message-errors";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -85,7 +86,7 @@ export async function POST(
       return NextResponse.json({ error: error.message }, { status: error.status });
     }
     console.error("[AdeHQ process agent run]", error);
-    const message = error instanceof Error ? error.message : "Agent run failed.";
+    const message = serializeUnknownError(error);
     const debug = request.headers.get("X-AdeHQ-Debug") === "true";
     return NextResponse.json(
       {
@@ -93,12 +94,14 @@ export async function POST(
         error: message,
         debug: debug
           ? {
-              hint: message.includes("SILICONFLOW")
+              ...debugErrorPayload(error),
+              hint: message.includes("SILICONFLOW") || message.includes("API key")
                 ? "Set SILICONFLOW_API_KEY in Vercel environment variables."
                 : message.includes("SERVICE_ROLE") || message.includes("service role")
                   ? "Set SUPABASE_SERVICE_ROLE_KEY in Vercel environment variables."
-                  : undefined,
-              stack: error instanceof Error ? error.stack?.split("\n").slice(0, 5) : undefined,
+                  : message.includes("null value") && message.includes("id")
+                    ? "Database insert missing required id — redeploy latest code."
+                    : undefined,
             }
           : undefined,
       },

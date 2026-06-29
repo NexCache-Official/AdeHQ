@@ -21,3 +21,28 @@ export function messageError(
   }
   return NextResponse.json({ error: message, code, ...extra }, { status });
 }
+
+/** Supabase/PostgREST errors are plain objects, not `instanceof Error`. */
+export function serializeUnknownError(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  if (error && typeof error === "object" && "message" in error) {
+    const msg = String((error as { message: unknown }).message);
+    const code = "code" in error ? String((error as { code: unknown }).code) : "";
+    const details = "details" in error ? String((error as { details: unknown }).details) : "";
+    return [msg, code && `(${code})`, details].filter(Boolean).join(" ");
+  }
+  return String(error ?? "Unknown error");
+}
+
+export function debugErrorPayload(error: unknown) {
+  if (error instanceof Error) {
+    return {
+      message: error.message,
+      stack: error.stack?.split("\n").slice(0, 8),
+    };
+  }
+  if (error && typeof error === "object") {
+    return error as Record<string, unknown>;
+  }
+  return { message: String(error) };
+}

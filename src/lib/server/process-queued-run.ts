@@ -8,8 +8,10 @@ import {
   getTimeoutMs,
   type ModelMode,
 } from "@/lib/ai/model-catalog";
-import { appendRunStep } from "@/lib/supabase/ai-runtime";
+import { appendRunStep, completeAgentRun, finalizeUsage } from "@/lib/supabase/ai-runtime";
 import { loadTopicContext, persistEmployeeEffects } from "@/lib/server/room-messages";
+import { serializeUnknownError } from "@/lib/server/message-errors";
+import { nowISO } from "@/lib/utils";
 
 type DbRow = Record<string, unknown>;
 
@@ -35,7 +37,7 @@ export async function processQueuedAgentRun(
 
   const run = runRow as DbRow;
   const status = String(run.status);
-  if (status !== "queued" && status !== "running") {
+  if (!["queued", "running"].includes(status)) {
     throw new Error(`Agent run is ${status}, not processable.`);
   }
 
@@ -49,6 +51,7 @@ export async function processQueuedAgentRun(
   const { data: usageRow } = await client
     .from("ai_usage_events")
     .select("id, estimated_max_output_tokens")
+    .eq("workspace_id", workspaceId)
     .eq("agent_run_id", runId)
     .maybeSingle();
 
@@ -59,172 +62,207 @@ export async function processQueuedAgentRun(
 
   await client
     .from("agent_runs")
-    .update({ status: "running" })
+    .update({ status: "running", error_message: null })
     .eq("workspace_id", workspaceId)
     .eq("id", runId);
 
-  const ctx = await loadTopicContext(client, workspaceId, roomId, topicId);
-  const employee = ctx.employees.find((e) => e.id === employeeId);
-  if (!employee) throw new Error("Employee not found in this room.");
+  try {
+    const ctx = await loadTopicContext(client, workspaceId, roomId, topicId);
+    const employee = ctx.employees.find((e) => e.id === employeeId);
+    if (!employee) throw new Error("Employee not found in this room.");
 
-  const { data: triggerMsg } = await client
-    .from("messages")
-    .select("content")
-    .eq("workspace_id", workspaceId)
-    .eq("id", triggerMessageId)
-    .maybeSingle();
+    const { data: triggerMsg } = await client
+      .from("messages")
+      .select("content")
+      .eq("workspace_id", workspaceId)
+      .eq("id", triggerMessageId)
+      .maybeSingle();
 
-  const content = options.content ?? (triggerMsg?.content ? String(triggerMsg.content) : "");
+    const content = options.content ?? (triggerMsg?.content ? String(triggerMsg.content) : "");
 
-  await client
-    .from("ai_employees")
-    .update({ status: "working", last_active_at: new Date().toISOString() })
-    .eq("workspace_id", workspaceId)
-    .eq("id", employeeId);
+    await client
+      .from("ai_employees")
+      .update({ status: "working", last_active_at: nowISO() })
+      .eq("workspace_id", workspaceId)
+      .eq("id", employeeId);
 
-  await appendRunStep(client, {
-    workspaceId,
-    agentRunId: runId,
-    roomId,
-    topicId,
-    employeeId,
-    stepType: "thinking",
-    title: "Reading context",
-    summary: "Reviewed topic messages and workspace context",
-    status: "running",
-  });
+    await appendRunStep(client, {
+      workspaceId,
+      agentRunId: runId,
+      roomId,
+      topicId,
+      employeeId,
+      stepType: "thinking",
+      title: "Reading context",
+      summary: "Reviewed topic messages and workspace context",
+      status: "running",
+    });
 
-  const modelMode: ModelMode = employee.modelMode ?? defaultModelModeForRole(employee.roleKey);
-  const isLive = options.mode !== "mock" && employee.provider.toLowerCase() !== "mock";
+    const modelMode: ModelMode = employee.modelMode ?? defaultModelModeForRole(employee.roleKey);
+    const isLive = options.mode !== "mock" && employee.provider.toLowerCase() !== "mock";
 
-  const roomWithMessages = {
-    ...ctx.room,
-    messages: [
-      ...ctx.room.messages,
-      {
-        id: triggerMessageId,
+    const roomWithMessages = {
+      ...ctx.room,
+      messages: [
+        ...ctx.room.messages,
+        {
+          id: triggerMessageId,
+          roomId,
+          topicId,
+          senderType: "human" as const,
+          senderId: "user",
+          senderName: "User",
+          content,
+          createdAt: nowISO(),
+        },
+      ],
+    };
+
+    if (!isLive || !usageId) {
+      const reply = `I'm ${employee.name}. Live AI is not configured for this employee.`;
+      const { aiMessage } = await persistEmployeeEffects(
+        client,
+        workspaceId,
         roomId,
         topicId,
-        senderType: "human" as const,
-        senderId: "user",
-        senderName: "User",
-        content,
-        createdAt: new Date().toISOString(),
-      },
-    ],
-  };
+        employee,
+        reply,
+        { workLog: [], tasks: [], memory: [], approvals: [] },
+        triggerMessageId,
+        runId,
+      );
+      await completeAgentRun(client, workspaceId, runId, {
+        status: "completed",
+        responseMessageId: aiMessage.id,
+      });
+      return {
+        reply,
+        aiMessageId: aiMessage.id,
+        aiMode: "mock",
+        employeeId,
+        employeeName: employee.name,
+      };
+    }
 
-  if (!isLive || !usageId) {
-    const reply = `I'm ${employee.name}. Live AI is not configured for this employee.`;
+    await appendRunStep(client, {
+      workspaceId,
+      agentRunId: runId,
+      roomId,
+      topicId,
+      employeeId,
+      stepType: "model_call",
+      title: "Thinking",
+      summary: `${employee.provider} · ${modelMode}`,
+      status: "running",
+    });
+
+    const { response, aiMode, metrics, failed, errorMessage } = await routeEmployeeResponse(
+      {
+        employee,
+        room: roomWithMessages,
+        topic: ctx.topic,
+        message: content,
+        allEmployees: ctx.employees,
+        recentMemory: ctx.recentMemory,
+        topicTasks: ctx.openTasks,
+        topicApprovals: ctx.topicApprovals,
+        topicWorkLogs: ctx.topicWorkLogs,
+        workspaceName: ctx.workspaceName,
+        openTasks: ctx.openTasks.map((t) => ({
+          id: t.id,
+          title: t.title,
+          status: t.status,
+          priority: t.priority,
+        })),
+        humanParticipants: ctx.humanParticipants,
+      },
+      {
+        mode: options.mode,
+        provider: employee.provider,
+        modelMode,
+        maxOutputTokens: maxOutputTokens ?? getOutputTokenCap(modelMode),
+        timeoutMs: getTimeoutMs(modelMode),
+        context: {
+          workspaceId,
+          roomId,
+          topicId,
+          agentRunId: runId,
+          client,
+        },
+      },
+    );
+
+    const effect = enforceEmployeePermissions(employee, response.effect);
+
     const { aiMessage } = await persistEmployeeEffects(
       client,
       workspaceId,
       roomId,
       topicId,
       employee,
-      reply,
-      { workLog: [], tasks: [], memory: [], approvals: [] },
+      response.reply,
+      effect,
       triggerMessageId,
       runId,
     );
+
+    await finalizeAiRun({
+      client,
+      workspaceId,
+      runId,
+      usageId,
+      responseMessageId: aiMessage.id,
+      inputTokens: metrics?.inputTokens,
+      outputTokens: metrics?.outputTokens,
+      cachedTokens: metrics?.cachedTokens,
+      actualCostUsd: metrics?.estimatedCostUsd,
+      latencyMs: metrics?.durationMs,
+      fallbackUsed: metrics?.fallbackUsed,
+      failed: failed || aiMode === "error",
+      errorMessage,
+    });
+
+    await client
+      .from("ai_employees")
+      .update({ status: "idle", last_active_at: nowISO() })
+      .eq("workspace_id", workspaceId)
+      .eq("id", employeeId);
+
     return {
-      reply,
+      reply: response.reply,
       aiMessageId: aiMessage.id,
-      aiMode: "mock",
+      aiMode,
       employeeId,
       employeeName: employee.name,
     };
+  } catch (error) {
+    const message = serializeUnknownError(error);
+    await completeAgentRun(client, workspaceId, runId, {
+      status: "failed",
+      errorMessage: message,
+    });
+    if (usageId) {
+      await finalizeUsage(client, usageId, {
+        status: "failed",
+        errorMessage: message,
+      }).catch(() => {});
+    }
+    await appendRunStep(client, {
+      workspaceId,
+      agentRunId: runId,
+      roomId,
+      topicId,
+      employeeId,
+      stepType: "error",
+      title: "Run failed",
+      summary: message,
+      status: "failed",
+    }).catch(() => undefined);
+    await client
+      .from("ai_employees")
+      .update({ status: "idle", last_active_at: nowISO() })
+      .eq("workspace_id", workspaceId)
+      .eq("id", employeeId);
+    throw error;
   }
-
-  await appendRunStep(client, {
-    workspaceId,
-    agentRunId: runId,
-    roomId,
-    topicId,
-    employeeId,
-    stepType: "model_call",
-    title: "Thinking",
-    summary: `${employee.provider} · ${modelMode}`,
-    status: "running",
-  });
-
-  const { response, aiMode, metrics, failed, errorMessage } = await routeEmployeeResponse(
-    {
-      employee,
-      room: roomWithMessages,
-      topic: ctx.topic,
-      message: content,
-      allEmployees: ctx.employees,
-      recentMemory: ctx.recentMemory,
-      topicTasks: ctx.openTasks,
-      topicApprovals: ctx.topicApprovals,
-      topicWorkLogs: ctx.topicWorkLogs,
-      workspaceName: ctx.workspaceName,
-      openTasks: ctx.openTasks.map((t) => ({
-        id: t.id,
-        title: t.title,
-        status: t.status,
-        priority: t.priority,
-      })),
-      humanParticipants: ctx.humanParticipants,
-    },
-    {
-      mode: options.mode,
-      provider: employee.provider,
-      modelMode,
-      maxOutputTokens: maxOutputTokens ?? getOutputTokenCap(modelMode),
-      timeoutMs: getTimeoutMs(modelMode),
-      context: {
-        workspaceId,
-        roomId,
-        topicId,
-        agentRunId: runId,
-        client,
-      },
-    },
-  );
-
-  const effect = enforceEmployeePermissions(employee, response.effect);
-
-  const { aiMessage } = await persistEmployeeEffects(
-    client,
-    workspaceId,
-    roomId,
-    topicId,
-    employee,
-    response.reply,
-    effect,
-    triggerMessageId,
-    runId,
-  );
-
-  await finalizeAiRun({
-    client,
-    workspaceId,
-    runId,
-    usageId,
-    responseMessageId: aiMessage.id,
-    inputTokens: metrics?.inputTokens,
-    outputTokens: metrics?.outputTokens,
-    cachedTokens: metrics?.cachedTokens,
-    actualCostUsd: metrics?.estimatedCostUsd,
-    latencyMs: metrics?.durationMs,
-    fallbackUsed: metrics?.fallbackUsed,
-    failed: failed || aiMode === "error",
-    errorMessage,
-  });
-
-  await client
-    .from("ai_employees")
-    .update({ status: "idle", last_active_at: new Date().toISOString() })
-    .eq("workspace_id", workspaceId)
-    .eq("id", employeeId);
-
-  return {
-    reply: response.reply,
-    aiMessageId: aiMessage.id,
-    aiMode,
-    employeeId,
-    employeeName: employee.name,
-  };
 }

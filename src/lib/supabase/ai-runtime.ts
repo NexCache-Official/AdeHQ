@@ -277,6 +277,7 @@ export async function appendRunStep(
   },
 ): Promise<void> {
   const { error } = await client.from("agent_run_steps").insert({
+    id: uid("step"),
     workspace_id: params.workspaceId,
     agent_run_id: params.agentRunId,
     room_id: params.roomId,
