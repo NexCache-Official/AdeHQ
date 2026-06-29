@@ -40,6 +40,8 @@ export async function processEmployeeResponse(
     .eq("workspace_id", ctx.workspaceId)
     .eq("id", employeeId);
 
+  const topicId = ctx.topic.id;
+
   const roomWithMessages = {
     ...ctx.room,
     messages: [
@@ -47,6 +49,7 @@ export async function processEmployeeResponse(
       {
         id: options.triggerMessageId ?? "trigger",
         roomId: ctx.room.id,
+        topicId,
         senderType: "human" as const,
         senderId: "user",
         senderName: "User",
@@ -70,6 +73,7 @@ export async function processEmployeeResponse(
       workspaceId: ctx.workspaceId,
       employeeId,
       roomId: ctx.room.id,
+      topicId,
       triggerMessageId: options.triggerMessageId,
       provider,
       modelMode,
@@ -95,6 +99,7 @@ export async function processEmployeeResponse(
         client,
         ctx.workspaceId,
         ctx.room.id,
+        topicId,
         employee,
         blockedReply.reply,
         blockedReply.effect,
@@ -112,6 +117,7 @@ export async function processEmployeeResponse(
       workspaceId: ctx.workspaceId,
       agentRunId: runId,
       roomId: ctx.room.id,
+      topicId,
       employeeId,
       stepType: "thinking",
       title: "Preparing response",
@@ -124,9 +130,13 @@ export async function processEmployeeResponse(
     {
       employee,
       room: roomWithMessages,
+      topic: ctx.topic,
       message: content,
       allEmployees: ctx.employees,
       recentMemory: ctx.recentMemory,
+      topicTasks: ctx.openTasks,
+      topicApprovals: ctx.topicApprovals,
+      topicWorkLogs: ctx.topicWorkLogs,
       workspaceName: ctx.workspaceName,
       openTasks: ctx.openTasks.map((t) => ({
         id: t.id,
@@ -145,6 +155,7 @@ export async function processEmployeeResponse(
       context: {
         workspaceId: ctx.workspaceId,
         roomId: ctx.room.id,
+        topicId,
         agentRunId: runId,
         client,
       },
@@ -158,6 +169,7 @@ export async function processEmployeeResponse(
       workspaceId: ctx.workspaceId,
       agentRunId: runId,
       roomId: ctx.room.id,
+      topicId,
       employeeId,
       stepType: "memory_write",
       title: "Saving memory",
@@ -170,6 +182,7 @@ export async function processEmployeeResponse(
       workspaceId: ctx.workspaceId,
       agentRunId: runId,
       roomId: ctx.room.id,
+      topicId,
       employeeId,
       stepType: "task_create",
       title: "Creating tasks",
@@ -182,6 +195,7 @@ export async function processEmployeeResponse(
       workspaceId: ctx.workspaceId,
       agentRunId: runId,
       roomId: ctx.room.id,
+      topicId,
       employeeId,
       stepType: "approval_request",
       title: "Requesting approval",
@@ -194,6 +208,7 @@ export async function processEmployeeResponse(
     client,
     ctx.workspaceId,
     ctx.room.id,
+    topicId,
     employee,
     response.reply,
     effect,

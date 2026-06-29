@@ -1,8 +1,11 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { ENABLE_DEMO_MODE } from "@/lib/config/features";
-import { isOpenAiConfigured, isSiliconFlowConfigured } from "@/lib/config/features";
+import {
+  ENABLE_DEMO_MODE,
+  isSiliconFlowConfigured,
+  normalizeLiveProvider,
+  type LiveProvider,
+} from "@/lib/config/features";
 import { recordAiRuntime } from "@/lib/ai/runtime-log";
-import { callOpenAiEmployee } from "@/lib/ai/openai-call";
 import { callSiliconFlowEmployee } from "@/lib/ai/siliconflow-call";
 import {
   estimateCost,
@@ -14,11 +17,11 @@ import { appendRunStep } from "@/lib/supabase/ai-runtime";
 import { sendMessageToEmployee } from "./employee-engine";
 import { buildEmployeeSystemPrompt, buildEmployeeUserPrompt } from "./prompts";
 import type { EmployeeResponse, SendMessageInput } from "./types";
-import type { ModelProvider } from "./types";
 
 type RouteContext = {
   workspaceId?: string;
   roomId?: string;
+  topicId?: string;
   agentRunId?: string;
   client?: SupabaseClient;
 };
@@ -138,14 +141,6 @@ async function scriptedFallback(
   return { response: resolved, aiMode: "fallback" };
 }
 
-function normalizeProvider(raw?: string): ModelProvider {
-  const value = (raw ?? "mock").toLowerCase();
-  if (value === "openai") return "openai";
-  if (value === "mock") return "mock";
-  if (value === "siliconflow") return "siliconflow";
-  return value as ModelProvider;
-}
-
 export type LiveCallMetrics = {
   model: string;
   inputTokens: number;
@@ -156,37 +151,6 @@ export type LiveCallMetrics = {
   estimatedCostUsd: number;
   durationMs: number;
 };
-
-async function dispatchLiveCall(
-  provider: ModelProvider,
-  system: string,
-  prompt: string,
-  model: string,
-  maxOutputTokens: number,
-  timeoutMs: number,
-): Promise<{
-  response: Pick<EmployeeResponse, "reply" | "effect">;
-  model: string;
-  inputTokens?: number;
-  outputTokens?: number;
-  cachedTokens?: number;
-  fallbackTier?: number;
-  structuredOutputUsed: boolean;
-}> {
-  if (provider === "siliconflow") {
-    const result = await callSiliconFlowEmployee(
-      system,
-      prompt,
-      model,
-      maxOutputTokens,
-      timeoutMs,
-    );
-    return result;
-  }
-
-  const result = await callOpenAiEmployee(system, prompt, model, maxOutputTokens, timeoutMs);
-  return result;
-}
 
 export async function routeEmployeeResponse(
   input: SendMessageInput & {
@@ -203,7 +167,9 @@ export async function routeEmployeeResponse(
   errorMessage?: string;
 }> {
   const ctx = options.context ?? {};
-  const provider = normalizeProvider(input.employee.provider);
+  const provider: LiveProvider = normalizeLiveProvider(
+    options.provider ?? input.employee.provider,
+  );
   const modelMode = normalizeModelMode(
     options.modelMode ?? input.employee.modelMode,
   );
@@ -215,6 +181,7 @@ export async function routeEmployeeResponse(
     employee: input.employee,
     workspace: { id: "", name: input.workspaceName, plan: "founder", workspaceMode: "real" as const },
     room: input.room,
+    topic: input.topic,
     recentMessages: input.room.messages,
     recentMemory: input.recentMemory,
     openTasks: input.openTasks,
@@ -238,7 +205,7 @@ export async function routeEmployeeResponse(
     return { response, aiMode: "mock" };
   }
 
-  if (provider === "siliconflow" && !isSiliconFlowConfigured()) {
+  if (!isSiliconFlowConfigured()) {
     return errorResponse(
       input,
       "SILICONFLOW_API_KEY is not configured on the server.",
@@ -246,39 +213,6 @@ export async function routeEmployeeResponse(
       provider,
       model,
       modelMode,
-    );
-  }
-
-  if (provider === "openai" && !isOpenAiConfigured()) {
-    return errorResponse(
-      input,
-      "OPENAI_API_KEY is not configured on the server.",
-      ctx,
-      provider,
-      model,
-      modelMode,
-    );
-  }
-
-  if (provider !== "openai" && provider !== "siliconflow") {
-    if (ENABLE_DEMO_MODE) {
-      return scriptedFallback(
-        input,
-        "Provider unsupported; used fallback response.",
-        ctx,
-        provider,
-        model,
-        modelMode,
-      );
-    }
-    return errorResponse(
-      input,
-      "Provider unsupported.",
-      ctx,
-      provider,
-      model,
-      modelMode,
-      `Employee provider "${input.employee.provider}" is not supported. Set provider to siliconflow or openai.`,
     );
   }
 
@@ -300,8 +234,7 @@ export async function routeEmployeeResponse(
       });
     }
 
-    const result = await dispatchLiveCall(
-      provider,
+    const result = await callSiliconFlowEmployee(
       system,
       prompt,
       model,

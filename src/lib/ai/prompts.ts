@@ -1,9 +1,10 @@
-import type { AIEmployee, MemoryEntry, ProjectRoom, RoomMessage, Workspace } from "@/lib/types";
+import type { AIEmployee, MemoryEntry, ProjectRoom, RoomMessage, RoomTopic, Workspace } from "@/lib/types";
 
 type PromptContext = {
   employee: AIEmployee;
   workspace: Workspace;
   room: ProjectRoom;
+  topic?: RoomTopic;
   recentMessages: RoomMessage[];
   recentMemory: MemoryEntry[];
   openTasks: { id: string; title: string; status: string; priority: string }[];
@@ -50,6 +51,13 @@ ${ctx.room.name}
 
 Room brief:
 ${ctx.room.brief || ctx.room.description}
+
+${ctx.topic ? `You are responding inside the topic: ${ctx.topic.title}.
+Topic status: ${ctx.topic.status} · priority: ${ctx.topic.priority}
+Topic description: ${ctx.topic.description || "(none)"}
+${ctx.topic.summary ? `Topic summary: ${ctx.topic.summary}` : ""}
+Stay focused on this topic unless the user explicitly asks for broader room/workspace context.
+If you create tasks, memory, approvals, or logs, attach them to this topic.` : ""}
 
 Your available tools:
 ${toolList}
@@ -102,7 +110,7 @@ export function buildEmployeeUserPrompt(ctx: PromptContext): string {
   const employees = ctx.roomEmployees.map((e) => `- ${e.name} (${e.role})`).join("\n");
   const humans = ctx.humanParticipants.map((h) => `- ${h.name}`).join("\n");
 
-  return `Recent room messages:
+  return `Recent topic messages:
 ${messages || "(none yet)"}
 
 Pinned/recent memory:

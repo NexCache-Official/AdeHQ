@@ -1,8 +1,6 @@
 import {
-  DEFAULT_OPENAI_MODEL,
   DEFAULT_PROVIDER,
   DEFAULT_SILICONFLOW_MODEL,
-  isOpenAiConfigured,
   isSiliconFlowConfigured,
 } from "@/lib/config/features";
 
@@ -68,10 +66,8 @@ export function recordAiRuntime(entry: Omit<AiRuntimeLogEntry, "id" | "at">) {
 export function getAiRuntimeSnapshot() {
   return {
     siliconflowConfigured: isSiliconFlowConfigured(),
-    openAiConfigured: isOpenAiConfigured(),
     defaultProvider: DEFAULT_PROVIDER,
     defaultSiliconflowModel: DEFAULT_SILICONFLOW_MODEL,
-    defaultModel: DEFAULT_OPENAI_MODEL,
     environment: process.env.NODE_ENV ?? "development",
     demoModeEnabled: process.env.NEXT_PUBLIC_ENABLE_DEMO_MODE === "true",
     last: lastEntry,

@@ -71,6 +71,8 @@ export const SUPABASE_WORKSPACE_TABLES = [
   "ai_employees",
   "employee_tools",
   "project_rooms",
+  "room_topics",
+  "topic_members",
   "room_members",
   "messages",
   "tasks",

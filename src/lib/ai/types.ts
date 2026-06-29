@@ -15,14 +15,7 @@ export type {
   Workspace,
 } from "@/lib/types";
 
-export type ModelProvider =
-  | "mock"
-  | "openai"
-  | "anthropic"
-  | "gemini"
-  | "perplexity"
-  | "openrouter"
-  | "siliconflow";
+export type ModelProvider = "mock" | "siliconflow";
 
 export type RespondRequestBody = {
   roomId: string;

@@ -1,10 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { openai } from "@ai-sdk/openai";
 import { AuthError, requireAuthUser, requireWorkspaceMembership } from "@/lib/supabase/auth-server";
 import { recordAiRuntime } from "@/lib/ai/runtime-log";
 import {
   siliconFlowChatModel,
-  siliconFlowProviderOptions,
 } from "@/lib/ai/siliconflow-client";
 import {
   siliconFlowModelsForMode,
@@ -16,9 +14,7 @@ import {
   type ModelMode,
 } from "@/lib/ai/model-catalog";
 import {
-  isOpenAiConfigured,
   isSiliconFlowConfigured,
-  DEFAULT_OPENAI_MODEL,
 } from "@/lib/config/features";
 import {
   callProviderHealthCheck,
@@ -31,12 +27,9 @@ export const dynamic = "force-dynamic";
 
 type TestBody = {
   workspaceId: string;
-  provider?: string;
   modelMode?: ModelMode;
   prompt?: string;
 };
-
-const OPENAI_HEALTH_FALLBACKS = [DEFAULT_OPENAI_MODEL, "gpt-4o-mini"] as const;
 
 export async function POST(request: NextRequest) {
   try {
@@ -55,7 +48,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const provider = (body.provider ?? "siliconflow").toLowerCase();
+    const provider = "siliconflow";
     const modelMode = body.modelMode ?? "cheap";
     const prompt = body.prompt?.trim() || "Reply with one short sentence.";
     const maxTokens = getOutputTokenCap(modelMode);
@@ -63,31 +56,14 @@ export async function POST(request: NextRequest) {
     const system = "You are a helpful assistant. Be concise.";
     const resolvedModel = resolveModel(provider, modelMode);
 
-    if (provider === "siliconflow" && !isSiliconFlowConfigured()) {
+    if (!isSiliconFlowConfigured()) {
       return NextResponse.json(
         { ok: false, error: "SILICONFLOW_API_KEY is not configured on the server." },
         { status: 400 },
       );
     }
 
-    if (provider === "openai" && !isOpenAiConfigured()) {
-      return NextResponse.json(
-        { ok: false, error: "OPENAI_API_KEY is not configured on the server." },
-        { status: 400 },
-      );
-    }
-
-    if (provider !== "siliconflow" && provider !== "openai") {
-      return NextResponse.json(
-        { ok: false, error: `Provider "${provider}" is not supported for testing.` },
-        { status: 400 },
-      );
-    }
-
-    const models =
-      provider === "siliconflow"
-        ? siliconFlowModelsForMode(resolvedModel, modelMode)
-        : [...new Set([resolvedModel, ...OPENAI_HEALTH_FALLBACKS])];
+    const models = siliconFlowModelsForMode(resolvedModel, modelMode);
 
     const result = await callProviderHealthCheck(
       provider,
@@ -96,10 +72,7 @@ export async function POST(request: NextRequest) {
       prompt,
       maxTokens,
       timeoutMs,
-      (modelId) =>
-        provider === "siliconflow"
-          ? siliconFlowChatModel(modelId)
-          : openai.chat(modelId),
+      (modelId) => siliconFlowChatModel(modelId),
     );
 
     const inputTokens = result.inputTokens ?? 0;

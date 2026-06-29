@@ -4,7 +4,7 @@
 
 AdeHQ is a workspace where humans and AI employees collaborate in project rooms.
 Hire AI employees, chat in channels, assign tasks, review approvals, and inspect work logs —
-all backed by Supabase with optional OpenAI-powered employee replies.
+all backed by Supabase with SiliconFlow-powered employee replies.
 
 ## Quick start
 
@@ -60,10 +60,6 @@ ADEHQ_SILICONFLOW_CHEAP_MODEL=deepseek-ai/DeepSeek-V3
 ADEHQ_SILICONFLOW_CODER_MODEL=Qwen/Qwen3-Coder-30B-A3B-Instruct
 ADEHQ_SILICONFLOW_LONG_CONTEXT_MODEL=MiniMaxAI/MiniMax-M2.5
 ADEHQ_DEFAULT_PROVIDER=siliconflow
-
-# OpenAI (optional)
-OPENAI_API_KEY=...
-ADEHQ_OPENAI_MODEL=gpt-5.4-mini
 ```
 
 Apply `supabase/migrations/20250629120000_ai_runtime_and_work_graph.sql` (or the synced
@@ -82,13 +78,6 @@ Add redirect URLs in Supabase → Authentication → URL configuration:
 4. Hire or onboard an employee with provider `siliconflow` and an intelligence level.
 5. **Settings → AI Runtime → Test provider** — confirm `ok: true` before room debugging.
 
-## OpenAI setup (optional)
-
-1. Set `OPENAI_API_KEY` in your deployment environment.
-2. Optionally set `ADEHQ_OPENAI_MODEL=gpt-5.4-mini` (default).
-3. Hire or onboard an AI employee with provider `openai` or `siliconflow`.
-4. Mention the employee in a room, or use **Settings → AI Runtime → Test provider** then **Test employee reply**.
-
 When the key is missing or a model call fails, AdeHQ falls back to scripted responses
 and records a work log / runtime event — the app does not crash.
 
@@ -97,7 +86,7 @@ and records a work log / runtime event — the app does not crash.
 1. Create an account and confirm email.
 2. Complete onboarding (creates workspace, employee, and room).
 3. Open **Settings → AI Runtime** as owner/admin.
-4. Confirm **SiliconFlow configured: Yes** (or OpenAI if using that provider).
+4. Confirm **SiliconFlow configured: Yes**.
 5. Run **Test provider**, then **Test employee reply**, or mention the employee in a room.
 6. Check work log and runtime status for `live` vs `fallback`.
 
@@ -131,7 +120,7 @@ src/
     config/features.ts              # ENABLE_DEMO_MODE, default model
     demo/                           # dev-only demo seed
     demo-store.tsx                  # Supabase-backed workspace store
-    ai/model-router.ts              # OpenAI + fallback + logging
+    ai/model-router.ts              # SiliconFlow routing + logging
     server/room-access.ts           # room membership checks
 ```
 

@@ -76,6 +76,8 @@ function buildSignedOutState(): DemoState {
     onboardingComplete: false,
     employees: [],
     rooms: [],
+    topics: [],
+    topicMembers: [],
     tasks: [],
     memory: [],
     approvals: [],
@@ -145,6 +147,9 @@ type StoreActions = {
   addLocalMessage: (roomId: string, msg: Omit<RoomMessage, "id" | "roomId" | "createdAt"> & { id?: string; createdAt?: string }) => RoomMessage;
   removeLocalMessage: (roomId: string, messageId: string) => void;
   updateMessage: (roomId: string, messageId: string, patch: Partial<RoomMessage>) => void;
+  refreshTopics: (roomId: string) => Promise<void>;
+  upsertTopic: (topic: import("@/lib/types").RoomTopic) => void;
+  setTopicSummary: (topicId: string, summary: string) => void;
 
   // tasks
   createTask: (task: Partial<Task> & { title: string; roomId: string }) => Task;
@@ -799,6 +804,46 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           await persistMessage(workspaceId, updatedMessage);
           await persistRoom(workspaceId, updatedRoom);
         });
+      },
+
+      refreshTopics: async (roomId) => {
+        if (backendRef.current !== "supabase") return;
+        try {
+          const { authHeaders } = await import("@/lib/api/auth-client");
+          const headers = await authHeaders();
+          const response = await fetch(`/api/rooms/${roomId}/topics`, { headers });
+          if (!response.ok) return;
+          const payload = await response.json();
+          set((s) => ({
+            ...s,
+            topics: [
+              ...s.topics.filter((t) => t.roomId !== roomId),
+              ...(payload.topics ?? []),
+            ],
+            topicMembers: [
+              ...s.topicMembers.filter((m) => m.roomId !== roomId),
+              ...(payload.members ?? []),
+            ],
+          }));
+        } catch {
+          // non-blocking
+        }
+      },
+
+      upsertTopic: (topic) => {
+        set((s) => ({
+          ...s,
+          topics: s.topics.some((t) => t.id === topic.id)
+            ? s.topics.map((t) => (t.id === topic.id ? topic : t))
+            : [topic, ...s.topics],
+        }));
+      },
+
+      setTopicSummary: (topicId, summary) => {
+        set((s) => ({
+          ...s,
+          topics: s.topics.map((t) => (t.id === topicId ? { ...t, summary } : t)),
+        }));
       },
 
       createTask: (task) => {

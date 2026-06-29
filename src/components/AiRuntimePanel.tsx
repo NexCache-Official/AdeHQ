@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import { useStore } from "@/lib/demo-store";
 import { authHeaders } from "@/lib/api/auth-client";
 import {
-  DEFAULT_OPENAI_MODEL,
   DEFAULT_SILICONFLOW_MODEL,
   ENABLE_DEMO_MODE,
 } from "@/lib/config/features";
@@ -14,10 +13,8 @@ import { Activity, Bot, Sparkles, Zap } from "lucide-react";
 
 type RuntimeSnapshot = {
   siliconflowConfigured?: boolean;
-  openAiConfigured: boolean;
   defaultProvider?: string;
   defaultSiliconflowModel?: string;
-  defaultModel: string;
   environment: string;
   demoModeEnabled: boolean;
   last?: {
@@ -54,7 +51,6 @@ export function AiRuntimePanel() {
   const [testResult, setTestResult] = useState<string | null>(null);
   const [testMode, setTestMode] = useState<string | null>(null);
   const [testBusy, setTestBusy] = useState(false);
-  const [providerTestProvider, setProviderTestProvider] = useState("siliconflow");
   const [providerTestMode, setProviderTestMode] = useState<ModelMode>("cheap");
   const [providerTestPrompt, setProviderTestPrompt] = useState("Reply with one short sentence.");
   const [providerTestResult, setProviderTestResult] = useState<string | null>(null);
@@ -143,7 +139,6 @@ export function AiRuntimePanel() {
         headers,
         body: JSON.stringify({
           workspaceId: state.workspace.id,
-          provider: providerTestProvider,
           modelMode: providerTestMode,
           prompt: providerTestPrompt.trim(),
         }),
@@ -192,10 +187,8 @@ export function AiRuntimePanel() {
       ) : (
         <dl className="grid gap-2 text-sm sm:grid-cols-2">
           <Stat label="SiliconFlow configured" value={snapshot?.siliconflowConfigured ? "Yes" : "No"} />
-          <Stat label="OpenAI configured" value={snapshot?.openAiConfigured ? "Yes" : "No"} />
           <Stat label="Default provider" value={snapshot?.defaultProvider ?? "siliconflow"} />
-          <Stat label="SiliconFlow model" value={snapshot?.defaultSiliconflowModel ?? DEFAULT_SILICONFLOW_MODEL} />
-          <Stat label="OpenAI model" value={snapshot?.defaultModel ?? DEFAULT_OPENAI_MODEL} />
+          <Stat label="Default model" value={snapshot?.defaultSiliconflowModel ?? DEFAULT_SILICONFLOW_MODEL} />
           <Stat label="Environment" value={snapshot?.environment ?? "unknown"} />
           <Stat label="Demo mode enabled" value={ENABLE_DEMO_MODE ? "Yes" : "No"} />
           <Stat
@@ -242,17 +235,9 @@ export function AiRuntimePanel() {
           <Zap className="h-4 w-4 text-accent-600" /> Test provider (isolated)
         </div>
         <p className="mb-3 text-xs text-slate-500">
-          Health-check SiliconFlow or OpenAI without room context. Run this before debugging employee replies.
+          Health-check SiliconFlow without room context. Run this before debugging employee replies.
         </p>
         <div className="grid gap-3 sm:grid-cols-2">
-          <select
-            className="input-field"
-            value={providerTestProvider}
-            onChange={(e) => setProviderTestProvider(e.target.value)}
-          >
-            <option value="siliconflow">SiliconFlow</option>
-            <option value="openai">OpenAI</option>
-          </select>
           <select
             className="input-field"
             value={providerTestMode}

@@ -13,6 +13,7 @@ import { WorkLogTimeline } from "@/components/WorkLogTimeline";
 import { EmptyState } from "@/components/States";
 import { toolIcon, TOOL_STATUS_META } from "@/lib/icons";
 import { cn, timeAgo } from "@/lib/utils";
+import { ENABLE_DEMO_MODE, normalizeLiveProvider } from "@/lib/config/features";
 import { EmployeeStatus, ModelMode } from "@/lib/types";
 import {
   defaultModelModeForRole,
@@ -99,7 +100,7 @@ export default function EmployeeProfilePage() {
             <p className="mt-0.5 text-sm text-slate-500">{employee.role} · {employee.seniority}</p>
             <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-500">
               <span className="chip">{employee.provider} · {employee.model}</span>
-              {employee.provider.toLowerCase() === "openai" && (
+              {employee.provider.toLowerCase() === "siliconflow" && (
                 <span className="chip bg-emerald-50 text-emerald-700">Live AI</span>
               )}
               {room && <span className="chip">{room.name}</span>}
@@ -292,7 +293,7 @@ function EditEmployeeModal({ open, onClose, employeeId }: { open: boolean; onClo
       role,
       instructions,
       status: statusVal,
-      provider: provider.toLowerCase(),
+      provider: normalizeLiveProvider(provider),
       model,
       modelMode,
     });
@@ -329,8 +330,7 @@ function EditEmployeeModal({ open, onClose, employeeId }: { open: boolean; onClo
           <span className="text-xs font-medium text-slate-500">AI provider</span>
           <select className="input-field" value={provider} onChange={(e) => setProvider(e.target.value)}>
             <option value="siliconflow">SiliconFlow</option>
-            <option value="openai">OpenAI</option>
-            <option value="mock">Mock</option>
+            {ENABLE_DEMO_MODE && <option value="mock">Mock</option>}
           </select>
         </label>
         {provider !== "mock" && (

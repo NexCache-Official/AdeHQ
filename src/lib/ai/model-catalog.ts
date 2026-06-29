@@ -1,6 +1,5 @@
 import type { EmployeeRoleKey } from "@/lib/types";
 import {
-  DEFAULT_OPENAI_MODEL,
   DEFAULT_SILICONFLOW_MODEL,
   SILICONFLOW_CHEAP_MODEL,
   SILICONFLOW_CODER_MODEL,
@@ -65,8 +64,6 @@ const PRICING_PER_MILLION: Record<string, { input: number; output: number }> = {
   [SILICONFLOW_STRONG_MODEL]: { input: 0.8, output: 1.6 },
   [SILICONFLOW_CODER_MODEL]: { input: 0.5, output: 1.0 },
   [SILICONFLOW_LONG_CONTEXT_MODEL]: { input: 0.4, output: 0.8 },
-  [DEFAULT_OPENAI_MODEL]: { input: 2.5, output: 10 },
-  "gpt-4o-mini": { input: 0.15, output: 0.6 },
 };
 
 const DEFAULT_PRICING = { input: 0.5, output: 1.0 };
@@ -87,10 +84,6 @@ export function resolveModel(
   explicitModel?: string | null,
 ): string {
   if (explicitModel?.trim()) return explicitModel.trim();
-
-  const p = provider.toLowerCase();
-  if (p === "openai") return DEFAULT_OPENAI_MODEL;
-  if (p !== "siliconflow") return DEFAULT_SILICONFLOW_MODEL;
 
   switch (modelMode) {
     case "cheap":

@@ -1,14 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { AuthError, requireAuthUser, requireWorkspaceMembership } from "@/lib/supabase/auth-server";
-import {
-  assertCanSendRoomMessage,
-} from "@/lib/server/room-access";
+import { assertCanSendRoomMessage } from "@/lib/server/room-access";
 import {
   getWorkspaceIdForRoom,
   insertHumanMessage,
-  loadRoomContext,
+  loadTopicContext,
   parseEmployeeMentions,
 } from "@/lib/server/room-messages";
+import { assertTopicInRoom } from "@/lib/server/topic-helpers";
 import { processEmployeeResponse } from "@/lib/server/process-employee-response";
 import { loadMaxParallelRuns } from "@/lib/ai/cost-guard";
 import type { MentionRef } from "@/lib/types";
@@ -17,6 +16,7 @@ export const runtime = "nodejs";
 
 type MessageBody = {
   content: string;
+  topicId: string;
   clientMessageId?: string;
   mode?: "mock" | "live";
   mentionsJson?: MentionRef[];
@@ -33,6 +33,9 @@ export async function POST(
     if (!body.content?.trim()) {
       return NextResponse.json({ error: "Message content is required." }, { status: 400 });
     }
+    if (!body.topicId) {
+      return NextResponse.json({ error: "topicId is required." }, { status: 400 });
+    }
 
     const workspaceId = await getWorkspaceIdForRoom(client, params.roomId);
     if (!workspaceId) {
@@ -42,7 +45,9 @@ export async function POST(
     const { role } = await requireWorkspaceMembership(client, workspaceId, user.id);
     await assertCanSendRoomMessage(client, workspaceId, params.roomId, user.id, role);
 
-    const ctx = await loadRoomContext(client, workspaceId, params.roomId);
+    await assertTopicInRoom(client, workspaceId, params.roomId, body.topicId);
+
+    const ctx = await loadTopicContext(client, workspaceId, params.roomId, body.topicId);
 
     const profile = await client
       .from("profiles")
@@ -64,6 +69,7 @@ export async function POST(
         name: profile.data?.name ?? user.email?.split("@")[0] ?? "You",
       },
       trimmed,
+      body.topicId,
       body.clientMessageId,
       mentionsJson,
     );
@@ -127,6 +133,7 @@ export async function POST(
       aiMessages.push({
         id: response.aiMessageId,
         roomId: params.roomId,
+        topicId: body.topicId,
         senderType: "ai" as const,
         senderId: employee.id,
         senderName: employee.name,
@@ -144,6 +151,9 @@ export async function POST(
   } catch (error) {
     if (error instanceof AuthError) {
       return NextResponse.json({ error: error.message }, { status: error.status });
+    }
+    if (error instanceof Error && error.message.includes("Topic not found")) {
+      return NextResponse.json({ error: error.message }, { status: 404 });
     }
     console.error("[AdeHQ messages route]", error);
     return NextResponse.json({ error: "Unable to send message." }, { status: 500 });

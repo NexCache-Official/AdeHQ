@@ -13,7 +13,9 @@ import type {
   MemoryEntry,
   ProjectRoom,
   RoomMessage,
+  RoomTopic,
   Task,
+  TopicMember,
   Tool,
   ToolAccess,
   Workspace,
@@ -22,6 +24,8 @@ import type {
   WorkspaceMemberRole,
   WorkLogEvent,
 } from "@/lib/types";
+import { normalizeLiveProvider } from "@/lib/config/features";
+import { topicFromRow, topicMemberFromRow } from "@/lib/server/topic-helpers";
 import { nowISO } from "@/lib/utils";
 import { supabase } from "./client";
 
@@ -162,6 +166,8 @@ export function buildFreshWorkspaceState(
     onboardingComplete,
     employees: [],
     rooms: [],
+    topics: [],
+    topicMembers: [],
     tasks: [],
     memory: [],
     approvals: [],
@@ -330,6 +336,8 @@ export async function loadWorkspaceState(
     membersResult,
     invitationsResult,
     pendingInvitationsResult,
+    topicsResult,
+    topicMembersResult,
   ] = await Promise.all([
     supabase.from("tools").select("*"),
     supabase.from("workspace_tools").select("*").eq("workspace_id", workspaceId),
@@ -350,6 +358,8 @@ export async function loadWorkspaceState(
       .select("*")
       .eq("status", "pending")
       .ilike("invited_email", user.email ?? ""),
+    supabase.from("room_topics").select("*").eq("workspace_id", workspaceId),
+    supabase.from("topic_members").select("*").eq("workspace_id", workspaceId),
   ]);
 
   const results = [
@@ -368,6 +378,8 @@ export async function loadWorkspaceState(
     membersResult,
     invitationsResult,
     pendingInvitationsResult,
+    topicsResult,
+    topicMembersResult,
   ];
   const failed = results.find((result) => result.error);
   if (failed?.error) throw failed.error;
@@ -424,6 +436,11 @@ export async function loadWorkspaceState(
     .map(messageFromRow)
     .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
 
+  const topics = ((topicsResult.data as DbRow[] | null) ?? [])
+    .map(topicFromRow)
+    .sort((a, b) => b.lastActivityAt.localeCompare(a.lastActivityAt));
+  const topicMembers = ((topicMembersResult.data as DbRow[] | null) ?? []).map(topicMemberFromRow);
+
   const roomMembersByRoom = new Map<string, DbRow[]>();
   for (const member of (roomMembersResult.data as DbRow[] | null) ?? []) {
     const existing = roomMembersByRoom.get(member.room_id) ?? [];
@@ -469,6 +486,8 @@ export async function loadWorkspaceState(
     onboardingComplete: Boolean(workspaceRow.onboarding_complete),
     employees,
     rooms,
+    topics,
+    topicMembers,
     tasks,
     memory,
     approvals,
@@ -604,7 +623,7 @@ function employeeFromRow(row: DbRow, tools: ToolAccess[]): AIEmployee {
     name: row.name,
     role: row.role,
     roleKey: row.role_key,
-    provider: row.provider,
+    provider: normalizeLiveProvider(row.provider),
     model: row.model,
     modelMode: row.model_mode ?? undefined,
     seniority: row.seniority,
@@ -658,6 +677,7 @@ function messageFromRow(row: DbRow): RoomMessage {
   return {
     id: row.id,
     roomId: row.room_id,
+    topicId: row.topic_id ?? undefined,
     senderType: row.sender_type,
     senderId: row.sender_id,
     senderName: row.sender_name,
@@ -676,6 +696,7 @@ function taskFromRow(row: DbRow): Task {
   return {
     id: row.id,
     roomId: row.room_id,
+    topicId: row.topic_id ?? undefined,
     title: row.title,
     description: row.description ?? undefined,
     status: row.status,
@@ -693,6 +714,7 @@ function memoryFromRow(row: DbRow): MemoryEntry {
   return {
     id: row.id,
     roomId: row.room_id,
+    topicId: row.topic_id ?? undefined,
     type: row.type,
     title: row.title,
     content: row.content,
@@ -707,6 +729,7 @@ function approvalFromRow(row: DbRow): Approval {
   return {
     id: row.id,
     roomId: row.room_id,
+    topicId: row.topic_id ?? undefined,
     requestedBy: row.requested_by,
     title: row.title,
     description: row.description ?? "",
@@ -722,6 +745,7 @@ function workLogFromRow(row: DbRow): WorkLogEvent {
   return {
     id: row.id,
     roomId: row.room_id,
+    topicId: row.topic_id ?? undefined,
     employeeId: row.employee_id,
     action: row.action,
     summary: row.summary ?? "",
@@ -754,7 +778,7 @@ function employeeRow(workspaceId: string, employee: AIEmployee): DbRow {
     name: employee.name,
     role: employee.role,
     role_key: employee.roleKey,
-    provider: employee.provider,
+    provider: normalizeLiveProvider(employee.provider),
     model: employee.model,
     model_mode: employee.modelMode ?? "balanced",
     seniority: employee.seniority,
@@ -826,6 +850,7 @@ function messageRow(workspaceId: string, message: RoomMessage): DbRow {
     workspace_id: workspaceId,
     id: message.id,
     room_id: message.roomId,
+    topic_id: message.topicId ?? null,
     sender_type: message.senderType,
     sender_id: message.senderId,
     sender_name: message.senderName,
@@ -842,6 +867,7 @@ function taskRow(workspaceId: string, task: Task): DbRow {
     workspace_id: workspaceId,
     id: task.id,
     room_id: task.roomId,
+    topic_id: task.topicId ?? null,
     title: task.title,
     description: task.description ?? null,
     status: task.status,
@@ -860,6 +886,7 @@ function memoryRow(workspaceId: string, entry: MemoryEntry): DbRow {
     workspace_id: workspaceId,
     id: entry.id,
     room_id: entry.roomId,
+    topic_id: entry.topicId ?? null,
     type: entry.type,
     title: entry.title,
     content: entry.content,
@@ -875,6 +902,7 @@ function approvalRow(workspaceId: string, approval: Approval): DbRow {
     workspace_id: workspaceId,
     id: approval.id,
     room_id: approval.roomId,
+    topic_id: approval.topicId ?? null,
     requested_by: approval.requestedBy,
     title: approval.title,
     description: approval.description,
@@ -891,6 +919,7 @@ function workLogRow(workspaceId: string, event: WorkLogEvent): DbRow {
     workspace_id: workspaceId,
     id: event.id,
     room_id: event.roomId,
+    topic_id: event.topicId ?? null,
     employee_id: event.employeeId,
     action: event.action,
     summary: event.summary,

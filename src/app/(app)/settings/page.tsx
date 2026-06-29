@@ -23,7 +23,6 @@ import {
 
 const PROVIDERS: { id: ProviderId; name: string; desc: string; accent: string }[] = [
   { id: "siliconflow", name: "SiliconFlow", desc: "Primary provider — DeepSeek, Qwen, Kimi, and more.", accent: "#6366f1" },
-  { id: "openai", name: "OpenAI", desc: "GPT models for reasoning and writing.", accent: "#10a37f" },
   { id: "anthropic", name: "Anthropic Claude", desc: "Claude models — coming soon.", accent: "#d97757" },
   { id: "gemini", name: "Google Gemini", desc: "Multimodal models — coming soon.", accent: "#4285f4" },
   { id: "perplexity", name: "Perplexity", desc: "Answer engine — coming soon.", accent: "#22d3ee" },
@@ -227,8 +226,7 @@ export default function SettingsPage() {
             <h2 className="text-sm font-semibold text-slate-900">Model providers</h2>
           </div>
           <p className="mb-4 text-sm text-slate-500">
-            Model keys are server-only. Set <code className="text-xs">SILICONFLOW_API_KEY</code> and/or{" "}
-            <code className="text-xs">OPENAI_API_KEY</code> in your deployment environment.
+            Model keys are server-only. Set <code className="text-xs">SILICONFLOW_API_KEY</code> in your deployment environment.
           </p>
           <div className="space-y-3">
             {PROVIDERS.map((p) => {
@@ -259,11 +257,9 @@ export default function SettingsPage() {
                           type="password"
                           className="input-field"
                           placeholder={
-                            p.id === "openai"
-                              ? "Set OPENAI_API_KEY on the server"
-                              : p.id === "siliconflow"
-                                ? "Set SILICONFLOW_API_KEY on the server"
-                                : "Server-side key support coming later"
+                            p.id === "siliconflow"
+                              ? "Set SILICONFLOW_API_KEY on the server"
+                              : "Server-side key support coming later"
                           }
                           value=""
                           disabled
@@ -277,7 +273,7 @@ export default function SettingsPage() {
             })}
           </div>
           <p className="mt-4 rounded-lg bg-amber-500/10 px-3 py-2 text-[11px] text-amber-700/90">
-            Keep provider secrets out of the browser. The live OpenAI route reads OPENAI_API_KEY only on the server.
+            Keep provider secrets out of the browser. SiliconFlow keys are read only on the server.
           </p>
         </Card>
 

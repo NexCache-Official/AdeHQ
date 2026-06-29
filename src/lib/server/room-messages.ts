@@ -8,10 +8,13 @@ import type {
   MessageArtifact,
   ProjectRoom,
   RoomMessage,
+  RoomTopic,
   Task,
   ToolAccess,
   WorkLogEvent,
 } from "@/lib/types";
+import { refreshTopicStats } from "@/lib/server/topic-stats";
+import { ensureGeneralTopic, topicFromRow } from "@/lib/server/topic-helpers";
 import { defaultModelModeForRole, normalizeModelMode } from "@/lib/ai/model-catalog";
 import { extractMentions, nowISO, uid } from "@/lib/utils";
 
@@ -63,6 +66,7 @@ function messageFromRow(row: DbRow): RoomMessage {
   return {
     id: String(row.id),
     roomId: String(row.room_id),
+    topicId: row.topic_id ? String(row.topic_id) : undefined,
     senderType: row.sender_type as RoomMessage["senderType"],
     senderId: String(row.sender_id),
     senderName: String(row.sender_name),
@@ -83,6 +87,7 @@ function memoryFromRow(row: DbRow): MemoryEntry {
   return {
     id: String(row.id),
     roomId: String(row.room_id),
+    topicId: row.topic_id ? String(row.topic_id) : undefined,
     type: row.type as MemoryEntry["type"],
     title: String(row.title),
     content: String(row.content),
@@ -97,17 +102,31 @@ export type RoomContext = {
   workspaceId: string;
   workspaceName: string;
   room: ProjectRoom;
+  topic: RoomTopic;
   employees: AIEmployee[];
   recentMemory: MemoryEntry[];
   openTasks: Task[];
+  topicApprovals: Approval[];
+  topicWorkLogs: WorkLogEvent[];
   humanParticipants: { id: string; name: string }[];
 };
 
-export async function loadRoomContext(
+export async function loadTopicContext(
   client: SupabaseClient,
   workspaceId: string,
   roomId: string,
+  topicId: string,
 ): Promise<RoomContext> {
+  const topicResult = await client
+    .from("room_topics")
+    .select("*")
+    .eq("workspace_id", workspaceId)
+    .eq("room_id", roomId)
+    .eq("id", topicId)
+    .single();
+  if (topicResult.error) throw topicResult.error;
+  const topic = topicFromRow(topicResult.data as DbRow);
+
   const [
     workspaceResult,
     roomResult,
@@ -115,8 +134,11 @@ export async function loadRoomContext(
     messagesResult,
     employeesResult,
     employeeToolsResult,
-    memoryResult,
+    topicMemoryResult,
+    roomPinnedMemoryResult,
     tasksResult,
+    approvalsResult,
+    workLogsResult,
     profilesResult,
   ] = await Promise.all([
     client.from("workspaces").select("id, name").eq("id", workspaceId).single(),
@@ -127,6 +149,7 @@ export async function loadRoomContext(
       .select("*")
       .eq("workspace_id", workspaceId)
       .eq("room_id", roomId)
+      .eq("topic_id", topicId)
       .order("created_at", { ascending: true })
       .limit(50),
     client.from("ai_employees").select("*").eq("workspace_id", workspaceId),
@@ -135,15 +158,39 @@ export async function loadRoomContext(
       .from("memory_entries")
       .select("*")
       .eq("workspace_id", workspaceId)
-      .eq("room_id", roomId)
+      .eq("topic_id", topicId)
       .order("created_at", { ascending: false })
       .limit(12),
+    client
+      .from("memory_entries")
+      .select("*")
+      .eq("workspace_id", workspaceId)
+      .eq("room_id", roomId)
+      .in("status", ["pinned", "approved"])
+      .is("topic_id", null)
+      .order("created_at", { ascending: false })
+      .limit(6),
     client
       .from("tasks")
       .select("*")
       .eq("workspace_id", workspaceId)
-      .eq("room_id", roomId)
+      .eq("topic_id", topicId)
       .in("status", ["open", "in_progress", "waiting_approval", "blocked"]),
+    client
+      .from("approvals")
+      .select("*")
+      .eq("workspace_id", workspaceId)
+      .eq("topic_id", topicId)
+      .eq("status", "pending")
+      .order("created_at", { ascending: false })
+      .limit(10),
+    client
+      .from("work_log_events")
+      .select("*")
+      .eq("workspace_id", workspaceId)
+      .eq("topic_id", topicId)
+      .order("created_at", { ascending: false })
+      .limit(15),
     client.from("profiles").select("id, name"),
   ]);
 
@@ -179,10 +226,14 @@ export async function loadRoomContext(
     .map((row) => employeeFromRow(row, toolsByEmployee.get(String(row.id)) ?? []));
 
   const messages = ((messagesResult.data as DbRow[] | null) ?? []).map(messageFromRow);
-  const memory = ((memoryResult.data as DbRow[] | null) ?? []).map(memoryFromRow);
+  const topicMemory = ((topicMemoryResult.data as DbRow[] | null) ?? []).map(memoryFromRow);
+  const roomPinned = ((roomPinnedMemoryResult.data as DbRow[] | null) ?? []).map(memoryFromRow);
+  const memory = [...topicMemory, ...roomPinned];
+
   const openTasks = ((tasksResult.data as DbRow[] | null) ?? []).map((row) => ({
     id: String(row.id),
     roomId: String(row.room_id),
+    topicId: row.topic_id ? String(row.topic_id) : undefined,
     title: String(row.title),
     description: row.description ? String(row.description) : undefined,
     status: row.status as Task["status"],
@@ -193,6 +244,34 @@ export async function loadRoomContext(
     dueDate: row.due_date ? String(row.due_date) : undefined,
     createdAt: String(row.created_at ?? nowISO()),
     updatedAt: String(row.updated_at ?? nowISO()),
+  }));
+
+  const topicApprovals = ((approvalsResult.data as DbRow[] | null) ?? []).map((row) => ({
+    id: String(row.id),
+    roomId: String(row.room_id),
+    topicId: row.topic_id ? String(row.topic_id) : undefined,
+    requestedBy: String(row.requested_by),
+    title: String(row.title),
+    description: String(row.description ?? ""),
+    risk: row.risk as Approval["risk"],
+    status: row.status as Approval["status"],
+    actionType: row.action_type as Approval["actionType"],
+    createdAt: String(row.created_at ?? nowISO()),
+  }));
+
+  const topicWorkLogs = ((workLogsResult.data as DbRow[] | null) ?? []).map((row) => ({
+    id: String(row.id),
+    roomId: String(row.room_id),
+    topicId: row.topic_id ? String(row.topic_id) : undefined,
+    employeeId: String(row.employee_id),
+    action: String(row.action),
+    summary: String(row.summary),
+    toolUsed: row.tool_used ? String(row.tool_used) : undefined,
+    status: row.status as WorkLogEvent["status"],
+    relatedEntityType: row.related_entity_type as WorkLogEvent["relatedEntityType"],
+    relatedEntityId: row.related_entity_id ? String(row.related_entity_id) : undefined,
+    agentRunId: row.agent_run_id ? String(row.agent_run_id) : undefined,
+    createdAt: String(row.created_at ?? nowISO()),
   }));
 
   const roomRow = roomResult.data as DbRow;
@@ -218,14 +297,27 @@ export async function loadRoomContext(
     workspaceId,
     workspaceName: String((workspaceResult.data as DbRow).name),
     room,
+    topic,
     employees,
     recentMemory: memory,
     openTasks,
+    topicApprovals,
+    topicWorkLogs,
     humanParticipants: humanIds.map((id) => ({
       id,
       name: profiles.get(id) ?? "Teammate",
     })),
   };
+}
+
+/** @deprecated Use loadTopicContext */
+export async function loadRoomContext(
+  client: SupabaseClient,
+  workspaceId: string,
+  roomId: string,
+): Promise<RoomContext> {
+  const general = await ensureGeneralTopic(client, workspaceId, roomId);
+  return loadTopicContext(client, workspaceId, roomId, general.id);
 }
 
 export function parseEmployeeMentions(
@@ -253,6 +345,7 @@ export async function insertHumanMessage(
   roomId: string,
   user: { id: string; name: string },
   content: string,
+  topicId: string,
   clientMessageId?: string,
   mentionsJson?: MentionRef[],
 ): Promise<RoomMessage> {
@@ -262,6 +355,7 @@ export async function insertHumanMessage(
   const message: RoomMessage = {
     id: clientMessageId ?? uid("msg"),
     roomId,
+    topicId,
     senderType: "human",
     senderId: user.id,
     senderName: user.name,
@@ -275,6 +369,7 @@ export async function insertHumanMessage(
     workspace_id: workspaceId,
     id: message.id,
     room_id: roomId,
+    topic_id: topicId,
     sender_type: message.senderType,
     sender_id: message.senderId,
     sender_name: message.senderName,
@@ -286,6 +381,7 @@ export async function insertHumanMessage(
   });
 
   if (error) throw error;
+  await refreshTopicStats(client, topicId);
   return message;
 }
 
@@ -293,6 +389,7 @@ export async function persistEmployeeEffects(
   client: SupabaseClient,
   workspaceId: string,
   roomId: string,
+  topicId: string,
   employee: AIEmployee,
   reply: string,
   effect: {
@@ -315,6 +412,7 @@ export async function persistEmployeeEffects(
     const entry: MemoryEntry = {
       id: uid("mem"),
       roomId,
+      topicId,
       type: draft.type ?? "general",
       title: draft.title ?? "Note",
       content: draft.content ?? "",
@@ -327,6 +425,7 @@ export async function persistEmployeeEffects(
       workspace_id: workspaceId,
       id: entry.id,
       room_id: roomId,
+      topic_id: topicId,
       type: entry.type,
       title: entry.title,
       content: entry.content,
@@ -344,6 +443,7 @@ export async function persistEmployeeEffects(
     const task: Task = {
       id: uid("task"),
       roomId,
+      topicId,
       title: draft.title ?? "Task",
       description: draft.description,
       status: draft.status ?? "open",
@@ -359,6 +459,7 @@ export async function persistEmployeeEffects(
       workspace_id: workspaceId,
       id: task.id,
       room_id: roomId,
+      topic_id: topicId,
       title: task.title,
       description: task.description ?? null,
       status: task.status,
@@ -387,6 +488,7 @@ export async function persistEmployeeEffects(
     const approval: Approval = {
       id: uid("appr"),
       roomId,
+      topicId,
       requestedBy: employee.id,
       title: draft.title ?? "Approval request",
       description: draft.description ?? "",
@@ -399,6 +501,7 @@ export async function persistEmployeeEffects(
       workspace_id: workspaceId,
       id: approval.id,
       room_id: roomId,
+      topic_id: topicId,
       requested_by: approval.requestedBy,
       title: approval.title,
       description: approval.description,
@@ -422,6 +525,7 @@ export async function persistEmployeeEffects(
     const event: WorkLogEvent = {
       id: uid("wl"),
       roomId,
+      topicId,
       employeeId: employee.id,
       action: draft.action ?? "Worked",
       summary: draft.summary ?? "",
@@ -445,6 +549,7 @@ export async function persistEmployeeEffects(
       workspace_id: workspaceId,
       id: event.id,
       room_id: roomId,
+      topic_id: topicId,
       employee_id: event.employeeId,
       action: event.action,
       summary: event.summary,
@@ -469,6 +574,7 @@ export async function persistEmployeeEffects(
   const aiMessage: RoomMessage = {
     id: uid("msg"),
     roomId,
+    topicId,
     senderType: "ai",
     senderId: employee.id,
     senderName: employee.name,
@@ -481,6 +587,7 @@ export async function persistEmployeeEffects(
     workspace_id: workspaceId,
     id: aiMessage.id,
     room_id: roomId,
+    topic_id: topicId,
     sender_type: aiMessage.senderType,
     sender_id: aiMessage.senderId,
     sender_name: aiMessage.senderName,
@@ -510,6 +617,8 @@ export async function persistEmployeeEffects(
     .eq("workspace_id", workspaceId)
     .eq("id", employee.id);
   if (employeeError) throw employeeError;
+
+  await refreshTopicStats(client, topicId);
 
   return { aiMessage, artifacts };
 }

@@ -19,6 +19,7 @@ export type BeginAiRunContext = {
   workspaceId: string;
   employeeId: string;
   roomId: string;
+  topicId?: string;
   triggerMessageId: string;
   provider: string;
   modelMode: ModelMode;
@@ -90,6 +91,7 @@ export async function beginAiRun(ctx: BeginAiRunContext): Promise<BeginAiRunResu
     runId,
     employeeId: ctx.employeeId,
     roomId: ctx.roomId,
+    topicId: ctx.topicId,
     triggerMessageId: ctx.triggerMessageId,
     provider: ctx.provider,
     model: estimate.model,
@@ -104,6 +106,7 @@ export async function beginAiRun(ctx: BeginAiRunContext): Promise<BeginAiRunResu
     agentRunId: runId,
     employeeId: ctx.employeeId,
     roomId: ctx.roomId,
+    topicId: ctx.topicId,
     triggerMessageId: ctx.triggerMessageId,
     provider: ctx.provider,
     model: estimate.model,

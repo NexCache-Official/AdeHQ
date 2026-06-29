@@ -8,7 +8,9 @@ import {
   MemoryEntry,
   ProjectRoom,
   RoomMessage,
+  RoomTopic,
   Task,
+  TopicMember,
   Tool,
   ToolAccess,
   WorkLogEvent,
@@ -41,7 +43,7 @@ export const TOOL_CATALOG: Tool[] = [
   { id: "godot", name: "Godot", category: "Game development", description: "Work with Godot scenes and scripts.", status: "mock" },
   { id: "blender", name: "Blender", category: "Game development", description: "Generate and tweak 3D assets.", status: "not_connected" },
   { id: "stripe", name: "Stripe", category: "Business", description: "Inspect payments and revenue (with approval).", status: "not_connected" },
-  { id: "openai", name: "OpenAI", category: "Model providers", description: "GPT models for reasoning and writing.", status: "mock" },
+  { id: "siliconflow", name: "SiliconFlow", category: "Model providers", description: "DeepSeek, Qwen, Kimi, and more.", status: "mock" },
   { id: "anthropic", name: "Anthropic", category: "Model providers", description: "Claude models for reasoning and writing.", status: "mock" },
   { id: "gemini", name: "Gemini", category: "Model providers", description: "Google multimodal models.", status: "mock" },
 ];
@@ -133,7 +135,7 @@ export const ROLE_TEMPLATES: RoleTemplate[] = [
     description:
       "Turns ideas into specs, tasks, roadmaps, and acceptance criteria. Reads research, makes a recommendation, and breaks work into shippable tasks.",
     suggestedTools: ["notion", "linear", "files", "web-search"],
-    suggestedProvider: "OpenAI",
+    suggestedProvider: "SiliconFlow",
     suggestedModel: "GPT",
     difficulty: "Standard",
     accent: "#ea580c",
@@ -150,7 +152,7 @@ export const ROLE_TEMPLATES: RoleTemplate[] = [
     description:
       "Helps with code, architecture, GitHub, Cursor, Vercel, and Supabase. Breaks features into implementation tasks and flags what needs access.",
     suggestedTools: ["github", "cursor", "vercel", "supabase", "files"],
-    suggestedProvider: "OpenAI",
+    suggestedProvider: "SiliconFlow",
     suggestedModel: "GPT / Cursor",
     difficulty: "Advanced",
     accent: "#5b8cff",
@@ -184,7 +186,7 @@ export const ROLE_TEMPLATES: RoleTemplate[] = [
     description:
       "Creates launch plans, landing page copy, social posts, and distribution strategy. Drafts external messaging and requests approval before sending.",
     suggestedTools: ["web-search", "notion", "browser"],
-    suggestedProvider: "OpenAI",
+    suggestedProvider: "SiliconFlow",
     suggestedModel: "GPT",
     difficulty: "Standard",
     accent: "#34d399",
@@ -218,7 +220,7 @@ export const ROLE_TEMPLATES: RoleTemplate[] = [
     description:
       "Keeps the company running: process, scheduling, vendor coordination, and logistics. Turns chaos into checklists.",
     suggestedTools: ["calendar", "notion", "files"],
-    suggestedProvider: "OpenAI",
+    suggestedProvider: "SiliconFlow",
     suggestedModel: "GPT",
     difficulty: "Easy",
     accent: "#94a3b8",
@@ -235,7 +237,7 @@ export const ROLE_TEMPLATES: RoleTemplate[] = [
     description:
       "Drives revenue: outreach, pipeline management, demos, and follow-ups. Drafts outreach and requests approval before sending.",
     suggestedTools: ["gmail", "calendar", "notion"],
-    suggestedProvider: "OpenAI",
+    suggestedProvider: "SiliconFlow",
     suggestedModel: "GPT",
     difficulty: "Standard",
     accent: "#fb923c",
@@ -312,8 +314,9 @@ function buildEmployees(): AIEmployee[] {
       name: "PM Employee",
       role: "Product Manager",
       roleKey: "pm",
-      provider: "OpenAI",
-      model: "GPT",
+      provider: "siliconflow",
+      model: "",
+      modelMode: "balanced",
       seniority: "Lead",
       status: "waiting_approval",
       currentTask: "Turning research into a launch roadmap",
@@ -343,8 +346,9 @@ function buildEmployees(): AIEmployee[] {
       name: "Engineering Employee",
       role: "Full-stack Engineer",
       roleKey: "engineering",
-      provider: "OpenAI",
-      model: "GPT / Cursor",
+      provider: "siliconflow",
+      model: "",
+      modelMode: "coding",
       seniority: "Senior",
       status: "idle",
       currentTask: "Reviewing app architecture",
@@ -375,8 +379,9 @@ function buildEmployees(): AIEmployee[] {
       name: "Design Employee",
       role: "Product Designer",
       roleKey: "design",
-      provider: "Gemini",
-      model: "Gemini",
+      provider: "siliconflow",
+      model: "",
+      modelMode: "balanced",
       seniority: "Senior",
       status: "on_call",
       currentTask: "Reviewing workspace UX",
@@ -405,8 +410,9 @@ function buildEmployees(): AIEmployee[] {
       name: "Marketing Employee",
       role: "Growth Marketer",
       roleKey: "marketing",
-      provider: "OpenAI",
-      model: "GPT",
+      provider: "siliconflow",
+      model: "",
+      modelMode: "balanced",
       seniority: "Mid",
       status: "idle",
       currentTask: "Drafting launch copy",
@@ -435,8 +441,9 @@ function buildEmployees(): AIEmployee[] {
       name: "Game Dev Employee",
       role: "Game Development Assistant",
       roleKey: "gamedev",
-      provider: "Anthropic",
-      model: "Claude / GPT",
+      provider: "siliconflow",
+      model: "",
+      modelMode: "coding",
       seniority: "Senior",
       status: "working",
       currentTask: "Planning the Plinko prototype",
@@ -714,6 +721,96 @@ function buildCalls(): Call[] {
 }
 
 // ---------------------------------------------------------------------------
+// Topics (demo)
+// ---------------------------------------------------------------------------
+
+function buildTopicsForDemo(
+  rooms: ProjectRoom[],
+  workspaceId: string,
+  tasks: Task[],
+  memory: MemoryEntry[],
+  approvals: Approval[],
+  workLog: WorkLogEvent[],
+): { topics: RoomTopic[]; topicMembers: TopicMember[] } {
+  const topics: RoomTopic[] = [];
+  const topicMembers: TopicMember[] = [];
+  const now = t(0);
+
+  for (const room of rooms) {
+    const topicId = `topic-general-${room.id}`;
+    const roomTasks = tasks.filter((tk) => tk.roomId === room.id);
+    const roomMemory = memory.filter((m) => m.roomId === room.id);
+    const roomApprovals = approvals.filter((a) => a.roomId === room.id && a.status === "pending");
+    const lastMsg = room.messages[room.messages.length - 1];
+
+    topics.push({
+      id: topicId,
+      workspaceId,
+      roomId: room.id,
+      title: "General",
+      description: "Default topic for existing room messages.",
+      status: "active",
+      priority: "normal",
+      createdByType: "system",
+      lastMessageAt: lastMsg?.createdAt ?? null,
+      lastActivityAt: lastMsg?.createdAt ?? now,
+      messageCount: room.messages.length,
+      taskCount: roomTasks.length,
+      openTaskCount: roomTasks.filter((tk) => tk.status !== "done").length,
+      memoryCount: roomMemory.length,
+      approvalCount: roomApprovals.length,
+      agentRunCount: 0,
+      createdAt: room.createdAt,
+      updatedAt: room.updatedAt,
+    });
+
+    topicMembers.push({
+      id: `tm-${room.id}-human`,
+      workspaceId,
+      roomId: room.id,
+      topicId,
+      memberType: "human",
+      memberId: DEMO_USER.id,
+      role: "owner",
+      notificationLevel: "normal",
+      createdAt: room.createdAt,
+    });
+
+    for (const empId of room.aiEmployees) {
+      topicMembers.push({
+        id: `tm-${room.id}-${empId}`,
+        workspaceId,
+        roomId: room.id,
+        topicId,
+        memberType: "ai",
+        memberId: empId,
+        role: "participant",
+        notificationLevel: "normal",
+        createdAt: room.createdAt,
+      });
+    }
+
+    room.messages.forEach((m) => {
+      m.topicId = topicId;
+    });
+    roomTasks.forEach((tk) => {
+      tk.topicId = topicId;
+    });
+    roomMemory.forEach((m) => {
+      m.topicId = topicId;
+    });
+    approvals.filter((a) => a.roomId === room.id).forEach((a) => {
+      a.topicId = topicId;
+    });
+    workLog.filter((w) => w.roomId === room.id).forEach((w) => {
+      w.topicId = topicId;
+    });
+  }
+
+  return { topics, topicMembers };
+}
+
+// ---------------------------------------------------------------------------
 // Full demo state
 // ---------------------------------------------------------------------------
 
@@ -725,6 +822,20 @@ export const DEMO_USER = {
 };
 
 export function buildDemoState(): DemoState {
+  const rooms = buildRooms();
+  const tasks = buildTasks();
+  const memory = buildMemory();
+  const approvals = buildApprovals();
+  const workLog = buildWorkLog();
+  const { topics, topicMembers } = buildTopicsForDemo(
+    rooms,
+    "ws-1",
+    tasks,
+    memory,
+    approvals,
+    workLog,
+  );
+
   return {
     version: DEMO_VERSION,
     user: { ...DEMO_USER },
@@ -742,11 +853,13 @@ export function buildDemoState(): DemoState {
     workspaceInvitations: [],
     onboardingComplete: true,
     employees: buildEmployees(),
-    rooms: buildRooms(),
-    tasks: buildTasks(),
-    memory: buildMemory(),
-    approvals: buildApprovals(),
-    workLog: buildWorkLog(),
+    rooms,
+    topics,
+    topicMembers,
+    tasks,
+    memory,
+    approvals,
+    workLog,
     tools: TOOL_CATALOG.map((t) => ({ ...t })),
     calls: buildCalls(),
     settings: { mode: "mock", activeProvider: "mock" },

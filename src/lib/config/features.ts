@@ -2,9 +2,6 @@
 export const ENABLE_DEMO_MODE =
   process.env.NEXT_PUBLIC_ENABLE_DEMO_MODE === "true";
 
-export const DEFAULT_OPENAI_MODEL =
-  process.env.ADEHQ_OPENAI_MODEL ?? "gpt-5.4-mini";
-
 export const DEFAULT_SILICONFLOW_MODEL =
   process.env.ADEHQ_SILICONFLOW_MODEL ?? "deepseek-ai/DeepSeek-V4-Flash";
 
@@ -35,6 +32,11 @@ export function isSiliconFlowConfigured(): boolean {
   return Boolean(process.env.SILICONFLOW_API_KEY?.trim());
 }
 
-export function isOpenAiConfigured(): boolean {
-  return Boolean(process.env.OPENAI_API_KEY?.trim());
+export type LiveProvider = "siliconflow" | "mock";
+
+/** Map legacy provider values (e.g. openai) to the live SiliconFlow runtime. */
+export function normalizeLiveProvider(raw?: string | null): LiveProvider {
+  const value = (raw ?? "siliconflow").toLowerCase();
+  if (value === "mock") return "mock";
+  return "siliconflow";
 }

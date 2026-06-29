@@ -129,6 +129,7 @@ export async function createAgentRun(
     runId: string;
     employeeId: string;
     roomId: string;
+    topicId?: string;
     triggerMessageId: string;
     provider: string;
     model: string;
@@ -142,6 +143,7 @@ export async function createAgentRun(
     id: params.runId,
     employee_id: params.employeeId,
     room_id: params.roomId,
+    topic_id: params.topicId ?? null,
     trigger_message_id: params.triggerMessageId,
     status: params.status ?? "running",
     provider: params.provider,
@@ -189,6 +191,7 @@ export async function reserveUsage(
     agentRunId: string;
     employeeId: string;
     roomId: string;
+    topicId?: string;
     triggerMessageId?: string;
     provider: string;
     model: string;
@@ -204,6 +207,7 @@ export async function reserveUsage(
     agent_run_id: params.agentRunId,
     employee_id: params.employeeId,
     room_id: params.roomId,
+    topic_id: params.topicId ?? null,
     trigger_message_id: params.triggerMessageId ?? null,
     provider: params.provider,
     model: params.model,
@@ -257,6 +261,7 @@ export async function appendRunStep(
     workspaceId: string;
     agentRunId: string;
     roomId: string;
+    topicId?: string;
     employeeId: string;
     stepType:
       | "thinking"
@@ -276,6 +281,7 @@ export async function appendRunStep(
     workspace_id: params.workspaceId,
     agent_run_id: params.agentRunId,
     room_id: params.roomId,
+    topic_id: params.topicId ?? null,
     employee_id: params.employeeId,
     step_type: params.stepType,
     title: params.title,

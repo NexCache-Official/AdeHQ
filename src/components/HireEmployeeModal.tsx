@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { DEFAULT_OPENAI_MODEL, ENABLE_DEMO_MODE } from "@/lib/config/features";
+import { ENABLE_DEMO_MODE } from "@/lib/config/features";
 import {
   defaultModelModeForRole,
   MODEL_MODE_LABELS,
@@ -135,8 +135,8 @@ export function HireEmployeeModal({
       name: name || template.name,
       role: roleTitle || template.role,
       roleKey: template.key,
-      provider: provider === "mock" ? "mock" : provider.toLowerCase(),
-      model: provider === "openai" ? DEFAULT_OPENAI_MODEL : "",
+      provider: provider === "mock" ? "mock" : "siliconflow",
+      model: "",
       modelMode,
       seniority,
       status: "idle",
@@ -285,7 +285,6 @@ export function HireEmployeeModal({
                     <div className="grid gap-2 sm:grid-cols-2">
                       <select className="input-field" value={provider} onChange={(e) => setProvider(e.target.value)}>
                         <option value="siliconflow">SiliconFlow (recommended)</option>
-                        <option value="openai">OpenAI · {DEFAULT_OPENAI_MODEL}</option>
                         {ENABLE_DEMO_MODE && <option value="mock">Mock (scripted)</option>}
                       </select>
                       {provider !== "mock" && (

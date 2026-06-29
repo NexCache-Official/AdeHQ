@@ -317,7 +317,7 @@ export function OnboardingFlow() {
                       />
                       <FeatureCard
                         icon={Rocket}
-                        title="Powered by OpenAI"
+                        title="Powered by SiliconFlow"
                         description={`Live replies via SiliconFlow (${DEFAULT_SILICONFLOW_MODEL}) when your server key is configured.`}
                       />
                       <p className="sm:col-span-2 rounded-2xl bg-accent-50 px-4 py-3 text-sm text-accent-900">

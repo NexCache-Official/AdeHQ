@@ -148,9 +148,55 @@ export type MessageArtifact = {
   label: string;
 };
 
+export type TopicStatus = "active" | "paused" | "resolved" | "archived";
+export type TopicPriority = "low" | "normal" | "high" | "urgent";
+export type TopicMemberRole = "owner" | "participant" | "watcher";
+export type TopicNotificationLevel = "muted" | "mentions" | "normal" | "all";
+
+export type RoomTopic = {
+  id: string;
+  workspaceId: string;
+  roomId: string;
+  title: string;
+  slug?: string | null;
+  description?: string | null;
+  status: TopicStatus;
+  priority: TopicPriority;
+  createdByType: "human" | "ai" | "system";
+  createdById?: string | null;
+  summary?: string | null;
+  pinnedSummary?: string | null;
+  lastMessageAt?: string | null;
+  lastActivityAt: string;
+  messageCount: number;
+  taskCount: number;
+  openTaskCount: number;
+  memoryCount: number;
+  approvalCount: number;
+  agentRunCount: number;
+  metadata?: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type TopicMember = {
+  id: string;
+  workspaceId: string;
+  roomId: string;
+  topicId: string;
+  memberType: "human" | "ai";
+  memberId: string;
+  role: TopicMemberRole;
+  notificationLevel: TopicNotificationLevel;
+  lastReadMessageId?: string | null;
+  lastReadAt?: string | null;
+  createdAt: string;
+};
+
 export type RoomMessage = {
   id: string;
   roomId: string;
+  topicId?: string;
   senderType: "human" | "ai" | "system";
   senderId: string;
   senderName: string;
@@ -196,6 +242,7 @@ export type TaskPriority = "low" | "medium" | "high";
 export type Task = {
   id: string;
   roomId: string;
+  topicId?: string;
   title: string;
   description?: string;
   status: TaskStatus;
@@ -221,6 +268,7 @@ export type MemoryStatus = "draft" | "approved" | "pinned" | "superseded";
 export type MemoryEntry = {
   id: string;
   roomId: string;
+  topicId?: string;
   type: MemoryType;
   title: string;
   content: string;
@@ -242,6 +290,7 @@ export type ApprovalActionType =
 export type Approval = {
   id: string;
   roomId: string;
+  topicId?: string;
   requestedBy: string;
   title: string;
   description: string;
@@ -258,6 +307,7 @@ export type WorkLogStatus = "success" | "pending" | "failed" | "needs_approval";
 export type WorkLogEvent = {
   id: string;
   roomId: string;
+  topicId?: string;
   employeeId: string;
   action: string;
   summary: string;
@@ -290,7 +340,6 @@ export type Tool = {
 
 export type ProviderId =
   | "siliconflow"
-  | "openai"
   | "anthropic"
   | "gemini"
   | "perplexity"
@@ -299,7 +348,7 @@ export type ProviderId =
 export type WorkspaceAiSettings = {
   workspaceId: string;
   aiEnabled: boolean;
-  defaultProvider: "siliconflow" | "openai" | "mock";
+  defaultProvider: "siliconflow" | "mock";
   dailyTokenLimit: number;
   dailyCostLimitUsd: number;
   employeeDailyTokenLimit: number;
@@ -324,6 +373,7 @@ export type AgentRun = {
   id: string;
   employeeId: string;
   roomId: string;
+  topicId?: string;
   taskId?: string;
   triggerMessageId: string;
   responseMessageId?: string;
@@ -355,6 +405,7 @@ export type AgentRunStep = {
   workspaceId: string;
   agentRunId: string;
   roomId: string;
+  topicId?: string;
   employeeId: string;
   stepType: AgentRunStepType;
   title: string;
@@ -378,6 +429,7 @@ export type AiUsageEvent = {
   agentRunId?: string;
   employeeId?: string;
   roomId?: string;
+  topicId?: string;
   triggerMessageId?: string;
   responseMessageId?: string;
   provider: string;
@@ -457,9 +509,13 @@ export type EmployeeResponse = {
 export type SendMessageInput = {
   employee: AIEmployee;
   room: ProjectRoom;
+  topic?: RoomTopic;
   message: string;
   allEmployees: AIEmployee[];
   recentMemory: MemoryEntry[];
+  topicTasks?: Task[];
+  topicApprovals?: Approval[];
+  topicWorkLogs?: WorkLogEvent[];
 };
 
 // ---------------------------------------------------------------------------
@@ -475,6 +531,8 @@ export type DemoState = {
   onboardingComplete: boolean;
   employees: AIEmployee[];
   rooms: ProjectRoom[];
+  topics: RoomTopic[];
+  topicMembers: TopicMember[];
   tasks: Task[];
   memory: MemoryEntry[];
   approvals: Approval[];
