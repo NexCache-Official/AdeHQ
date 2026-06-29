@@ -867,6 +867,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         const created: Task = {
           id: task.id ?? uid("task"),
           roomId: task.roomId,
+          topicId: task.topicId,
           title: task.title,
           description: task.description,
           status: task.status ?? "open",
@@ -904,6 +905,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         const created: MemoryEntry = {
           id: m.id ?? uid("mem"),
           roomId: m.roomId,
+          topicId: m.topicId,
           type: m.type ?? "general",
           title: m.title,
           content: m.content,

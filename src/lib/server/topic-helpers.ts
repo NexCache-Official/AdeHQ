@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { RoomTopic, TopicMember, TopicPriority, TopicStatus } from "@/lib/types";
+import { isGeneralTopic } from "@/lib/topics";
 import { nowISO } from "@/lib/utils";
 
 type DbRow = Record<string, unknown>;
@@ -108,6 +109,7 @@ export async function ensureGeneralTopic(
       title: "General",
       description: "Default topic for existing room messages.",
       created_by_type: "system",
+      metadata: { isMainChat: true, aiParticipationMode: "manual_only" },
     })
     .select("*")
     .single();

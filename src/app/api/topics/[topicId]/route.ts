@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { AuthError, requireAuthUser, requireWorkspaceMembership } from "@/lib/supabase/auth-server";
 import { assertCanAccessRoom } from "@/lib/server/room-access";
 import { topicFromRow } from "@/lib/server/topic-helpers";
+import { isGeneralTopic } from "@/lib/topics";
 import { nowISO } from "@/lib/utils";
 import type { TopicPriority, TopicStatus } from "@/lib/types";
 
@@ -25,6 +26,8 @@ type PatchTopicBody = {
   priority?: TopicPriority;
   summary?: string;
   pinnedSummary?: string;
+  metadata?: Record<string, unknown>;
+  aiParticipationMode?: import("@/lib/types").AiParticipationMode;
 };
 
 export async function PATCH(
@@ -56,11 +59,24 @@ export async function PATCH(
       if (!isAdmin && body.status === "archived") {
         return NextResponse.json({ error: "Only admins can archive topics." }, { status: 403 });
       }
+      if (body.status === "archived" && isGeneralTopic(topic)) {
+        return NextResponse.json(
+          { error: "General chat cannot be archived." },
+          { status: 400 },
+        );
+      }
       patch.status = body.status;
     }
     if (body.priority !== undefined) patch.priority = body.priority;
     if (body.summary !== undefined) patch.summary = body.summary;
     if (body.pinnedSummary !== undefined) patch.pinned_summary = body.pinnedSummary;
+    if (body.metadata !== undefined || body.aiParticipationMode !== undefined) {
+      const nextMeta = { ...(topic.metadata ?? {}), ...(body.metadata ?? {}) };
+      if (body.aiParticipationMode !== undefined) {
+        nextMeta.aiParticipationMode = body.aiParticipationMode;
+      }
+      patch.metadata = nextMeta;
+    }
 
     const { data, error } = await client
       .from("room_topics")

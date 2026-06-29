@@ -1,4 +1,4 @@
-import type { RoomTopic, TopicMember, RoomMessage } from "@/lib/types";
+import type { AiParticipationMode, RoomTopic, TopicMember, RoomMessage } from "@/lib/types";
 
 export type TopicFilter = "active" | "mine" | "ai_running" | "approvals" | "archived";
 
@@ -8,8 +8,8 @@ export function topicsForRoom(topics: RoomTopic[], roomId: string): RoomTopic[] 
 
 export function sortTopics(topics: RoomTopic[]): RoomTopic[] {
   return [...topics].sort((a, b) => {
-    const aGeneral = a.title.toLowerCase() === "general" ? 1 : 0;
-    const bGeneral = b.title.toLowerCase() === "general" ? 1 : 0;
+    const aGeneral = isGeneralTopic(a) ? 1 : 0;
+    const bGeneral = isGeneralTopic(b) ? 1 : 0;
     if (aGeneral !== bGeneral) return bGeneral - aGeneral;
 
     const aRunning = a.agentRunCount > 0 ? 1 : 0;
@@ -61,8 +61,26 @@ export function topicUnreadCount(
   return messages.filter((m) => m.topicId === topic.id).slice(lastReadIdx + 1).length;
 }
 
+export function isGeneralTopic(topic: RoomTopic): boolean {
+  return topic.title.toLowerCase() === "general" || Boolean(topic.metadata?.isMainChat);
+}
+
 export function generalTopicForRoom(topics: RoomTopic[], roomId: string): RoomTopic | undefined {
-  return topics.find((t) => t.roomId === roomId && t.title.toLowerCase() === "general");
+  return topics.find((t) => t.roomId === roomId && isGeneralTopic(t));
+}
+
+export function nonGeneralTopics(topics: RoomTopic[], roomId: string): RoomTopic[] {
+  return topicsForRoom(topics, roomId).filter((t) => !isGeneralTopic(t));
+}
+
+export function mainChatLabel(isDm: boolean): string {
+  return isDm ? "Direct Chat" : "General Chat";
+}
+
+export function getAiParticipationMode(topic: RoomTopic): AiParticipationMode {
+  const mode = topic.metadata?.aiParticipationMode;
+  if (mode === "smart_assist" || mode === "active_team") return mode;
+  return "manual_only";
 }
 
 export const TOPIC_TEMPLATES = [

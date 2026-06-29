@@ -7,47 +7,73 @@ import {
   loadTopicContext,
   parseEmployeeMentions,
 } from "@/lib/server/room-messages";
-import { assertTopicInRoom } from "@/lib/server/topic-helpers";
-import { processEmployeeResponse } from "@/lib/server/process-employee-response";
+import { assertTopicInRoom, ensureGeneralTopic } from "@/lib/server/topic-helpers";
+import { decideResponders } from "@/lib/server/decide-responders";
+import { queueAgentRuns } from "@/lib/server/queue-agent-runs";
 import { loadMaxParallelRuns } from "@/lib/ai/cost-guard";
+import { messageError } from "@/lib/server/message-errors";
 import type { MentionRef } from "@/lib/types";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 type MessageBody = {
   content: string;
-  topicId: string;
+  topicId?: string;
   clientMessageId?: string;
   mode?: "mock" | "live";
   mentionsJson?: MentionRef[];
+  slashCommand?: string;
 };
 
 export async function POST(
   request: NextRequest,
   { params }: { params: { roomId: string } },
 ) {
+  let humanMessageSaved = false;
+  let humanMessageId: string | undefined;
+
   try {
     const { user, client } = await requireAuthUser(request);
     const body = (await request.json()) as MessageBody;
 
     if (!body.content?.trim()) {
-      return NextResponse.json({ error: "Message content is required." }, { status: 400 });
-    }
-    if (!body.topicId) {
-      return NextResponse.json({ error: "topicId is required." }, { status: 400 });
+      return messageError("message_required", "Message content is required.", 400);
     }
 
     const workspaceId = await getWorkspaceIdForRoom(client, params.roomId);
     if (!workspaceId) {
-      return NextResponse.json({ error: "Room not found." }, { status: 404 });
+      return messageError("room_not_found", "Room not found.", 404);
     }
 
     const { role } = await requireWorkspaceMembership(client, workspaceId, user.id);
-    await assertCanSendRoomMessage(client, workspaceId, params.roomId, user.id, role);
+    try {
+      await assertCanSendRoomMessage(client, workspaceId, params.roomId, user.id, role);
+    } catch (err) {
+      if (err instanceof AuthError) {
+        return messageError("not_room_member", err.message, err.status);
+      }
+      throw err;
+    }
 
-    await assertTopicInRoom(client, workspaceId, params.roomId, body.topicId);
+    let topicId = body.topicId;
+    if (!topicId) {
+      const general = await ensureGeneralTopic(client, workspaceId, params.roomId);
+      topicId = general.id;
+    }
 
-    const ctx = await loadTopicContext(client, workspaceId, params.roomId, body.topicId);
+    let topic;
+    try {
+      topic = await assertTopicInRoom(client, workspaceId, params.roomId, topicId);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Topic not found.";
+      if (msg.includes("archived")) {
+        return messageError("topic_archived", msg, 400, { topicId });
+      }
+      return messageError("topic_not_in_room", msg, 404, { topicId });
+    }
+
+    const ctx = await loadTopicContext(client, workspaceId, params.roomId, topicId);
 
     const profile = await client
       .from("profiles")
@@ -57,8 +83,6 @@ export async function POST(
 
     const trimmed = body.content.trim();
     const mentionsJson = body.mentionsJson?.length ? body.mentionsJson : undefined;
-    const mentioned = parseEmployeeMentions(trimmed, ctx.employees, mentionsJson);
-    const mentions = mentioned.map((e) => e.id);
 
     const humanMessage = await insertHumanMessage(
       client,
@@ -69,10 +93,15 @@ export async function POST(
         name: profile.data?.name ?? user.email?.split("@")[0] ?? "You",
       },
       trimmed,
-      body.topicId,
+      topicId,
       body.clientMessageId,
       mentionsJson,
     );
+    humanMessageSaved = true;
+    humanMessageId = humanMessage.id;
+
+    const mentioned = parseEmployeeMentions(trimmed, ctx.employees, mentionsJson);
+    const mentions = mentioned.map((e) => e.id);
 
     if (mentions.length && !mentionsJson) {
       await client
@@ -84,78 +113,62 @@ export async function POST(
     humanMessage.mentions = mentions;
     if (mentionsJson) humanMessage.mentionsJson = mentionsJson;
 
-    const isDM = ctx.room.kind === "dm";
-    const dmEmployee =
-      isDM && ctx.room.dmEmployeeId
-        ? ctx.employees.find((e) => e.id === ctx.room.dmEmployeeId)
-        : undefined;
-
-    const responders =
-      mentioned.length > 0
-        ? mentioned
-        : isDM && dmEmployee
-          ? [dmEmployee]
-          : [];
-
-    if (responders.length === 0) {
-      return NextResponse.json({
-        humanMessage,
-        aiResponses: [],
-        aiMessages: [],
-        hint: "Mention an employee with @ to get a response",
-      });
-    }
-
     const maxParallel = await loadMaxParallelRuns(client, workspaceId);
-    const capped = responders.slice(0, Math.min(maxParallel, 3));
-
-    const settled = await Promise.allSettled(
-      capped.map((employee) =>
-        processEmployeeResponse(client, ctx, employee.id, trimmed, {
-          mode: body.mode,
-          triggerMessageId: humanMessage.id,
-        }),
-      ),
+    const decisions = decideResponders(
+      trimmed,
+      topic,
+      ctx.room,
+      ctx.employees,
+      mentionsJson,
+      { maxParallel },
     );
 
-    const aiResponses = [];
-    const aiMessages = [];
+    const { queued, blocked } = await queueAgentRuns(client, {
+      workspaceId,
+      roomId: params.roomId,
+      topicId,
+      triggerMessageId: humanMessage.id,
+      responders: decisions,
+      content: trimmed,
+    });
 
-    for (let i = 0; i < settled.length; i++) {
-      const result = settled[i];
-      const employee = capped[i];
-      if (result.status === "rejected") {
-        console.error("[AdeHQ messages route] employee response failed", result.reason);
-        continue;
-      }
-      const response = result.value;
-      aiResponses.push(response);
-      aiMessages.push({
-        id: response.aiMessageId,
+    if (process.env.NODE_ENV === "development") {
+      console.info("[AdeHQ messages]", {
         roomId: params.roomId,
-        topicId: body.topicId,
-        senderType: "ai" as const,
-        senderId: employee.id,
-        senderName: employee.name,
-        content: response.reply,
-        createdAt: new Date().toISOString(),
-        agentRunId: response.agentRunId,
+        topicId,
+        humanMessageId: humanMessage.id,
+        queued: queued.length,
+        blocked: blocked.length,
       });
     }
 
     return NextResponse.json({
       humanMessage,
-      aiResponses,
-      aiMessages,
+      queuedRuns: queued,
+      blockedRuns: blocked,
+      aiResponses: [],
+      aiMessages: [],
+      hint:
+        queued.length === 0 && decisions.length === 0
+          ? "Mention an employee with @ to get a response"
+          : undefined,
     });
   } catch (error) {
     if (error instanceof AuthError) {
-      return NextResponse.json({ error: error.message }, { status: error.status });
+      return messageError("not_room_member", error.message, error.status);
     }
-    if (error instanceof Error && error.message.includes("Topic not found")) {
-      return NextResponse.json({ error: error.message }, { status: 404 });
+    if (humanMessageSaved && humanMessageId) {
+      return NextResponse.json(
+        {
+          error: "AI processing could not be queued, but your message was saved.",
+          code: "ai_runtime_failed_but_message_saved",
+          humanMessageId,
+        },
+        { status: 207 },
+      );
     }
     console.error("[AdeHQ messages route]", error);
-    return NextResponse.json({ error: "Unable to send message." }, { status: 500 });
+    const detail = error instanceof Error ? error.message : "Unknown error";
+    return messageError("send_failed", `Unable to send message: ${detail}`, 500);
   }
 }

@@ -148,6 +148,8 @@ export type MessageArtifact = {
   label: string;
 };
 
+export type AiParticipationMode = "manual_only" | "smart_assist" | "active_team";
+
 export type TopicStatus = "active" | "paused" | "resolved" | "archived";
 export type TopicPriority = "low" | "normal" | "high" | "urgent";
 export type TopicMemberRole = "owner" | "participant" | "watcher";

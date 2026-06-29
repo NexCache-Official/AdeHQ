@@ -1,7 +1,17 @@
 "use client";
 
 import { useState } from "react";
-import type { AIEmployee, Approval, MemoryEntry, ProjectRoom, RoomTopic, Task, TopicMember, WorkLogEvent } from "@/lib/types";
+import type {
+  AIEmployee,
+  AiParticipationMode,
+  Approval,
+  MemoryEntry,
+  ProjectRoom,
+  RoomTopic,
+  Task,
+  TopicMember,
+  WorkLogEvent,
+} from "@/lib/types";
 import { EmployeeAvatar } from "./EmployeeAvatar";
 import { TaskCard } from "./TaskCard";
 import { MemoryCard } from "./MemoryCard";
@@ -10,6 +20,7 @@ import { WorkLogTimeline } from "./WorkLogTimeline";
 import { EmptyState } from "./States";
 import { Button } from "./ui";
 import { cn } from "@/lib/utils";
+import { getAiParticipationMode, isGeneralTopic, mainChatLabel } from "@/lib/topics";
 import {
   BookText,
   BrainCircuit,
@@ -31,6 +42,12 @@ const TABS = [
   { id: "people", label: "People", icon: Users },
 ] as const;
 
+const PARTICIPATION_MODES: { id: AiParticipationMode; label: string; hint: string }[] = [
+  { id: "manual_only", label: "Manual only", hint: "AI responds only when @mentioned" },
+  { id: "smart_assist", label: "Smart assist", hint: "Relevant employees may join (max 1)" },
+  { id: "active_team", label: "Active team", hint: "More proactive (max 2)" },
+];
+
 function displaySummary(summary: string) {
   return summary
     .replace(/^#{1,6}\s*/gm, "")
@@ -47,10 +64,12 @@ export function TopicPanel({
   memory,
   approvals,
   workLog,
+  isDm = false,
   onSummarize,
-  onResolve,
+  onArchive,
   onAskAi,
   onSaveSummaryToMemory,
+  onParticipationChange,
   summarizing,
 }: {
   topic: RoomTopic;
@@ -61,13 +80,18 @@ export function TopicPanel({
   memory: MemoryEntry[];
   approvals: Approval[];
   workLog: WorkLogEvent[];
+  isDm?: boolean;
   onSummarize: () => void;
-  onResolve: () => void;
+  onArchive: () => void;
   onAskAi: () => void;
   onSaveSummaryToMemory: () => void;
+  onParticipationChange?: (mode: AiParticipationMode) => void;
   summarizing?: boolean;
 }) {
   const [tab, setTab] = useState<(typeof TABS)[number]["id"]>("overview");
+  const isMainChat = isGeneralTopic(topic);
+  const displayTitle = isMainChat ? mainChatLabel(isDm) : topic.title;
+  const participation = getAiParticipationMode(topic);
 
   const topicEmployees = topicMembers
     .filter((m) => m.memberType === "ai")
@@ -92,153 +116,206 @@ export function TopicPanel({
   };
 
   return (
-    <div className="flex h-full flex-col">
-      <div className="shrink-0 border-b border-slate-200 px-4 py-3">
-        <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0">
-            <h2 className="truncate text-sm font-semibold text-slate-900">{topic.title}</h2>
-            {topic.description && (
-              <p className="mt-0.5 line-clamp-2 text-xs text-slate-500">{topic.description}</p>
-            )}
-            <div className="mt-1.5 flex flex-wrap gap-1.5">
-              <span className="rounded-md bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-600">
-                {topic.status}
-              </span>
-              <span className="rounded-md bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-600">
-                {topic.priority} priority
-              </span>
-            </div>
-          </div>
-        </div>
-        <div className="mt-2 flex flex-wrap gap-1.5">
-          <Button variant="secondary" size="sm" onClick={onSummarize} disabled={summarizing}>
-            {summarizing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
-            Summarize
-          </Button>
-          <Button variant="ghost" size="sm" onClick={onAskAi}>
-            <Zap className="h-3.5 w-3.5" /> Draft AI question
-          </Button>
-          {topic.status !== "resolved" && (
-            <Button variant="ghost" size="sm" onClick={onResolve}>
-              Resolve
-            </Button>
-          )}
-        </div>
-      </div>
-
-      <div className="flex shrink-0 items-center gap-1 overflow-x-auto border-b border-slate-200 px-2 py-2">
+    <div className="flex h-full min-h-0">
+      <nav className="flex w-[108px] shrink-0 flex-col gap-0.5 border-r border-slate-200 bg-slate-50/80 p-2">
         {TABS.map((tb) => (
           <button
             key={tb.id}
             onClick={() => setTab(tb.id)}
             className={cn(
-              "flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors",
-              tab === tb.id ? "bg-accent-500/15 text-accent-700" : "text-slate-400 hover:bg-slate-50 hover:text-slate-700",
+              "flex flex-col items-center gap-1 rounded-lg px-1 py-2 text-[10px] font-medium leading-tight transition-colors",
+              tab === tb.id
+                ? "bg-accent-500/15 text-accent-700"
+                : "text-slate-500 hover:bg-white hover:text-slate-800",
             )}
           >
-            <tb.icon className="h-3.5 w-3.5" />
-            {tb.label}
+            <tb.icon className="h-4 w-4 shrink-0" />
+            <span className="text-center">{tb.label}</span>
             {counts[tb.id] > 0 && (
-              <span className="rounded-full bg-slate-100 px-1.5 text-[10px]">{counts[tb.id]}</span>
+              <span className="rounded-full bg-slate-200 px-1.5 text-[9px] text-slate-600">
+                {counts[tb.id]}
+              </span>
             )}
           </button>
         ))}
-      </div>
+      </nav>
 
-      <div className="min-h-0 flex-1 overflow-y-auto p-4">
-        {tab === "overview" && (
-          <div className="space-y-4">
-            {topic.summary && (
-              <section>
-                <div className="section-title mb-1.5">Summary</div>
-                <div className="max-h-48 overflow-y-auto rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs leading-relaxed text-slate-600 whitespace-pre-wrap">
-                  {displaySummary(topic.summary)}
-                </div>
-              </section>
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+        <div className="shrink-0 border-b border-slate-200 px-4 py-3">
+          <div className="min-w-0">
+            <h2 className="truncate text-sm font-semibold text-slate-900">{displayTitle}</h2>
+            {topic.description && !isMainChat && (
+              <p className="mt-0.5 line-clamp-2 text-xs text-slate-500">{topic.description}</p>
             )}
-            <section>
-              <div className="section-title mb-1.5">Open tasks</div>
-              {topicTasks.filter((t) => t.status !== "done").length === 0 ? (
-                <p className="text-xs text-slate-500">No open tasks in this topic.</p>
+            {!isMainChat && (
+              <div className="mt-1.5 flex flex-wrap gap-1.5">
+                <span className="rounded-md bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-600">
+                  {topic.status}
+                </span>
+                <span className="rounded-md bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-600">
+                  {topic.priority} priority
+                </span>
+              </div>
+            )}
+          </div>
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            <Button variant="secondary" size="sm" onClick={onSummarize} disabled={summarizing}>
+              {summarizing ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
               ) : (
-                <div className="space-y-2">
-                  {topicTasks.filter((t) => t.status !== "done").slice(0, 3).map((t) => (
-                    <TaskCard key={t.id} task={t} compact />
-                  ))}
-                </div>
+                <Sparkles className="h-3.5 w-3.5" />
               )}
-            </section>
-            <section>
-              <div className="section-title mb-1.5">Pending approvals</div>
-              {topicApprovals.filter((a) => a.status === "pending").length === 0 ? (
-                <p className="text-xs text-slate-500">No pending approvals.</p>
-              ) : (
-                <div className="space-y-2">
-                  {topicApprovals.filter((a) => a.status === "pending").map((a) => (
-                    <ApprovalCard key={a.id} approval={a} />
-                  ))}
-                </div>
-              )}
-            </section>
-            {topic.summary && (
-              <Button variant="secondary" size="sm" className="w-full" onClick={onSaveSummaryToMemory}>
-                Save summary to memory
+              Summarize
+            </Button>
+            <Button variant="ghost" size="sm" onClick={onAskAi}>
+              <Zap className="h-3.5 w-3.5" /> Draft AI question
+            </Button>
+            {!isMainChat && topic.status !== "archived" && (
+              <Button variant="ghost" size="sm" onClick={onArchive}>
+                Archive Topic
               </Button>
             )}
           </div>
-        )}
+          {!isMainChat && onParticipationChange && (
+            <div className="mt-3">
+              <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                AI participation
+              </div>
+              <div className="flex flex-col gap-1">
+                {PARTICIPATION_MODES.map((mode) => (
+                  <button
+                    key={mode.id}
+                    type="button"
+                    onClick={() => onParticipationChange(mode.id)}
+                    className={cn(
+                      "rounded-lg border px-2.5 py-1.5 text-left text-xs transition-colors",
+                      participation === mode.id
+                        ? "border-accent-500/40 bg-accent-500/10 text-accent-800"
+                        : "border-slate-200 bg-white text-slate-600 hover:border-slate-300",
+                    )}
+                  >
+                    <div className="font-medium">{mode.label}</div>
+                    <div className="text-[10px] text-slate-500">{mode.hint}</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
 
-        {tab === "tasks" && (
-          <div className="space-y-2">
-            {topicTasks.length === 0 ? (
-              <EmptyState icon={CheckSquare} title="No tasks" description="Tasks linked to this topic appear here." />
-            ) : (
-              topicTasks.map((t) => <TaskCard key={t.id} task={t} compact />)
-            )}
-          </div>
-        )}
+        <div className="min-h-0 flex-1 overflow-y-auto p-4">
+          {tab === "overview" && (
+            <div className="space-y-4">
+              {topic.summary && (
+                <section>
+                  <div className="section-title mb-1.5">Summary</div>
+                  <div className="max-h-48 overflow-y-auto rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs leading-relaxed text-slate-600 whitespace-pre-wrap">
+                    {displaySummary(topic.summary)}
+                  </div>
+                </section>
+              )}
+              <section>
+                <div className="section-title mb-1.5">Open tasks</div>
+                {topicTasks.filter((t) => t.status !== "done").length === 0 ? (
+                  <p className="text-xs text-slate-500">No open tasks in this topic.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {topicTasks
+                      .filter((t) => t.status !== "done")
+                      .slice(0, 3)
+                      .map((t) => (
+                        <TaskCard key={t.id} task={t} compact />
+                      ))}
+                  </div>
+                )}
+              </section>
+              <section>
+                <div className="section-title mb-1.5">Pending approvals</div>
+                {topicApprovals.filter((a) => a.status === "pending").length === 0 ? (
+                  <p className="text-xs text-slate-500">No pending approvals.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {topicApprovals
+                      .filter((a) => a.status === "pending")
+                      .map((a) => (
+                        <ApprovalCard key={a.id} approval={a} />
+                      ))}
+                  </div>
+                )}
+              </section>
+              {topic.summary && (
+                <Button variant="secondary" size="sm" className="w-full" onClick={onSaveSummaryToMemory}>
+                  Save summary to memory
+                </Button>
+              )}
+            </div>
+          )}
 
-        {tab === "memory" && (
-          <div className="space-y-3">
-            {topicMemory.length === 0 ? (
-              <EmptyState icon={BrainCircuit} title="No memory" description="Topic and pinned room memory appears here." />
-            ) : (
-              topicMemory.map((m) => <MemoryCard key={m.id} memory={m} />)
-            )}
-          </div>
-        )}
+          {tab === "tasks" && (
+            <div className="space-y-2">
+              {topicTasks.length === 0 ? (
+                <EmptyState icon={CheckSquare} title="No tasks" description="Tasks linked to this topic appear here." />
+              ) : (
+                topicTasks.map((t) => <TaskCard key={t.id} task={t} compact />)
+              )}
+            </div>
+          )}
 
-        {tab === "approvals" && (
-          <div className="space-y-3">
-            {topicApprovals.length === 0 ? (
-              <EmptyState icon={ShieldAlert} title="No approvals" description="Approval requests for this topic appear here." />
-            ) : (
-              topicApprovals.map((a) => <ApprovalCard key={a.id} approval={a} />)
-            )}
-          </div>
-        )}
+          {tab === "memory" && (
+            <div className="space-y-3">
+              {topicMemory.length === 0 ? (
+                <EmptyState icon={BrainCircuit} title="No memory" description="Topic and pinned room memory appears here." />
+              ) : (
+                topicMemory.map((m) => <MemoryCard key={m.id} memory={m} />)
+              )}
+            </div>
+          )}
 
-        {tab === "activity" && (
-          <div>
-            {topicLog.length === 0 ? (
-              <EmptyState icon={ScrollText} title="No activity" description="Work log events for this topic appear here." />
-            ) : (
-              <WorkLogTimeline events={topicLog} compact />
-            )}
-          </div>
-        )}
+          {tab === "approvals" && (
+            <div className="space-y-3">
+              {topicApprovals.length === 0 ? (
+                <EmptyState icon={ShieldAlert} title="No approvals" description="Approval requests for this topic appear here." />
+              ) : (
+                topicApprovals.map((a) => <ApprovalCard key={a.id} approval={a} />)
+              )}
+            </div>
+          )}
 
-        {tab === "people" && (
-          <div className="space-y-2">
-            <div className="section-title mb-1">Room AI employees</div>
-            {room.aiEmployees.length === 0 ? (
-              <p className="text-xs text-slate-500">No AI employees in this room.</p>
-            ) : (
-              room.aiEmployees
-                .map((id) => employees.find((e) => e.id === id))
-                .filter((e): e is AIEmployee => !!e)
-                .map((e) => (
-                  <div key={e.id} className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white p-2.5">
+          {tab === "activity" && (
+            <div>
+              {topicLog.length === 0 ? (
+                <EmptyState icon={ScrollText} title="No activity" description="Work log events for this topic appear here." />
+              ) : (
+                <WorkLogTimeline events={topicLog} compact />
+              )}
+            </div>
+          )}
+
+          {tab === "people" && (
+            <div className="space-y-2">
+              <div className="section-title mb-1">Room AI employees</div>
+              {room.aiEmployees.length === 0 ? (
+                <p className="text-xs text-slate-500">No AI employees in this room.</p>
+              ) : (
+                room.aiEmployees
+                  .map((id) => employees.find((e) => e.id === id))
+                  .filter((e): e is AIEmployee => !!e)
+                  .map((e) => (
+                    <div key={e.id} className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white p-2.5">
+                      <EmployeeAvatar employee={e} size="sm" />
+                      <div>
+                        <div className="text-sm font-medium text-slate-800">{e.name}</div>
+                        <div className="text-[11px] text-slate-500">{e.role}</div>
+                      </div>
+                    </div>
+                  ))
+              )}
+              <div className="section-title mb-1">AI employees in topic</div>
+              {topicEmployees.length === 0 ? (
+                <p className="text-xs text-slate-500">No AI employees assigned yet.</p>
+              ) : (
+                topicEmployees.map((e) => (
+                  <div key={e.id} className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 p-2.5">
                     <EmployeeAvatar employee={e} size="sm" />
                     <div>
                       <div className="text-sm font-medium text-slate-800">{e.name}</div>
@@ -246,23 +323,10 @@ export function TopicPanel({
                     </div>
                   </div>
                 ))
-            )}
-            <div className="section-title mb-1">AI employees in topic</div>
-            {topicEmployees.length === 0 ? (
-              <p className="text-xs text-slate-500">No AI employees assigned yet.</p>
-            ) : (
-              topicEmployees.map((e) => (
-                <div key={e.id} className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 p-2.5">
-                  <EmployeeAvatar employee={e} size="sm" />
-                  <div>
-                    <div className="text-sm font-medium text-slate-800">{e.name}</div>
-                    <div className="text-[11px] text-slate-500">{e.role}</div>
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-        )}
+              )}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

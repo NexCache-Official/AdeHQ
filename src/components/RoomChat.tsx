@@ -1,21 +1,24 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ProjectRoom, RoomTopic } from "@/lib/types";
 import { useStore } from "@/lib/demo-store";
 import { ENABLE_DEMO_MODE } from "@/lib/config/features";
 import { useResponder } from "@/lib/ai/use-responder";
 import { authHeaders } from "@/lib/api/auth-client";
+import { isGeneralTopic, mainChatLabel } from "@/lib/topics";
 import { RoomMessageItem } from "./RoomMessageItem";
-import { ChatComposer } from "./ChatComposer";
+import { ChatComposer, type SlashCommandResult } from "./ChatComposer";
 import { EmptyState } from "./States";
 import { Button } from "./ui";
+import { EmployeeAvatar } from "./EmployeeAvatar";
 import { extractMentions, uid } from "@/lib/utils";
 import {
   AlertCircle,
   Bot,
   ListChecks,
+  Loader2,
   MessagesSquare,
   RotateCcw,
   UserPlus,
@@ -26,28 +29,44 @@ type PendingSend = {
   content: string;
 };
 
+type ActiveRun = {
+  runId: string;
+  employeeId: string;
+  employeeName: string;
+  phase: "queued" | "reading" | "thinking" | "typing" | "done" | "failed";
+};
+
+const MESSAGE_PAGE = 50;
+
 export function RoomChat({
   room,
   topic,
   draftText,
   onDraftConsumed,
+  onSlashCommand,
+  isDm = false,
 }: {
   room: ProjectRoom;
   topic?: RoomTopic;
   draftText?: string;
   onDraftConsumed?: () => void;
+  onSlashCommand?: (result: SlashCommandResult) => void | Promise<void>;
+  isDm?: boolean;
 }) {
   const { state, actions, backend } = useStore();
   const respond = useResponder();
   const router = useRouter();
-  const [busy, setBusy] = useState(false);
   const [failedSend, setFailedSend] = useState<PendingSend | null>(null);
   const [sendError, setSendError] = useState<string | null>(null);
+  const [activeRuns, setActiveRuns] = useState<ActiveRun[]>([]);
+  const [messageLimit, setMessageLimit] = useState(MESSAGE_PAGE);
   const bottomRef = useRef<HTMLDivElement>(null);
 
-  const topicMessages = topic
+  const allTopicMessages = topic
     ? room.messages.filter((m) => m.topicId === topic.id)
     : [];
+  const topicMessages = allTopicMessages.slice(-messageLimit);
+  const hasOlder = allTopicMessages.length > messageLimit;
 
   const roomEmployees = room.aiEmployees
     .map((id) => state.employees.find((e) => e.id === id))
@@ -55,7 +74,7 @@ export function RoomChat({
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-  }, [topicMessages.length, topicMessages[topicMessages.length - 1]?.pending]);
+  }, [topicMessages.length, activeRuns.length]);
 
   useEffect(() => {
     if (!topic) return;
@@ -79,12 +98,103 @@ export function RoomChat({
     }
   };
 
-  const isDM = room.kind === "dm";
-  const dmEmployee = isDM
+  const dmEmployee = isDm
     ? roomEmployees.find((e) => e.id === room.dmEmployeeId) ?? roomEmployees[0]
     : undefined;
 
   const useServerApi = backend === "supabase";
+
+  const processQueuedRuns = useCallback(
+    async (
+      queuedRuns: {
+        runId: string;
+        employeeId: string;
+        employeeName: string;
+      }[],
+    ) => {
+      if (!queuedRuns.length || !topic) return;
+
+      setActiveRuns(
+        queuedRuns.map((r) => ({
+          ...r,
+          phase: "queued" as const,
+        })),
+      );
+
+      const headers = await authHeaders();
+
+      await Promise.allSettled(
+        queuedRuns.map(async (run) => {
+          setActiveRuns((prev) =>
+            prev.map((r) =>
+              r.runId === run.runId ? { ...r, phase: "reading" } : r,
+            ),
+          );
+
+          await new Promise((r) => setTimeout(r, 300));
+          setActiveRuns((prev) =>
+            prev.map((r) =>
+              r.runId === run.runId ? { ...r, phase: "thinking" } : r,
+            ),
+          );
+
+          try {
+            setActiveRuns((prev) =>
+              prev.map((r) =>
+                r.runId === run.runId ? { ...r, phase: "typing" } : r,
+              ),
+            );
+
+            const res = await fetch(`/api/agent-runs/${run.runId}/process`, {
+              method: "POST",
+              headers,
+              body: JSON.stringify({
+                workspaceId: state.workspace.id,
+                mode: "live",
+              }),
+            });
+
+            const data = await res.json();
+            if (!res.ok || !data.ok) {
+              throw new Error(data.error ?? "AI response failed");
+            }
+
+            if (data.aiMessage) {
+              actions.addMessage(room.id, {
+                id: data.aiMessage.id,
+                topicId: topic.id,
+                senderType: "ai",
+                senderId: data.aiMessage.senderId,
+                senderName: data.aiMessage.senderName,
+                content: data.aiMessage.content,
+                agentRunId: run.runId,
+              });
+            }
+
+            setActiveRuns((prev) =>
+              prev.map((r) =>
+                r.runId === run.runId ? { ...r, phase: "done" } : r,
+              ),
+            );
+          } catch (err) {
+            console.error("[AdeHQ process run]", err);
+            setActiveRuns((prev) =>
+              prev.map((r) =>
+                r.runId === run.runId ? { ...r, phase: "failed" } : r,
+              ),
+            );
+          }
+        }),
+      );
+
+      setTimeout(() => {
+        setActiveRuns((prev) => prev.filter((r) => r.phase !== "done"));
+      }, 3000);
+
+      void actions.refreshTopics(room.id);
+    },
+    [actions, room.id, state.workspace.id, topic],
+  );
 
   const sendViaServer = async (
     text: string,
@@ -92,7 +202,6 @@ export function RoomChat({
     mentionsJson?: import("@/lib/types").MentionRef[],
   ) => {
     if (!topic) return;
-    setBusy(true);
     setFailedSend(null);
     setSendError(null);
     const messageId = clientMessageId ?? uid("msg");
@@ -109,6 +218,7 @@ export function RoomChat({
       senderName: state.user?.name ?? "You",
       content: text,
       mentions,
+      pending: true,
     });
 
     try {
@@ -124,35 +234,47 @@ export function RoomChat({
           mode: "live",
         }),
       });
-      if (!response.ok) {
-        const payload = await response.json().catch(() => null);
+
+      const payload = await response.json().catch(() => ({}));
+
+      if (!response.ok && response.status !== 207) {
+        if (payload.code === "ai_runtime_failed_but_message_saved" || payload.humanMessage) {
+          actions.updateMessage(room.id, messageId, { pending: false });
+          if (payload.humanMessage) {
+            actions.updateMessage(room.id, messageId, payload.humanMessage);
+          }
+          return;
+        }
         throw new Error(payload?.error ?? "Unable to send message.");
       }
-      const payload = await response.json();
+
       actions.updateMessage(room.id, messageId, { pending: false });
 
-      for (const aiMsg of payload.aiMessages ?? []) {
+      if (payload.humanMessage && payload.humanMessage.id !== messageId) {
+        actions.removeLocalMessage(room.id, messageId);
         actions.addMessage(room.id, {
-          id: aiMsg.id,
+          ...payload.humanMessage,
           topicId: topic.id,
-          senderType: "ai",
-          senderId: aiMsg.senderId,
-          senderName: aiMsg.senderName,
-          content: aiMsg.content,
-          agentRunId: aiMsg.agentRunId,
+        });
+      } else if (payload.humanMessage) {
+        actions.updateMessage(room.id, messageId, {
+          ...payload.humanMessage,
+          pending: false,
         });
       }
 
-      if (payload.humanMessage) {
-        actions.refreshTopics(room.id);
+      if (payload.queuedRuns?.length) {
+        void processQueuedRuns(payload.queuedRuns);
       }
+
+      void actions.refreshTopics(room.id);
     } catch (error) {
       actions.removeLocalMessage(room.id, messageId);
       setFailedSend({ clientMessageId: messageId, content: text });
       setSendError(error instanceof Error ? error.message : "Unable to send message.");
-      console.error("[AdeHQ RoomChat]", error);
-    } finally {
-      setBusy(false);
+      if (process.env.NODE_ENV === "development") {
+        console.error("[AdeHQ RoomChat send]", error);
+      }
     }
   };
 
@@ -170,14 +292,12 @@ export function RoomChat({
       mentions,
     });
 
-    const responders = mentions.length > 0 ? mentions : isDM && dmEmployee ? [dmEmployee.id] : [];
+    const responders = mentions.length > 0 ? mentions : [];
     if (responders.length === 0) return;
 
-    setBusy(true);
     for (const employeeId of responders) {
       await respond(room.id, employeeId, text);
     }
-    setBusy(false);
   };
 
   const handleSend = async (text: string, mentionsJson?: import("@/lib/types").MentionRef[]) => {
@@ -196,7 +316,7 @@ export function RoomChat({
     const { clientMessageId, content } = failedSend;
     actions.removeLocalMessage(room.id, clientMessageId);
     setFailedSend(null);
-    await sendViaServer(content);
+    await sendViaServer(content, clientMessageId);
   };
 
   if (!topic) {
@@ -211,30 +331,44 @@ export function RoomChat({
     );
   }
 
-  const placeholder = isDM && dmEmployee
+  const isMainChat = isGeneralTopic(topic);
+  const displayTitle = isMainChat ? mainChatLabel(isDm) : topic.title;
+
+  const placeholder = isDm && dmEmployee
     ? `Message ${dmEmployee.name} directly…`
-    : topic.title.toLowerCase() === "general"
-      ? `Message #${room.name} general chat…`
-      : `Discuss ${topic.title}… mention an employee with @ when you need help`;
+    : isMainChat
+      ? `Message ${mainChatLabel(isDm)}…`
+      : `Discuss ${topic.title}… use @ to mention an employee`;
 
   return (
     <div className="flex h-full flex-col">
       <div className="shrink-0 border-b border-slate-200 bg-white px-4 py-2.5 sm:px-6">
         <div className="mx-auto max-w-3xl">
-          <h2 className="text-sm font-semibold text-slate-900">{topic.title}</h2>
-          {topic.description && (
+          <h2 className="text-sm font-semibold text-slate-900">{displayTitle}</h2>
+          {topic.description && !isMainChat && (
             <p className="mt-0.5 text-xs text-slate-500 line-clamp-1">{topic.description}</p>
           )}
         </div>
       </div>
 
       <div className="flex-1 overflow-y-auto px-4 py-4 sm:px-6">
+        {hasOlder && (
+          <div className="mx-auto mb-3 max-w-3xl text-center">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setMessageLimit((n) => n + MESSAGE_PAGE)}
+            >
+              Load older messages
+            </Button>
+          </div>
+        )}
         {topicMessages.length === 0 ? (
           <div className="flex h-full flex-col items-center justify-center gap-4">
             <EmptyState
               icon={MessagesSquare}
-              title={isDM && dmEmployee ? `Message ${dmEmployee.name}` : `Start ${topic.title}`}
-              description="Send a message in this topic. Mention an AI employee with @ when you want help."
+              title={isDm && dmEmployee ? `Message ${dmEmployee.name}` : `Start ${displayTitle}`}
+              description="Send a message here. Mention an AI employee with @ when you want help."
             />
             <div className="flex flex-wrap justify-center gap-2">
               <Button variant="secondary" size="sm" onClick={() => router.push("/settings")}>
@@ -253,7 +387,36 @@ export function RoomChat({
             {topicMessages.map((m) => (
               <RoomMessageItem key={m.id} message={m} />
             ))}
-            {busy && <div className="px-1 py-2 text-xs text-slate-500">Sending…</div>}
+            {activeRuns
+              .filter((r) => r.phase !== "done")
+              .map((run) => {
+                const emp = roomEmployees.find((e) => e.id === run.employeeId);
+                const phaseLabel =
+                  run.phase === "queued"
+                    ? "has seen your message"
+                    : run.phase === "reading"
+                      ? "is reading…"
+                      : run.phase === "thinking"
+                        ? "is thinking…"
+                        : run.phase === "typing"
+                          ? "is typing…"
+                          : run.phase === "failed"
+                            ? "couldn't respond"
+                            : "";
+                return (
+                  <div
+                    key={run.runId}
+                    className="flex items-center gap-2 px-1 py-2 text-xs text-slate-500"
+                  >
+                    {emp && <EmployeeAvatar employee={emp} size="xs" />}
+                    <Loader2 className="h-3 w-3 animate-spin text-accent-600" />
+                    <span>
+                      <span className="font-medium text-slate-700">{run.employeeName}</span>{" "}
+                      {phaseLabel}
+                    </span>
+                  </div>
+                );
+              })}
             <div ref={bottomRef} />
           </div>
         )}
@@ -278,14 +441,15 @@ export function RoomChat({
           <ChatComposer
             employees={roomEmployees}
             onSend={handleSend}
-            disabled={busy || !topic}
+            disabled={!topic}
             placeholder={placeholder}
             draftText={draftText}
             onDraftConsumed={onDraftConsumed}
+            onSlashCommand={onSlashCommand}
           />
           {useServerApi && roomEmployees.length > 0 && (
             <p className="mt-2 px-1 text-[11px] text-slate-600">
-              {roomEmployees.length} AI employee{roomEmployees.length === 1 ? "" : "s"} in this room · mention with @ for a reply
+              {roomEmployees.length} AI employee{roomEmployees.length === 1 ? "" : "s"} in this room · mention with @ for a reply · type /help for commands
             </p>
           )}
         </div>

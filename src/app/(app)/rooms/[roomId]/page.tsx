@@ -11,8 +11,9 @@ import { EmployeeAvatar } from "@/components/EmployeeAvatar";
 import { Button } from "@/components/ui";
 import { EmptyState } from "@/components/States";
 import { authHeaders } from "@/lib/api/auth-client";
-import { generalTopicForRoom, topicsForRoom } from "@/lib/topics";
-import type { TopicPriority } from "@/lib/types";
+import { generalTopicForRoom, isGeneralTopic, topicsForRoom } from "@/lib/topics";
+import type { AiParticipationMode, TopicPriority } from "@/lib/types";
+import type { SlashCommandResult } from "@/components/ChatComposer";
 import {
   ArrowLeft,
   Hash,
@@ -31,8 +32,10 @@ export default function RoomDetailPage() {
   const [summarizing, setSummarizing] = useState(false);
   const [creatingTopic, setCreatingTopic] = useState(false);
   const [composerDraft, setComposerDraft] = useState("");
+  const [slashNotice, setSlashNotice] = useState<string | null>(null);
 
   const room = state.rooms.find((r) => r.id === roomId);
+  const isDm = room?.kind === "dm";
   const roomTopics = useMemo(
     () => topicsForRoom(state.topics, roomId),
     [state.topics, roomId],
@@ -161,12 +164,94 @@ export default function RoomDetailPage() {
     const response = await fetch(`/api/topics/${selectedTopic.id}`, {
       method: "PATCH",
       headers,
-      body: JSON.stringify({ status: "resolved" }),
+      body: JSON.stringify({ status: "archived" }),
+    });
+    if (response.ok) {
+      const { topic } = await response.json();
+      actions.upsertTopic(topic);
+      const general = generalTopicForRoom(roomTopics, roomId);
+      if (general) selectTopic(general.id);
+    }
+  };
+
+  const archiveTopic = resolveTopic;
+
+  const setParticipationMode = async (mode: AiParticipationMode) => {
+    if (!selectedTopic || backend !== "supabase") return;
+    const headers = await authHeaders();
+    const response = await fetch(`/api/topics/${selectedTopic.id}`, {
+      method: "PATCH",
+      headers,
+      body: JSON.stringify({ aiParticipationMode: mode }),
     });
     if (response.ok) {
       const { topic } = await response.json();
       actions.upsertTopic(topic);
     }
+  };
+
+  const handleSlashCommand = async (result: SlashCommandResult) => {
+    if (!selectedTopic || !room) return;
+
+    switch (result.type) {
+      case "help":
+        setSlashNotice("Commands: /task /memory /summary /ask /archive /assign");
+        break;
+      case "task":
+        actions.createTask({
+          roomId,
+          topicId: selectedTopic.id,
+          title: result.title,
+          status: "open",
+          createdFrom: "slash_command",
+        });
+        setSlashNotice(`Task created: ${result.title}`);
+        break;
+      case "memory":
+        actions.createMemory({
+          roomId,
+          topicId: selectedTopic.id,
+          title: `Memory — ${selectedTopic.title}`,
+          content: result.content,
+          type: "general",
+          status: "approved",
+          createdByType: "human",
+          createdById: state.user?.id ?? "user",
+        });
+        setSlashNotice("Saved to topic memory.");
+        break;
+      case "summary":
+        await summarizeTopic();
+        setSlashNotice("Topic summary updated.");
+        break;
+      case "ask":
+        askAiAboutTopic();
+        setSlashNotice("Draft inserted — review and send.");
+        break;
+      case "archive":
+        if (isGeneralTopic(selectedTopic)) {
+          setSlashNotice("General/Direct Chat cannot be archived.");
+          return;
+        }
+        await archiveTopic();
+        setSlashNotice("Topic archived.");
+        break;
+      case "assign":
+        if (backend === "supabase") {
+          const headers = await authHeaders();
+          await fetch(`/api/topics/${selectedTopic.id}/members`, {
+            method: "POST",
+            headers,
+            body: JSON.stringify({ employeeId: result.employeeId }),
+          });
+          await actions.refreshTopics(roomId);
+        }
+        setSlashNotice(`${result.employeeName} added to topic.`);
+        break;
+      default:
+        break;
+    }
+    setTimeout(() => setSlashNotice(null), 4000);
   };
 
   const askAiAboutTopic = () => {
@@ -258,17 +343,25 @@ export default function RoomDetailPage() {
             messages={room.messages}
             selectedTopicId={selectedTopic?.id}
             userId={state.user?.id}
+            isDm={isDm}
             onSelect={selectTopic}
             onNewTopic={() => setNewTopicOpen(true)}
           />
         </div>
 
         <div className="min-w-0 flex-1 border-r border-slate-200">
+          {slashNotice && (
+            <div className="border-b border-accent-200 bg-accent-50 px-4 py-1.5 text-center text-xs text-accent-800">
+              {slashNotice}
+            </div>
+          )}
           <RoomChat
             room={room}
             topic={selectedTopic}
+            isDm={isDm}
             draftText={composerDraft}
             onDraftConsumed={() => setComposerDraft("")}
+            onSlashCommand={handleSlashCommand}
           />
         </div>
 
@@ -283,10 +376,12 @@ export default function RoomDetailPage() {
               memory={state.memory}
               approvals={state.approvals}
               workLog={state.workLog}
+              isDm={isDm}
               onSummarize={summarizeTopic}
-              onResolve={resolveTopic}
+              onArchive={archiveTopic}
               onAskAi={askAiAboutTopic}
               onSaveSummaryToMemory={saveSummaryToMemory}
+              onParticipationChange={setParticipationMode}
               summarizing={summarizing}
             />
           ) : (
