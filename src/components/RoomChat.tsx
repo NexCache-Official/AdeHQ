@@ -14,6 +14,8 @@ import { EmptyState } from "./States";
 import { Button } from "./ui";
 import { EmployeeAvatar } from "./EmployeeAvatar";
 import { extractMentions, uid } from "@/lib/utils";
+import { readDebugMode } from "@/lib/debug-trace";
+import { useDebugTrace } from "./DebugProvider";
 import {
   AlertCircle,
   Bot,
@@ -34,6 +36,7 @@ type ActiveRun = {
   employeeId: string;
   employeeName: string;
   phase: "queued" | "reading" | "thinking" | "typing" | "done" | "failed";
+  error?: string;
 };
 
 const MESSAGE_PAGE = 50;
@@ -54,6 +57,7 @@ export function RoomChat({
   isDm?: boolean;
 }) {
   const { state, actions, backend } = useStore();
+  const { trace } = useDebugTrace();
   const respond = useResponder();
   const router = useRouter();
   const [failedSend, setFailedSend] = useState<PendingSend | null>(null);
@@ -104,6 +108,12 @@ export function RoomChat({
 
   const useServerApi = backend === "supabase";
 
+  const withDebugHeaders = async () => {
+    const headers = (await authHeaders()) as Record<string, string>;
+    if (readDebugMode()) headers["X-AdeHQ-Debug"] = "true";
+    return headers;
+  };
+
   const processQueuedRuns = useCallback(
     async (
       queuedRuns: {
@@ -114,6 +124,12 @@ export function RoomChat({
     ) => {
       if (!queuedRuns.length || !topic) return;
 
+      trace("agent-run", "info", `Processing ${queuedRuns.length} queued run(s)`, {
+        runs: queuedRuns,
+        roomId: room.id,
+        topicId: topic.id,
+      });
+
       setActiveRuns(
         queuedRuns.map((r) => ({
           ...r,
@@ -121,10 +137,11 @@ export function RoomChat({
         })),
       );
 
-      const headers = await authHeaders();
+      const headers = await withDebugHeaders();
 
       await Promise.allSettled(
         queuedRuns.map(async (run) => {
+          trace("agent-run", "info", `${run.employeeName} → reading context`, { runId: run.runId });
           setActiveRuns((prev) =>
             prev.map((r) =>
               r.runId === run.runId ? { ...r, phase: "reading" } : r,
@@ -138,12 +155,17 @@ export function RoomChat({
             ),
           );
 
+          const started = Date.now();
           try {
             setActiveRuns((prev) =>
               prev.map((r) =>
                 r.runId === run.runId ? { ...r, phase: "typing" } : r,
               ),
             );
+
+            trace("agent-run", "info", `POST /api/agent-runs/${run.runId}/process`, {
+              workspaceId: state.workspace.id,
+            });
 
             const res = await fetch(`/api/agent-runs/${run.runId}/process`, {
               method: "POST",
@@ -155,9 +177,23 @@ export function RoomChat({
             });
 
             const data = await res.json();
+            const ms = Date.now() - started;
+
             if (!res.ok || !data.ok) {
-              throw new Error(data.error ?? "AI response failed");
+              trace("agent-run", "error", `${run.employeeName} process failed (${ms}ms)`, {
+                status: res.status,
+                runId: run.runId,
+                response: data,
+              });
+              throw new Error(data.error ?? data.debug?.hint ?? "AI response failed");
             }
+
+            trace("agent-run", "success", `${run.employeeName} replied (${ms}ms)`, {
+              runId: run.runId,
+              aiMode: data.aiMode,
+              aiMessageId: data.aiMessage?.id,
+              replyPreview: data.aiMessage?.content?.slice(0, 120),
+            });
 
             if (data.aiMessage) {
               actions.addMessage(room.id, {
@@ -173,14 +209,19 @@ export function RoomChat({
 
             setActiveRuns((prev) =>
               prev.map((r) =>
-                r.runId === run.runId ? { ...r, phase: "done" } : r,
+                r.runId === run.runId ? { ...r, phase: "done", error: undefined } : r,
               ),
             );
           } catch (err) {
+            const message = err instanceof Error ? err.message : "AI response failed";
             console.error("[AdeHQ process run]", err);
+            trace("agent-run", "error", `${run.employeeName} couldn't respond`, {
+              runId: run.runId,
+              error: message,
+            });
             setActiveRuns((prev) =>
               prev.map((r) =>
-                r.runId === run.runId ? { ...r, phase: "failed" } : r,
+                r.runId === run.runId ? { ...r, phase: "failed", error: message } : r,
               ),
             );
           }
@@ -193,8 +234,15 @@ export function RoomChat({
 
       void actions.refreshTopics(room.id);
     },
-    [actions, room.id, state.workspace.id, topic],
+    [actions, room.id, state.workspace.id, topic, trace],
   );
+
+  const retryRun = (run: ActiveRun) => {
+    trace("agent-run", "info", `Retrying ${run.employeeName}`, { runId: run.runId });
+    void processQueuedRuns([
+      { runId: run.runId, employeeId: run.employeeId, employeeName: run.employeeName },
+    ]);
+  };
 
   const sendViaServer = async (
     text: string,
@@ -222,20 +270,38 @@ export function RoomChat({
     });
 
     try {
-      const headers = await authHeaders();
+      const headers = await withDebugHeaders();
+      const body = {
+        content: text,
+        topicId: topic.id,
+        clientMessageId: messageId,
+        mentionsJson,
+        mode: "live" as const,
+      };
+
+      trace("message", "info", `POST /api/rooms/${room.id}/messages`, body);
+
+      const sendStarted = Date.now();
       const response = await fetch(`/api/rooms/${room.id}/messages`, {
         method: "POST",
         headers,
-        body: JSON.stringify({
-          content: text,
-          topicId: topic.id,
-          clientMessageId: messageId,
-          mentionsJson,
-          mode: "live",
-        }),
+        body: JSON.stringify(body),
       });
 
       const payload = await response.json().catch(() => ({}));
+
+      trace(
+        "message",
+        response.ok || response.status === 207 ? "success" : "error",
+        `Message API ${response.status} (${Date.now() - sendStarted}ms)`,
+        {
+          queuedRuns: payload.queuedRuns,
+          blockedRuns: payload.blockedRuns,
+          code: payload.code,
+          hint: payload.hint,
+          error: payload.error,
+        },
+      );
 
       if (!response.ok && response.status !== 207) {
         if (payload.code === "ai_runtime_failed_but_message_saved" || payload.humanMessage) {
@@ -266,11 +332,11 @@ export function RoomChat({
       if (payload.queuedRuns?.length) {
         void processQueuedRuns(payload.queuedRuns);
       } else if (payload.blockedRuns?.length) {
-        const reason = payload.blockedRuns.map((b: { employeeName?: string; reason: string }) => b.reason).join("; ");
+        const reason = payload.blockedRuns
+          .map((b: { employeeName?: string; reason: string }) => b.reason)
+          .join("; ");
         setSendError(`AI could not respond: ${reason}`);
-        if (process.env.NODE_ENV === "development") {
-          console.warn("[AdeHQ blocked runs]", payload.blockedRuns);
-        }
+        trace("message", "warn", "AI runs blocked at queue", payload.blockedRuns);
       }
 
       // Background server processing may complete shortly — refresh to pick up AI replies.
@@ -282,10 +348,9 @@ export function RoomChat({
     } catch (error) {
       actions.removeLocalMessage(room.id, messageId);
       setFailedSend({ clientMessageId: messageId, content: text });
-      setSendError(error instanceof Error ? error.message : "Unable to send message.");
-      if (process.env.NODE_ENV === "development") {
-        console.error("[AdeHQ RoomChat send]", error);
-      }
+      const msg = error instanceof Error ? error.message : "Unable to send message.";
+      setSendError(msg);
+      trace("message", "error", "Send failed", { error: msg });
     }
   };
 
@@ -420,11 +485,28 @@ export function RoomChat({
                     className="flex items-center gap-2 px-1 py-2 text-xs text-slate-500"
                   >
                     {emp && <EmployeeAvatar employee={emp} size="xs" />}
-                    <Loader2 className="h-3 w-3 animate-spin text-accent-600" />
-                    <span>
+                    {run.phase === "failed" ? (
+                      <AlertCircle className="h-3 w-3 shrink-0 text-rose-500" />
+                    ) : (
+                      <Loader2 className="h-3 w-3 animate-spin text-accent-600" />
+                    )}
+                    <span className="min-w-0 flex-1">
                       <span className="font-medium text-slate-700">{run.employeeName}</span>{" "}
                       {phaseLabel}
+                      {run.phase === "failed" && run.error && (
+                        <span className="block text-[10px] text-rose-600">{run.error}</span>
+                      )}
                     </span>
+                    {run.phase === "failed" && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-7 shrink-0 px-2 text-[10px]"
+                        onClick={() => retryRun(run)}
+                      >
+                        <RotateCcw className="h-3 w-3" /> Retry
+                      </Button>
+                    )}
                   </div>
                 );
               })}

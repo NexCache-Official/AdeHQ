@@ -39,8 +39,25 @@ export async function POST(
       role,
     );
 
+    const debug = request.headers.get("X-AdeHQ-Debug") === "true";
+    let serviceClient;
+    try {
+      serviceClient = createServiceRoleClient();
+    } catch (err) {
+      const hint =
+        "SUPABASE_SERVICE_ROLE_KEY is not set on the server. Add it in Vercel env vars.";
+      return NextResponse.json(
+        {
+          ok: false,
+          error: hint,
+          debug: debug ? { step: "createServiceRoleClient", detail: String(err) } : undefined,
+        },
+        { status: 500 },
+      );
+    }
+
     const result = await processQueuedAgentRun(
-      createServiceRoleClient(),
+      serviceClient,
       workspaceId,
       params.runId,
       {
@@ -69,6 +86,23 @@ export async function POST(
     }
     console.error("[AdeHQ process agent run]", error);
     const message = error instanceof Error ? error.message : "Agent run failed.";
-    return NextResponse.json({ ok: false, error: message }, { status: 500 });
+    const debug = request.headers.get("X-AdeHQ-Debug") === "true";
+    return NextResponse.json(
+      {
+        ok: false,
+        error: message,
+        debug: debug
+          ? {
+              hint: message.includes("SILICONFLOW")
+                ? "Set SILICONFLOW_API_KEY in Vercel environment variables."
+                : message.includes("SERVICE_ROLE") || message.includes("service role")
+                  ? "Set SUPABASE_SERVICE_ROLE_KEY in Vercel environment variables."
+                  : undefined,
+              stack: error instanceof Error ? error.stack?.split("\n").slice(0, 5) : undefined,
+            }
+          : undefined,
+      },
+      { status: 500 },
+    );
   }
 }

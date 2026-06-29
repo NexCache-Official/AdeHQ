@@ -2,7 +2,6 @@
 
 import {
   createContext,
-  useCallback,
   useContext,
   useEffect,
   useMemo,
@@ -16,6 +15,8 @@ import { CommandBar } from "./CommandBar";
 import { HireEmployeeModal } from "./HireEmployeeModal";
 import { CreateRoomModal } from "./CreateRoomModal";
 import { LoadingState } from "./States";
+import { DebugProvider, useDebugTraceListener } from "./DebugProvider";
+import { DebugTerminal } from "./DebugTerminal";
 
 type ShellUI = {
   openCommand: () => void;
@@ -32,6 +33,15 @@ export function useShellUI() {
 }
 
 export function AppShell({ children }: { children: React.ReactNode }) {
+  return (
+    <DebugProvider>
+      <AppShellInner>{children}</AppShellInner>
+    </DebugProvider>
+  );
+}
+
+function AppShellInner({ children }: { children: React.ReactNode }) {
+  useDebugTraceListener();
   const { state, hydrated } = useStore();
   const router = useRouter();
   const pathname = usePathname();
@@ -40,7 +50,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [hireOpen, setHireOpen] = useState(false);
   const [roomOpen, setRoomOpen] = useState(false);
 
-  // Auth + onboarding gating
   useEffect(() => {
     if (!hydrated) return;
     if (!state.user) {
@@ -50,7 +59,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     }
   }, [hydrated, state.user, state.onboardingComplete, router]);
 
-  // Global ⌘K
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
@@ -80,13 +88,19 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <Sidebar />
         <div className="flex min-w-0 flex-1 flex-col">
           <Topbar />
-          <main key={pathname} className="flex-1 overflow-y-auto">
+          <main key={pathname} className="min-h-0 flex-1 overflow-y-auto">
             <div className="animate-fade-in">{children}</div>
           </main>
+          <DebugTerminal />
         </div>
       </div>
 
-      <CommandBar open={commandOpen} onClose={() => setCommandOpen(false)} onHire={ui.openHire} onCreateRoom={ui.openCreateRoom} />
+      <CommandBar
+        open={commandOpen}
+        onClose={() => setCommandOpen(false)}
+        onHire={ui.openHire}
+        onCreateRoom={ui.openCreateRoom}
+      />
       <HireEmployeeModal open={hireOpen} onClose={() => setHireOpen(false)} />
       <CreateRoomModal open={roomOpen} onClose={() => setRoomOpen(false)} />
     </ShellUIContext.Provider>

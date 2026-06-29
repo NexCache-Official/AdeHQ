@@ -8,7 +8,9 @@ import { useShellUI } from "./AppShell";
 import { WorkspaceSwitcher } from "./WorkspaceSwitcher";
 import { Button, Kbd } from "./ui";
 import { HumanAvatar } from "./EmployeeAvatar";
+import { useDebugTrace } from "./DebugProvider";
 import {
+  Bug,
   ChevronDown,
   LogOut,
   Plus,
@@ -18,10 +20,12 @@ import {
   UserPlus,
 } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
+import { cn } from "@/lib/utils";
 
 export function Topbar() {
   const { state, actions, backend } = useStore();
   const ui = useShellUI();
+  const { enabled: debugEnabled, toggleEnabled } = useDebugTrace();
   const router = useRouter();
   const [menuOpen, setMenuOpen] = useState(false);
 
@@ -46,6 +50,20 @@ export function Topbar() {
 
       {/* Right — actions + profile */}
       <div className="flex flex-1 items-center justify-end gap-2 md:flex-none">
+        <button
+          type="button"
+          onClick={toggleEnabled}
+          className={cn(
+            "hidden h-8 items-center gap-1.5 rounded-lg border px-2.5 text-xs font-medium transition-colors sm:inline-flex",
+            debugEnabled
+              ? "border-amber-500/50 bg-amber-500/15 text-amber-700"
+              : "border-slate-200 bg-slate-50 text-slate-600 hover:border-slate-300 hover:bg-white",
+          )}
+          title="Toggle debug trace terminal"
+        >
+          <Bug className="h-3.5 w-3.5" />
+          Debug
+        </button>
         <Button variant="secondary" size="sm" onClick={ui.openHire} className="hidden sm:inline-flex">
           <UserPlus className="h-4 w-4" />
           Hire AI Employee
