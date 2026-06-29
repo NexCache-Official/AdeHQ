@@ -26,6 +26,7 @@ import type {
 } from "@/lib/types";
 import { normalizeLiveProvider } from "@/lib/config/features";
 import { authHeaders } from "@/lib/api/auth-client";
+import { isEmailConfirmed } from "@/lib/auth/session";
 import { topicFromRow, topicMemberFromRow } from "@/lib/server/topic-helpers";
 import { nowISO } from "@/lib/utils";
 import { supabase } from "./client";
@@ -213,38 +214,81 @@ async function ensureToolCatalogRemote(): Promise<void> {
   }
 }
 
+let bootstrapInFlight: Promise<{
+  workspaceId: string;
+  workspaceName: string;
+  created: boolean;
+}> | null = null;
+
+/** Idempotent workspace create — safe to call from onboarding (server dedupes). */
+export async function bootstrapWorkspaceRemote(
+  workspaceName?: string,
+): Promise<{ workspaceId: string; workspaceName: string; created: boolean }> {
+  if (bootstrapInFlight) {
+    const existing = await bootstrapInFlight;
+    return { ...existing, created: false };
+  }
+
+  bootstrapInFlight = (async () => {
+    const headers = await authHeaders();
+    const res = await fetch("/api/workspaces/bootstrap", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ workspaceName }),
+    });
+    const payload = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(payload.error ?? "Could not create workspace.");
+    }
+    return {
+      workspaceId: String(payload.workspaceId),
+      workspaceName: String(payload.workspaceName),
+      created: Boolean(payload.created),
+    };
+  })();
+
+  try {
+    return await bootstrapInFlight;
+  } finally {
+    bootstrapInFlight = null;
+  }
+}
+
+export function buildPendingSignupState(user: User, profile: HumanUser): DemoState {
+  const workspaceName =
+    typeof user.user_metadata?.workspace_name === "string" &&
+    user.user_metadata.workspace_name.trim()
+      ? user.user_metadata.workspace_name.trim()
+      : "My AI Workspace";
+
+  const placeholder: Workspace = {
+    id: "",
+    name: workspaceName,
+    plan: "Founder",
+    workspaceMode: "real",
+    onboardingComplete: false,
+  };
+
+  return buildFreshWorkspaceState(profile, placeholder, false, [
+    {
+      workspaceId: "",
+      userId: profile.id,
+      name: profile.name,
+      email: profile.email,
+      role: "owner",
+      createdAt: nowISO(),
+    },
+  ]);
+}
+
 export async function createWorkspaceForUser(
   user: User,
   workspaceName: string,
   profilePatch: Partial<HumanUser> = {},
 ): Promise<DemoState> {
   const profile = await ensureProfile(user, profilePatch);
-  const { data: workspaceRow, error: workspaceError } = await supabase
-    .from("workspaces")
-    .insert({
-      name: workspaceName,
-      plan: "Founder",
-      workspace_mode: "real",
-      owner_id: user.id,
-      onboarding_complete: false,
-    })
-    .select("*")
-    .single();
-
-  if (workspaceError) throw workspaceError;
-
-  const { error: memberError } = await supabase.from("workspace_members").insert({
-    workspace_id: workspaceRow.id,
-    user_id: user.id,
-    role: "owner",
-  });
-
-  if (memberError) throw memberError;
-
-  const workspace = workspaceFromRow(workspaceRow);
-  const state = buildFreshWorkspaceState(profile, workspace, false);
-  await seedWorkspaceState(state);
-  return state;
+  const bootstrapped = await bootstrapWorkspaceRemote(workspaceName);
+  return loadWorkspaceState(user, bootstrapped.workspaceId);
 }
 
 async function fetchWorkspaceIdForUser(
@@ -315,11 +359,7 @@ export async function loadWorkspaceState(
   const workspaceId = await fetchWorkspaceIdForUser(user.id, preferredWorkspaceId);
 
   if (!workspaceId) {
-    const name =
-      typeof user.user_metadata?.workspace_name === "string"
-        ? user.user_metadata.workspace_name
-        : "My AI Workspace";
-    return createWorkspaceForUser(user, name, profile);
+    return buildPendingSignupState(user, profile);
   }
 
   const { data: workspaceRow, error: workspaceError } = await supabase

@@ -13,10 +13,10 @@ import { supabase } from "@/lib/supabase/client";
 import { ArrowRight, Sparkles } from "lucide-react";
 
 function LoginForm() {
-  const { state, actions, error: storeError, hydrated } = useStore();
+  const { actions, error: storeError } = useStore();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [email, setEmail] = useState(state.user?.email ?? "");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -26,6 +26,7 @@ function LoginForm() {
 
   useEffect(() => {
     actions.clearError();
+    void supabase.auth.signOut();
   }, [actions]);
 
   useEffect(() => {
@@ -36,23 +37,11 @@ function LoginForm() {
     }
   }, [searchParams]);
 
-  useEffect(() => {
-    if (!hydrated) return;
-    if (state.user) {
-      router.replace(state.onboardingComplete ? "/" : "/onboarding");
-      return;
-    }
-    void supabase.auth.getSession().then(({ data }) => {
-      if (data.session?.user) {
-        router.replace("/onboarding");
-      }
-    });
-  }, [hydrated, state.user, state.onboardingComplete, router]);
-
   const enter = async () => {
     setError(null);
     actions.clearError();
     setNeedsConfirmation(false);
+    setInfo(null);
     if (!email.trim() || !password) {
       setError("Enter your email and password.");
       return;
@@ -60,8 +49,8 @@ function LoginForm() {
 
     setLoading(true);
     try {
-      await actions.login(email.trim(), password);
-      router.replace("/");
+      const { onboardingComplete } = await actions.login(email.trim(), password);
+      router.replace(onboardingComplete ? "/" : "/onboarding");
     } catch (err) {
       const parsed = parseAuthError(err);
       setError(parsed.message);

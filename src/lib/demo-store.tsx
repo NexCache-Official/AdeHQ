@@ -33,6 +33,7 @@ import {
   WorkLogEvent,
 } from "./types";
 import { getEmailRedirectUrl, setAuthNextPath } from "@/lib/auth/callback-session";
+import { isEmailConfirmed } from "@/lib/auth/session";
 import { nowISO, uid } from "./utils";
 import { SUPABASE_WORKSPACE_TABLES } from "./supabase/config";
 import { supabase } from "./supabase/client";
@@ -40,7 +41,7 @@ import {
   buildFreshWorkspaceState,
   acceptWorkspaceInvitation as acceptWorkspaceInvitationRemote,
   createWorkspaceInvitation as createWorkspaceInvitationRemote,
-  createWorkspaceForUser,
+  bootstrapWorkspaceRemote,
   declineWorkspaceInvitation as declineWorkspaceInvitationRemote,
   revokeWorkspaceInvitation as revokeWorkspaceInvitationRemote,
   deleteEmployee,
@@ -122,7 +123,8 @@ type StoreActions = {
     workspaceName: string,
     password: string,
   ) => Promise<{ needsEmailConfirmation: boolean }>;
-  login: (email: string, password: string) => Promise<void>;
+  login: (email: string, password: string) => Promise<{ onboardingComplete: boolean }>;
+  bootstrapWorkspace: (workspaceName?: string) => Promise<void>;
   loginDemo: () => void;
   logout: () => Promise<void>;
   clearError: () => void;
@@ -225,6 +227,15 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 
   const loadRemote = useCallback(
     async (user: User, preferredWorkspaceId?: string) => {
+      if (!isEmailConfirmed(user)) {
+        await supabase.auth.signOut();
+        authUserRef.current = null;
+        setBackend("demo");
+        setState(buildSignedOutState());
+        setHydrated(true);
+        throw new Error("Email not confirmed");
+      }
+
       authUserRef.current = user;
       const workspaceId = preferredWorkspaceId ?? getActiveWorkspaceId() ?? undefined;
       const loaded = await loadWorkspaceState(user, workspaceId);
@@ -242,6 +253,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const runRemote = useCallback((operation: (workspaceId: string) => Promise<void>) => {
     if (backendRef.current !== "supabase") return;
     const workspaceId = stateRef.current.workspace.id;
+    if (!workspaceId) return;
     remoteQueueRef.current = remoteQueueRef.current
       .catch(() => undefined)
       .then(() => operation(workspaceId))
@@ -261,15 +273,23 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         if (sessionError) throw sessionError;
 
         if (data.session?.user) {
-          authUserRef.current = data.session.user;
-          const preferredId = getActiveWorkspaceId() ?? undefined;
-          const loaded = await loadWorkspaceState(data.session.user, preferredId);
-          if (!active) return;
-          if (loaded.workspace.id) setActiveWorkspaceId(loaded.workspace.id);
-          const workspaces = await listUserWorkspaces(data.session.user.id);
-          setUserWorkspaces(workspaces);
-          setRemoteState(loaded);
-          setBackend("supabase");
+          if (!isEmailConfirmed(data.session.user)) {
+            await supabase.auth.signOut();
+            if (!active) return;
+            authUserRef.current = null;
+            setBackend("demo");
+            setState(buildSignedOutState());
+          } else {
+            authUserRef.current = data.session.user;
+            const preferredId = getActiveWorkspaceId() ?? undefined;
+            const loaded = await loadWorkspaceState(data.session.user, preferredId);
+            if (!active) return;
+            if (loaded.workspace.id) setActiveWorkspaceId(loaded.workspace.id);
+            const workspaces = await listUserWorkspaces(data.session.user.id);
+            setUserWorkspaces(workspaces);
+            setRemoteState(loaded);
+            setBackend("supabase");
+          }
         } else {
           if (!active) return;
           authUserRef.current = null;
@@ -319,7 +339,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   }, [loadRemote, setRemoteState]);
 
   useEffect(() => {
-    if (!hydrated || backend !== "supabase" || !state.user) return;
+    if (!hydrated || backend !== "supabase" || !state.user || !state.workspace.id) return;
 
     const workspaceId = state.workspace.id;
     let refreshTimer: ReturnType<typeof setTimeout> | undefined;
@@ -404,19 +424,13 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           if (signupError) throw signupError;
           if (!data.user) throw new Error("Unable to create account.");
 
-          if (!data.session) {
+          if (!data.session || !isEmailConfirmed(data.user)) {
+            if (data.session) await supabase.auth.signOut();
             return { needsEmailConfirmation: true };
           }
 
           authUserRef.current = data.user;
-          const loaded = await createWorkspaceForUser(data.user, workspaceName, {
-            name: user.name,
-            email: user.email,
-          });
-          setRemoteState(loaded);
-          setBackend("supabase");
-          setHydrated(true);
-          setError(null);
+          await loadRemote(data.user);
           return { needsEmailConfirmation: false };
         } finally {
           authBusyRef.current = false;
@@ -432,7 +446,33 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           });
           if (loginError) throw loginError;
           if (!data.user) throw new Error("No user returned from Supabase.");
+          if (!isEmailConfirmed(data.user)) {
+            await supabase.auth.signOut();
+            throw new Error("Email not confirmed");
+          }
           await loadRemote(data.user);
+          return { onboardingComplete: stateRef.current.onboardingComplete };
+        } finally {
+          authBusyRef.current = false;
+        }
+      },
+
+      bootstrapWorkspace: async (workspaceName) => {
+        authBusyRef.current = true;
+        try {
+          const user = authUserRef.current;
+          if (!user) throw new Error("Sign in to create a workspace.");
+          if (!isEmailConfirmed(user)) {
+            throw new Error("Confirm your email before creating a workspace.");
+          }
+          const name =
+            workspaceName?.trim() ||
+            stateRef.current.workspace.name ||
+            (typeof user.user_metadata?.workspace_name === "string"
+              ? user.user_metadata.workspace_name
+              : "My AI Workspace");
+          await bootstrapWorkspaceRemote(name);
+          await loadRemote(user);
         } finally {
           authBusyRef.current = false;
         }

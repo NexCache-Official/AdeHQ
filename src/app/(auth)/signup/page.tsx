@@ -73,7 +73,8 @@ export default function SignupPage() {
         Create your AI workforce.
       </h1>
       <p className="mt-1.5 text-sm text-slate-500">
-        Create a real workspace, invite your team, and hire your first AI employee.
+        We&apos;ll save your workspace name for onboarding — nothing is created until you finish
+        setup.
       </p>
 
       {confirmationSent ? (
@@ -140,7 +141,7 @@ export default function SignupPage() {
             />
           </label>
           <label className="block space-y-1.5">
-            <span className="text-xs font-medium text-slate-500">Workspace name</span>
+            <span className="text-xs font-medium text-slate-500">Workspace name (for later)</span>
             <input
               className="input-field"
               placeholder="Acme HQ"
@@ -150,7 +151,7 @@ export default function SignupPage() {
           </label>
         </div>
         <Button type="submit" size="lg" className="w-full">
-          {loading ? "Creating..." : "Create workspace"} <ArrowRight className="h-4 w-4" />
+          {loading ? "Creating..." : "Create account"} <ArrowRight className="h-4 w-4" />
         </Button>
       </form>
 

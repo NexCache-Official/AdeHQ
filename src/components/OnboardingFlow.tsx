@@ -123,6 +123,8 @@ export function OnboardingFlow() {
     if (!template || !state.user) return;
     setBusy(true);
     try {
+      await actions.bootstrapWorkspace(state.workspace.name);
+
       const roomId = uid("room");
       const employeeId = uid("emp");
       const timestamp = nowISO();
