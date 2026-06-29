@@ -57,7 +57,10 @@ const TIMEOUT_MS: Record<ModelMode, number> = {
 
 /** Rough per-1M-token pricing (USD) for cost estimates. */
 const PRICING_PER_MILLION: Record<string, { input: number; output: number }> = {
-  [SILICONFLOW_CHEAP_MODEL]: { input: 0.1, output: 0.1 },
+  [SILICONFLOW_CHEAP_MODEL]: { input: 0.1, output: 0.15 },
+  "Qwen/Qwen3-8B": { input: 0.1, output: 0.15 },
+  "Qwen/Qwen3-Coder-30B-A3B-Instruct": { input: 0.3, output: 0.6 },
+  "MiniMaxAI/MiniMax-M2.5": { input: 0.4, output: 0.8 },
   [DEFAULT_SILICONFLOW_MODEL]: { input: 0.3, output: 0.6 },
   [SILICONFLOW_STRONG_MODEL]: { input: 0.8, output: 1.6 },
   [SILICONFLOW_CODER_MODEL]: { input: 0.5, output: 1.0 },

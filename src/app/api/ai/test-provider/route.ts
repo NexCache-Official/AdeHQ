@@ -1,16 +1,28 @@
 import { NextRequest, NextResponse } from "next/server";
+import { createOpenAI } from "@ai-sdk/openai";
+import { openai } from "@ai-sdk/openai";
 import { AuthError, requireAuthUser, requireWorkspaceMembership } from "@/lib/supabase/auth-server";
 import { recordAiRuntime } from "@/lib/ai/runtime-log";
-import { callSiliconFlowEmployee } from "@/lib/ai/siliconflow-call";
-import { callOpenAiEmployee } from "@/lib/ai/openai-call";
+import {
+  siliconFlowModelsForMode,
+} from "@/lib/ai/siliconflow-call";
 import {
   getOutputTokenCap,
   getTimeoutMs,
-  estimateCost,
   resolveModel,
   type ModelMode,
 } from "@/lib/ai/model-catalog";
-import { isOpenAiConfigured, isSiliconFlowConfigured } from "@/lib/config/features";
+import {
+  isOpenAiConfigured,
+  isSiliconFlowConfigured,
+  SILICONFLOW_API_BASE_URL,
+  DEFAULT_OPENAI_MODEL,
+} from "@/lib/config/features";
+import {
+  callProviderHealthCheck,
+  healthCheckCost,
+} from "@/lib/ai/provider-health-call";
+import { formatProviderError } from "@/lib/ai/provider-errors";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -21,6 +33,8 @@ type TestBody = {
   modelMode?: ModelMode;
   prompt?: string;
 };
+
+const OPENAI_HEALTH_FALLBACKS = [DEFAULT_OPENAI_MODEL, "gpt-4o-mini"] as const;
 
 export async function POST(request: NextRequest) {
   try {
@@ -45,7 +59,7 @@ export async function POST(request: NextRequest) {
     const maxTokens = getOutputTokenCap(modelMode);
     const timeoutMs = getTimeoutMs(modelMode);
     const system = "You are a helpful assistant. Be concise.";
-    const model = resolveModel(provider, modelMode);
+    const resolvedModel = resolveModel(provider, modelMode);
 
     if (provider === "siliconflow" && !isSiliconFlowConfigured()) {
       return NextResponse.json(
@@ -61,25 +75,42 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const started = Date.now();
-    const result =
-      provider === "siliconflow"
-        ? await callSiliconFlowEmployee(system, prompt, model, maxTokens, timeoutMs)
-        : provider === "openai"
-          ? await callOpenAiEmployee(system, prompt, model, maxTokens, timeoutMs)
-          : null;
-
-    if (!result) {
+    if (provider !== "siliconflow" && provider !== "openai") {
       return NextResponse.json(
         { ok: false, error: `Provider "${provider}" is not supported for testing.` },
         { status: 400 },
       );
     }
 
-    const latencyMs = Date.now() - started;
+    const models =
+      provider === "siliconflow"
+        ? siliconFlowModelsForMode(resolvedModel, modelMode)
+        : [...new Set([resolvedModel, ...OPENAI_HEALTH_FALLBACKS])];
+
+    const siliconflowClient =
+      provider === "siliconflow"
+        ? createOpenAI({
+            apiKey: process.env.SILICONFLOW_API_KEY,
+            baseURL: SILICONFLOW_API_BASE_URL,
+          })
+        : null;
+
+    const result = await callProviderHealthCheck(
+      provider,
+      models,
+      system,
+      prompt,
+      maxTokens,
+      timeoutMs,
+      (modelId) =>
+        provider === "siliconflow"
+          ? siliconflowClient!(modelId)
+          : openai(modelId),
+    );
+
     const inputTokens = result.inputTokens ?? 0;
     const outputTokens = result.outputTokens ?? 0;
-    const estimatedCostUsd = estimateCost(result.model, inputTokens, outputTokens);
+    const estimatedCostUsd = healthCheckCost(result.model, inputTokens, outputTokens);
 
     recordAiRuntime({
       workspaceId: body.workspaceId,
@@ -87,12 +118,11 @@ export async function POST(request: NextRequest) {
       model: result.model,
       modelMode,
       mode: "live",
-      durationMs: latencyMs,
+      durationMs: result.latencyMs,
       inputTokens,
       outputTokens,
-      cachedTokens: result.cachedTokens,
       estimatedCostUsd,
-      fallbackTier: result.fallbackTier,
+      fallbackTier: 3,
     });
 
     return NextResponse.json({
@@ -100,20 +130,21 @@ export async function POST(request: NextRequest) {
       provider,
       model: result.model,
       modelMode,
-      latencyMs,
+      latencyMs: result.latencyMs,
       inputTokens,
       outputTokens,
       estimatedCostUsd,
-      reply: result.response.reply,
-      structuredOutputUsed: result.structuredOutputUsed,
-      fallbackTier: result.fallbackTier,
+      reply: result.reply,
+      structuredOutputUsed: false,
+      fallbackTier: 3,
     });
   } catch (error) {
     if (error instanceof AuthError) {
       return NextResponse.json({ error: error.message }, { status: error.status });
     }
     console.error("[AdeHQ test-provider]", error);
-    const message = error instanceof Error ? error.message : "Provider test failed.";
+    const message =
+      error instanceof Error ? error.message : formatProviderError(error, "provider", "unknown");
     return NextResponse.json({ ok: false, error: message }, { status: 500 });
   }
 }

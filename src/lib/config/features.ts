@@ -10,14 +10,20 @@ export const DEFAULT_SILICONFLOW_MODEL =
 
 export const SILICONFLOW_MODEL = DEFAULT_SILICONFLOW_MODEL;
 
+/** Verified on SiliconFlow API; Qwen3.5-9B may 404 on some accounts. */
+export const SILICONFLOW_CHEAP_MODEL_FALLBACK = "Qwen/Qwen3-8B";
+
 export const SILICONFLOW_CHEAP_MODEL =
-  process.env.ADEHQ_SILICONFLOW_CHEAP_MODEL ?? "Qwen/Qwen3.5-9B";
+  process.env.ADEHQ_SILICONFLOW_CHEAP_MODEL ?? SILICONFLOW_CHEAP_MODEL_FALLBACK;
+
+export const SILICONFLOW_API_BASE_URL =
+  process.env.SILICONFLOW_API_BASE_URL ?? "https://api.siliconflow.com/v1";
 
 export const SILICONFLOW_CODER_MODEL =
-  process.env.ADEHQ_SILICONFLOW_CODER_MODEL ?? "moonshotai/Kimi-K2.7-Code";
+  process.env.ADEHQ_SILICONFLOW_CODER_MODEL ?? "Qwen/Qwen3-Coder-30B-A3B-Instruct";
 
 export const SILICONFLOW_LONG_CONTEXT_MODEL =
-  process.env.ADEHQ_SILICONFLOW_LONG_CONTEXT_MODEL ?? "MiniMaxAI/MiniMax-M3";
+  process.env.ADEHQ_SILICONFLOW_LONG_CONTEXT_MODEL ?? "MiniMaxAI/MiniMax-M2.5";
 
 export const SILICONFLOW_STRONG_MODEL =
   process.env.ADEHQ_SILICONFLOW_STRONG_MODEL ?? "deepseek-ai/DeepSeek-V4-Pro";

@@ -139,19 +139,35 @@ export function AiRuntimePanel() {
     try {
       const headers = await authHeaders();
       const res = await fetch(`/api/ai/test-provider`, {
-          method: "POST",
-          headers,
-          body: JSON.stringify({
-            workspaceId: state.workspace.id,
-            provider: providerTestProvider,
-            modelMode: providerTestMode,
-            prompt: providerTestPrompt.trim(),
-          }),
-        });
-      const data = await res.json();
-      if (!res.ok || !data.ok) throw new Error(data.error ?? "Provider test failed.");
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          workspaceId: state.workspace.id,
+          provider: providerTestProvider,
+          modelMode: providerTestMode,
+          prompt: providerTestPrompt.trim(),
+        }),
+      });
+
+      const raw = await res.text();
+      let data: { ok?: boolean; error?: string; reply?: string; provider?: string; model?: string; latencyMs?: number; fallbackTier?: number };
+      try {
+        data = JSON.parse(raw) as typeof data;
+      } catch {
+        if (res.status === 404) {
+          throw new Error(
+            "Test provider API not found. Redeploy the latest version of AdeHQ.",
+          );
+        }
+        throw new Error(raw.slice(0, 200) || `HTTP ${res.status}`);
+      }
+
+      if (!res.ok || !data.ok) {
+        throw new Error(data.error ?? `Provider test failed (HTTP ${res.status}).`);
+      }
+
       setProviderTestResult(
-        `${data.reply}\n\n(${data.provider}/${data.model} · ${data.latencyMs}ms · tier ${data.fallbackTier})`,
+        `${data.reply}\n\n(${data.provider}/${data.model} · ${data.latencyMs}ms · health check)`,
       );
       const snap = await refreshSnapshot();
       setSnapshot(snap ?? null);
