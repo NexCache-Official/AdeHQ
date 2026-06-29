@@ -12,7 +12,7 @@ import {
   TOOL_CATALOG,
   defaultPermissions,
 } from "@/lib/demo";
-import { AIEmployee, EmployeePermissions, ToolAccess } from "@/lib/types";
+import { AIEmployee, EmployeePermissions, ProjectRoom, ToolAccess, WorkLogEvent } from "@/lib/types";
 import { roleIcon, toolIcon } from "@/lib/icons";
 import { cn, uid, nowISO, avatarGradient } from "@/lib/utils";
 import { EmployeeAvatar } from "./EmployeeAvatar";
@@ -87,6 +87,7 @@ export function OnboardingFlow() {
   const [tools, setTools] = useState<Record<string, ToolAccess["permission"]>>({});
   const [perms, setPerms] = useState<EmployeePermissions>(defaultPermissions());
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const roomMeta = ROOM_TEMPLATES.find((r) => r.name === roomTemplate) ?? ROOM_TEMPLATES[3];
   const roomName =
@@ -122,9 +123,8 @@ export function OnboardingFlow() {
   const finish = async () => {
     if (!template || !state.user) return;
     setBusy(true);
+    setError(null);
     try {
-      await actions.bootstrapWorkspace(state.workspace.name);
-
       const roomId = uid("room");
       const employeeId = uid("emp");
       const timestamp = nowISO();
@@ -135,7 +135,7 @@ export function OnboardingFlow() {
         role: template.role,
         roleKey: template.key,
         provider: "siliconflow",
-        model: "",
+        model: DEFAULT_SILICONFLOW_MODEL,
         modelMode: defaultModelModeForRole(template.key),
         seniority: "Senior",
         status: "idle",
@@ -156,7 +156,7 @@ export function OnboardingFlow() {
         createdAt: timestamp,
       };
 
-      const room = actions.createRoom({
+      const room: ProjectRoom = {
         id: roomId,
         name: roomName,
         kind: "channel",
@@ -176,19 +176,32 @@ export function OnboardingFlow() {
             createdAt: timestamp,
           },
         ],
-      });
+        tasks: [],
+        memory: [],
+        unread: 0,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      };
 
-      actions.hireEmployee(employee);
-      actions.addWorkLog({
-        roomId: room.id,
+      const workLog: WorkLogEvent = {
+        id: uid("wl"),
+        roomId,
         employeeId,
         action: "Onboarding complete",
         summary: `${employee.name} joined ${room.name}.`,
         status: "success",
-      });
+        createdAt: timestamp,
+      };
 
-      actions.completeOnboarding();
-      router.replace(`/rooms/${room.id}`);
+      const { roomId: savedRoomId } = await actions.finishOnboarding({
+        workspaceName: state.workspace.name,
+        employee,
+        room,
+        workLog,
+      });
+      router.replace(`/rooms/${savedRoomId}`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not finish onboarding.");
     } finally {
       setBusy(false);
     }
@@ -541,6 +554,12 @@ export function OnboardingFlow() {
                 </motion.div>
               </AnimatePresence>
             </div>
+
+            {error && (
+              <p className="mx-6 mb-0 rounded-lg bg-rose-500/10 px-3 py-2 text-sm text-rose-700 sm:mx-8">
+                {error}
+              </p>
+            )}
 
             <div className="flex items-center justify-between border-t border-slate-100 px-6 py-4 sm:px-8">
               <Button

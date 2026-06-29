@@ -125,6 +125,13 @@ type StoreActions = {
   ) => Promise<{ needsEmailConfirmation: boolean }>;
   login: (email: string, password: string) => Promise<{ onboardingComplete: boolean }>;
   bootstrapWorkspace: (workspaceName?: string) => Promise<void>;
+  finishOnboarding: (payload: {
+    workspaceName: string;
+    employee: AIEmployee;
+    room: ProjectRoom;
+    workLog: WorkLogEvent;
+  }) => Promise<{ roomId: string }>;
+  flushRemote: () => Promise<void>;
   loginDemo: () => void;
   logout: () => Promise<void>;
   clearError: () => void;
@@ -219,10 +226,14 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   backendRef.current = backend;
 
   const setRemoteState = useCallback((loaded: DemoState) => {
-    setState((previous) => ({
-      ...loaded,
-      settings: previous.settings ?? loaded.settings,
-    }));
+    setState((previous) => {
+      const next = {
+        ...loaded,
+        settings: previous.settings ?? loaded.settings,
+      };
+      stateRef.current = next;
+      return next;
+    });
   }, []);
 
   const loadRemote = useCallback(
@@ -250,13 +261,19 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     [setRemoteState],
   );
 
+  const flushRemote = useCallback(async () => {
+    await remoteQueueRef.current.catch(() => undefined);
+  }, []);
+
   const runRemote = useCallback((operation: (workspaceId: string) => Promise<void>) => {
     if (backendRef.current !== "supabase") return;
-    const workspaceId = stateRef.current.workspace.id;
-    if (!workspaceId) return;
     remoteQueueRef.current = remoteQueueRef.current
       .catch(() => undefined)
-      .then(() => operation(workspaceId))
+      .then(async () => {
+        const workspaceId = stateRef.current.workspace.id;
+        if (!workspaceId) return;
+        await operation(workspaceId);
+      })
       .catch((err) => {
         const message = errorMessage(err);
         setError(message);
@@ -477,6 +494,59 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           authBusyRef.current = false;
         }
       },
+
+      finishOnboarding: async ({ workspaceName, employee, room, workLog }) => {
+        authBusyRef.current = true;
+        try {
+          const user = authUserRef.current;
+          if (!user) throw new Error("Sign in to finish onboarding.");
+
+          if (backendRef.current !== "supabase") {
+            set((s) => ({
+              ...s,
+              onboardingComplete: true,
+              employees: [...s.employees, employee],
+              rooms: [room, ...s.rooms.filter((existing) => existing.id !== room.id)],
+              workLog: [workLog, ...s.workLog],
+            }));
+            return { roomId: room.id };
+          }
+
+          if (!isEmailConfirmed(user)) {
+            throw new Error("Confirm your email before creating a workspace.");
+          }
+
+          const name =
+            workspaceName.trim() ||
+            stateRef.current.workspace.name ||
+            (typeof user.user_metadata?.workspace_name === "string"
+              ? user.user_metadata.workspace_name
+              : "My AI Workspace");
+
+          const bootstrapped = await bootstrapWorkspaceRemote(name);
+          const workspaceId = bootstrapped.workspaceId;
+
+          await persistRoom(workspaceId, room);
+          await Promise.all([
+            ...room.humans.map((id) => persistRoomMember(workspaceId, room.id, "human", id)),
+            ...room.aiEmployees.map((id) => persistRoomMember(workspaceId, room.id, "ai", id)),
+          ]);
+          await Promise.all(room.messages.map((message) => persistMessage(workspaceId, message)));
+          await persistEmployee(workspaceId, employee);
+          if (employee.defaultRoomId) {
+            await persistRoomMember(workspaceId, employee.defaultRoomId, "ai", employee.id);
+          }
+          await persistWorkLog(workspaceId, workLog);
+          await persistWorkspace(workspaceId, { onboardingComplete: true });
+
+          await loadRemote(user, workspaceId);
+          return { roomId: room.id };
+        } finally {
+          authBusyRef.current = false;
+        }
+      },
+
+      flushRemote,
 
       loginDemo: () => {
         if (!ENABLE_DEMO_MODE) return;
