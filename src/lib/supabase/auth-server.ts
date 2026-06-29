@@ -61,6 +61,41 @@ export async function requireWorkspaceMembership(
   return { role: data.role };
 }
 
+/** Re-verify identity with email + password before destructive actions. */
+export async function requirePasswordReauth(user: User, password: string | undefined): Promise<void> {
+  if (!password?.trim()) {
+    throw new AuthError("Enter your password to confirm this action.", 400);
+  }
+
+  const email = user.email?.trim();
+  if (!email) {
+    throw new AuthError(
+      "Password confirmation is not available for this sign-in method. Sign out and sign in again.",
+      400,
+    );
+  }
+
+  const verifier = createClient(SUPABASE_PROJECT_URL, SUPABASE_PUBLISHABLE_KEY, {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+    },
+  });
+
+  const { data, error } = await verifier.auth.signInWithPassword({
+    email,
+    password: password.trim(),
+  });
+
+  if (error || !data.user) {
+    throw new AuthError("Incorrect password. Please sign in again to confirm.", 401);
+  }
+
+  if (data.user.id !== user.id) {
+    throw new AuthError("Password does not match the signed-in account.", 401);
+  }
+}
+
 export class AuthError extends Error {
   status: number;
 

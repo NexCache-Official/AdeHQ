@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import {
   AuthError,
   requireAuthUser,
+  requirePasswordReauth,
   requireWorkspaceMembership,
 } from "@/lib/supabase/auth-server";
 import { createServiceRoleClient } from "@/lib/supabase/server";
@@ -20,6 +21,7 @@ export async function DELETE(
 
     const body = (await request.json().catch(() => ({}))) as {
       confirmName?: string;
+      password?: string;
     };
 
     if (!body.confirmName?.trim()) {
@@ -28,6 +30,8 @@ export async function DELETE(
         { status: 400 },
       );
     }
+
+    await requirePasswordReauth(user, body.password);
 
     const serviceClient = createServiceRoleClient();
     const result = await purgeWorkspace(

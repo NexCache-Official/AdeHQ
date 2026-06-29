@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { AuthError, requireAuthUser } from "@/lib/supabase/auth-server";
+import { AuthError, requireAuthUser, requirePasswordReauth } from "@/lib/supabase/auth-server";
 import { createServiceRoleClient } from "@/lib/supabase/server";
 import {
   AccountLifecycleError,
@@ -36,6 +36,7 @@ export async function DELETE(request: NextRequest) {
     const body = (await request.json().catch(() => ({}))) as {
       confirmEmail?: string;
       deleteOwnedWorkspaces?: boolean;
+      password?: string;
     };
 
     if (!body.confirmEmail?.trim()) {
@@ -44,6 +45,8 @@ export async function DELETE(request: NextRequest) {
         { status: 400 },
       );
     }
+
+    await requirePasswordReauth(user, body.password);
 
     const serviceClient = createServiceRoleClient();
     const result = await purgeUserAccount(serviceClient, user.id, user.email ?? "", {
