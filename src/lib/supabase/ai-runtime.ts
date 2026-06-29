@@ -74,22 +74,7 @@ export async function loadWorkspaceAiSettings(
   if (error) throw error;
   if (data) return settingsFromRow(workspaceId, data as DbRow);
 
-  const row = {
-    workspace_id: workspaceId,
-    ...DEFAULT_SETTINGS,
-    default_provider: DEFAULT_SETTINGS.defaultProvider,
-    daily_token_limit: DEFAULT_SETTINGS.dailyTokenLimit,
-    daily_cost_limit_usd: DEFAULT_SETTINGS.dailyCostLimitUsd,
-    employee_daily_token_limit: DEFAULT_SETTINGS.employeeDailyTokenLimit,
-    max_parallel_runs: DEFAULT_SETTINGS.maxParallelRuns,
-    max_output_tokens: DEFAULT_SETTINGS.maxOutputTokens,
-    max_tool_runs_per_task: DEFAULT_SETTINGS.maxToolRunsPerTask,
-    max_handoff_depth: DEFAULT_SETTINGS.maxHandoffDepth,
-  };
-
-  const { error: insertError } = await client.from("workspace_ai_settings").insert(row);
-  if (insertError && !insertError.message.includes("duplicate")) throw insertError;
-
+  // Defaults only — persisted when an admin saves AI settings (RLS blocks member inserts).
   return { workspaceId, ...DEFAULT_SETTINGS };
 }
 
@@ -115,8 +100,22 @@ export async function updateWorkspaceAiSettings(
 
   const { error } = await client
     .from("workspace_ai_settings")
-    .update(payload)
-    .eq("workspace_id", workspaceId);
+    .upsert(
+      {
+        workspace_id: workspaceId,
+        ai_enabled: DEFAULT_SETTINGS.aiEnabled,
+        default_provider: DEFAULT_SETTINGS.defaultProvider,
+        daily_token_limit: DEFAULT_SETTINGS.dailyTokenLimit,
+        daily_cost_limit_usd: DEFAULT_SETTINGS.dailyCostLimitUsd,
+        employee_daily_token_limit: DEFAULT_SETTINGS.employeeDailyTokenLimit,
+        max_parallel_runs: DEFAULT_SETTINGS.maxParallelRuns,
+        max_output_tokens: DEFAULT_SETTINGS.maxOutputTokens,
+        max_tool_runs_per_task: DEFAULT_SETTINGS.maxToolRunsPerTask,
+        max_handoff_depth: DEFAULT_SETTINGS.maxHandoffDepth,
+        ...payload,
+      },
+      { onConflict: "workspace_id" },
+    );
   if (error) throw error;
 
   return loadWorkspaceAiSettings(client, workspaceId);

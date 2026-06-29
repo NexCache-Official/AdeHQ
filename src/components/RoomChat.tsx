@@ -265,6 +265,17 @@ export function RoomChat({
 
       if (payload.queuedRuns?.length) {
         void processQueuedRuns(payload.queuedRuns);
+      } else if (payload.blockedRuns?.length) {
+        const reason = payload.blockedRuns.map((b: { employeeName?: string; reason: string }) => b.reason).join("; ");
+        setSendError(`AI could not respond: ${reason}`);
+        if (process.env.NODE_ENV === "development") {
+          console.warn("[AdeHQ blocked runs]", payload.blockedRuns);
+        }
+      }
+
+      // Background server processing may complete shortly — refresh to pick up AI replies.
+      if (payload.queuedRuns?.length) {
+        setTimeout(() => void actions.refreshTopics(room.id), 4000);
       }
 
       void actions.refreshTopics(room.id);

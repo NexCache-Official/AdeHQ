@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { AuthError, requireAuthUser, requireWorkspaceMembership } from "@/lib/supabase/auth-server";
 import { assertCanAccessRoom } from "@/lib/server/room-access";
 import { processQueuedAgentRun } from "@/lib/server/process-queued-run";
+import { createServiceRoleClient } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -38,9 +39,14 @@ export async function POST(
       role,
     );
 
-    const result = await processQueuedAgentRun(client, workspaceId, params.runId, {
-      mode: body.mode,
-    });
+    const result = await processQueuedAgentRun(
+      createServiceRoleClient(),
+      workspaceId,
+      params.runId,
+      {
+        mode: body.mode,
+      },
+    );
 
     return NextResponse.json({
       ok: true,

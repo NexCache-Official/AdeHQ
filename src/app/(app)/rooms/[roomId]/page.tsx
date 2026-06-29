@@ -310,9 +310,11 @@ export default function RoomDetailPage() {
         <div className="min-w-0 flex-1">
           <h1 className="truncate text-base font-semibold text-slate-900">{room.name}</h1>
           <p className="truncate text-xs text-slate-500">
-            {roomTopics.length} topic{roomTopics.length === 1 ? "" : "s"} · {room.humans.length + roomEmployees.length} participants
+            {isDm
+              ? `Direct message with ${roomEmployees[0]?.name ?? "AI employee"}`
+              : `${roomTopics.length} topic${roomTopics.length === 1 ? "" : "s"} · you + ${roomEmployees.length} AI employee${roomEmployees.length === 1 ? "" : "s"}`}
           </p>
-          {roomEmployees.length > 0 && (
+          {!isDm && roomEmployees.length > 0 && (
             <div className="mt-1 flex flex-wrap items-center gap-1.5">
               {roomEmployees.slice(0, 4).map((employee) => (
                 <span key={employee?.id} className="chip bg-white">
@@ -376,6 +378,7 @@ export default function RoomDetailPage() {
               memory={state.memory}
               approvals={state.approvals}
               workLog={state.workLog}
+              workspaceMembers={state.workspaceMembers}
               isDm={isDm}
               onSummarize={summarizeTopic}
               onArchive={archiveTopic}

@@ -38,7 +38,7 @@ export function pickSmartResponders(
   if (!scored.length) return [];
 
   const limit = mode === "active_team" ? Math.min(max, 2) : 1;
-  const threshold = mode === "active_team" ? 1 : 2;
+  const threshold = mode === "active_team" ? 1 : 1;
 
   return scored
     .filter((s) => s.score >= threshold)

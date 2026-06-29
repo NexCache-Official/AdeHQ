@@ -1,5 +1,5 @@
 import type { AIEmployee, MentionRef, ProjectRoom, RoomTopic } from "@/lib/types";
-import { getAiParticipationMode } from "@/lib/topics";
+import { getAiParticipationMode, isGeneralTopic } from "@/lib/topics";
 import { pickSmartResponders } from "@/lib/server/smart-participation";
 import { extractMentions } from "@/lib/utils";
 
@@ -28,35 +28,39 @@ export function decideResponders(
   }
 
   let mentioned: AIEmployee[];
+  const mentionedIds = new Set<string>();
+
   if (mentionsJson?.length) {
-    const ids = mentionsJson.filter((m) => m.type === "ai_employee").map((m) => m.id);
-    mentioned = employees.filter((e) => ids.includes(e.id));
-  } else {
-    const ids = extractMentions(
-      content,
-      employees.map((e) => ({ id: e.id, name: e.name })),
-    );
-    mentioned = employees.filter((e) => ids.includes(e.id));
+    for (const m of mentionsJson) {
+      if (m.type === "ai_employee") mentionedIds.add(m.id);
+    }
   }
+  for (const id of extractMentions(
+    content,
+    employees.map((e) => ({ id: e.id, name: e.name })),
+  )) {
+    mentionedIds.add(id);
+  }
+  mentioned = employees.filter((e) => mentionedIds.has(e.id));
 
   if (mentioned.length > 0) {
     return mentioned.slice(0, max).map((employee) => ({ employee, reason: "mention" }));
   }
 
   if (participation !== "manual_only") {
-    const topicMemberIds = new Set(
-      employees.map((e) => e.id),
-    );
-    const eligible = employees.filter((e) => topicMemberIds.has(e.id));
-    const smart = pickSmartResponders(content, eligible, participation, max);
+    const smart = pickSmartResponders(content, employees, participation, max);
     if (smart.length) {
       return smart.map((employee) => ({ employee, reason: "smart_assist" }));
     }
   }
 
-  // DMs: in manual_only, no auto-reply without mention
-  if (isDM && participation === "manual_only") {
-    return [];
+  // DMs: the counterpart AI employee should always respond in Direct Chat.
+  if (isDM && isGeneralTopic(topic)) {
+    const dmEmployee =
+      employees.find((e) => e.id === room.dmEmployeeId) ?? employees[0];
+    if (dmEmployee) {
+      return [{ employee: dmEmployee, reason: "dm_default" }];
+    }
   }
 
   return [];

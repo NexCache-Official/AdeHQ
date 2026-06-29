@@ -9,6 +9,7 @@ import {
 } from "@/lib/supabase/ai-runtime";
 import { getOutputTokenCap, type ModelMode } from "@/lib/ai/model-catalog";
 import type { ResponderDecision } from "@/lib/server/decide-responders";
+import { createServiceRoleClient } from "@/lib/supabase/server";
 
 export type QueuedRun = {
   runId: string;
@@ -30,6 +31,13 @@ export async function queueAgentRuns(
   },
 ): Promise<{ queued: QueuedRun[]; blocked: { employeeId: string; reason: string }[] }> {
   const settings = await loadWorkspaceAiSettings(client, params.workspaceId);
+  const aiClient = (() => {
+    try {
+      return createServiceRoleClient();
+    } catch {
+      return client;
+    }
+  })();
   const queued: QueuedRun[] = [];
   const blocked: { employeeId: string; reason: string }[] = [];
 
@@ -59,7 +67,7 @@ export async function queueAgentRuns(
     const usageId = newUsageId();
 
     try {
-      await createAgentRun(client, {
+      await createAgentRun(aiClient, {
         workspaceId: params.workspaceId,
         runId,
         employeeId: employee.id,
@@ -73,7 +81,7 @@ export async function queueAgentRuns(
         estimatedCostUsd: estimate.cost,
       });
 
-      await reserveUsage(client, {
+      await reserveUsage(aiClient, {
         workspaceId: params.workspaceId,
         usageId,
         agentRunId: runId,

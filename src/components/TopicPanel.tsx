@@ -11,6 +11,7 @@ import type {
   Task,
   TopicMember,
   WorkLogEvent,
+  WorkspaceMember,
 } from "@/lib/types";
 import { EmployeeAvatar } from "./EmployeeAvatar";
 import { TaskCard } from "./TaskCard";
@@ -64,6 +65,7 @@ export function TopicPanel({
   memory,
   approvals,
   workLog,
+  workspaceMembers = [],
   isDm = false,
   onSummarize,
   onArchive,
@@ -80,6 +82,7 @@ export function TopicPanel({
   memory: MemoryEntry[];
   approvals: Approval[];
   workLog: WorkLogEvent[];
+  workspaceMembers?: WorkspaceMember[];
   isDm?: boolean;
   onSummarize: () => void;
   onArchive: () => void;
@@ -107,12 +110,23 @@ export function TopicPanel({
     .filter((w) => w.topicId === topic.id)
     .sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt));
 
+  const humanParticipants = room.humans
+    .map((id) => {
+      const member = workspaceMembers.find((m) => m.userId === id);
+      return {
+        id,
+        name: member?.name ?? (id === room.humans[0] ? "You" : "Teammate"),
+        email: member?.email,
+      };
+    })
+    .filter((h) => h.id);
+
   const counts: Record<string, number> = {
     tasks: topicTasks.length,
     memory: topicMemory.length,
     approvals: topicApprovals.filter((a) => a.status === "pending").length,
     activity: topicLog.length,
-    people: topicMembers.length,
+    people: humanParticipants.length + topicEmployees.length,
   };
 
   return (
@@ -293,36 +307,79 @@ export function TopicPanel({
 
           {tab === "people" && (
             <div className="space-y-2">
-              <div className="section-title mb-1">Room AI employees</div>
-              {room.aiEmployees.length === 0 ? (
-                <p className="text-xs text-slate-500">No AI employees in this room.</p>
-              ) : (
-                room.aiEmployees
-                  .map((id) => employees.find((e) => e.id === id))
-                  .filter((e): e is AIEmployee => !!e)
-                  .map((e) => (
-                    <div key={e.id} className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white p-2.5">
-                      <EmployeeAvatar employee={e} size="sm" />
+              {isDm ? (
+                <>
+                  <div className="section-title mb-1">Direct message</div>
+                  {topicEmployees[0] ? (
+                    <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white p-2.5">
+                      <EmployeeAvatar employee={topicEmployees[0]} size="sm" />
                       <div>
-                        <div className="text-sm font-medium text-slate-800">{e.name}</div>
-                        <div className="text-[11px] text-slate-500">{e.role}</div>
+                        <div className="text-sm font-medium text-slate-800">{topicEmployees[0].name}</div>
+                        <div className="text-[11px] text-slate-500">{topicEmployees[0].role}</div>
                       </div>
                     </div>
-                  ))
-              )}
-              <div className="section-title mb-1">AI employees in topic</div>
-              {topicEmployees.length === 0 ? (
-                <p className="text-xs text-slate-500">No AI employees assigned yet.</p>
+                  ) : (
+                    <p className="text-xs text-slate-500">No AI employee linked to this DM.</p>
+                  )}
+                  <p className="text-[11px] text-slate-500">
+                    This is a 1:1 conversation between you and this AI employee.
+                  </p>
+                </>
               ) : (
-                topicEmployees.map((e) => (
-                  <div key={e.id} className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 p-2.5">
-                    <EmployeeAvatar employee={e} size="sm" />
-                    <div>
-                      <div className="text-sm font-medium text-slate-800">{e.name}</div>
-                      <div className="text-[11px] text-slate-500">{e.role}</div>
-                    </div>
-                  </div>
-                ))
+                <>
+                  <div className="section-title mb-1">People in this room</div>
+                  {humanParticipants.length === 0 ? (
+                    <p className="text-xs text-slate-500">No human members listed.</p>
+                  ) : (
+                    humanParticipants.map((human) => (
+                      <div
+                        key={human.id}
+                        className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white p-2.5"
+                      >
+                        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-200 text-xs font-semibold text-slate-700">
+                          {(human.name ?? "U").slice(0, 2).toUpperCase()}
+                        </div>
+                        <div>
+                          <div className="text-sm font-medium text-slate-800">{human.name}</div>
+                          {human.email && (
+                            <div className="text-[11px] text-slate-500">{human.email}</div>
+                          )}
+                        </div>
+                      </div>
+                    ))
+                  )}
+                  <div className="section-title mb-1 mt-3">AI employees in room</div>
+                  {room.aiEmployees.length === 0 ? (
+                    <p className="text-xs text-slate-500">No AI employees in this room.</p>
+                  ) : (
+                    room.aiEmployees
+                      .map((id) => employees.find((e) => e.id === id))
+                      .filter((e): e is AIEmployee => !!e)
+                      .map((e) => (
+                        <div key={e.id} className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white p-2.5">
+                          <EmployeeAvatar employee={e} size="sm" />
+                          <div>
+                            <div className="text-sm font-medium text-slate-800">{e.name}</div>
+                            <div className="text-[11px] text-slate-500">{e.role}</div>
+                          </div>
+                        </div>
+                      ))
+                  )}
+                  <div className="section-title mb-1 mt-3">AI employees in this topic</div>
+                  {topicEmployees.length === 0 ? (
+                    <p className="text-xs text-slate-500">No AI employees assigned to this topic yet.</p>
+                  ) : (
+                    topicEmployees.map((e) => (
+                      <div key={e.id} className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 p-2.5">
+                        <EmployeeAvatar employee={e} size="sm" />
+                        <div>
+                          <div className="text-sm font-medium text-slate-800">{e.name}</div>
+                          <div className="text-[11px] text-slate-500">{e.role}</div>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </>
               )}
             </div>
           )}

@@ -221,9 +221,24 @@ export async function loadTopicContext(
     toolsByEmployee.set(employeeId, list);
   }
 
+  const roomRow = roomResult.data as DbRow;
+
   const employees = ((employeesResult.data as DbRow[] | null) ?? [])
     .filter((row) => aiIds.includes(String(row.id)))
     .map((row) => employeeFromRow(row, toolsByEmployee.get(String(row.id)) ?? []));
+
+  // DM rooms: always include the DM employee even if room_members is stale.
+  if (roomRow.kind === "dm" && roomRow.dm_employee_id) {
+    const dmId = String(roomRow.dm_employee_id);
+    if (!employees.some((e) => e.id === dmId)) {
+      const dmRow = ((employeesResult.data as DbRow[] | null) ?? []).find(
+        (row) => String(row.id) === dmId,
+      );
+      if (dmRow) {
+        employees.push(employeeFromRow(dmRow, toolsByEmployee.get(dmId) ?? []));
+      }
+    }
+  }
 
   const messages = ((messagesResult.data as DbRow[] | null) ?? []).map(messageFromRow);
   const topicMemory = ((topicMemoryResult.data as DbRow[] | null) ?? []).map(memoryFromRow);
@@ -274,7 +289,6 @@ export async function loadTopicContext(
     createdAt: String(row.created_at ?? nowISO()),
   }));
 
-  const roomRow = roomResult.data as DbRow;
   const room: ProjectRoom = {
     id: String(roomRow.id),
     name: String(roomRow.name),

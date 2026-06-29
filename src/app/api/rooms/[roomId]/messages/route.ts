@@ -139,6 +139,7 @@ export async function POST(
         humanMessageId: humanMessage.id,
         queued: queued.length,
         blocked: blocked.length,
+        decisions: decisions.length,
       });
     }
 
