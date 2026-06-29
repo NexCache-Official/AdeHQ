@@ -25,6 +25,7 @@ import type {
   WorkLogEvent,
 } from "@/lib/types";
 import { normalizeLiveProvider } from "@/lib/config/features";
+import { authHeaders } from "@/lib/api/auth-client";
 import { topicFromRow, topicMemberFromRow } from "@/lib/server/topic-helpers";
 import { nowISO } from "@/lib/utils";
 import { supabase } from "./client";
@@ -201,6 +202,15 @@ export async function ensureProfile(
 
   if (error) throw error;
   return profileFromRow(data, user);
+}
+
+async function ensureToolCatalogRemote(): Promise<void> {
+  const headers = await authHeaders();
+  const res = await fetch("/api/tools/ensure-catalog", { method: "POST", headers });
+  if (!res.ok) {
+    const payload = await res.json().catch(() => ({}));
+    throw new Error(payload.error ?? "Could not initialize tool catalog.");
+  }
 }
 
 export async function createWorkspaceForUser(
@@ -977,6 +987,8 @@ async function upsertRows(table: string, rows: DbRow[], onConflict: string) {
 
 export async function seedWorkspaceState(state: DemoState) {
   const workspaceId = state.workspace.id;
+
+  await ensureToolCatalogRemote();
 
   const { error: workspaceError } = await supabase
     .from("workspaces")

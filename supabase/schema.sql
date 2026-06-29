@@ -835,7 +835,7 @@ values
   ('godot', 'Godot', 'Game development', 'Work with Godot scenes and scripts.', 'mock'),
   ('blender', 'Blender', 'Game development', 'Generate and tweak 3D assets.', 'not_connected'),
   ('stripe', 'Stripe', 'Business', 'Inspect payments and revenue with approval.', 'not_connected'),
-  ('openai', 'OpenAI', 'Model providers', 'GPT models for reasoning and writing.', 'mock'),
+  ('siliconflow', 'SiliconFlow', 'Model providers', 'DeepSeek, Qwen, Kimi, and more.', 'mock'),
   ('anthropic', 'Anthropic', 'Model providers', 'Claude models for reasoning and writing.', 'mock'),
   ('gemini', 'Gemini', 'Model providers', 'Google multimodal models.', 'mock')
 on conflict (id) do update set
