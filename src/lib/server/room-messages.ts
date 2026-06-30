@@ -58,6 +58,9 @@ function employeeFromRow(row: DbRow, tools: ToolAccess[]): AIEmployee {
     trustScore: Number(row.trust_score ?? 75),
     accent: String(row.accent ?? "#f97316"),
     defaultRoomId: row.default_room_id ? String(row.default_room_id) : undefined,
+    participationStyle: row.participation_style
+      ? (String(row.participation_style) as AIEmployee["participationStyle"])
+      : "balanced_teammate",
     lastActiveAt: String(row.last_active_at ?? row.updated_at ?? nowISO()),
     createdAt: String(row.created_at ?? nowISO()),
   };

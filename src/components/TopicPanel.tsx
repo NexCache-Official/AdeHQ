@@ -22,6 +22,7 @@ import { EmptyState } from "./States";
 import { Button } from "./ui";
 import { cn } from "@/lib/utils";
 import { getAiParticipationMode, isGeneralTopic, mainChatLabel } from "@/lib/topics";
+import { getTopicAiControlState } from "@/lib/topic-ai-control";
 import {
   BookText,
   BrainCircuit,
@@ -44,9 +45,11 @@ const TABS = [
 ] as const;
 
 const PARTICIPATION_MODES: { id: AiParticipationMode; label: string; hint: string }[] = [
+  { id: "silent_observation", label: "Silent observation", hint: "AI tracks context; speaks only when @mentioned" },
   { id: "manual_only", label: "Manual only", hint: "AI responds only when @mentioned" },
-  { id: "smart_assist", label: "Smart assist", hint: "Relevant employees may join (max 1)" },
-  { id: "active_team", label: "Active team", hint: "More proactive (max 2)" },
+  { id: "smart_assist_lite", label: "Smart assist (lite)", hint: "General Chat default — greetings & role matches, room cooldown" },
+  { id: "smart_assist", label: "Smart assist", hint: "Broader relevance matching (max 1 ambient)" },
+  { id: "active_team", label: "Active team", hint: "More proactive contributors (max 2)" },
 ];
 
 function displaySummary(summary: string) {
@@ -72,6 +75,7 @@ export function TopicPanel({
   onAskAi,
   onSaveSummaryToMemory,
   onParticipationChange,
+  onAiControl,
   summarizing,
 }: {
   topic: RoomTopic;
@@ -89,12 +93,14 @@ export function TopicPanel({
   onAskAi: () => void;
   onSaveSummaryToMemory: () => void;
   onParticipationChange?: (mode: AiParticipationMode) => void;
+  onAiControl?: (action: "stop_all" | "resume" | "pause_smart") => void;
   summarizing?: boolean;
 }) {
   const [tab, setTab] = useState<(typeof TABS)[number]["id"]>("overview");
   const isMainChat = isGeneralTopic(topic);
   const displayTitle = isMainChat ? mainChatLabel(isDm) : topic.title;
   const participation = getAiParticipationMode(topic);
+  const aiControl = getTopicAiControlState(topic);
 
   const topicEmployees = topicMembers
     .filter((m) => m.memberType === "ai")
@@ -190,22 +196,37 @@ export function TopicPanel({
               </Button>
             )}
           </div>
-          {!isMainChat && onParticipationChange && (
+          {onParticipationChange && (
             <div className="mt-3">
               <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
                 AI participation
               </div>
+              {aiControl.aiStopped && (
+                <p className="mb-2 rounded-lg border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] text-amber-800">
+                  All AI activity is stopped in this topic.
+                </p>
+              )}
+              {aiControl.smartAssistPaused && !aiControl.aiStopped && (
+                <p className="mb-2 rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] text-slate-600">
+                  Smart assist paused — @mentions only until{" "}
+                  {aiControl.aiPausedUntil
+                    ? new Date(aiControl.aiPausedUntil).toLocaleTimeString()
+                    : "resumed"}
+                </p>
+              )}
               <div className="flex flex-col gap-1">
                 {PARTICIPATION_MODES.map((mode) => (
                   <button
                     key={mode.id}
                     type="button"
                     onClick={() => onParticipationChange(mode.id)}
+                    disabled={aiControl.aiStopped}
                     className={cn(
                       "rounded-lg border px-2.5 py-1.5 text-left text-xs transition-colors",
                       participation === mode.id
                         ? "border-accent-500/40 bg-accent-500/10 text-accent-800"
                         : "border-slate-200 bg-white text-slate-600 hover:border-slate-300",
+                      aiControl.aiStopped && "opacity-50",
                     )}
                   >
                     <div className="font-medium">{mode.label}</div>
@@ -213,6 +234,24 @@ export function TopicPanel({
                   </button>
                 ))}
               </div>
+              {onAiControl && (
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {aiControl.aiStopped || aiControl.smartAssistPaused ? (
+                    <Button variant="secondary" size="sm" onClick={() => onAiControl("resume")}>
+                      Resume AI
+                    </Button>
+                  ) : (
+                    <>
+                      <Button variant="ghost" size="sm" onClick={() => onAiControl("pause_smart")}>
+                        Pause smart assist
+                      </Button>
+                      <Button variant="ghost" size="sm" onClick={() => onAiControl("stop_all")}>
+                        Stop all AI
+                      </Button>
+                    </>
+                  )}
+                </div>
+              )}
             </div>
           )}
         </div>

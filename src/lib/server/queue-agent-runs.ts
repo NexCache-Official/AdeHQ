@@ -9,6 +9,7 @@ import {
 } from "@/lib/supabase/ai-runtime";
 import { getOutputTokenCap, type ModelMode } from "@/lib/ai/model-catalog";
 import type { ResponderDecision } from "@/lib/server/decide-responders";
+import { GREETING_MAX_OUTPUT_TOKENS } from "@/lib/server/channel-governance";
 import { createServiceRoleClient } from "@/lib/supabase/server";
 
 export type QueuedRun = {
@@ -26,6 +27,9 @@ export async function queueAgentRuns(
     roomId: string;
     topicId: string;
     triggerMessageId: string;
+    rootTriggerMessageId?: string;
+    parentRunId?: string;
+    handoffDepth?: number;
     responders: ResponderDecision[];
     content: string;
   },
@@ -51,20 +55,30 @@ export async function queueAgentRuns(
     };
   }
 
-  for (const { employee, reason } of params.responders) {
+  const rootTriggerMessageId =
+    params.rootTriggerMessageId ?? params.triggerMessageId;
+
+  for (const decision of params.responders) {
+    const { employee, reason, isGreetingRun } = decision;
     const modelMode: ModelMode = employee.modelMode ?? "balanced";
     const provider = employee.provider.toLowerCase();
     const modeCap = getOutputTokenCap(modelMode);
-    const maxOutputTokens = Math.min(modeCap, settings.maxOutputTokens);
+    const maxOutputTokens = isGreetingRun
+      ? Math.min(GREETING_MAX_OUTPUT_TOKENS, modeCap, settings.maxOutputTokens)
+      : Math.min(modeCap, settings.maxOutputTokens);
     const estimate = buildRunEstimate(
       provider,
       modelMode,
       params.content.length,
-      settings.maxOutputTokens,
+      maxOutputTokens,
     );
 
     const runId = newAgentRunId();
     const usageId = newUsageId();
+    const runMetadata = {
+      ...(isGreetingRun ? { isGreetingRun: true } : {}),
+      ...(decision.runMetadata ?? {}),
+    };
 
     try {
       await createAgentRun(aiClient, {
@@ -74,6 +88,11 @@ export async function queueAgentRuns(
         roomId: params.roomId,
         topicId: params.topicId,
         triggerMessageId: params.triggerMessageId,
+        rootTriggerMessageId,
+        parentRunId: params.parentRunId,
+        handoffDepth: params.handoffDepth ?? 0,
+        responseReason: reason,
+        runMetadata: Object.keys(runMetadata).length ? runMetadata : undefined,
         provider,
         model: estimate.model,
         modelMode,

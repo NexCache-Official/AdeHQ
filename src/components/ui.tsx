@@ -5,6 +5,18 @@ import { motion, AnimatePresence } from "framer-motion";
 import { X } from "lucide-react";
 import { forwardRef, useEffect } from "react";
 
+let modalOpenCount = 0;
+
+function lockBodyScroll() {
+  modalOpenCount += 1;
+  if (modalOpenCount === 1) document.body.style.overflow = "hidden";
+}
+
+function unlockBodyScroll() {
+  modalOpenCount = Math.max(0, modalOpenCount - 1);
+  if (modalOpenCount === 0) document.body.style.overflow = "";
+}
+
 // Button --------------------------------------------------------------------
 
 type ButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> & {
@@ -110,10 +122,10 @@ export function Modal({
       if (e.key === "Escape") onClose();
     };
     window.addEventListener("keydown", handler);
-    document.body.style.overflow = "hidden";
+    lockBodyScroll();
     return () => {
       window.removeEventListener("keydown", handler);
-      document.body.style.overflow = "";
+      unlockBodyScroll();
     };
   }, [open, onClose]);
 
@@ -125,14 +137,14 @@ export function Modal({
   };
 
   return (
-    <AnimatePresence>
+    <AnimatePresence mode="wait">
       {open && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <motion.div
             className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
+            exit={{ opacity: 0, pointerEvents: "none" as const }}
             onClick={onClose}
           />
           <motion.div

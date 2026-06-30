@@ -113,6 +113,7 @@ export type AIEmployee = {
   trustScore: number;
   accent: string; // hex used for avatar gradient
   defaultRoomId?: string;
+  participationStyle?: ParticipationStyle;
   lastActiveAt: string;
   createdAt: string;
 };
@@ -154,7 +155,30 @@ export type MessageArtifact = {
   };
 };
 
-export type AiParticipationMode = "manual_only" | "smart_assist" | "active_team";
+export type AiParticipationMode =
+  | "silent_observation"
+  | "manual_only"
+  | "smart_assist_lite"
+  | "smart_assist"
+  | "active_team";
+
+export type ParticipationStyle =
+  | "quiet_specialist"
+  | "balanced_teammate"
+  | "proactive_operator"
+  | "critical_reviewer"
+  | "social_coordinator";
+
+export type ResponseReason =
+  | "explicit_mention"
+  | "dm_default"
+  | "group_greeting"
+  | "smart_assist_role_match"
+  | "ai_mention"
+  | "handoff"
+  | "slash_command"
+  | "blocked_cooldown"
+  | "blocked_policy";
 
 export type TopicStatus = "active" | "paused" | "resolved" | "archived";
 export type TopicPriority = "low" | "normal" | "high" | "urgent";
@@ -213,6 +237,7 @@ export type RoomMessage = {
   mentionsJson?: MentionRef[];
   agentRunId?: string;
   triggerMessageId?: string;
+  responseReason?: ResponseReason;
   createdAt: string;
   artifacts?: MessageArtifact[];
   pending?: boolean;

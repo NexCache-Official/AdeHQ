@@ -692,6 +692,7 @@ function employeeFromRow(row: DbRow, tools: ToolAccess[]): AIEmployee {
     trustScore: row.trust_score ?? 75,
     accent: row.accent ?? "#f97316",
     defaultRoomId: row.default_room_id ?? undefined,
+    participationStyle: row.participation_style ?? "balanced_teammate",
     lastActiveAt: row.last_active_at ?? row.updated_at ?? nowISO(),
     createdAt: row.created_at ?? nowISO(),
   };

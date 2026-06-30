@@ -189,6 +189,7 @@ export function RoomChat({
 
             trace("agent-run", "success", `${run.employeeName} replied (${ms}ms)`, {
               runId: run.runId,
+              responseReason: data.responseReason,
               agentRunId: run.runId,
               usageId: data.metrics?.usageId,
               aiMode: data.aiMode,
@@ -220,7 +221,15 @@ export function RoomChat({
                 content: data.aiMessage.content,
                 artifacts: data.aiMessage.artifacts,
                 agentRunId: run.runId,
+                responseReason: data.responseReason ?? data.reason,
               });
+            }
+
+            if (Array.isArray(data.followUpRuns) && data.followUpRuns.length) {
+              trace("agent-run", "info", `Follow-up runs queued (${data.followUpRuns.length})`, {
+                followUpRuns: data.followUpRuns,
+              });
+              void processQueuedRuns(data.followUpRuns);
             }
 
             setActiveRuns((prev) =>
@@ -252,6 +261,40 @@ export function RoomChat({
     },
     [actions, room.id, state.workspace.id, topic, trace],
   );
+
+  useEffect(() => {
+    if (!topic || backend !== "supabase") return;
+    let cancelled = false;
+
+    const recoverRuns = async () => {
+      try {
+        const headers = await withDebugHeaders();
+        const res = await fetch(
+          `/api/rooms/${room.id}/topics/${topic.id}/agent-runs?status=queued,running&since=10m`,
+          { headers },
+        );
+        if (!res.ok || cancelled) return;
+        const data = await res.json();
+        const queued = (data.runs ?? []).filter(
+          (r: { status: string; stale?: boolean }) =>
+            r.status === "queued" && !r.stale,
+        );
+        if (queued.length && !cancelled) {
+          trace("agent-run", "info", `Recovering ${queued.length} queued run(s)`, {
+            topicId: topic.id,
+          });
+          void processQueuedRuns(queued);
+        }
+      } catch {
+        // non-blocking
+      }
+    };
+
+    void recoverRuns();
+    return () => {
+      cancelled = true;
+    };
+  }, [topic?.id, room.id, backend, processQueuedRuns, trace]);
 
   const retryRun = (run: ActiveRun) => {
     trace("agent-run", "info", `Retrying ${run.employeeName}`, { runId: run.runId });

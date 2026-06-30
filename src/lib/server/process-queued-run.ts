@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { enforceEmployeePermissions } from "@/lib/ai/enforce-permissions";
+import { sanitizeEffects } from "@/lib/ai/sanitize-effects";
 import { routeEmployeeResponse, type LiveCallMetrics } from "@/lib/ai/model-router";
 import { finalizeAiRun } from "@/lib/ai/cost-guard";
 import {
@@ -10,6 +11,9 @@ import {
 } from "@/lib/ai/model-catalog";
 import { appendRunStep, completeAgentRun, finalizeUsage } from "@/lib/supabase/ai-runtime";
 import { loadTopicContext, persistEmployeeEffects } from "@/lib/server/room-messages";
+import { queueFollowUpRuns } from "@/lib/server/queue-follow-up-runs";
+import { GREETING_MAX_OUTPUT_TOKENS } from "@/lib/server/channel-governance";
+import type { QueuedRun } from "@/lib/server/queue-agent-runs";
 import { serializeUnknownError } from "@/lib/server/message-errors";
 import { nowISO } from "@/lib/utils";
 
@@ -32,7 +36,10 @@ export async function processQueuedAgentRun(
     modelMode: string;
     usageId?: string;
     agentRunId: string;
+    fallbackTier?: number;
+    structuredOutputSuccess?: boolean;
   };
+  followUpRuns?: QueuedRun[];
 }> {
   const { data: runRow, error: runError } = await client
     .from("agent_runs")
@@ -52,6 +59,13 @@ export async function processQueuedAgentRun(
   const roomId = String(run.room_id);
   const topicId = run.topic_id ? String(run.topic_id) : "";
   const triggerMessageId = String(run.trigger_message_id);
+  const rootTriggerMessageId = run.root_trigger_message_id
+    ? String(run.root_trigger_message_id)
+    : triggerMessageId;
+  const handoffDepth = Number(run.handoff_depth ?? 0);
+  const runMetadata = (run.run_metadata as Record<string, unknown> | null) ?? {};
+  const isGreetingRun = Boolean(runMetadata.isGreetingRun);
+  const collaborationOnly = Boolean(runMetadata.collaborationOnly);
 
   if (!topicId) throw new Error("Agent run missing topic.");
 
@@ -109,6 +123,9 @@ export async function processQueuedAgentRun(
 
     const modelMode: ModelMode = employee.modelMode ?? defaultModelModeForRole(employee.roleKey);
     const isLive = options.mode !== "mock" && employee.provider.toLowerCase() !== "mock";
+    const outputCap = isGreetingRun
+      ? GREETING_MAX_OUTPUT_TOKENS
+      : maxOutputTokens ?? getOutputTokenCap(modelMode);
 
     const roomWithMessages = {
       ...ctx.room,
@@ -202,8 +219,9 @@ export async function processQueuedAgentRun(
         mode: options.mode,
         provider: employee.provider,
         modelMode,
-        maxOutputTokens: maxOutputTokens ?? getOutputTokenCap(modelMode),
+        maxOutputTokens: outputCap,
         timeoutMs: getTimeoutMs(modelMode),
+        isGreetingRun,
         context: {
           workspaceId,
           roomId,
@@ -214,7 +232,11 @@ export async function processQueuedAgentRun(
       },
     );
 
-    const effect = enforceEmployeePermissions(employee, response.effect);
+    let effect = enforceEmployeePermissions(employee, response.effect);
+    effect = sanitizeEffects(effect, {
+      isGreetingRun,
+      stripAllEffects: collaborationOnly && !effect.tasks.length,
+    });
 
     const { aiMessage, artifacts } = await persistEmployeeEffects(
       client,
@@ -250,6 +272,25 @@ export async function processQueuedAgentRun(
       .eq("workspace_id", workspaceId)
       .eq("id", employeeId);
 
+    let followUpRuns: QueuedRun[] = [];
+    if (!isGreetingRun && isLive) {
+      const followUp = await queueFollowUpRuns(client, {
+        workspaceId,
+        roomId,
+        topic: ctx.topic,
+        employees: ctx.employees,
+        aiMessageId: aiMessage.id,
+        aiReply: response.reply,
+        sourceEmployee: employee,
+        parentRunId: runId,
+        rootTriggerMessageId,
+        handoffTo: response.effect.handoffTo,
+        handoffDepth,
+        isGreetingRun,
+      });
+      followUpRuns = followUp.followUpRuns;
+    }
+
     return {
       reply: response.reply,
       aiMessageId: aiMessage.id,
@@ -257,6 +298,7 @@ export async function processQueuedAgentRun(
       employeeId,
       employeeName: employee.name,
       artifacts,
+      followUpRuns,
       metrics: metrics
         ? {
             ...metrics,
@@ -264,6 +306,8 @@ export async function processQueuedAgentRun(
             modelMode,
             usageId,
             agentRunId: runId,
+            fallbackTier: metrics.fallbackTier,
+            structuredOutputSuccess: !metrics.fallbackUsed,
           }
         : undefined,
     };

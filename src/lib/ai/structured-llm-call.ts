@@ -60,16 +60,10 @@ function tier3Fallback(text: string): Pick<EmployeeResponse, "reply" | "effect">
     };
   }
 
-  return {
+    return {
     reply: sanitizeReplyForChat(text) || "Got it — working on that.",
     effect: {
-      workLog: [
-        {
-          action: "Structured output fallback",
-          summary: "Returned natural language reply after structured parse failed.",
-          status: "success",
-        },
-      ],
+      workLog: [],
       tasks: [],
       memory: [],
       approvals: [],

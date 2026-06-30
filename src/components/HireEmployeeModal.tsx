@@ -88,8 +88,8 @@ export function HireEmployeeModal({
   };
 
   const close = () => {
+    reset();
     onClose();
-    setTimeout(reset, 250);
   };
 
   const pickTemplate = (tpl: RoleTemplate) => {

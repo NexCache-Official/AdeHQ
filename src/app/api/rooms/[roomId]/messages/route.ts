@@ -10,6 +10,8 @@ import {
 import { assertTopicInRoom, ensureGeneralTopic } from "@/lib/server/topic-helpers";
 import { decideResponders } from "@/lib/server/decide-responders";
 import { queueAgentRuns } from "@/lib/server/queue-agent-runs";
+import { loadChannelGovernanceContext } from "@/lib/server/channel-governance";
+import { isAiQueueingBlocked } from "@/lib/topic-ai-control";
 import { loadMaxParallelRuns } from "@/lib/ai/cost-guard";
 import { messageError } from "@/lib/server/message-errors";
 import type { MentionRef, ProjectRoom } from "@/lib/types";
@@ -125,14 +127,24 @@ export async function POST(
     if (mentionsJson) humanMessage.mentionsJson = mentionsJson;
 
     const maxParallel = await loadMaxParallelRuns(client, workspaceId);
-    const decisions = decideResponders(
-      trimmed,
-      topic,
-      roomForDecisions,
-      respondersCtx.employees,
-      mentionsJson,
-      { maxParallel },
+    const governance = await loadChannelGovernanceContext(
+      client,
+      workspaceId,
+      params.roomId,
+      topicId,
+      humanMessage.id,
     );
+
+    const decisions = isAiQueueingBlocked(topic)
+      ? []
+      : decideResponders(
+          trimmed,
+          topic,
+          roomForDecisions,
+          respondersCtx.employees,
+          mentionsJson,
+          { maxParallel, governance },
+        );
 
     const { queued, blocked } = await queueAgentRuns(client, {
       workspaceId,

@@ -37,6 +37,7 @@ export type RouteOptions = {
   modelMode?: ModelMode;
   maxOutputTokens?: number;
   timeoutMs?: number;
+  isGreetingRun?: boolean;
   context?: RouteContext;
 };
 
@@ -226,7 +227,9 @@ export async function routeEmployeeResponse(
 
   const started = Date.now();
   try {
-    const system = buildEmployeeSystemPrompt(promptContext);
+    const system = buildEmployeeSystemPrompt(promptContext, {
+      isGreetingRun: options.isGreetingRun,
+    });
     const prompt = buildEmployeeUserPrompt(promptContext);
 
     if (ctx.client && ctx.agentRunId && ctx.workspaceId && ctx.roomId) {

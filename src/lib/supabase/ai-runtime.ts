@@ -130,6 +130,11 @@ export async function createAgentRun(
     roomId: string;
     topicId?: string;
     triggerMessageId: string;
+    rootTriggerMessageId?: string;
+    parentRunId?: string;
+    handoffDepth?: number;
+    responseReason?: string;
+    runMetadata?: Record<string, unknown>;
     provider: string;
     model: string;
     modelMode: ModelMode;
@@ -144,6 +149,11 @@ export async function createAgentRun(
     room_id: params.roomId,
     topic_id: params.topicId ?? null,
     trigger_message_id: params.triggerMessageId,
+    root_trigger_message_id: params.rootTriggerMessageId ?? params.triggerMessageId,
+    parent_run_id: params.parentRunId ?? null,
+    handoff_depth: params.handoffDepth ?? 0,
+    response_reason: params.responseReason ?? null,
+    run_metadata: params.runMetadata ?? {},
     status: params.status ?? "running",
     provider: params.provider,
     model: params.model,

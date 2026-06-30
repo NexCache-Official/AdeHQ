@@ -109,7 +109,7 @@ export async function ensureGeneralTopic(
       title: "General",
       description: "Default topic for existing room messages.",
       created_by_type: "system",
-      metadata: { isMainChat: true, aiParticipationMode: "manual_only" },
+      metadata: { isMainChat: true, aiParticipationMode: "smart_assist_lite" },
     })
     .select("*")
     .single();

@@ -79,7 +79,15 @@ export function mainChatLabel(isDm: boolean): string {
 
 export function getAiParticipationMode(topic: RoomTopic): AiParticipationMode {
   const mode = topic.metadata?.aiParticipationMode;
-  if (mode === "smart_assist" || mode === "active_team") return mode;
+  if (
+    mode === "silent_observation" ||
+    mode === "smart_assist_lite" ||
+    mode === "smart_assist" ||
+    mode === "active_team"
+  ) {
+    return mode;
+  }
+  if (isGeneralTopic(topic)) return "smart_assist_lite";
   return "manual_only";
 }
 

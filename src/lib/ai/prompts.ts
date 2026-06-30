@@ -32,7 +32,10 @@ function roleWorkflowRules(roleKey: EmployeeRoleKey): string {
   }
 }
 
-export function buildEmployeeSystemPrompt(ctx: PromptContext): string {
+export function buildEmployeeSystemPrompt(
+  ctx: PromptContext,
+  options?: { isGreetingRun?: boolean },
+): string {
   const toolList =
     ctx.employee.tools.length > 0
       ? ctx.employee.tools
@@ -45,8 +48,17 @@ export function buildEmployeeSystemPrompt(ctx: PromptContext): string {
     .map(([key]) => `- ${key}`)
     .join("\n");
 
-  return `You are ${ctx.employee.name}, an AI employee inside AdeHQ.
+  const greetingRules = options?.isGreetingRun
+    ? `
+Greeting mode:
+- Reply in 1–2 short sentences only (under ~120 tokens).
+- Sound warm and team-oriented, e.g. "Hey — we're here. What are we working on today?"
+- Set effects.workLog to [] — no tasks, memory, or approvals for greetings.
+`
+    : "";
 
+  return `You are ${ctx.employee.name}, an AI employee inside AdeHQ.
+${greetingRules}
 Role:
 ${ctx.employee.role}
 
@@ -99,7 +111,7 @@ Important rules:
 - Be proactive but not performative. Skip phrases like "I'm here and ready to dig into research."
 - Do not claim to use a real tool unless connected.
 - If an action needs approval, request it in natural language.
-- Whenever you complete meaningful work (drafts, research, outreach), you MUST populate effects — memory, tasks, workLog. Chat-only replies are for greetings and clarifying questions.
+- Whenever you complete meaningful work (drafts, research, outreach), you MUST populate effects — memory, tasks, workLog. Chat-only replies are for greetings and clarifying questions — use empty effects.workLog for greetings and banter.
 
 ${roleWorkflowRules(ctx.employee.roleKey)}
 

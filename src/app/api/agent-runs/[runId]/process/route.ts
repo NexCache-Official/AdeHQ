@@ -21,7 +21,7 @@ export async function POST(
 
     const { data: runRow, error: runError } = await client
       .from("agent_runs")
-      .select("workspace_id, room_id, topic_id, status")
+      .select("workspace_id, room_id, topic_id, status, response_reason")
       .eq("id", params.runId)
       .maybeSingle();
 
@@ -70,6 +70,10 @@ export async function POST(
       ok: true,
       runId: params.runId,
       ...result,
+      followUpRuns: result.followUpRuns ?? [],
+      responseReason: runRow.response_reason
+        ? String(runRow.response_reason)
+        : undefined,
       aiMessage: {
         id: result.aiMessageId,
         roomId: String(runRow.room_id),

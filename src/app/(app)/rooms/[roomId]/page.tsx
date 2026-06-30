@@ -190,6 +190,20 @@ export default function RoomDetailPage() {
     }
   };
 
+  const handleAiControl = async (action: "stop_all" | "resume" | "pause_smart") => {
+    if (!selectedTopic || backend !== "supabase") return;
+    const headers = await authHeaders();
+    const response = await fetch(`/api/topics/${selectedTopic.id}/ai-control`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ action, pauseMinutes: 60 }),
+    });
+    if (response.ok) {
+      const { topic } = await response.json();
+      actions.upsertTopic(topic);
+    }
+  };
+
   const handleSlashCommand = async (result: SlashCommandResult) => {
     if (!selectedTopic || !room) return;
 
@@ -385,6 +399,7 @@ export default function RoomDetailPage() {
               onAskAi={askAiAboutTopic}
               onSaveSummaryToMemory={saveSummaryToMemory}
               onParticipationChange={setParticipationMode}
+              onAiControl={handleAiControl}
               summarizing={summarizing}
             />
           ) : (
