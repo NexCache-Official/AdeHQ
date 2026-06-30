@@ -1,4 +1,28 @@
-import type { DemoApplicant } from "./types";
+/** @deprecated Legacy shape for static demo data — shortlist uses candidate-engine at runtime */
+type LegacyDemoApplicant = {
+  id: string;
+  name: string;
+  first: string;
+  title: string;
+  badge: string;
+  badgeKind: "rec" | "neutral";
+  tags: string[];
+  engine: string;
+  advModel: string;
+  hours: number;
+  cap: number;
+  quality: number;
+  qualityText: string;
+  speed: number;
+  speedText: string;
+  cost: number;
+  costText: string;
+  strengths: string[];
+  weaknesses: string[];
+  bestFor: string;
+  grad: string;
+  recommended: boolean;
+};
 
 export const HIRE_EXAMPLES = [
   "get my startup press coverage",
@@ -44,7 +68,8 @@ export const MATCH_BARS = [
   { label: "Personality match", w: 80 },
 ];
 
-export const DEMO_APPLICANTS: DemoApplicant[] = [
+/** @deprecated Static demo data — shortlist uses candidate-engine at runtime */
+export const DEMO_APPLICANTS: LegacyDemoApplicant[] = [
   {
     id: "nova",
     name: "Nova Reed",
@@ -146,18 +171,7 @@ export const INTERVIEW_QUESTIONS = [
 ];
 
 export const INTERVIEW_ANSWERS: Record<string, Record<string, string>> = {
-  eleanor: {
-    week: "I'd start by reviewing your current investor messaging, identifying your strongest proof points, and drafting a reusable outreach framework. By the end of the week I'd aim to have a press angle, an investor-update template, and a follow-up sequence ready for your review.",
-    email:
-      "Subject: A quick update on our momentum\n\nHi [Name] — I wanted to share two milestones from this quarter that I think you'll find relevant... I'd flag this for your approval before it goes out, and tailor the proof points to each investor.",
-    investor:
-      "Carefully and consistently. I'd keep a single source of truth for our narrative, match tone to each stakeholder's seniority, and always route anything material past you before it's sent.",
-    sales:
-      "Closely. I'd reuse the proof points your Sales Employee surfaces in outreach, and feed back which media angles and messages land so the two motions reinforce each other.",
-    access:
-      "Your messaging docs, recent investor updates, the Marketing Room, and the Investor Relations topic to start. I'll ask before connecting anything that sends externally.",
-  },
-  nova: {
+  high_capacity: {
     week: "I'd get moving fast — by day two you'd have a batch of outreach drafts and a follow-up cadence you can react to. I prefer to ship a rough first version quickly and tighten from there.",
     email:
       "Subject: Worth a look?\n\nHey [Name], quick one — we just shipped something I think fits what you cover. Happy to send a 2-line summary or the full release, your call.",
@@ -168,7 +182,18 @@ export const INTERVIEW_ANSWERS: Record<string, Record<string, string>> = {
     access:
       "Outreach lists, templates, and the Sales Room. Keep me pointed at execution and I'll keep the pipeline of drafts full.",
   },
-  marcus: {
+  recommended: {
+    week: "I'd start by reviewing your current investor messaging, identifying your strongest proof points, and drafting a reusable outreach framework. By the end of the week I'd aim to have a press angle, an investor-update template, and a follow-up sequence ready for your review.",
+    email:
+      "Subject: A quick update on our momentum\n\nHi [Name] — I wanted to share two milestones from this quarter that I think you'll find relevant... I'd flag this for your approval before it goes out, and tailor the proof points to each investor.",
+    investor:
+      "Carefully and consistently. I'd keep a single source of truth for our narrative, match tone to each stakeholder's seniority, and always route anything material past you before it's sent.",
+    sales:
+      "Closely. I'd reuse the proof points your Sales Employee surfaces in outreach, and feed back which media angles and messages land so the two motions reinforce each other.",
+    access:
+      "Your messaging docs, recent investor updates, the Marketing Room, and the Investor Relations topic to start. I'll ask before connecting anything that sends externally.",
+  },
+  premium: {
     week: "I'd spend week one understanding the full stakeholder map, risk areas, and the narrative you want to protect. I move deliberately — the first deliverable would be a strategic comms plan rather than volume.",
     email:
       "I'd draft this with precision and route it for approval. Subject: Re: [Topic] — a considered update. Every claim would be defensible and compliance-aware.",
@@ -185,9 +210,9 @@ export const SUCCESS_LABELS = [
   "Employee profile created",
   "Job brief saved",
   "DM created",
-  "Assigned to workspace room",
-  "Welcome message ready",
+  "Welcome message sent",
   "Approval rules enabled",
+  "Ready to collaborate",
 ];
 
 export const ONBOARDING_ROOM_KEY = "adehq-onboarding-room";
