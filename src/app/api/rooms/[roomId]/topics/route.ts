@@ -7,6 +7,7 @@ import {
   topicFromRow,
   topicMemberFromRow,
   slugifyTopicTitle,
+  backfillOrphanMessagesToGeneralTopic,
 } from "@/lib/server/topic-helpers";
 import { refreshTopicStats } from "@/lib/server/topic-stats";
 import { nowISO, uid } from "@/lib/utils";
@@ -37,6 +38,7 @@ export async function GET(
     await assertCanAccessRoom(client, workspaceId, params.roomId, user.id, role);
 
     await ensureGeneralTopic(client, workspaceId, params.roomId);
+    await backfillOrphanMessagesToGeneralTopic(client, workspaceId, params.roomId);
 
     const [topicsResult, membersResult] = await Promise.all([
       client

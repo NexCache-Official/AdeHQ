@@ -537,12 +537,13 @@ export async function loadWorkspaceState(
   let finalTopicMembers = topicMembers;
 
   const mayaDmRoom = rooms.find((room) => room.kind === "dm" && room.dmEmployeeId === MAYA_EMPLOYEE_ID);
-  const needsMayaBootstrap = !employees.some(isMayaEmployee);
-  const needsMayaTopics =
-    Boolean(mayaDmRoom) &&
-    !topics.some((topic) => topic.roomId === mayaDmRoom?.id && isGeneralTopic(topic));
+  const needsMayaEnsure =
+    !employees.some(isMayaEmployee) ||
+    !rooms.some((room) => room.kind === "dm" && room.dmEmployeeId === MAYA_EMPLOYEE_ID) ||
+    (Boolean(mayaDmRoom) &&
+      !topics.some((topic) => topic.roomId === mayaDmRoom?.id && isGeneralTopic(topic)));
 
-  if (needsMayaBootstrap || needsMayaTopics) {
+  if (needsMayaEnsure) {
     try {
       const headers = await authHeaders();
       const res = await fetch("/api/workspaces/ensure-maya", { method: "POST", headers });

@@ -203,7 +203,7 @@ export function buildMayaDmRoom(userId: string, welcomeContent: string): Project
   };
 }
 
-function ensureMayaDmTopicsInState<
+export function ensureMayaDmTopicsInState<
   T extends {
     employees: AIEmployee[];
     rooms: ProjectRoom[];
@@ -215,10 +215,29 @@ function ensureMayaDmTopicsInState<
   const dmRoom = state.rooms.find((room) => room.kind === "dm" && room.dmEmployeeId === MAYA_EMPLOYEE_ID);
   if (!dmRoom || !userId) return state;
 
-  const hasGeneralTopic = (state.topics ?? []).some(
+  const generalTopic = (state.topics ?? []).find(
     (topic) => topic.roomId === dmRoom.id && isGeneralTopic(topic),
   );
-  if (hasGeneralTopic) return state;
+
+  if (generalTopic) {
+    const needsMessageSync = dmRoom.messages.some((message) => message.topicId !== generalTopic.id);
+    if (!needsMessageSync) return state;
+    return {
+      ...state,
+      rooms: state.rooms.map((room) =>
+        room.id === dmRoom.id
+          ? {
+              ...room,
+              messages: room.messages.map((message) =>
+                message.topicId === generalTopic.id
+                  ? message
+                  : { ...message, topicId: generalTopic.id },
+              ),
+            }
+          : room,
+      ),
+    };
+  }
 
   const workspaceId = state.workspace?.id ?? "local";
   const topic = buildMayaDmGeneralTopic(
@@ -234,23 +253,41 @@ function ensureMayaDmTopicsInState<
     userId,
     dmRoom.createdAt,
   );
-  const topicId = topic.id;
-  const rooms = state.rooms.map((room) =>
-    room.id === dmRoom.id
-      ? {
-          ...room,
-          messages: room.messages.map((message) =>
-            message.topicId ? message : { ...message, topicId },
-          ),
-        }
-      : room,
+
+  return {
+    ...state,
+    rooms: state.rooms.map((room) =>
+      room.id === dmRoom.id
+        ? {
+            ...room,
+            messages: room.messages.map((message) =>
+              message.topicId ? message : { ...message, topicId: topic.id },
+            ),
+          }
+        : room,
+    ),
+    topics: [...(state.topics ?? []), topic],
+    topicMembers: [...(state.topicMembers ?? []), ...topicMembers],
+  };
+}
+
+export function dedupeMayaDmRooms<T extends { rooms: ProjectRoom[] }>(state: T): T {
+  const canonicalId = mayaDmRoomId();
+  const mayaRooms = state.rooms.filter(
+    (room) => room.kind === "dm" && room.dmEmployeeId === MAYA_EMPLOYEE_ID,
+  );
+  if (mayaRooms.length <= 1) return state;
+
+  const canonical =
+    mayaRooms.find((room) => room.id === canonicalId) ??
+    mayaRooms.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0];
+  const duplicateIds = new Set(
+    mayaRooms.filter((room) => room.id !== canonical.id).map((room) => room.id),
   );
 
   return {
     ...state,
-    rooms,
-    topics: [...(state.topics ?? []), topic],
-    topicMembers: [...(state.topicMembers ?? []), ...topicMembers],
+    rooms: state.rooms.filter((room) => !duplicateIds.has(room.id)),
   };
 }
 
@@ -274,6 +311,7 @@ export function mergeMayaIntoState<
   }
 
   if (userId && welcomeContent) {
+    next = dedupeMayaDmRooms(next);
     const existingDm = next.rooms.find(
       (room) => room.kind === "dm" && room.dmEmployeeId === MAYA_EMPLOYEE_ID,
     );

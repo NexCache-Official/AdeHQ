@@ -35,7 +35,7 @@ import {
 import { getEmailRedirectUrl, setAuthNextPath } from "@/lib/auth/callback-session";
 import { isEmailConfirmed } from "@/lib/auth/session";
 import { mayaWelcomeMessage } from "@/lib/hiring/maya";
-import { isMayaEmployee, isSystemEmployee, mergeMayaIntoState, mayaEmployeeStatus } from "@/lib/maya-employee";
+import { isMayaEmployee, isSystemEmployee, mergeMayaIntoState, mayaEmployeeStatus, buildMayaDmRoom, ensureMayaDmTopicsInState, dedupeMayaDmRooms } from "@/lib/maya-employee";
 import { isGroupChannel } from "@/lib/rooms";
 import { nowISO, uid } from "./utils";
 import { SUPABASE_WORKSPACE_TABLES } from "./supabase/config";
@@ -430,6 +430,61 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       });
     };
 
+    const refreshTopicsForRoom = async (roomId: string) => {
+      const room = stateRef.current.rooms.find((entry) => entry.id === roomId);
+      const isMayaDm =
+        room?.kind === "dm" &&
+        stateRef.current.employees.some(
+          (employee) => isMayaEmployee(employee) && employee.id === room.dmEmployeeId,
+        );
+
+      if (backendRef.current === "supabase") {
+        try {
+          const { authHeaders } = await import("@/lib/api/auth-client");
+          const headers = await authHeaders();
+          const response = await fetch(`/api/rooms/${roomId}/topics`, { headers });
+          if (response.ok) {
+            const payload = await response.json();
+            set((current) =>
+              ensureMayaDmTopicsInState(
+                {
+                  ...current,
+                  topics: [
+                    ...current.topics.filter((topic) => topic.roomId !== roomId),
+                    ...(payload.topics ?? []),
+                  ],
+                  topicMembers: [
+                    ...current.topicMembers.filter((member) => member.roomId !== roomId),
+                    ...(payload.members ?? []),
+                  ],
+                },
+                current.user?.id,
+              ),
+            );
+            return;
+          }
+        } catch {
+          // fall through to local ensure for Maya
+        }
+      }
+
+      if (isMayaDm) {
+        set((current) => ensureMayaDmTopicsInState(current, current.user?.id));
+      }
+    };
+
+    const ensureMayaDmRemote = async (roomId: string) => {
+      if (backendRef.current !== "supabase") return;
+      try {
+        const { authHeaders } = await import("@/lib/api/auth-client");
+        const headers = await authHeaders();
+        await fetch("/api/workspaces/ensure-maya", { method: "POST", headers });
+        await refreshTopicsForRoom(roomId);
+      } catch {
+        set((current) => ensureMayaDmTopicsInState(current, current.user?.id));
+      }
+    };
+
     return {
       signup: async (user, workspaceName, password) => {
         if (!password) throw new Error("Password is required.");
@@ -742,17 +797,48 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 
       openOrCreateDM: (employeeId) => {
         const s = stateRef.current;
-        const existing = s.rooms.find((r) => r.kind === "dm" && r.dmEmployeeId === employeeId);
-        if (existing) return existing;
         const employee = s.employees.find((e) => e.id === employeeId);
         const userId = s.user?.id;
         if (!userId) throw new Error("Sign in to open a direct message.");
+
+        const isMaya = employee ? isMayaEmployee(employee) : false;
+        if (isMaya) {
+          const welcomeContent = s.user?.name
+            ? mayaWelcomeMessage(s.user.name.split(" ")[0] ?? "there")
+            : mayaWelcomeMessage("there");
+          const canonical = buildMayaDmRoom(userId, welcomeContent);
+          const existing = s.rooms.find(
+            (room) => room.kind === "dm" && room.dmEmployeeId === employeeId,
+          );
+
+          if (existing?.id === canonical.id) {
+            set((st) =>
+              ensureMayaDmTopicsInState(dedupeMayaDmRooms(st), userId),
+            );
+            void ensureMayaDmRemote(canonical.id);
+            return existing;
+          }
+
+          set((st) => {
+            const withoutDupes = st.rooms.filter(
+              (room) => !(room.kind === "dm" && room.dmEmployeeId === employeeId),
+            );
+            return ensureMayaDmTopicsInState(
+              { ...st, rooms: [canonical, ...withoutDupes] },
+              userId,
+            );
+          });
+
+          void ensureMayaDmRemote(canonical.id);
+
+          return canonical;
+        }
+
+        const existing = s.rooms.find((r) => r.kind === "dm" && r.dmEmployeeId === employeeId);
+        if (existing) return existing;
         const id = uid("dm");
         const timestamp = nowISO();
-        const isMaya = employee ? isMayaEmployee(employee) : false;
-        const welcomeContent = isMaya && s.user?.name
-          ? mayaWelcomeMessage(s.user.name.split(" ")[0] ?? "there")
-          : `This is the start of your direct message with ${employee?.name ?? "your employee"}.`;
+        const welcomeContent = `This is the start of your direct message with ${employee?.name ?? "your employee"}.`;
         const created: ProjectRoom = {
           id,
           name: employee?.name ?? "Direct message",
@@ -766,9 +852,9 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
             {
               id: uid("msg"),
               roomId: id,
-              senderType: isMaya ? "ai" : "system",
-              senderId: isMaya ? employeeId : "system",
-              senderName: isMaya ? employee?.name ?? "Maya" : "AdeHQ",
+              senderType: "system",
+              senderId: "system",
+              senderName: "AdeHQ",
               content: welcomeContent,
               createdAt: timestamp,
             },
@@ -962,29 +1048,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         });
       },
 
-      refreshTopics: async (roomId) => {
-        if (backendRef.current !== "supabase") return;
-        try {
-          const { authHeaders } = await import("@/lib/api/auth-client");
-          const headers = await authHeaders();
-          const response = await fetch(`/api/rooms/${roomId}/topics`, { headers });
-          if (!response.ok) return;
-          const payload = await response.json();
-          set((s) => ({
-            ...s,
-            topics: [
-              ...s.topics.filter((t) => t.roomId !== roomId),
-              ...(payload.topics ?? []),
-            ],
-            topicMembers: [
-              ...s.topicMembers.filter((m) => m.roomId !== roomId),
-              ...(payload.members ?? []),
-            ],
-          }));
-        } catch {
-          // non-blocking
-        }
-      },
+      refreshTopics: refreshTopicsForRoom,
 
       upsertTopic: (topic) => {
         set((s) => ({

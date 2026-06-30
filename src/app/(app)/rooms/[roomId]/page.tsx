@@ -12,6 +12,7 @@ import { Button } from "@/components/ui";
 import { EmptyState } from "@/components/States";
 import { authHeaders } from "@/lib/api/auth-client";
 import { generalTopicForRoom, isGeneralTopic, topicsForRoom } from "@/lib/topics";
+import { isMayaEmployee } from "@/lib/maya-employee";
 import type { AiParticipationMode, TopicPriority } from "@/lib/types";
 import type { SlashCommandResult } from "@/components/ChatComposer";
 import {
@@ -50,12 +51,19 @@ export default function RoomDetailPage() {
 
   const selectedTopic = roomTopics.find((t) => t.id === selectedTopicId) ?? roomTopics[0];
 
+  const roomEmployees = useMemo(
+    () => (room ? room.aiEmployees.map((id) => state.employees.find((e) => e.id === id)).filter(Boolean) : []),
+    [room, state.employees],
+  );
+  const isMayaDm = Boolean(
+    isDm && roomEmployees[0] && isMayaEmployee(roomEmployees[0]),
+  );
+
   useEffect(() => {
-    if (backend === "supabase") {
-      void actions.refreshTopics(roomId);
-    }
+    if (backend !== "supabase" && !isMayaDm) return;
+    void actions.refreshTopics(roomId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [roomId, backend]);
+  }, [roomId, backend, isMayaDm]);
 
   useEffect(() => {
     if (roomTopics.length === 0) return;
@@ -76,11 +84,6 @@ export default function RoomDetailPage() {
       router.replace(`/rooms/${roomId}?topic=${topicId}`, { scroll: false });
     },
     [roomId, router],
-  );
-
-  const roomEmployees = useMemo(
-    () => (room ? room.aiEmployees.map((id) => state.employees.find((e) => e.id === id)).filter(Boolean) : []),
-    [room, state.employees],
   );
 
   const createTopic = async (payload: {
