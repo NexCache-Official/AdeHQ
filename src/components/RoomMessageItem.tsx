@@ -65,11 +65,11 @@ function EmailDraftCard({
       {meta.subject && (
         <div className="border-b border-emerald-200/40 px-3 py-2">
           <p className="text-[10px] font-medium uppercase tracking-wide text-emerald-600">Subject</p>
-          <p className="text-sm font-medium text-slate-800">{meta.subject}</p>
+          <p className="text-sm font-medium text-ink">{meta.subject}</p>
         </div>
       )}
       <div className="px-3 py-2.5">
-        <p className="whitespace-pre-wrap text-[13px] leading-relaxed text-slate-700">{meta.body}</p>
+        <p className="whitespace-pre-wrap text-[13px] leading-relaxed text-ink-2">{meta.body}</p>
       </div>
     </div>
   );
@@ -79,7 +79,7 @@ function renderContent(content: string) {
   const parts = content.split(/(@[A-Za-z][A-Za-z ]*?Employee)/g);
   return parts.map((part, i) =>
     /^@[A-Za-z]/.test(part) && part.includes("Employee") ? (
-      <span key={i} className="font-medium text-accent-600">
+      <span key={i} className="font-medium text-accent">
         {part}
       </span>
     ) : (
@@ -95,7 +95,7 @@ export function RoomMessageItem({ message }: { message: RoomMessage }) {
   if (message.senderType === "system") {
     return (
       <div className="flex justify-center py-2">
-        <span className="rounded-full bg-slate-50 px-3 py-1 text-[11px] text-slate-500">
+        <span className="rounded-full bg-muted px-3 py-1 text-[11px] text-ink-3">
           {message.content}
         </span>
       </div>
@@ -125,25 +125,25 @@ export function RoomMessageItem({ message }: { message: RoomMessage }) {
 
       <div className="min-w-0 flex-1">
         <div className="flex items-baseline gap-2">
-          <span className="text-sm font-semibold text-slate-900">{message.senderName}</span>
+          <span className="text-sm font-semibold text-ink">{message.senderName}</span>
           {!isHuman && (
-            <span className="rounded-md bg-accent-500/10 px-1.5 py-0.5 text-[10px] font-medium text-accent-700">
+            <span className="rounded-md bg-accent-500/10 px-1.5 py-0.5 text-[10px] font-medium text-accent-d">
               AI
             </span>
           )}
           {!isHuman && employee && (
-            <span className="rounded-md bg-slate-50 px-1.5 py-0.5 text-[10px] text-slate-500">
+            <span className="rounded-md bg-muted px-1.5 py-0.5 text-[10px] text-ink-3">
               {employee.role}
             </span>
           )}
-          <span className="text-[11px] text-slate-500">{formatTime(message.createdAt)}</span>
+          <span className="text-[11px] text-ink-3">{formatTime(message.createdAt)}</span>
           {message.failed && (
             <span className="text-[11px] font-medium text-rose-600">Failed to send</span>
           )}
         </div>
 
         {message.pending ? (
-          <div className="mt-1.5 flex items-center gap-1.5 rounded-2xl rounded-tl-sm bg-slate-50 px-3.5 py-3 w-fit">
+          <div className="mt-1.5 flex items-center gap-1.5 rounded-2xl rounded-tl-sm bg-muted px-3.5 py-3 w-fit">
             <span className="typing-dot" />
             <span className="typing-dot" />
             <span className="typing-dot" />
@@ -151,7 +151,7 @@ export function RoomMessageItem({ message }: { message: RoomMessage }) {
         ) : (
           <div
             className={cn(
-              "mt-1 whitespace-pre-wrap text-[14px] leading-relaxed text-slate-700",
+              "mt-1 whitespace-pre-wrap text-[14px] leading-relaxed text-ink-2",
             )}
           >
             {renderContent(message.content)}

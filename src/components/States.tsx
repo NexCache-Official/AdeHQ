@@ -20,19 +20,19 @@ export function EmptyState({
   return (
     <div
       className={cn(
-        "flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-6 py-16 text-center",
+        "flex flex-col items-center justify-center rounded-2xl border border-dashed border-border bg-muted px-6 py-16 text-center",
         className,
       )}
     >
       <div className="relative mb-4">
         <div className="absolute inset-0 -z-10 animate-pulse rounded-full bg-accent-500/20 blur-2xl" />
-        <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 text-accent-600">
+        <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-border bg-muted text-accent">
           <Icon className="h-6 w-6" />
         </div>
       </div>
-      <h3 className="text-base font-semibold text-slate-900">{title}</h3>
+      <h3 className="text-base font-semibold text-ink">{title}</h3>
       {description && (
-        <p className="mt-1.5 max-w-sm text-sm text-slate-500">{description}</p>
+        <p className="mt-1.5 max-w-sm text-sm text-ink-3">{description}</p>
       )}
       {action && (
         <Button className="mt-5" onClick={action.onClick}>
@@ -53,7 +53,7 @@ export function LoadingState({
   return (
     <div
       className={cn(
-        "flex flex-col items-center justify-center gap-3 text-slate-400",
+        "flex flex-col items-center justify-center gap-3 text-ink-3",
         full ? "min-h-screen" : "py-20",
       )}
     >
@@ -70,11 +70,11 @@ export function Skeleton({ className }: { className?: string }) {
   return (
     <div
       className={cn(
-        "relative overflow-hidden rounded-xl bg-slate-50",
+        "relative overflow-hidden rounded-xl bg-muted",
         className,
       )}
     >
-      <div className="absolute inset-0 -translate-x-full animate-shimmer bg-gradient-to-r from-transparent via-slate-200 to-transparent" />
+      <div className="absolute inset-0 -translate-x-full animate-shimmer bg-gradient-to-r from-transparent via-[var(--border)] to-transparent" />
     </div>
   );
 }

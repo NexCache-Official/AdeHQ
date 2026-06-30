@@ -48,11 +48,11 @@ export default function TasksPage() {
             <option key={r.id} value={r.id}>{r.name}</option>
           ))}
         </select>
-        <div className="flex rounded-xl border border-border bg-muted p-0.5">
-          <button onClick={() => setView("board")} className={cn("flex h-9 items-center gap-1.5 rounded-lg px-3 text-sm transition-colors", view === "board" ? "bg-surface text-ink shadow-sm" : "text-ink-3")}>
+        <div className="flex rounded-xl border border-slate-200 bg-slate-50 p-0.5">
+          <button onClick={() => setView("board")} className={cn("flex h-9 items-center gap-1.5 rounded-lg px-3 text-sm transition-colors", view === "board" ? "bg-slate-100 text-slate-900" : "text-slate-400")}>
             <Columns3 className="h-4 w-4" /> Board
           </button>
-          <button onClick={() => setView("list")} className={cn("flex h-9 items-center gap-1.5 rounded-lg px-3 text-sm transition-colors", view === "list" ? "bg-surface text-ink shadow-sm" : "text-ink-3")}>
+          <button onClick={() => setView("list")} className={cn("flex h-9 items-center gap-1.5 rounded-lg px-3 text-sm transition-colors", view === "list" ? "bg-slate-100 text-slate-900" : "text-slate-400")}>
             <List className="h-4 w-4" /> List
           </button>
         </div>
@@ -66,20 +66,20 @@ export default function TasksPage() {
             const colTasks = tasks.filter((t) => t.status === col);
             const meta = TASK_STATUS_META[col];
             return (
-              <div key={col} className="flex flex-col rounded-2xl border border-border bg-muted p-2.5">
+              <div key={col} className="flex flex-col rounded-2xl border border-slate-200 bg-slate-50 p-2.5">
                 <div className="mb-2.5 flex items-center justify-between px-1">
                   <span className={cn("flex items-center gap-1.5 text-xs font-semibold", meta.color)}>
                     <span className={cn("h-2 w-2 rounded-full", meta.bg.replace("/15", ""))} style={{ background: "currentColor" }} />
                     {meta.label}
                   </span>
-                  <span className="text-xs text-ink-3">{colTasks.length}</span>
+                  <span className="text-xs text-slate-500">{colTasks.length}</span>
                 </div>
                 <div className="space-y-2">
                   {colTasks.map((t) => (
                     <TaskCard key={t.id} task={t} compact onClick={() => setDetail(t)} />
                   ))}
                   {colTasks.length === 0 && (
-                    <div className="rounded-xl border border-dashed border-border py-6 text-center text-[11px] text-ink-3">
+                    <div className="rounded-xl border border-dashed border-slate-200 py-6 text-center text-[11px] text-slate-600">
                       Nothing here
                     </div>
                   )}

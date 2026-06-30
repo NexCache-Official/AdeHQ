@@ -28,14 +28,14 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
   ({ className, variant = "primary", size = "md", ...props }, ref) => {
     const variants: Record<string, string> = {
       primary:
-        "bg-accent-600 text-white hover:bg-accent-500 shadow-sm hover:shadow-md",
+        "bg-accent text-white hover:brightness-105 shadow-glow border-none",
       secondary:
-        "bg-white text-accent-700 hover:bg-accent-50 border border-accent-300 hover:border-accent-400",
+        "bg-surface text-accent-d hover:bg-accent-soft border border-border",
       outline:
-        "border border-slate-200 text-slate-700 bg-white hover:bg-slate-50 hover:border-slate-300",
-      ghost: "text-slate-600 hover:bg-accent-50 hover:text-accent-700",
-      subtle: "bg-accent-50 text-accent-700 hover:bg-accent-100 border border-accent-200",
-      danger: "bg-rose-600 text-white hover:bg-rose-500",
+        "border border-border text-ink-2 bg-surface hover:bg-muted hover:border-[var(--border)]",
+      ghost: "text-ink-2 hover:bg-muted hover:text-ink border border-transparent",
+      subtle: "bg-accent-soft text-accent-d hover:bg-accent-soft/80 border border-accent-soft",
+      danger: "bg-danger text-white hover:brightness-105",
     };
     const sizes: Record<string, string> = {
       sm: "h-8 px-3 text-xs gap-1.5 rounded-lg",
@@ -141,7 +141,7 @@ export function Modal({
       {open && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <motion.div
-            className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
+            className="absolute inset-0 bg-[#1a1714]/40 backdrop-blur-[3px]"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0, pointerEvents: "none" as const }}
@@ -149,7 +149,7 @@ export function Modal({
           />
           <motion.div
             className={cn(
-              "relative z-10 w-full overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-panel",
+              "relative z-10 w-full overflow-hidden rounded-[22px] border border-border bg-surface shadow-lift",
               widths[size],
               className,
             )}
@@ -178,16 +178,16 @@ export function ModalHeader({
   icon?: React.ReactNode;
 }) {
   return (
-    <div className="flex items-start justify-between gap-4 border-b border-slate-200 px-6 py-5">
+    <div className="flex items-start justify-between gap-4 border-b border-border-2 px-6 py-5">
       <div className="flex items-start gap-3">
         {icon && (
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-accent-50 text-accent-600">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-accent-soft text-accent">
             {icon}
           </div>
         )}
         <div>
-          <h2 className="text-base font-semibold text-slate-900">{title}</h2>
-          {subtitle && <p className="mt-0.5 text-sm text-slate-500">{subtitle}</p>}
+          <h2 className="text-base font-semibold text-ink">{title}</h2>
+          {subtitle && <p className="mt-0.5 text-sm text-ink-3">{subtitle}</p>}
         </div>
       </div>
       {onClose && (

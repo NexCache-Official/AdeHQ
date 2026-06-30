@@ -1,13 +1,12 @@
 "use client";
 
-import { useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { getDirectMessages, getGroupChannels } from "@/lib/rooms";
 import { useStore } from "@/lib/demo-store";
 import { useShellUI } from "./AppShell";
-import { EmployeeAvatar } from "./EmployeeAvatar";
+import { WorkspaceSwitcher } from "./WorkspaceSwitcher";
 import {
   Bot,
   CheckSquare,
@@ -18,17 +17,16 @@ import {
   Phone,
   Home,
   Hash,
-  Plus,
-  ChevronDown,
-  Sparkles,
-  Lock,
+  MessageSquare,
+  Search,
+  Settings,
 } from "lucide-react";
 
-const WORKSPACE_NAV = [
+const WORKFORCE_NAV = [
   { href: "/workforce", label: "AI Workforce", icon: Bot },
-  { href: "/tasks", label: "Tasks", icon: CheckSquare },
+  { href: "/tasks", label: "Tasks", icon: CheckSquare, badgeKey: "tasks" as const },
   { href: "/memory", label: "Memory", icon: Brain },
-  { href: "/approvals", label: "Approvals", icon: ClipboardCheck, badgeKey: "approvals" },
+  { href: "/approvals", label: "Approvals", icon: ClipboardCheck, badgeKey: "approvals" as const },
   { href: "/work-log", label: "Work Log", icon: ScrollText },
   { href: "/tools", label: "Tools", icon: Wrench },
 ];
@@ -36,14 +34,14 @@ const WORKSPACE_NAV = [
 export function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
-  const { state, actions, backend } = useStore();
+  const { state, actions } = useStore();
   const ui = useShellUI();
-  const [channelsOpen, setChannelsOpen] = useState(true);
-  const [dmsOpen, setDmsOpen] = useState(true);
 
   const pendingApprovals = state.approvals.filter((a) => a.status === "pending").length;
+  const openTasks = state.tasks.filter((t) => t.status !== "done").length;
   const channels = getGroupChannels(state.rooms);
   const dmRooms = getDirectMessages(state.rooms);
+  const hasDmUnread = dmRooms.some((r) => r.unread > 0);
 
   const isActive = (href: string, exact?: boolean) =>
     exact ? pathname === href : pathname === href || pathname.startsWith(href + "/");
@@ -55,137 +53,130 @@ export function Sidebar() {
   };
 
   return (
-    <aside className="hidden w-[262px] shrink-0 flex-col border-r border-slate-200 bg-white lg:flex">
-      <div className="flex h-16 items-center gap-2.5 px-5">
-        <div className="relative flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-accent-500 to-glow-amber shadow-glow-sm">
-          <Sparkles className="h-5 w-5 text-white" />
-        </div>
-        <div className="leading-tight">
-          <div className="text-[15px] font-semibold tracking-tight text-slate-900">AdeHQ</div>
-          <div className="text-[11px] text-slate-500">AI Workforce</div>
-        </div>
-      </div>
+    <aside className="hidden w-[240px] shrink-0 flex-col bg-rail lg:flex">
+      <div className="flex flex-col gap-0.5 p-3 pb-2">
+        <WorkspaceSwitcher variant="rail" />
 
-      <nav className="flex-1 space-y-0.5 overflow-y-auto px-3 py-2">
-        {/* Home */}
+        <div className="relative mb-2 mt-1">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-[15px] w-[15px] -translate-y-1/2 text-white/40" />
+          <button
+            type="button"
+            onClick={ui.openCommand}
+            className="flex w-full items-center justify-between rounded-[11px] border border-white/[0.09] bg-white/[0.03] py-2 pl-9 pr-2.5 text-left text-[12.5px] text-white/50 transition-colors hover:bg-white/[0.06] hover:text-white/70"
+          >
+            <span>Search or command</span>
+            <span className="rounded-[5px] border border-white/[0.14] px-1.5 py-px font-mono text-[10px] text-white/35">
+              ⌘K
+            </span>
+          </button>
+        </div>
+
+        <p className="px-2.5 pb-1 pt-2 text-[10.5px] font-semibold uppercase tracking-[0.08em] text-white/30">
+          Workspace
+        </p>
         <Link href="/" className={cn("nav-link", isActive("/", true) && "nav-link-active")}>
-          <Home className="h-[18px] w-[18px]" strokeWidth={isActive("/", true) ? 2.2 : 1.8} />
+          <Home className="h-[17px] w-[17px]" strokeWidth={1.8} />
           <span className="flex-1">Home</span>
         </Link>
+        <Link href="/rooms" className={cn("nav-link", isActive("/rooms") && "nav-link-active")}>
+          <Hash className="h-[17px] w-[17px]" strokeWidth={1.8} />
+          <span className="flex-1">Channels</span>
+          {channels.length > 0 && (
+            <span className="rounded-md bg-white/10 px-1.5 py-px font-mono text-[10.5px] text-white/70">
+              {channels.length}
+            </span>
+          )}
+        </Link>
+        <button
+          type="button"
+          onClick={() => {
+            const first = state.employees[0];
+            if (first) openDM(first.id);
+            else router.push("/workforce");
+          }}
+          className={cn(
+            "nav-link w-full",
+            dmRooms.some((r) => isRoomActive(r.id)) && "nav-link-active",
+          )}
+        >
+          <MessageSquare className="h-[17px] w-[17px]" strokeWidth={1.8} />
+          <span className="flex-1 text-left">Direct messages</span>
+          {hasDmUnread && <span className="h-[7px] w-[7px] rounded-full bg-accent" />}
+        </button>
+        <Link href="/calls" className={cn("nav-link", isActive("/calls") && "nav-link-active")}>
+          <Phone className="h-[17px] w-[17px]" strokeWidth={1.8} />
+          <span className="flex-1">Calls</span>
+        </Link>
 
-        {/* Channels */}
-        <div className="pt-3">
-          <div className="group flex items-center gap-1 px-3 pb-1">
-            <button
-              onClick={() => setChannelsOpen((v) => !v)}
-              className="flex flex-1 items-center gap-1 text-left section-title transition-colors hover:text-slate-700"
-            >
-              <ChevronDown className={cn("h-3 w-3 transition-transform", !channelsOpen && "-rotate-90")} />
-              Channels
-            </button>
-            <button
-              onClick={ui.openCreateRoom}
-              className="rounded-md p-0.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
-              title="Create channel"
-            >
-              <Plus className="h-3.5 w-3.5" />
-            </button>
-          </div>
-          {channelsOpen &&
-            channels.map((room) => {
-              const active = isRoomActive(room.id);
-              return (
-                <Link
-                  key={room.id}
-                  href={`/rooms/${room.id}`}
-                  className={cn("nav-link !py-1.5", active && "nav-link-active")}
-                >
-                  <Hash className="h-[16px] w-[16px] shrink-0 text-slate-400" strokeWidth={2} />
-                  <span className="flex-1 truncate">{room.name}</span>
-                  {room.unread > 0 && (
-                    <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-accent-500 px-1.5 text-[11px] font-semibold text-white">
-                      {room.unread}
-                    </span>
-                  )}
-                </Link>
-              );
-            })}
-        </div>
-
-        {/* Direct messages */}
-        <div className="pt-3">
-          <div className="flex items-center gap-1 px-3 pb-1">
-            <button
-              onClick={() => setDmsOpen((v) => !v)}
-              className="flex flex-1 items-center gap-1 text-left section-title transition-colors hover:text-slate-700"
-            >
-              <ChevronDown className={cn("h-3 w-3 transition-transform", !dmsOpen && "-rotate-90")} />
-              Direct Messages
-            </button>
-            <Lock className="h-3 w-3 text-slate-300" />
-          </div>
-          {dmsOpen &&
-            state.employees.map((e) => {
-              const dm = dmRooms.find((r) => r.dmEmployeeId === e.id);
-              const active = dm ? isRoomActive(dm.id) : false;
-              return (
-                <button
-                  key={e.id}
-                  onClick={() => openDM(e.id)}
-                  className={cn("nav-link w-full !py-1.5", active && "nav-link-active")}
-                >
-                  <EmployeeAvatar employee={e} size="xs" className="!h-5 !w-5" />
-                  <span className="flex-1 truncate text-left">{e.name}</span>
-                  {dm && dm.unread > 0 && (
-                    <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-accent-500 px-1.5 text-[11px] font-semibold text-white">
-                      {dm.unread}
-                    </span>
-                  )}
-                </button>
-              );
-            })}
-        </div>
-
-        {/* Calls — right below the conversation areas */}
-        <div className="pt-3">
-          <Link href="/calls" className={cn("nav-link", isActive("/calls") && "nav-link-active")}>
-            <Phone className="h-[18px] w-[18px]" strokeWidth={isActive("/calls") ? 2.2 : 1.8} />
-            <span className="flex-1">Calls</span>
-          </Link>
-        </div>
-
-        {/* Workspace tools */}
-        <p className="px-3 pb-1.5 pt-4 section-title">Workspace</p>
-        {WORKSPACE_NAV.map((item) => {
+        <p className="px-2.5 pb-1 pt-3.5 text-[10.5px] font-semibold uppercase tracking-[0.08em] text-white/30">
+          Workforce
+        </p>
+        {WORKFORCE_NAV.map((item) => {
           const active = isActive(item.href);
-          const badge = item.badgeKey === "approvals" ? pendingApprovals : 0;
+          const badge =
+            item.badgeKey === "approvals"
+              ? pendingApprovals
+              : item.badgeKey === "tasks"
+                ? openTasks
+                : 0;
           return (
             <Link key={item.href} href={item.href} className={cn("nav-link", active && "nav-link-active")}>
-              <item.icon className="h-[18px] w-[18px]" strokeWidth={active ? 2.2 : 1.8} />
+              <item.icon className="h-[17px] w-[17px]" strokeWidth={1.8} />
               <span className="flex-1">{item.label}</span>
               {badge > 0 && (
-                <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-amber-500/20 px-1.5 text-[11px] font-semibold text-amber-700">
+                <span
+                  className={cn(
+                    "rounded-md px-1.5 py-px font-mono text-[10.5px]",
+                    item.badgeKey === "approvals"
+                      ? "bg-accent text-white"
+                      : "bg-white/10 text-white/70",
+                  )}
+                >
                   {badge}
                 </span>
               )}
             </Link>
           );
         })}
-      </nav>
+      </div>
 
-      <div className="border-t border-slate-200 p-3">
-        <div className="flex items-center gap-2.5 rounded-xl bg-accent-50 px-3 py-2.5">
-          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-500/15">
-            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse-ring" />
+      {/* Channel quick links when on rooms */}
+      {channels.length > 0 && pathname.startsWith("/rooms") && (
+        <div className="mx-3 mb-2 max-h-32 overflow-y-auto rounded-xl border border-white/[0.07] bg-white/[0.03] p-1.5">
+          {channels.slice(0, 6).map((room) => (
+            <Link
+              key={room.id}
+              href={`/rooms/${room.id}`}
+              className={cn(
+                "flex items-center gap-2 rounded-lg px-2 py-1.5 text-xs text-white/55 hover:bg-white/[0.06] hover:text-white",
+                isRoomActive(room.id) && "bg-white/10 text-white",
+              )}
+            >
+              <Hash className="h-3.5 w-3.5 shrink-0 opacity-60" />
+              <span className="truncate">{room.name}</span>
+            </Link>
+          ))}
+        </div>
+      )}
+
+      <div className="mt-auto border-t border-white/[0.07] p-3">
+        <div className="flex items-center gap-2.5 rounded-xl border border-white/[0.07] p-2">
+          <div className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-[9px] bg-gradient-to-br from-[#3B4C6B] to-[#5A6E94] text-xs font-bold text-white">
+            {(state.user?.name ?? "U").slice(0, 2).toUpperCase()}
           </div>
-          <div className="min-w-0 flex-1 leading-tight">
-            <div className="truncate text-xs font-medium text-slate-700">
-              {state.employees.filter((e) => e.status === "working").length} employees working
+          <div className="min-w-0 flex-1">
+            <div className="truncate text-[12.5px] font-semibold text-white">
+              {state.user?.name ?? "You"}
             </div>
-            <div className="text-[11px] text-slate-500">
-              {backend === "demo" ? "Demo workspace" : state.settings.mode === "live" ? "Live AI route" : "Mock AI mode"}
-            </div>
+            <div className="text-[11px] text-white/40">Owner</div>
           </div>
+          <Link
+            href="/settings"
+            className="rounded-lg p-1 text-white/45 transition-colors hover:bg-white/[0.08] hover:text-white"
+            title="Settings"
+          >
+            <Settings className="h-[15px] w-[15px]" strokeWidth={1.8} />
+          </Link>
         </div>
       </div>
     </aside>

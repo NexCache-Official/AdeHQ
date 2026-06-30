@@ -10,50 +10,68 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        // Surfaces — deep charcoal / near black (legacy, rarely used in light mode)
+        rail: {
+          DEFAULT: "#1a1714",
+          2: "#262119",
+        },
+        canvas: "#f6f3ee",
+        surface: "#ffffff",
+        muted: "#f0ede6",
+        border: {
+          DEFAULT: "#e6e1d8",
+          2: "#efebe3",
+        },
         ink: {
-          950: "#070708",
-          900: "#0a0a0c",
-          850: "#0e0e12",
-          800: "#131318",
-          700: "#1a1a21",
-          600: "#22232c",
-          500: "#2c2d38",
+          DEFAULT: "#221f1a",
+          2: "#6c685f",
+          3: "#9b968b",
         },
-        // Accent — warm orange
         accent: {
-          50: "#fff7ed",
-          100: "#ffedd5",
-          200: "#fed7aa",
-          300: "#fdba74",
-          400: "#fb923c",
-          500: "#f97316",
-          600: "#ea580c",
-          700: "#c2410c",
-          800: "#9a3412",
-          900: "#7c2d12",
+          DEFAULT: "#e85d2c",
+          d: "#ce4e22",
+          soft: "#fbe9de",
+          50: "#fbe9de",
+          100: "#fbe9de",
+          200: "#f5d4c0",
+          300: "#efb89a",
+          400: "#e8855a",
+          500: "#e85d2c",
+          600: "#ce4e22",
+          700: "#b0441e",
+          800: "#8c3719",
+          900: "#6e2c14",
         },
-        glow: {
-          orange: "#fb923c",
-          amber: "#f59e0b",
-          warm: "#fbbf24",
+        green: {
+          DEFAULT: "#1ba672",
+          soft: "#e3f4eb",
+        },
+        amber: {
+          DEFAULT: "#cb8a1b",
+          soft: "#fbefd6",
+        },
+        danger: {
+          DEFAULT: "#d9483b",
+          soft: "#fbe3e0",
+        },
+        info: {
+          DEFAULT: "#2f6fed",
+          soft: "#e5edfd",
         },
       },
       fontFamily: {
-        sans: ["var(--font-geist-sans)", "system-ui", "sans-serif"],
+        sans: ["var(--font-schibsted)", "system-ui", "sans-serif"],
         mono: ["var(--font-geist-mono)", "ui-monospace", "monospace"],
       },
       boxShadow: {
-        glow: "0 0 0 1px rgba(249,115,22,0.2), 0 0 28px -4px rgba(249,115,22,0.25)",
-        "glow-sm": "0 0 18px -6px rgba(249,115,22,0.3)",
-        panel: "0 1px 3px 0 rgba(0,0,0,0.06), 0 8px 24px -8px rgba(0,0,0,0.1)",
-        card: "0 1px 2px 0 rgba(0,0,0,0.04), 0 4px 12px -4px rgba(0,0,0,0.06)",
+        glow: "0 4px 14px -6px rgba(232, 93, 44, 0.55)",
+        panel: "0 10px 30px -18px rgba(40, 30, 15, 0.32)",
+        card: "0 1px 3px rgba(40, 30, 15, 0.06)",
+        lift: "0 12px 30px -14px rgba(40, 34, 24, 0.22)",
       },
-      backgroundImage: {
-        "grid-fade":
-          "radial-gradient(ellipse 80% 60% at 50% -10%, rgba(249,115,22,0.06), transparent 70%)",
-        "mesh":
-          "radial-gradient(at 0% 0%, rgba(249,115,22,0.04) 0px, transparent 50%), radial-gradient(at 100% 0%, rgba(251,146,60,0.03) 0px, transparent 50%)",
+      borderRadius: {
+        xl: "12px",
+        "2xl": "16px",
+        "3xl": "18px",
       },
       keyframes: {
         "fade-in": {
@@ -69,20 +87,25 @@ const config: Config = {
           "100%": { opacity: "1", transform: "scale(1)" },
         },
         "pulse-ring": {
-          "0%": { boxShadow: "0 0 0 0 rgba(74,222,128,0.5)" },
-          "70%": { boxShadow: "0 0 0 6px rgba(74,222,128,0)" },
-          "100%": { boxShadow: "0 0 0 0 rgba(74,222,128,0)" },
+          "0%": { boxShadow: "0 0 0 0 rgba(27, 166, 114, 0.5)" },
+          "70%": { boxShadow: "0 0 0 7px rgba(27, 166, 114, 0)" },
+          "100%": { boxShadow: "0 0 0 0 rgba(27, 166, 114, 0)" },
+        },
+        glowpulse: {
+          "0%, 100%": { opacity: "0.55" },
+          "50%": { opacity: "1" },
         },
         shimmer: {
-          "100%": { transform: "translateX(100%)" },
+          "0%": { backgroundPosition: "-200% 0" },
+          "100%": { backgroundPosition: "200% 0" },
         },
         "bounce-dot": {
           "0%, 80%, 100%": { transform: "translateY(0)", opacity: "0.4" },
           "40%": { transform: "translateY(-4px)", opacity: "1" },
         },
-        float: {
-          "0%, 100%": { transform: "translateY(0)" },
-          "50%": { transform: "translateY(-6px)" },
+        fadeup: {
+          from: { transform: "translateY(7px)", opacity: "0" },
+          to: { transform: "translateY(0)", opacity: "1" },
         },
       },
       animation: {
@@ -90,9 +113,10 @@ const config: Config = {
         "fade-in-fast": "fade-in-fast 0.25s ease-out",
         "scale-in": "scale-in 0.2s cubic-bezier(0.16,1,0.3,1)",
         "pulse-ring": "pulse-ring 2s infinite",
-        shimmer: "shimmer 2s infinite",
+        glowpulse: "glowpulse 1.8s infinite",
+        shimmer: "shimmer 1.8s infinite linear",
         "bounce-dot": "bounce-dot 1.4s infinite ease-in-out both",
-        float: "float 6s ease-in-out infinite",
+        fadeup: "fadeup 0.34s cubic-bezier(0.2, 0.7, 0.3, 1)",
       },
     },
   },

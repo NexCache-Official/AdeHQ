@@ -207,9 +207,9 @@ export function ChatComposer({
             initial={{ opacity: 0, y: 6 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 6 }}
-            className="absolute bottom-full left-0 mb-2 w-80 overflow-hidden rounded-xl border border-slate-200 bg-white p-1.5 shadow-panel"
+            className="absolute bottom-full left-0 mb-2 w-80 overflow-hidden rounded-xl border border-border bg-surface p-1.5 shadow-panel"
           >
-            <div className="px-2 py-1 text-[10px] font-medium uppercase tracking-wide text-slate-500">
+            <div className="px-2 py-1 text-[10px] font-medium uppercase tracking-wide text-ink-3">
               Slash commands
             </div>
             {filteredSlash.map((c) => (
@@ -217,10 +217,10 @@ export function ChatComposer({
                 type="button"
                 key={c.cmd}
                 onClick={() => insertSlash(c.example)}
-                className="flex w-full flex-col rounded-lg px-2 py-1.5 text-left transition-colors hover:bg-slate-100"
+                className="flex w-full flex-col rounded-lg px-2 py-1.5 text-left transition-colors hover:bg-muted"
               >
-                <span className="text-sm font-medium text-slate-800">{c.cmd}</span>
-                <span className="text-[11px] text-slate-500">{c.label}</span>
+                <span className="text-sm font-medium text-ink">{c.cmd}</span>
+                <span className="text-[11px] text-ink-3">{c.label}</span>
               </button>
             ))}
           </motion.div>
@@ -231,9 +231,9 @@ export function ChatComposer({
             initial={{ opacity: 0, y: 6 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 6 }}
-            className="absolute bottom-full left-0 mb-2 w-72 overflow-hidden rounded-xl border border-slate-200 bg-white p-1.5 shadow-panel"
+            className="absolute bottom-full left-0 mb-2 w-72 overflow-hidden rounded-xl border border-border bg-surface p-1.5 shadow-panel"
           >
-            <div className="px-2 py-1 text-[10px] font-medium uppercase tracking-wide text-slate-500">
+            <div className="px-2 py-1 text-[10px] font-medium uppercase tracking-wide text-ink-3">
               Mention an employee
             </div>
             {filteredMentions.map((e) => (
@@ -241,12 +241,12 @@ export function ChatComposer({
                 type="button"
                 key={e.id}
                 onClick={() => insertMention(e)}
-                className="flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left transition-colors hover:bg-slate-100"
+                className="flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left transition-colors hover:bg-muted"
               >
                 <EmployeeAvatar employee={e} size="xs" showStatus={false} />
                 <div className="min-w-0">
-                  <div className="truncate text-sm text-slate-800">{e.name}</div>
-                  <div className="truncate text-[11px] text-slate-500">{e.role}</div>
+                  <div className="truncate text-sm text-ink">{e.name}</div>
+                  <div className="truncate text-[11px] text-ink-3">{e.role}</div>
                 </div>
               </button>
             ))}
@@ -258,13 +258,13 @@ export function ChatComposer({
             initial={{ opacity: 0, y: 6 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 6 }}
-            className="absolute bottom-full left-0 mb-2 w-80 overflow-hidden rounded-xl border border-slate-200 bg-white p-1.5 shadow-panel"
+            className="absolute bottom-full left-0 mb-2 w-80 overflow-hidden rounded-xl border border-border bg-surface p-1.5 shadow-panel"
           >
-            <div className="px-2 py-1 text-[10px] font-medium uppercase tracking-wide text-slate-500">
+            <div className="px-2 py-1 text-[10px] font-medium uppercase tracking-wide text-ink-3">
               Quick commands
             </div>
             {commandNotice && (
-              <p className="px-2 py-1 text-[11px] text-accent-700">{commandNotice}</p>
+              <p className="px-2 py-1 text-[11px] text-accent-d">{commandNotice}</p>
             )}
             {employees.slice(0, 3).map((e) => (
               <button
@@ -279,9 +279,9 @@ export function ChatComposer({
                   setShowCommands(false);
                   inputRef.current?.focus();
                 }}
-                className="flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left text-sm text-slate-700 transition-colors hover:bg-slate-100"
+                className="flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left text-sm text-ink-2 transition-colors hover:bg-muted"
               >
-                <Sparkles className="h-3.5 w-3.5 text-accent-600" /> Ask {e.name}
+                <Sparkles className="h-3.5 w-3.5 text-accent" /> Ask {e.name}
               </button>
             ))}
             {QUICK_COMMANDS.map((c) => (
@@ -293,19 +293,19 @@ export function ChatComposer({
                   setShowCommands(false);
                   inputRef.current?.focus();
                 }}
-                className="flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left text-sm text-slate-700 transition-colors hover:bg-slate-100"
+                className="flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left text-sm text-ink-2 transition-colors hover:bg-muted"
               >
-                <Slash className="h-3.5 w-3.5 text-slate-500" /> {c.label}
+                <Slash className="h-3.5 w-3.5 text-ink-3" /> {c.label}
               </button>
             ))}
-            <div className="border-t border-slate-100 px-2 py-1.5">
-              <div className="text-[10px] font-medium text-slate-500">All slash commands</div>
+            <div className="border-t border-border-2 px-2 py-1.5">
+              <div className="text-[10px] font-medium text-ink-3">All slash commands</div>
               {SLASH_COMMANDS.map((c) => (
                 <button
                   type="button"
                   key={c.cmd}
                   onClick={() => insertSlash(c.example)}
-                  className="block w-full py-0.5 text-left text-[11px] text-slate-600 hover:text-accent-700"
+                  className="block w-full py-0.5 text-left text-[11px] text-ink-2 hover:text-accent-d"
                 >
                   {c.cmd} — {c.label}
                 </button>
@@ -319,7 +319,7 @@ export function ChatComposer({
         <div className="fixed inset-0 z-0" onClick={() => setShowCommands(false)} />
       )}
 
-      <div className="relative z-10 rounded-2xl border border-slate-200 bg-slate-50 p-2 transition-colors focus-within:border-accent-500/40">
+      <div className="relative z-10 rounded-2xl border border-border bg-muted p-2 transition-colors focus-within:border-accent-500/40">
         <textarea
           ref={inputRef}
           value={value}
@@ -332,7 +332,7 @@ export function ChatComposer({
           }}
           rows={1}
           placeholder={placeholder ?? "Message the room… use @ to mention an employee"}
-          className="max-h-32 min-h-[40px] w-full resize-none bg-transparent px-2 py-2 text-sm text-slate-800 outline-none placeholder:text-slate-500"
+          className="max-h-32 min-h-[40px] w-full resize-none bg-transparent px-2 py-2 text-sm text-ink outline-none placeholder:text-ink-3"
         />
         <div className="flex items-center gap-1 px-1">
           <ComposerButton icon={Slash} label="Commands" onClick={() => setShowCommands((v) => !v)} active={showCommands} />
@@ -378,8 +378,8 @@ function ComposerButton({
       onClick={onClick}
       title={label}
       className={cn(
-        "flex h-9 w-9 items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700",
-        active && "bg-accent-500/15 text-accent-700",
+        "flex h-9 w-9 items-center justify-center rounded-lg text-ink-3 transition-colors hover:bg-muted hover:text-ink-2",
+        active && "bg-accent-500/15 text-accent-d",
       )}
     >
       <Icon className="h-4 w-4" />

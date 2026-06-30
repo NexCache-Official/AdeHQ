@@ -131,21 +131,21 @@ export function CommandBar({
   };
 
   return (
-    <Modal open={open} onClose={onClose} size="lg" className="!bg-white/95">
-      <div className="flex items-center gap-3 border-b border-slate-200 px-4">
-        <Search className="h-4 w-4 text-slate-500" />
+    <Modal open={open} onClose={onClose} size="lg" className="!bg-surface/95">
+      <div className="flex items-center gap-3 border-b border-border px-4">
+        <Search className="h-4 w-4 text-ink-3" />
         <input
           ref={inputRef}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={onKeyDown}
           placeholder="Search rooms, employees, or run a command…"
-          className="h-14 flex-1 bg-transparent text-[15px] text-slate-800 outline-none placeholder:text-slate-500"
+          className="h-14 flex-1 bg-transparent text-[15px] text-ink outline-none placeholder:text-ink-3"
         />
       </div>
       <div className="max-h-[min(60vh,420px)] overflow-y-auto p-2">
         {filtered.length === 0 ? (
-          <div className="px-3 py-10 text-center text-sm text-slate-500">No results for “{query}”</div>
+          <div className="px-3 py-10 text-center text-sm text-ink-3">No results for “{query}”</div>
         ) : (
           filtered.map((item, i) => (
             <button
@@ -154,18 +154,18 @@ export function CommandBar({
               onClick={item.run}
               className={cn(
                 "flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors",
-                i === active ? "bg-accent-500/15 ring-1 ring-inset ring-accent-500/25" : "hover:bg-slate-50",
+                i === active ? "bg-accent-500/15 ring-1 ring-inset ring-accent-500/25" : "hover:bg-muted",
               )}
             >
               <span
-                className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-600"
-                style={item.accent ? { background: `${item.accent}22`, color: item.accent } : { background: "rgba(241,245,249,1)" }}
+                className="flex h-8 w-8 items-center justify-center rounded-lg text-ink-2"
+                style={item.accent ? { background: `${item.accent}22`, color: item.accent } : { background: "var(--muted)" }}
               >
                 <item.icon className="h-4 w-4" />
               </span>
-              <span className="flex-1 text-sm font-medium text-slate-800">{item.label}</span>
-              {item.hint && <span className="text-xs text-slate-500">{item.hint}</span>}
-              {i === active && <CornerDownLeft className="h-3.5 w-3.5 text-slate-500" />}
+              <span className="flex-1 text-sm font-medium text-ink">{item.label}</span>
+              {item.hint && <span className="text-xs text-ink-3">{item.hint}</span>}
+              {i === active && <CornerDownLeft className="h-3.5 w-3.5 text-ink-3" />}
             </button>
           ))
         )}

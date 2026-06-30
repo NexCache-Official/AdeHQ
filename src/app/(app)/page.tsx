@@ -14,15 +14,23 @@ import { Card } from "@/components/ui";
 import {
   ArrowRight,
   Bot,
+  Brain,
   CheckSquare,
   ClipboardCheck,
+  Hash,
   Phone,
   Plus,
   ScrollText,
-  Sparkles,
   UserPlus,
   Wrench,
 } from "lucide-react";
+
+function greeting(): string {
+  const h = new Date().getHours();
+  if (h < 12) return "Good morning";
+  if (h < 17) return "Good afternoon";
+  return "Good evening";
+}
 
 export default function HomePage() {
   const { state, actions } = useStore();
@@ -42,79 +50,90 @@ export default function HomePage() {
     .slice(0, 6);
   const workingCount = employees.filter((e) => e.status === "working").length;
   const channels = getGroupChannels(state.rooms);
-
-  const quickActions = [
-    { label: "Hire AI Employee", icon: UserPlus, onClick: ui.openHire },
-    { label: "Create Channel", icon: Plus, onClick: ui.openCreateRoom },
-    { label: "Start Workforce Call", icon: Phone, onClick: () => router.push("/calls") },
-    { label: "Connect Tool", icon: Wrench, onClick: () => router.push("/tools") },
-    { label: "View Work Log", icon: ScrollText, onClick: () => router.push("/work-log") },
-  ];
+  const firstName = state.user?.name?.split(" ")[0] ?? "there";
 
   const stats = [
-    { label: "AI employees", value: employees.length, icon: Bot, href: "/workforce" },
-    { label: "Active channels", value: channels.length, icon: Sparkles, href: "/rooms" },
-    { label: "Active tasks", value: activeTasks.length, icon: CheckSquare, href: "/tasks" },
-    { label: "Pending approvals", value: pendingApprovals.length, icon: ClipboardCheck, href: "/approvals", alert: pendingApprovals.length > 0 },
+    { label: "AI employees", value: employees.length, sub: `${workingCount} working now`, href: "/workforce" },
+    { label: "Channels", value: channels.length, sub: "Active project rooms", href: "/rooms" },
+    { label: "Open tasks", value: activeTasks.length, sub: "Across all rooms", href: "/tasks" },
+    { label: "Approvals", value: pendingApprovals.length, sub: pendingApprovals.length ? "Needs review" : "All clear", href: "/approvals", alert: pendingApprovals.length > 0 },
+    { label: "Memory", value: state.memory.length, sub: "Facts & decisions", href: "/memory" },
+    { label: "Work log", value: state.workLog.length, sub: "AI actions tracked", href: "/work-log" },
   ];
 
+  const heroSub =
+    pendingApprovals.length > 0
+      ? `${pendingApprovals.length} approval${pendingApprovals.length === 1 ? "" : "s"} waiting — your team is active across ${channels.length} channel${channels.length === 1 ? "" : "s"}.`
+      : `Your AI employees are working across ${channels.length} channel${channels.length === 1 ? "" : "s"}. Give them a task, review their work, or jump on a call.`;
+
   return (
-    <PageContainer wide>
-      {/* Hero */}
-      <div className="relative mb-6 overflow-hidden rounded-3xl border border-slate-200 bg-white p-6 sm:p-8">
-        <div className="absolute -right-10 -top-10 h-48 w-48 rounded-full bg-accent-100 blur-3xl" />
-        <div className="absolute right-20 top-20 h-32 w-32 rounded-full bg-accent-50 blur-2xl" />
+    <PageContainer wide className="pb-16">
+      {/* Command center hero */}
+      <div className="relative mb-[18px] overflow-hidden rounded-[22px] hero-dark p-8 text-white shadow-[0_20px_50px_-24px_rgba(40,30,15,0.5)] sm:p-8">
+        <div className="pointer-events-none absolute -right-16 -top-16 h-[280px] w-[280px] rounded-full bg-[radial-gradient(circle,rgba(232,93,44,0.42),transparent_70%)] blur-[20px]" />
+        <div className="pointer-events-none absolute bottom-[-90px] right-[120px] h-[220px] w-[220px] rounded-full bg-[radial-gradient(circle,rgba(242,151,78,0.22),transparent_70%)] blur-[10px]" />
         <div className="relative">
-          <div className="flex items-center gap-2 text-sm text-slate-500">
-            <span className="flex items-center gap-1.5">
-              <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse-ring" />
-              {workingCount} working now
-            </span>
-            <span>·</span>
-            <span>{state.workspace.name}</span>
+          <div className="flex items-center gap-2 text-[12.5px] font-medium text-white/60">
+            <span className="h-[7px] w-[7px] rounded-full bg-green animate-glowpulse" />
+            Workforce online · {state.workspace.name}
           </div>
-          <h1 className="mt-2 text-3xl font-semibold tracking-tight text-slate-900 sm:text-4xl">
-            My AI Workforce
+          <h1 className="mt-3 text-[30px] font-bold leading-tight tracking-tight sm:text-[32px]">
+            {greeting()}, {firstName}.
+            <br />
+            Your AI workforce is ready.
           </h1>
-          <p className="mt-2 max-w-xl text-[15px] text-slate-600">
-            Welcome back, {state.user?.name?.split(" ")[0]}. Your AI employees are working across{" "}
-            {channels.length} channels. Give them a task, review their work, or jump on a call.
-          </p>
-          <div className="mt-5 flex flex-wrap gap-2">
-            {quickActions.map((a) => (
-              <button
-                key={a.label}
-                onClick={a.onClick}
-                className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-sm font-medium text-slate-700 transition-all hover:border-accent-300 hover:bg-accent-50"
-              >
-                <a.icon className="h-4 w-4 text-accent-600" />
-                {a.label}
-              </button>
-            ))}
+          <p className="mt-2 max-w-xl text-[14.5px] text-white/62">{heroSub}</p>
+          <div className="mt-5 flex flex-wrap gap-2.5">
+            <button
+              type="button"
+              onClick={ui.openHire}
+              className="inline-flex items-center gap-2 rounded-xl bg-accent px-4 py-2.5 text-[13px] font-semibold text-white shadow-glow transition-all hover:brightness-105"
+            >
+              <UserPlus className="h-4 w-4" /> Hire AI Employee
+            </button>
+            <button
+              type="button"
+              onClick={ui.openCreateRoom}
+              className="inline-flex items-center gap-2 rounded-xl border border-white/16 bg-white/[0.06] px-4 py-2.5 text-[13px] font-medium text-white transition-colors hover:bg-white/10"
+            >
+              <Plus className="h-4 w-4" /> Create channel
+            </button>
+            <button
+              type="button"
+              onClick={() => router.push("/calls")}
+              className="inline-flex items-center gap-2 rounded-xl border border-white/16 bg-white/[0.06] px-4 py-2.5 text-[13px] font-medium text-white transition-colors hover:bg-white/10"
+            >
+              <Phone className="h-4 w-4" /> Start workforce call
+            </button>
+            <button
+              type="button"
+              onClick={() => router.push("/work-log")}
+              className="inline-flex items-center gap-2 rounded-xl border border-white/16 bg-white/[0.06] px-4 py-2.5 text-[13px] font-medium text-white transition-colors hover:bg-white/10"
+            >
+              <ScrollText className="h-4 w-4" /> Review work log
+            </button>
           </div>
         </div>
       </div>
 
-      {/* Stats */}
-      <div className="mb-8 grid grid-cols-2 gap-3 lg:grid-cols-4">
+      {/* Stat strip */}
+      <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-6">
         {stats.map((s) => (
           <Link key={s.label} href={s.href}>
-            <Card hover className="flex items-center gap-3 p-4">
-              <div className={`flex h-11 w-11 items-center justify-center rounded-xl ${s.alert ? "bg-amber-500/15 text-amber-700" : "bg-accent-500/12 text-accent-600"}`}>
-                <s.icon className="h-5 w-5" />
+            <Card hover className="p-4">
+              <div className="flex items-center justify-between">
+                <span className="text-[11.5px] font-semibold tracking-wide text-ink-2">{s.label}</span>
+                {s.alert && <span className="h-2 w-2 rounded-full bg-amber" />}
               </div>
-              <div>
-                <div className="text-2xl font-semibold tracking-tight text-slate-900">{s.value}</div>
-                <div className="text-xs text-slate-500">{s.label}</div>
-              </div>
+              <div className="mt-2 font-mono text-[26px] font-bold tracking-tight text-ink">{s.value}</div>
+              <div className="mt-0.5 text-[11px] text-ink-3">{s.sub}</div>
             </Card>
           </Link>
         ))}
       </div>
 
-      <div className="grid gap-8 lg:grid-cols-3">
-        {/* Left — workforce */}
-        <div className="space-y-8 lg:col-span-2">
+      <div className="grid items-start gap-6 lg:grid-cols-[1.55fr_1fr] lg:gap-[22px]">
+        <div className="flex flex-col gap-6 lg:gap-6">
           <section>
             <SectionHeader title="Workforce status" href="/workforce" linkLabel="View all" />
             <div className="grid gap-3 sm:grid-cols-2">
@@ -134,11 +153,10 @@ export default function HomePage() {
           </section>
         </div>
 
-        {/* Right — activity + approvals */}
-        <div className="space-y-8">
+        <div className="flex flex-col gap-6">
           <section>
-            <SectionHeader title="Today's activity" href="/work-log" linkLabel="Work log" />
-            <Card className="p-3">
+            <SectionHeader title="Today&apos;s activity" href="/work-log" linkLabel="Work log" />
+            <Card className="px-4 py-2">
               <WorkLogTimeline events={recentLog} compact />
             </Card>
           </section>
@@ -147,8 +165,8 @@ export default function HomePage() {
             <SectionHeader title="Pending approvals" href="/approvals" linkLabel="All" />
             <div className="space-y-3">
               {pendingApprovals.length === 0 ? (
-                <Card className="p-5 text-center text-sm text-slate-500">
-                  You&apos;re all caught up — no pending approvals.
+                <Card className="border-dashed p-6 text-center text-sm text-ink-3">
+                  You&apos;re all caught up.
                 </Card>
               ) : (
                 pendingApprovals.slice(0, 3).map((a) => <ApprovalCard key={a.id} approval={a} />)
@@ -171,9 +189,12 @@ function SectionHeader({
   linkLabel: string;
 }) {
   return (
-    <div className="mb-3 flex items-center justify-between">
-      <h2 className="text-lg font-semibold tracking-tight text-slate-900">{title}</h2>
-      <Link href={href} className="flex items-center gap-1 text-xs font-medium text-accent-600 hover:text-accent-700">
+    <div className="mb-3.5 flex items-center justify-between">
+      <h2 className="text-base font-bold tracking-tight text-ink">{title}</h2>
+      <Link
+        href={href}
+        className="flex items-center gap-1 text-xs font-semibold text-accent hover:text-accent-d"
+      >
         {linkLabel} <ArrowRight className="h-3.5 w-3.5" />
       </Link>
     </div>

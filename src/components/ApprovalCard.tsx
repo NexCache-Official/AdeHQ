@@ -26,8 +26,8 @@ export function ApprovalCard({ approval }: { approval: Approval }) {
     <motion.div
       layout
       className={cn(
-        "rounded-2xl border bg-slate-50 p-4",
-        resolved ? "border-slate-200 opacity-70" : risk.border,
+        "rounded-2xl border bg-muted p-4",
+        resolved ? "border-border opacity-70" : risk.border,
       )}
     >
       <div className="flex items-start justify-between gap-3">
@@ -39,7 +39,7 @@ export function ApprovalCard({ approval }: { approval: Approval }) {
             <span className={cn("rounded-md px-1.5 py-0.5 text-[10px] font-medium", risk.bg, risk.color)}>
               {risk.label}
             </span>
-            <span className="ml-1.5 text-[10px] text-slate-500">{ACTION_LABEL[approval.actionType]}</span>
+            <span className="ml-1.5 text-[10px] text-ink-3">{ACTION_LABEL[approval.actionType]}</span>
           </div>
         </div>
         {resolved && (
@@ -54,18 +54,18 @@ export function ApprovalCard({ approval }: { approval: Approval }) {
         )}
       </div>
 
-      <h4 className="mt-2.5 text-sm font-semibold text-slate-900">{approval.title}</h4>
-      <p className="mt-1 text-xs leading-relaxed text-slate-600">{approval.description}</p>
+      <h4 className="mt-2.5 text-sm font-semibold text-ink">{approval.title}</h4>
+      <p className="mt-1 text-xs leading-relaxed text-ink-2">{approval.description}</p>
 
       <div className="mt-3 flex items-center justify-between">
-        <div className="flex items-center gap-1.5 text-[11px] text-slate-500">
+        <div className="flex items-center gap-1.5 text-[11px] text-ink-3">
           <ActorChip id={approval.requestedBy} />
         </div>
-        <span className="text-[11px] text-slate-500">{room?.name} · {timeAgo(approval.createdAt)}</span>
+        <span className="text-[11px] text-ink-3">{room?.name} · {timeAgo(approval.createdAt)}</span>
       </div>
 
       {!resolved && (
-        <div className="mt-3.5 flex gap-2 border-t border-slate-200 pt-3.5">
+        <div className="mt-3.5 flex gap-2 border-t border-border pt-3.5">
           <Button size="sm" className="flex-1" onClick={() => actions.resolveApproval(approval.id, true)}>
             <Check className="h-4 w-4" /> Approve
           </Button>

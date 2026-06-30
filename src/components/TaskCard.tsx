@@ -42,11 +42,11 @@ export function TaskCard({
     <div
       onClick={onClick}
       className={cn(
-        "group cursor-pointer rounded-xl border border-slate-200 bg-slate-50 p-3.5 transition-all hover:border-slate-300 hover:bg-slate-50",
+        "group cursor-pointer rounded-xl border border-border bg-muted p-3.5 transition-all hover:border-[var(--border)] hover:bg-muted",
       )}
     >
       <div className="flex items-start justify-between gap-2">
-        <p className="text-sm font-medium leading-snug text-slate-800">{task.title}</p>
+        <p className="text-sm font-medium leading-snug text-ink">{task.title}</p>
         <button
           onClick={cycleStatus}
           className={cn("shrink-0 rounded-md px-2 py-0.5 text-[10px] font-medium transition-transform active:scale-95", meta.bg, meta.color)}
@@ -56,7 +56,7 @@ export function TaskCard({
         </button>
       </div>
       {!compact && task.description && (
-        <p className="mt-1.5 line-clamp-2 text-xs text-slate-500">{task.description}</p>
+        <p className="mt-1.5 line-clamp-2 text-xs text-ink-3">{task.description}</p>
       )}
       <div className="mt-3 flex items-center gap-2">
         {assignee ? (
@@ -64,7 +64,7 @@ export function TaskCard({
         ) : (
           <HumanAvatar name={state.user?.name ?? "You"} size="xs" />
         )}
-        <span className="truncate text-[11px] text-slate-400">
+        <span className="truncate text-[11px] text-ink-3">
           {assignee?.name ?? state.user?.name ?? "You"}
         </span>
         <span className={cn("ml-auto flex items-center gap-1 text-[11px]", prio.color)}>
@@ -72,15 +72,15 @@ export function TaskCard({
         </span>
       </div>
       {!compact && room && (
-        <div className="mt-2.5 flex items-center justify-between border-t border-slate-200 pt-2.5">
+        <div className="mt-2.5 flex items-center justify-between border-t border-border pt-2.5">
           <Link
             href={`/rooms/${room.id}`}
             onClick={(e) => e.stopPropagation()}
-            className="flex items-center gap-1 text-[11px] text-slate-500 hover:text-slate-700"
+            className="flex items-center gap-1 text-[11px] text-ink-3 hover:text-ink-2"
           >
             {room.name} <ArrowUpRight className="h-3 w-3" />
           </Link>
-          <span className="text-[11px] text-slate-500">{timeAgo(task.updatedAt)}</span>
+          <span className="text-[11px] text-ink-3">{timeAgo(task.updatedAt)}</span>
         </div>
       )}
     </div>

@@ -84,12 +84,12 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
 
   return (
     <ShellUIContext.Provider value={ui}>
-      <div className="flex h-screen overflow-hidden bg-canvas text-ink">
+      <div className="flex h-screen overflow-hidden">
         <Sidebar />
         <div className="flex min-w-0 flex-1 flex-col">
           <Topbar />
-          <main key={pathname} className="min-h-0 flex-1 overflow-hidden">
-            <div className="fade-up h-full overflow-y-auto">{children}</div>
+          <main key={pathname} className="min-h-0 flex-1 overflow-y-auto">
+            <div className="animate-fade-in">{children}</div>
           </main>
           <DebugTerminal />
         </div>

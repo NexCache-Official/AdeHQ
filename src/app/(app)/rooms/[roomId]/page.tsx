@@ -315,11 +315,11 @@ export default function RoomDetailPage() {
   }
 
   return (
-    <div className="flex h-[calc(100vh-4rem)] flex-col">
-      <div className="flex shrink-0 items-center gap-3 border-b border-slate-200 bg-slate-50 px-4 py-3 sm:px-6">
+    <div className="flex h-full min-h-0 flex-col">
+      <div className="flex shrink-0 items-center gap-3 border-b border-border bg-surface px-4 py-3 sm:px-6">
         <button
           onClick={() => router.push("/rooms")}
-          className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-900 lg:hidden"
+          className="rounded-lg p-1.5 text-ink-3 hover:bg-muted hover:text-ink lg:hidden"
         >
           <ArrowLeft className="h-4 w-4" />
         </button>
@@ -334,8 +334,8 @@ export default function RoomDetailPage() {
           </span>
         )}
         <div className="min-w-0 flex-1">
-          <h1 className="truncate text-base font-semibold text-slate-900">{room.name}</h1>
-          <p className="truncate text-xs text-slate-500">
+          <h1 className="truncate text-base font-semibold text-ink">{room.name}</h1>
+          <p className="truncate text-xs text-ink-3">
             {isDm
               ? `Direct message with ${roomEmployees[0]?.name ?? "AI employee"}`
               : `${roomTopics.length} topic${roomTopics.length === 1 ? "" : "s"} · you + ${roomEmployees.length} AI employee${roomEmployees.length === 1 ? "" : "s"}`}
@@ -348,7 +348,7 @@ export default function RoomDetailPage() {
                 </span>
               ))}
               {roomEmployees.length > 4 && (
-                <span className="text-[11px] text-slate-500">+{roomEmployees.length - 4} more</span>
+                <span className="text-[11px] text-ink-3">+{roomEmployees.length - 4} more</span>
               )}
             </div>
           )}
@@ -377,7 +377,7 @@ export default function RoomDetailPage() {
           />
         </div>
 
-        <div className="min-w-0 flex-1 border-r border-slate-200">
+        <div className="min-w-0 flex-1 border-r border-border">
           {slashNotice && (
             <div className="border-b border-accent-200 bg-accent-50 px-4 py-1.5 text-center text-xs text-accent-800">
               {slashNotice}
@@ -415,7 +415,7 @@ export default function RoomDetailPage() {
               summarizing={summarizing}
             />
           ) : (
-            <div className="flex h-full items-center justify-center p-6 text-center text-xs text-slate-500">
+            <div className="flex h-full items-center justify-center p-6 text-center text-xs text-ink-3">
               Select a topic to see context
             </div>
           )}

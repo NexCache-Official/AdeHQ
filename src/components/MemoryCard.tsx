@@ -16,10 +16,10 @@ const TYPE_META: Record<MemoryType, { label: string; icon: typeof Pin; color: st
 };
 
 const STATUS_META: Record<MemoryStatus, { label: string; color: string }> = {
-  draft: { label: "Draft", color: "bg-slate-500/15 text-slate-600" },
+  draft: { label: "Draft", color: "bg-muted text-ink-2" },
   approved: { label: "Approved", color: "bg-emerald-500/15 text-emerald-700" },
-  pinned: { label: "Pinned", color: "bg-accent-500/15 text-accent-700" },
-  superseded: { label: "Superseded", color: "bg-slate-100 text-slate-500 line-through" },
+  pinned: { label: "Pinned", color: "bg-accent-500/15 text-accent-d" },
+  superseded: { label: "Superseded", color: "bg-muted text-ink-3 line-through" },
 };
 
 export function MemoryCard({ memory }: { memory: MemoryEntry }) {
@@ -35,15 +35,15 @@ export function MemoryCard({ memory }: { memory: MemoryEntry }) {
     });
 
   return (
-    <div className="group rounded-2xl border border-slate-200 bg-slate-50 p-4 transition-all hover:border-slate-200">
+    <div className="group rounded-2xl border border-border bg-muted p-4 transition-all hover:border-border">
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-center gap-2">
-          <span className={cn("flex h-8 w-8 items-center justify-center rounded-lg bg-slate-50", type.color)}>
+          <span className={cn("flex h-8 w-8 items-center justify-center rounded-lg bg-muted", type.color)}>
             <Icon className="h-4 w-4" />
           </span>
           <div>
             <div className="flex items-center gap-2">
-              <span className="text-[11px] font-medium text-slate-400">{type.label}</span>
+              <span className="text-[11px] font-medium text-ink-3">{type.label}</span>
               <span className={cn("rounded-md px-1.5 py-0.5 text-[10px] font-medium", status.color)}>
                 {status.label}
               </span>
@@ -54,7 +54,7 @@ export function MemoryCard({ memory }: { memory: MemoryEntry }) {
           {memory.status === "draft" && (
             <button
               onClick={() => actions.updateMemory(memory.id, { status: "approved" })}
-              className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-emerald-700"
+              className="rounded-lg p-1.5 text-ink-3 hover:bg-muted hover:text-emerald-700"
               title="Approve"
             >
               <Check className="h-3.5 w-3.5" />
@@ -62,7 +62,7 @@ export function MemoryCard({ memory }: { memory: MemoryEntry }) {
           )}
           <button
             onClick={togglePin}
-            className={cn("rounded-lg p-1.5 hover:bg-slate-100", memory.status === "pinned" ? "text-accent-600" : "text-slate-400 hover:text-accent-600")}
+            className={cn("rounded-lg p-1.5 hover:bg-muted", memory.status === "pinned" ? "text-accent" : "text-ink-3 hover:text-accent")}
             title={memory.status === "pinned" ? "Unpin" : "Pin"}
           >
             {memory.status === "pinned" ? <PinOff className="h-3.5 w-3.5" /> : <Pin className="h-3.5 w-3.5" />}
@@ -70,12 +70,12 @@ export function MemoryCard({ memory }: { memory: MemoryEntry }) {
         </div>
       </div>
 
-      <h4 className="mt-2.5 text-sm font-semibold leading-snug text-slate-900">{memory.title}</h4>
-      <p className="mt-1.5 text-xs leading-relaxed text-slate-600">{memory.content}</p>
+      <h4 className="mt-2.5 text-sm font-semibold leading-snug text-ink">{memory.title}</h4>
+      <p className="mt-1.5 text-xs leading-relaxed text-ink-2">{memory.content}</p>
 
-      <div className="mt-3 flex items-center justify-between border-t border-slate-200 pt-2.5">
+      <div className="mt-3 flex items-center justify-between border-t border-border pt-2.5">
         <ActorChip id={memory.createdById} />
-        <span className="text-[11px] text-slate-500">
+        <span className="text-[11px] text-ink-3">
           {room?.name} · {timeAgo(memory.createdAt)}
         </span>
       </div>
