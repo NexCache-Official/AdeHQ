@@ -164,9 +164,16 @@ export function TopicPanel({
     people: humanParticipants.length + topicEmployees.length,
   };
 
+  const insTitle = isDm
+    ? topicEmployees[0]?.name ?? displayTitle
+    : `${room.name} · ${displayTitle}`;
+  const insSub = isDm
+    ? topicEmployees[0]?.role ?? "Direct message"
+    : "Topic workstream";
+
   return (
     <div className="flex h-full min-h-0 bg-surface">
-      <nav className="flex w-[50px] shrink-0 flex-col items-center gap-1 border-r border-border py-3.5 px-1.5">
+      <nav className="flex w-[50px] shrink-0 flex-col items-center gap-1 border-r border-border-2 py-3">
         {TABS.map((tb) => (
           <button
             key={tb.id}
@@ -189,110 +196,89 @@ export function TopicPanel({
       </nav>
 
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-        <div className="shrink-0 border-b border-border px-3 py-2">
-          <div className="flex items-center justify-between gap-2">
-            <h2 className="min-w-0 truncate text-sm font-semibold text-ink">{displayTitle}</h2>
-            {!isMainChat && (
-              <div className="flex shrink-0 flex-wrap justify-end gap-1">
-                <span
-                  className={cn(
-                    "rounded-md px-1.5 py-0.5 text-[10px] font-medium",
-                    isArchived ? "bg-amber-100 text-amber-800" : "bg-muted text-ink-2",
-                  )}
-                >
-                  {topic.status}
-                </span>
-                {!isArchived && (
-                  <span className="rounded-md bg-muted px-1.5 py-0.5 text-[10px] font-medium text-ink-2">
-                    {topic.priority}
-                  </span>
-                )}
-              </div>
-            )}
-          </div>
-          {topic.description && !isMainChat && (
-            <p className="mt-0.5 line-clamp-1 text-xs text-ink-3">{topic.description}</p>
-          )}
-          <div className="mt-1.5 flex flex-wrap gap-1">
-            <Button variant="secondary" size="sm" onClick={onSummarize} disabled={summarizing}>
-              {summarizing ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <Sparkles className="h-3.5 w-3.5" />
-              )}
-              Summarize
-            </Button>
-            {!isMainChat &&
-              (isArchived ? (
-                onUnarchive && (
-                  <Button variant="ghost" size="sm" onClick={onUnarchive}>
-                    <ArchiveRestore className="h-3.5 w-3.5" /> Restore topic
-                  </Button>
-                )
-              ) : (
-                <Button variant="ghost" size="sm" onClick={onArchive}>
-                  Archive
-                </Button>
-              ))}
-          </div>
-          {onParticipationChange && (
-            <details className="group mt-2">
-              <summary className="flex cursor-pointer list-none items-center gap-1.5 rounded-lg border border-border bg-muted px-2.5 py-1.5 text-xs text-ink-2 hover:bg-surface [&::-webkit-details-marker]:hidden">
-                <ChevronDown className="h-3.5 w-3.5 shrink-0 text-ink-3 transition-transform group-open:rotate-180" />
-                <span className="font-medium">AI participation</span>
-                <span className="truncate text-ink-3">
-                  — {aiControl.aiStopped ? "Stopped" : participationModeLabel(participation)}
-                </span>
-              </summary>
-              <div className="mt-1.5 space-y-1.5 rounded-lg border border-border bg-surface p-2">
-                {aiControl.aiStopped && (
-                  <p className="rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] text-amber-800">
-                    All AI activity is stopped in this topic.
-                  </p>
-                )}
-                <div className="flex flex-col gap-1">
-                  {PARTICIPATION_MODES.map((mode) => (
-                    <button
-                      key={mode.id}
-                      type="button"
-                      onClick={() =>
-                        onParticipationChange(resolveParticipationModeForTopic(topic, mode.id))
-                      }
-                      disabled={aiControl.aiStopped}
-                      className={cn(
-                        "rounded-lg border px-2 py-1.5 text-left text-xs transition-colors",
-                        modeIsSelected(participation, mode.id)
-                          ? "border-accent-500/40 bg-accent-500/10 text-accent-800"
-                          : "border-border bg-surface text-ink-2 hover:border-[var(--border)]",
-                        aiControl.aiStopped && "opacity-50",
-                      )}
-                    >
-                      <div className="font-medium">{mode.label}</div>
-                      <div className="text-[10px] text-ink-3">{mode.hint}</div>
-                    </button>
-                  ))}
-                </div>
-                {onAiControl && (
-                  <div className="flex flex-wrap gap-1.5 pt-0.5">
-                    {aiControl.aiStopped ? (
-                      <Button variant="secondary" size="sm" onClick={() => onAiControl("resume")}>
-                        Resume AI
-                      </Button>
-                    ) : (
-                      <Button variant="ghost" size="sm" onClick={() => onAiControl("stop_all")}>
-                        Stop all AI
-                      </Button>
-                    )}
-                  </div>
-                )}
-              </div>
-            </details>
-          )}
+        <div className="shrink-0 border-b border-border-2 px-4 pb-3 pt-[15px]">
+          <h2 className="truncate text-[14.5px] font-bold tracking-tight text-ink">{insTitle}</h2>
+          <p className="text-[11.5px] text-ink-2">{insSub}</p>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto p-4">
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-6 pt-3.5">
           {tab === "overview" && (
             <div className="space-y-4">
+              <div className="flex flex-wrap gap-1.5">
+                <Button variant="secondary" size="sm" onClick={onSummarize} disabled={summarizing}>
+                  {summarizing ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Sparkles className="h-3.5 w-3.5" />
+                  )}
+                  Summarize
+                </Button>
+                {!isMainChat &&
+                  (isArchived ? (
+                    onUnarchive && (
+                      <Button variant="ghost" size="sm" onClick={onUnarchive}>
+                        <ArchiveRestore className="h-3.5 w-3.5" /> Restore topic
+                      </Button>
+                    )
+                  ) : (
+                    <Button variant="ghost" size="sm" onClick={onArchive}>
+                      Archive
+                    </Button>
+                  ))}
+              </div>
+              {onParticipationChange && (
+                <details className="group">
+                  <summary className="flex cursor-pointer list-none items-center gap-1.5 rounded-lg border border-border bg-muted px-2.5 py-1.5 text-xs text-ink-2 hover:bg-surface [&::-webkit-details-marker]:hidden">
+                    <ChevronDown className="h-3.5 w-3.5 shrink-0 text-ink-3 transition-transform group-open:rotate-180" />
+                    <span className="font-medium">AI participation</span>
+                    <span className="truncate text-ink-3">
+                      — {aiControl.aiStopped ? "Stopped" : participationModeLabel(participation)}
+                    </span>
+                  </summary>
+                  <div className="mt-1.5 space-y-1.5 rounded-lg border border-border bg-surface p-2">
+                    {aiControl.aiStopped && (
+                      <p className="rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] text-amber-800">
+                        All AI activity is stopped in this topic.
+                      </p>
+                    )}
+                    <div className="flex flex-col gap-1">
+                      {PARTICIPATION_MODES.map((mode) => (
+                        <button
+                          key={mode.id}
+                          type="button"
+                          onClick={() =>
+                            onParticipationChange(resolveParticipationModeForTopic(topic, mode.id))
+                          }
+                          disabled={aiControl.aiStopped}
+                          className={cn(
+                            "rounded-lg border px-2 py-1.5 text-left text-xs transition-colors",
+                            modeIsSelected(participation, mode.id)
+                              ? "border-accent-500/40 bg-accent-500/10 text-accent-800"
+                              : "border-border bg-surface text-ink-2 hover:border-[var(--border)]",
+                            aiControl.aiStopped && "opacity-50",
+                          )}
+                        >
+                          <div className="font-medium">{mode.label}</div>
+                          <div className="text-[10px] text-ink-3">{mode.hint}</div>
+                        </button>
+                      ))}
+                    </div>
+                    {onAiControl && (
+                      <div className="flex flex-wrap gap-1.5 pt-0.5">
+                        {aiControl.aiStopped ? (
+                          <Button variant="secondary" size="sm" onClick={() => onAiControl("resume")}>
+                            Resume AI
+                          </Button>
+                        ) : (
+                          <Button variant="ghost" size="sm" onClick={() => onAiControl("stop_all")}>
+                            Stop all AI
+                          </Button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </details>
+              )}
               {topic.summary && (
                 <section>
                   <div className="section-title mb-1.5">Summary</div>

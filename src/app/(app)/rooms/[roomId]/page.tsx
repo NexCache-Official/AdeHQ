@@ -392,6 +392,8 @@ export default function RoomDetailPage() {
             draftText={composerDraft}
             onDraftConsumed={() => setComposerDraft("")}
             onSlashCommand={handleSlashCommand}
+            onSummarize={summarizeTopic}
+            summarizing={summarizing}
           />
         </div>
 

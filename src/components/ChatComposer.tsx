@@ -3,11 +3,9 @@
 import { useEffect, useRef, useState } from "react";
 import { AIEmployee, MentionRef } from "@/lib/types";
 import { EmployeeAvatar } from "./EmployeeAvatar";
-import { cn } from "@/lib/utils";
 import {
   AtSign,
-  Mic,
-  Paperclip,
+  Plus,
   SendHorizontal,
   Slash,
   Sparkles,
@@ -319,84 +317,62 @@ export function ChatComposer({
         <div className="fixed inset-0 z-0" onClick={() => setShowCommands(false)} />
       )}
 
-      <div className="relative z-10 flex items-end gap-1 rounded-[17px] border border-border bg-muted px-3 py-1 transition-colors focus-within:border-accent/40">
-        <textarea
-          ref={inputRef}
-          value={value}
-          onChange={handleChange}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey) {
-              e.preventDefault();
-              void send();
-            }
-          }}
-          rows={1}
-          placeholder={placeholder ?? "Message the room… use @ to mention an employee"}
-          className="max-h-32 min-h-[40px] w-full flex-1 resize-none bg-transparent py-2 text-sm text-ink outline-none placeholder:text-ink-3"
-        />
-        <button
-          type="button"
-          onClick={() => void send()}
-          disabled={!value.trim() || disabled}
-          className="mb-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-[11px] bg-accent text-white transition-all hover:brightness-105 disabled:opacity-40 active:scale-95"
-          aria-label="Send message"
-        >
-          <SendHorizontal className="h-4 w-4" strokeWidth={2} />
-        </button>
-      </div>
-      <div className="flex flex-wrap gap-3.5 px-1 pt-1.5 text-[11px] text-ink-3">
-        <button
-          type="button"
-          onClick={() => {
-            setValue((v) => v + "@");
-            setMentionQuery("");
-            inputRef.current?.focus();
-          }}
-          className="hover:text-ink-2"
-        >
-          @ mention
-        </button>
-        <button type="button" onClick={() => setShowCommands((v) => !v)} className="hover:text-ink-2">
-          / commands
-        </button>
-        <ComposerButton icon={Paperclip} label="Attach" onClick={() => {}} compact />
-        <ComposerButton icon={Mic} label="Voice" onClick={() => {}} compact />
+      <div className="relative z-10 rounded-[17px] border border-border bg-surface p-1.5 shadow-[0_8px_26px_-18px_rgba(40,30,15,0.3)] transition-[border-color,box-shadow] focus-within:border-accent/30">
+        <div className="flex items-end gap-1.5">
+          <button
+            type="button"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[11px] text-ink-3 transition-colors hover:bg-muted hover:text-ink-2"
+            aria-label="Attach"
+          >
+            <Plus className="h-[18px] w-[18px]" strokeWidth={1.8} />
+          </button>
+          <textarea
+            ref={inputRef}
+            value={value}
+            onChange={handleChange}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                void send();
+              }
+            }}
+            rows={1}
+            placeholder={placeholder ?? "Message the room… use @ to mention an employee"}
+            className="max-h-32 min-h-[40px] w-full flex-1 resize-none bg-transparent px-1 py-2 text-sm text-ink outline-none placeholder:text-ink-3"
+          />
+          <div className="flex shrink-0 items-center gap-0.5 pb-0.5">
+            <button
+              type="button"
+              onClick={() => {
+                setValue((v) => v + "@");
+                setMentionQuery("");
+                inputRef.current?.focus();
+              }}
+              className="flex h-[34px] w-[34px] items-center justify-center rounded-[10px] text-ink-3 transition-colors hover:bg-muted hover:text-ink-2"
+              title="Mention employee"
+            >
+              <AtSign className="h-[17px] w-[17px]" strokeWidth={1.8} />
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowCommands((v) => !v)}
+              className="flex h-[34px] w-[34px] items-center justify-center rounded-[10px] font-mono text-base font-semibold text-ink-3 transition-colors hover:bg-muted hover:text-ink-2"
+              title="Slash command"
+            >
+              /
+            </button>
+            <button
+              type="button"
+              onClick={() => void send()}
+              disabled={!value.trim() || disabled}
+              className="flex h-9 w-9 items-center justify-center rounded-[11px] bg-accent text-white shadow-[0_4px_12px_-5px_rgba(232,93,44,0.5)] transition-all hover:brightness-105 disabled:opacity-40 active:scale-95"
+              aria-label="Send message"
+            >
+              <SendHorizontal className="h-[17px] w-[17px]" strokeWidth={2} />
+            </button>
+          </div>
+        </div>
       </div>
     </div>
-  );
-}
-
-function ComposerButton({
-  icon: Icon,
-  label,
-  onClick,
-  active,
-  compact,
-}: {
-  icon: typeof AtSign;
-  label: string;
-  onClick: () => void;
-  active?: boolean;
-  compact?: boolean;
-}) {
-  if (compact) {
-    return (
-      <button type="button" onClick={onClick} title={label} className="hover:text-ink-2">
-        {label.toLowerCase()}
-      </button>
-    );
-  }
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      title={label}
-      className={cn(
-        "flex h-9 w-9 items-center justify-center rounded-lg text-ink-3 transition-colors hover:bg-muted hover:text-ink-2",
-        active && "bg-accent-soft text-accent-d",
-      )}
-    >
-      <Icon className="h-4 w-4" />
-    </button>
   );
 }

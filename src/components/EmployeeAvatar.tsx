@@ -79,23 +79,15 @@ export function HumanAvatar({
 }
 
 /** Muted square icon container for channels (prototype style). */
-export function ChannelIcon({
-  className,
-  accent,
-}: {
-  className?: string;
-  accent?: string;
-}) {
+export function ChannelIcon({ className }: { className?: string }) {
   return (
     <div
       className={cn(
-        "flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-[10px] text-ink-2",
-        !accent && "bg-muted",
+        "flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-[11px] bg-muted text-ink-2",
         className,
       )}
-      style={accent ? { background: accent } : undefined}
     >
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9">
         <path d="M9 4 7 20M17 4l-2 16M4 9h16M3 15h16" />
       </svg>
     </div>

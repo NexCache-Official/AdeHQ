@@ -93,13 +93,13 @@ body {
     @apply inline-flex items-center gap-1.5 rounded-full border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1 text-xs font-medium text-[var(--ink-2)];
   }
   .nav-link {
-    @apply flex items-center gap-3 rounded-[11px] px-2.5 py-2 text-[13.5px] font-medium text-white/60 transition-all duration-150 hover:bg-white/[0.07] hover:text-white;
+    @apply flex w-full items-center gap-[11px] rounded-[11px] border-0 px-[11px] py-2 text-left text-[13.5px] font-medium text-white/60 transition-all duration-150 hover:bg-white/[0.07] hover:text-white;
   }
   .nav-link-active {
     @apply bg-white/10 text-white;
   }
   .section-title {
-    @apply text-[10.5px] font-semibold uppercase tracking-wider text-[var(--ink-3)];
+    @apply text-[10.5px] font-bold uppercase tracking-[0.07em] text-[var(--ink-3)];
   }
   .lift {
     @apply transition-all duration-200;

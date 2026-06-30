@@ -66,7 +66,8 @@ export function CommandBar({
     };
     const nav: Item[] = [
       { id: "n-home", label: "Home", icon: Home, run: go("/") },
-      { id: "n-rooms", label: "Rooms", icon: MessagesSquare, run: go("/rooms") },
+      { id: "n-rooms", label: "Channels", icon: MessagesSquare, run: go("/rooms") },
+      { id: "n-dm", label: "Direct messages", icon: MessagesSquare, run: go("/dm") },
       { id: "n-workforce", label: "AI Workforce", icon: Bot, run: go("/workforce") },
       { id: "n-tasks", label: "Tasks", icon: CheckSquare, run: go("/tasks") },
       { id: "n-memory", label: "Memory", icon: Brain, run: go("/memory") },

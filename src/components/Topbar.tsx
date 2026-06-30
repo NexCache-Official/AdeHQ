@@ -11,10 +11,14 @@ import { Bug, LogOut, Plus, RotateCcw, Search, Settings, UserPlus } from "lucide
 import { AnimatePresence, motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 
-function useBreadcrumb(pathname: string, roomName?: string): string {
+function useBreadcrumb(pathname: string, roomName?: string, isDm?: boolean): string {
   if (pathname === "/") return "Home";
   if (pathname === "/rooms") return "Channels";
-  if (pathname.startsWith("/rooms/")) return roomName ? roomName : "Channel";
+  if (pathname === "/dm") return "Direct messages";
+  if (pathname.startsWith("/rooms/")) {
+    if (isDm) return roomName ? roomName : "Direct message";
+    return roomName ? roomName : "Channel";
+  }
   if (pathname.startsWith("/workforce/")) return "Employee profile";
   if (pathname === "/workforce") return "AI Workforce";
   if (pathname === "/tasks") return "Tasks";
@@ -37,11 +41,11 @@ export function Topbar() {
 
   const roomId = pathname.match(/^\/rooms\/([^/]+)/)?.[1];
   const room = roomId ? state.rooms.find((r) => r.id === roomId) : undefined;
-  const crumb = useBreadcrumb(pathname, room?.name);
+  const crumb = useBreadcrumb(pathname, room?.name, room?.kind === "dm");
   const workingCount = state.employees.filter((e) => e.status === "working").length;
 
   return (
-    <header className="z-20 flex h-[60px] shrink-0 items-center gap-4 border-b border-border bg-canvas px-4 sm:px-5">
+    <header className="z-20 flex h-[60px] shrink-0 items-center gap-4 border-b border-border bg-canvas px-[22px]">
       <div className="flex min-w-0 shrink-0 items-center gap-2.5">
         <span className="truncate text-[15px] font-semibold tracking-tight text-ink">{crumb}</span>
         {workingCount > 0 && (

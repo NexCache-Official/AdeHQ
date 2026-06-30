@@ -17,3 +17,15 @@ export function getGroupChannels(rooms: ProjectRoom[]): ProjectRoom[] {
 export function getDirectMessages(rooms: ProjectRoom[]): ProjectRoom[] {
   return rooms.filter(isDirectMessage);
 }
+
+/** Resolve the AI employee for a DM room. */
+export function getDmEmployeeId(room: ProjectRoom): string | undefined {
+  return room.dmEmployeeId ?? room.aiEmployees[0];
+}
+
+export function findDmRoomForEmployee(
+  rooms: ProjectRoom[],
+  employeeId: string,
+): ProjectRoom | undefined {
+  return rooms.find((r) => isDirectMessage(r) && getDmEmployeeId(r) === employeeId);
+}

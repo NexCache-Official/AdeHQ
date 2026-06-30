@@ -16,6 +16,7 @@ import { HireEmployeeModal } from "./HireEmployeeModal";
 import { CreateRoomModal } from "./CreateRoomModal";
 import { LoadingState } from "./States";
 import { DebugProvider, useDebugTraceListener } from "./DebugProvider";
+import { cn } from "@/lib/utils";
 import { DebugTerminal } from "./DebugTerminal";
 
 type ShellUI = {
@@ -79,6 +80,8 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
     [],
   );
 
+  const isImmersive = pathname.startsWith("/rooms/") && pathname !== "/rooms";
+
   if (!hydrated) return <LoadingState full />;
   if (!state.user || !state.onboardingComplete) return <LoadingState full label="Redirecting…" />;
 
@@ -89,7 +92,14 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
         <div className="flex min-w-0 flex-1 flex-col">
           <Topbar />
           <main key={pathname} className="min-h-0 flex-1 overflow-hidden">
-            <div className="fade-up h-full overflow-y-auto">{children}</div>
+            <div
+              className={cn(
+                "fade-up h-full",
+                isImmersive ? "overflow-hidden" : "overflow-y-auto",
+              )}
+            >
+              {children}
+            </div>
           </main>
           <DebugTerminal />
         </div>

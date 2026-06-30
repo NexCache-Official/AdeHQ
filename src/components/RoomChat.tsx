@@ -23,9 +23,13 @@ import {
   ListChecks,
   Loader2,
   MessagesSquare,
+  PanelRight,
+  Phone,
   RotateCcw,
   UserPlus,
 } from "lucide-react";
+import { EmployeeStatusDot } from "./EmployeeStatusBadge";
+import { STATUS_META } from "@/lib/icons";
 
 type PendingSend = {
   clientMessageId: string;
@@ -69,6 +73,8 @@ export function RoomChat({
   onDraftConsumed,
   onSlashCommand,
   isDm = false,
+  onSummarize,
+  summarizing = false,
 }: {
   room: ProjectRoom;
   topic?: RoomTopic;
@@ -76,6 +82,8 @@ export function RoomChat({
   onDraftConsumed?: () => void;
   onSlashCommand?: (result: SlashCommandResult) => void | Promise<void>;
   isDm?: boolean;
+  onSummarize?: () => void;
+  summarizing?: boolean;
 }) {
   const { state, actions, backend } = useStore();
   const { trace } = useDebugTrace();
@@ -573,27 +581,100 @@ export function RoomChat({
 
   const isMainChat = isGeneralTopic(topic);
   const displayTitle = isMainChat ? mainChatLabel(isDm) : topic.title;
+  const openTopicTasks = state.tasks.filter(
+    (t) => t.topicId === topic.id && t.status !== "done",
+  ).length;
 
   const placeholder = isDm && dmEmployee
-    ? `Message ${dmEmployee.name} directly…`
+    ? `Message ${dmEmployee.name} directly… use @ to mention, / for commands`
     : isMainChat
       ? `Message ${mainChatLabel(isDm)}…`
       : `Discuss ${topic.title}… use @ to mention an employee`;
 
   return (
     <div className="flex h-full flex-col bg-canvas">
-      <div className="flex h-14 shrink-0 items-center border-b border-border bg-surface px-5">
-        <div className="mx-auto flex w-full max-w-[760px] items-center justify-between gap-3">
+      <div className="flex h-14 shrink-0 items-center gap-3 border-b border-border bg-canvas px-[18px]">
+        {isDm && dmEmployee ? (
+          <>
+            <EmployeeAvatar
+              employee={dmEmployee}
+              size="sm"
+              showStatus={false}
+              className="!h-[34px] !w-[34px] !rounded-[10px] !text-xs"
+            />
+            <div className="min-w-0">
+              <div className="flex items-center gap-1.5">
+                <span className="truncate text-sm font-semibold text-ink">{dmEmployee.name}</span>
+                <span className="rounded-[5px] bg-accent-soft px-[5px] py-0.5 text-[9px] font-bold text-accent">
+                  AI
+                </span>
+              </div>
+              <div className="flex items-center gap-1.5 text-[11.5px] text-ink-2">
+                <EmployeeStatusDot status={dmEmployee.status} />
+                {STATUS_META[dmEmployee.status].label} · {dmEmployee.provider} · {dmEmployee.model}
+              </div>
+            </div>
+          </>
+        ) : (
           <div className="min-w-0">
-            <h2 className="truncate text-sm font-semibold text-ink">{displayTitle}</h2>
-            {topic.description && !isMainChat && (
-              <p className="mt-0.5 line-clamp-1 text-xs text-ink-2">{topic.description}</p>
-            )}
+            <div className="flex items-center gap-1.5 text-sm font-semibold text-ink">
+              <span className="truncate">{displayTitle}</span>
+              <span className="truncate text-[11px] font-medium text-ink-3">in {room.name}</span>
+            </div>
+            <p className="text-[11.5px] text-ink-2">
+              {openTopicTasks} open task{openTopicTasks === 1 ? "" : "s"} · {roomEmployees.length}{" "}
+              employee{roomEmployees.length === 1 ? "" : "s"}
+            </p>
           </div>
+        )}
+
+        <div className="ml-auto flex items-center gap-1.5">
+          {onSummarize && (
+            <button
+              type="button"
+              onClick={onSummarize}
+              disabled={summarizing}
+              className="hidden items-center gap-1.5 rounded-[10px] border border-border bg-surface px-[11px] py-[7px] text-xs font-medium text-ink-2 transition-colors hover:bg-muted disabled:opacity-50 sm:inline-flex"
+            >
+              {summarizing ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9">
+                  <path d="M3 7h18M3 12h18M3 17h12" />
+                </svg>
+              )}
+              Summarize
+            </button>
+          )}
+          {!isDm && (
+            <button
+              type="button"
+              onClick={() => router.push("/workforce")}
+              className="hidden items-center gap-1.5 rounded-[10px] border border-border bg-surface px-[11px] py-[7px] text-xs font-medium text-ink-2 transition-colors hover:bg-muted sm:inline-flex"
+            >
+              <UserPlus className="h-3.5 w-3.5" strokeWidth={2} />
+              Add employee
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => router.push(`/calls?room=${room.id}`)}
+            className="flex h-[34px] w-[34px] items-center justify-center rounded-[10px] border border-border bg-surface text-ink-2 transition-colors hover:bg-muted"
+            aria-label="Start call"
+          >
+            <Phone className="h-[15px] w-[15px]" strokeWidth={1.9} />
+          </button>
+          <button
+            type="button"
+            className="hidden h-[34px] w-[34px] items-center justify-center rounded-[10px] border border-border bg-surface text-ink-2 transition-colors hover:bg-muted xl:flex"
+            aria-label="Inspector"
+          >
+            <PanelRight className="h-[15px] w-[15px]" strokeWidth={1.9} />
+          </button>
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-5 py-4 sm:px-6">
+      <div className="flex-1 overflow-y-auto px-[26px] pb-2 pt-[18px]">
         {hasOlder && (
           <div className="mx-auto mb-3 max-w-3xl text-center">
             <Button
@@ -626,6 +707,9 @@ export function RoomChat({
           </div>
         ) : (
           <div className="mx-auto max-w-[760px]">
+            <div className="mb-[18px] mt-1.5 text-center">
+              <span className="rounded-full bg-muted px-3 py-0.5 text-[11px] text-ink-3">Today</span>
+            </div>
             {collaborationPlan && (
               <CollaborationPlanBanner
                 plan={collaborationPlan}
@@ -706,7 +790,7 @@ export function RoomChat({
         </div>
       )}
 
-      <div className="border-t border-border bg-canvas px-5 py-3 sm:px-6">
+      <div className="shrink-0 px-[26px] pb-[18px] pt-1.5">
         <div className="mx-auto max-w-[760px]">
           <ChatComposer
             employees={roomEmployees}
@@ -717,11 +801,15 @@ export function RoomChat({
             onDraftConsumed={onDraftConsumed}
             onSlashCommand={onSlashCommand}
           />
-          {useServerApi && roomEmployees.length > 0 && (
-            <p className="mt-1.5 px-1 text-[11px] text-ink-3">
-              {roomEmployees.length} AI employee{roomEmployees.length === 1 ? "" : "s"} in this room · mention with @ for a reply · type /help for commands
-            </p>
-          )}
+          <p className="px-1.5 pt-[7px] text-[11px] text-ink-3">
+            <span>
+              <b className="font-mono text-ink-2">@</b> mention an employee
+            </span>
+            <span className="mx-3.5">
+              <b className="font-mono text-ink-2">/</b> run a command
+            </span>
+            <span className="float-right hidden sm:inline">Enter to send · Shift+Enter for newline</span>
+          </p>
         </div>
       </div>
     </div>
