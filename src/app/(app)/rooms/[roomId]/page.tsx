@@ -158,7 +158,7 @@ export default function RoomDetailPage() {
     }
   };
 
-  const resolveTopic = async () => {
+  const archiveTopic = async () => {
     if (!selectedTopic || backend !== "supabase") return;
     const headers = await authHeaders();
     const response = await fetch(`/api/topics/${selectedTopic.id}`, {
@@ -174,7 +174,19 @@ export default function RoomDetailPage() {
     }
   };
 
-  const archiveTopic = resolveTopic;
+  const unarchiveTopic = async () => {
+    if (!selectedTopic || backend !== "supabase") return;
+    const headers = await authHeaders();
+    const response = await fetch(`/api/topics/${selectedTopic.id}`, {
+      method: "PATCH",
+      headers,
+      body: JSON.stringify({ status: "active" }),
+    });
+    if (response.ok) {
+      const { topic } = await response.json();
+      actions.upsertTopic(topic);
+    }
+  };
 
   const setParticipationMode = async (mode: AiParticipationMode) => {
     if (!selectedTopic || backend !== "supabase") return;
@@ -190,13 +202,13 @@ export default function RoomDetailPage() {
     }
   };
 
-  const handleAiControl = async (action: "stop_all" | "resume" | "pause_smart") => {
+  const handleAiControl = async (action: "stop_all" | "resume") => {
     if (!selectedTopic || backend !== "supabase") return;
     const headers = await authHeaders();
     const response = await fetch(`/api/topics/${selectedTopic.id}/ai-control`, {
       method: "POST",
       headers,
-      body: JSON.stringify({ action, pauseMinutes: 60 }),
+      body: JSON.stringify({ action }),
     });
     if (response.ok) {
       const { topic } = await response.json();
@@ -396,7 +408,7 @@ export default function RoomDetailPage() {
               isDm={isDm}
               onSummarize={summarizeTopic}
               onArchive={archiveTopic}
-              onAskAi={askAiAboutTopic}
+              onUnarchive={unarchiveTopic}
               onSaveSummaryToMemory={saveSummaryToMemory}
               onParticipationChange={setParticipationMode}
               onAiControl={handleAiControl}

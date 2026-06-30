@@ -81,6 +81,7 @@ export function getAiParticipationMode(topic: RoomTopic): AiParticipationMode {
   const mode = topic.metadata?.aiParticipationMode;
   if (
     mode === "silent_observation" ||
+    mode === "manual_only" ||
     mode === "smart_assist_lite" ||
     mode === "smart_assist" ||
     mode === "active_team"
@@ -88,7 +89,28 @@ export function getAiParticipationMode(topic: RoomTopic): AiParticipationMode {
     return mode;
   }
   if (isGeneralTopic(topic)) return "smart_assist_lite";
-  return "manual_only";
+  return "smart_assist";
+}
+
+export function isSmartAssistMode(mode: AiParticipationMode): boolean {
+  return mode === "smart_assist" || mode === "smart_assist_lite";
+}
+
+export function participationModeLabel(mode: AiParticipationMode): string {
+  if (isSmartAssistMode(mode)) return "Smart assist";
+  if (mode === "active_team") return "Active team";
+  if (mode === "silent_observation") return "Silent observation";
+  return "Manual only";
+}
+
+/** Map UI selection to stored mode (general chat keeps lite variant). */
+export function resolveParticipationModeForTopic(
+  topic: RoomTopic,
+  mode: AiParticipationMode,
+): AiParticipationMode {
+  if (mode === "smart_assist" && isGeneralTopic(topic)) return "smart_assist_lite";
+  if (mode === "smart_assist_lite" && !isGeneralTopic(topic)) return "smart_assist";
+  return mode;
 }
 
 export const TOPIC_TEMPLATES = [

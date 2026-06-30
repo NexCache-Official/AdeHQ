@@ -21,18 +21,26 @@ import { WorkLogTimeline } from "./WorkLogTimeline";
 import { EmptyState } from "./States";
 import { Button } from "./ui";
 import { cn } from "@/lib/utils";
-import { getAiParticipationMode, isGeneralTopic, mainChatLabel } from "@/lib/topics";
+import {
+  getAiParticipationMode,
+  isGeneralTopic,
+  isSmartAssistMode,
+  mainChatLabel,
+  participationModeLabel,
+  resolveParticipationModeForTopic,
+} from "@/lib/topics";
 import { getTopicAiControlState } from "@/lib/topic-ai-control";
 import {
+  ArchiveRestore,
   BookText,
   BrainCircuit,
   CheckSquare,
+  ChevronDown,
   Loader2,
   ScrollText,
   ShieldAlert,
   Sparkles,
   Users,
-  Zap,
 } from "lucide-react";
 
 const TABS = [
@@ -45,12 +53,32 @@ const TABS = [
 ] as const;
 
 const PARTICIPATION_MODES: { id: AiParticipationMode; label: string; hint: string }[] = [
-  { id: "silent_observation", label: "Silent observation", hint: "AI tracks context; speaks only when @mentioned" },
-  { id: "manual_only", label: "Manual only", hint: "AI responds only when @mentioned" },
-  { id: "smart_assist_lite", label: "Smart assist (lite)", hint: "General Chat default — greetings & role matches, room cooldown" },
-  { id: "smart_assist", label: "Smart assist", hint: "Broader relevance matching (max 1 ambient)" },
-  { id: "active_team", label: "Active team", hint: "More proactive contributors (max 2)" },
+  {
+    id: "smart_assist",
+    label: "Smart assist",
+    hint: "AI joins when relevant — @mentions, greetings, and role matches",
+  },
+  {
+    id: "active_team",
+    label: "Active team",
+    hint: "More proactive — up to 2 AI employees may contribute",
+  },
+  {
+    id: "manual_only",
+    label: "Manual only",
+    hint: "AI responds only when @mentioned",
+  },
+  {
+    id: "silent_observation",
+    label: "Silent observation",
+    hint: "AI tracks context quietly; speaks only when @mentioned",
+  },
 ];
+
+function modeIsSelected(current: AiParticipationMode, option: AiParticipationMode): boolean {
+  if (option === "smart_assist") return isSmartAssistMode(current);
+  return current === option;
+}
 
 function displaySummary(summary: string) {
   return summary
@@ -72,7 +100,7 @@ export function TopicPanel({
   isDm = false,
   onSummarize,
   onArchive,
-  onAskAi,
+  onUnarchive,
   onSaveSummaryToMemory,
   onParticipationChange,
   onAiControl,
@@ -90,10 +118,10 @@ export function TopicPanel({
   isDm?: boolean;
   onSummarize: () => void;
   onArchive: () => void;
-  onAskAi: () => void;
+  onUnarchive?: () => void;
   onSaveSummaryToMemory: () => void;
   onParticipationChange?: (mode: AiParticipationMode) => void;
-  onAiControl?: (action: "stop_all" | "resume" | "pause_smart") => void;
+  onAiControl?: (action: "stop_all" | "resume") => void;
   summarizing?: boolean;
 }) {
   const [tab, setTab] = useState<(typeof TABS)[number]["id"]>("overview");
@@ -101,6 +129,7 @@ export function TopicPanel({
   const displayTitle = isMainChat ? mainChatLabel(isDm) : topic.title;
   const participation = getAiParticipationMode(topic);
   const aiControl = getTopicAiControlState(topic);
+  const isArchived = topic.status === "archived";
 
   const topicEmployees = topicMembers
     .filter((m) => m.memberType === "ai")
@@ -161,24 +190,31 @@ export function TopicPanel({
       </nav>
 
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-        <div className="shrink-0 border-b border-slate-200 px-4 py-3">
-          <div className="min-w-0">
-            <h2 className="truncate text-sm font-semibold text-slate-900">{displayTitle}</h2>
-            {topic.description && !isMainChat && (
-              <p className="mt-0.5 line-clamp-2 text-xs text-slate-500">{topic.description}</p>
-            )}
+        <div className="shrink-0 border-b border-slate-200 px-3 py-2">
+          <div className="flex items-center justify-between gap-2">
+            <h2 className="min-w-0 truncate text-sm font-semibold text-slate-900">{displayTitle}</h2>
             {!isMainChat && (
-              <div className="mt-1.5 flex flex-wrap gap-1.5">
-                <span className="rounded-md bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-600">
+              <div className="flex shrink-0 flex-wrap justify-end gap-1">
+                <span
+                  className={cn(
+                    "rounded-md px-1.5 py-0.5 text-[10px] font-medium",
+                    isArchived ? "bg-amber-100 text-amber-800" : "bg-slate-100 text-slate-600",
+                  )}
+                >
                   {topic.status}
                 </span>
-                <span className="rounded-md bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-600">
-                  {topic.priority} priority
-                </span>
+                {!isArchived && (
+                  <span className="rounded-md bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-600">
+                    {topic.priority}
+                  </span>
+                )}
               </div>
             )}
           </div>
-          <div className="mt-2 flex flex-wrap gap-1.5">
+          {topic.description && !isMainChat && (
+            <p className="mt-0.5 line-clamp-1 text-xs text-slate-500">{topic.description}</p>
+          )}
+          <div className="mt-1.5 flex flex-wrap gap-1">
             <Button variant="secondary" size="sm" onClick={onSummarize} disabled={summarizing}>
               {summarizing ? (
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -187,72 +223,71 @@ export function TopicPanel({
               )}
               Summarize
             </Button>
-            <Button variant="ghost" size="sm" onClick={onAskAi}>
-              <Zap className="h-3.5 w-3.5" /> Draft AI question
-            </Button>
-            {!isMainChat && topic.status !== "archived" && (
-              <Button variant="ghost" size="sm" onClick={onArchive}>
-                Archive Topic
-              </Button>
-            )}
+            {!isMainChat &&
+              (isArchived ? (
+                onUnarchive && (
+                  <Button variant="ghost" size="sm" onClick={onUnarchive}>
+                    <ArchiveRestore className="h-3.5 w-3.5" /> Restore topic
+                  </Button>
+                )
+              ) : (
+                <Button variant="ghost" size="sm" onClick={onArchive}>
+                  Archive
+                </Button>
+              ))}
           </div>
           {onParticipationChange && (
-            <div className="mt-3">
-              <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
-                AI participation
-              </div>
-              {aiControl.aiStopped && (
-                <p className="mb-2 rounded-lg border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] text-amber-800">
-                  All AI activity is stopped in this topic.
-                </p>
-              )}
-              {aiControl.smartAssistPaused && !aiControl.aiStopped && (
-                <p className="mb-2 rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] text-slate-600">
-                  Smart assist paused — @mentions only until{" "}
-                  {aiControl.aiPausedUntil
-                    ? new Date(aiControl.aiPausedUntil).toLocaleTimeString()
-                    : "resumed"}
-                </p>
-              )}
-              <div className="flex flex-col gap-1">
-                {PARTICIPATION_MODES.map((mode) => (
-                  <button
-                    key={mode.id}
-                    type="button"
-                    onClick={() => onParticipationChange(mode.id)}
-                    disabled={aiControl.aiStopped}
-                    className={cn(
-                      "rounded-lg border px-2.5 py-1.5 text-left text-xs transition-colors",
-                      participation === mode.id
-                        ? "border-accent-500/40 bg-accent-500/10 text-accent-800"
-                        : "border-slate-200 bg-white text-slate-600 hover:border-slate-300",
-                      aiControl.aiStopped && "opacity-50",
-                    )}
-                  >
-                    <div className="font-medium">{mode.label}</div>
-                    <div className="text-[10px] text-slate-500">{mode.hint}</div>
-                  </button>
-                ))}
-              </div>
-              {onAiControl && (
-                <div className="mt-2 flex flex-wrap gap-1.5">
-                  {aiControl.aiStopped || aiControl.smartAssistPaused ? (
-                    <Button variant="secondary" size="sm" onClick={() => onAiControl("resume")}>
-                      Resume AI
-                    </Button>
-                  ) : (
-                    <>
-                      <Button variant="ghost" size="sm" onClick={() => onAiControl("pause_smart")}>
-                        Pause smart assist
+            <details className="group mt-2">
+              <summary className="flex cursor-pointer list-none items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs text-slate-700 hover:bg-white [&::-webkit-details-marker]:hidden">
+                <ChevronDown className="h-3.5 w-3.5 shrink-0 text-slate-400 transition-transform group-open:rotate-180" />
+                <span className="font-medium">AI participation</span>
+                <span className="truncate text-slate-500">
+                  — {aiControl.aiStopped ? "Stopped" : participationModeLabel(participation)}
+                </span>
+              </summary>
+              <div className="mt-1.5 space-y-1.5 rounded-lg border border-slate-200 bg-white p-2">
+                {aiControl.aiStopped && (
+                  <p className="rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] text-amber-800">
+                    All AI activity is stopped in this topic.
+                  </p>
+                )}
+                <div className="flex flex-col gap-1">
+                  {PARTICIPATION_MODES.map((mode) => (
+                    <button
+                      key={mode.id}
+                      type="button"
+                      onClick={() =>
+                        onParticipationChange(resolveParticipationModeForTopic(topic, mode.id))
+                      }
+                      disabled={aiControl.aiStopped}
+                      className={cn(
+                        "rounded-lg border px-2 py-1.5 text-left text-xs transition-colors",
+                        modeIsSelected(participation, mode.id)
+                          ? "border-accent-500/40 bg-accent-500/10 text-accent-800"
+                          : "border-slate-200 bg-white text-slate-600 hover:border-slate-300",
+                        aiControl.aiStopped && "opacity-50",
+                      )}
+                    >
+                      <div className="font-medium">{mode.label}</div>
+                      <div className="text-[10px] text-slate-500">{mode.hint}</div>
+                    </button>
+                  ))}
+                </div>
+                {onAiControl && (
+                  <div className="flex flex-wrap gap-1.5 pt-0.5">
+                    {aiControl.aiStopped ? (
+                      <Button variant="secondary" size="sm" onClick={() => onAiControl("resume")}>
+                        Resume AI
                       </Button>
+                    ) : (
                       <Button variant="ghost" size="sm" onClick={() => onAiControl("stop_all")}>
                         Stop all AI
                       </Button>
-                    </>
-                  )}
-                </div>
-              )}
-            </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </details>
           )}
         </div>
 
