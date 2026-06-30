@@ -19,6 +19,8 @@ import {
   chooseNextRecruiterQuestion,
   finalizeReadinessScore,
   generateSuggestionChips,
+  inferDepartmentId,
+  isEngineeringBrief,
 } from "@/lib/hiring/recruiter-brain";
 import type {
   AiEmployeeJobBrief,
@@ -119,7 +121,20 @@ function recruiterMessageFor(
 ) {
   const lastUser = [...conversation].reverse().find((m) => m.role === "user")?.text.toLowerCase() ?? "";
   if (lastUser.includes("don't know") || lastUser.includes("not sure") || lastUser.includes("help me decide")) {
-    return "No problem. For this kind of role, I’d usually suggest a few directions: product engineering for shipping features, AI infrastructure for performance and scale, or data workflows for analysis and ML-heavy work. Which feels closest?";
+    const deptId = inferDepartmentId(currentBrief);
+    if (deptId === "pr") {
+      return "No problem. For PR roles, common starting points are press releases, media pitching, internal comms, or crisis response. Which feels closest to what you need?";
+    }
+    if (deptId === "marketing") {
+      return "No problem. For marketing hires, teams often start with content, campaigns, social, or SEO. Which direction fits best?";
+    }
+    if (deptId === "sales") {
+      return "No problem. For sales support, people usually start with lead qualification, outbound outreach, proposals, or pipeline follow-ups. Which sounds right?";
+    }
+    if (isEngineeringBrief(currentBrief)) {
+      return "No problem. For engineering roles, common directions are frontend product work, backend systems, AI infrastructure, or data workflows. Which feels closest?";
+    }
+    return "No problem. Tell me whether you want someone more strategic, more execution-focused, or a mix — and I’ll shape the brief from there.";
   }
   return chooseNextRecruiterQuestion(readiness, currentBrief);
 }
@@ -147,7 +162,7 @@ function buildResponse(input: {
   const baseReadiness = assessRecruiterReadiness(input.conversation, input.brief);
   const canReviewBrief = input.forceCanReview || baseReadiness.ready;
   const readiness = finalizeReadinessScore(baseReadiness, input.brief, canReviewBrief);
-  let suggestionChips = generateSuggestionChips(readiness, input.brief);
+  let suggestionChips = generateSuggestionChips(readiness, input.brief, input.conversation);
   if (canReviewBrief && !suggestionChips.some((chip) => chip.intent === "review_brief")) {
     suggestionChips = [
       {
