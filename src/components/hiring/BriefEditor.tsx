@@ -9,6 +9,7 @@ type ListKey =
   | "successMetrics"
   | "approvalRules"
   | "technicalFocus"
+  | "businessFocus"
   | "toolsNeeded";
 
 function EditableBullets({
@@ -237,6 +238,37 @@ export function BriefEditor({
             }
           />
         </div>
+
+        {(brief.businessFocus.length > 0 || editable) && (
+          <div className="border-b border-border/60 py-5">
+            {sectionActions("businessFocus", "businessFocus")}
+            <div className="mb-2 font-mono text-[10px] uppercase tracking-wider text-ink-3">
+              Business focus
+            </div>
+            <EditableBullets
+              items={brief.businessFocus}
+              editable={editable}
+              onChange={(i, v) =>
+                patchList("businessFocus", (list) => {
+                  const next = [...list];
+                  next[i] = v;
+                  return next;
+                })
+              }
+              onAdd={() => patchList("businessFocus", (l) => [...l, "New focus area"])}
+              onRemove={(i) => patchList("businessFocus", (l) => l.filter((_, j) => j !== i))}
+              onMove={(i, dir) =>
+                patchList("businessFocus", (l) => {
+                  const next = [...l];
+                  const j = i + dir;
+                  if (j < 0 || j >= next.length) return next;
+                  [next[i], next[j]] = [next[j], next[i]];
+                  return next;
+                })
+              }
+            />
+          </div>
+        )}
 
         <div className="border-b border-border/60 py-5">
           {sectionActions("successMetrics", "successMetrics")}

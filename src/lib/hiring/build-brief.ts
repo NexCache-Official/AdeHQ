@@ -1,4 +1,5 @@
 import { DEPARTMENT_CARDS } from "./data";
+import { synthesizeRoleTitle } from "./role-title-synthesizer";
 import type { AiEmployeeJobBrief, RecruiterMessage } from "./types";
 
 const DEPT_NAMES: Record<string, string> = {
@@ -17,6 +18,138 @@ const DEPT_NAMES: Record<string, string> = {
   gamedev: "Game Development",
   custom: "Custom",
 };
+
+const DEPT_DOMAIN: Record<string, string> = {
+  product: "Product & roadmap",
+  engineering: "Software engineering",
+  design: "Product design & UX",
+  research: "Market & competitive research",
+  marketing: "Marketing & growth",
+  sales: "Sales & revenue",
+  support: "Customer support",
+  operations: "Business operations",
+  finance: "Finance & accounting",
+  legal: "Corporate legal & compliance",
+  hr: "People & HR operations",
+  pr: "PR & communications",
+  gamedev: "Game development",
+  custom: "General business",
+};
+
+type DeptBriefSeed = Pick<
+  AiEmployeeJobBrief,
+  | "mission"
+  | "coreResponsibilities"
+  | "businessFocus"
+  | "successMetrics"
+  | "approvalRules"
+  | "toolsNeeded"
+  | "personalityTraits"
+>;
+
+const DEPT_BRIEF_SEEDS: Record<string, DeptBriefSeed> = {
+  legal: {
+    mission:
+      "Protect the business through careful contract review, compliance monitoring, and clear legal guidance — escalating material risk before anything is signed or published.",
+    coreResponsibilities: [
+      "Review and redline contracts, NDAs, and vendor agreements",
+      "Flag compliance, regulatory, and reputational risks early",
+      "Summarize legal implications in plain language for stakeholders",
+      "Maintain a consistent approval workflow before external commitments",
+      "Track open legal items and follow up on outstanding reviews",
+    ],
+    businessFocus: [
+      "Contract lifecycle",
+      "Regulatory compliance",
+      "Vendor & partnership agreements",
+      "IP and confidentiality",
+    ],
+    successMetrics: [
+      "Contracts reviewed within agreed SLAs",
+      "Material risks flagged before execution",
+      "Fewer last-minute legal escalations",
+      "Clear audit trail on approvals",
+    ],
+    approvalRules: [
+      "Never sign or commit on behalf of the company without explicit approval",
+      "Escalate litigation, regulatory, or crisis matters immediately",
+      "Route all external legal communications for review",
+    ],
+    toolsNeeded: ["Contract repository", "Clause library", "Compliance checklist"],
+    personalityTraits: ["careful", "precise", "risk-aware", "diplomatic"],
+  },
+  engineering: {
+    mission:
+      "Ship reliable software by turning technical goals into clear plans, high-quality implementation support, and measurable performance improvements.",
+    coreResponsibilities: [
+      "Break down technical problems into actionable tasks",
+      "Review code paths, architecture tradeoffs, and performance bottlenecks",
+      "Draft technical specs and implementation notes",
+      "Coordinate with PM and design on feasibility and scope",
+      "Document decisions and follow up on open engineering work",
+    ],
+    businessFocus: ["System reliability", "Developer velocity", "Technical debt"],
+    successMetrics: [
+      "Faster issue resolution",
+      "Clearer technical documentation",
+      "Measurable performance improvements",
+      "Fewer regressions from rushed changes",
+    ],
+    approvalRules: [
+      "Ask before production deployments or infra changes",
+      "Flag security-sensitive changes for review",
+    ],
+    toolsNeeded: ["Issue tracker", "Repository access", "Monitoring dashboards"],
+    personalityTraits: ["analytical", "practical", "detail-oriented"],
+  },
+  marketing: {
+    mission:
+      "Drive awareness and pipeline through sharp positioning, compelling copy, and coordinated launch execution.",
+    coreResponsibilities: [
+      "Draft campaign copy, landing pages, and launch messaging",
+      "Turn product updates into distribution plans",
+      "Maintain consistent brand voice across channels",
+      "Coordinate with sales on proof points and nurture content",
+    ],
+    businessFocus: ["Brand positioning", "Content & campaigns", "Launch execution"],
+    successMetrics: [
+      "Higher-quality launch assets",
+      "Consistent messaging across channels",
+      "Faster turnaround on campaign drafts",
+    ],
+    approvalRules: ["Ask before publishing public statements or paid ads"],
+    toolsNeeded: ["Brand guidelines", "Content calendar", "Analytics access"],
+    personalityTraits: ["creative", "clear", "audience-aware"],
+  },
+  pr: {
+    mission:
+      "Build credibility through thoughtful media outreach, investor communications, and launch narratives.",
+    coreResponsibilities: [
+      "Draft press angles, media pitches, and stakeholder updates",
+      "Prepare investor and executive communications",
+      "Monitor narrative consistency across public touchpoints",
+      "Coordinate launch announcements with internal teams",
+    ],
+    businessFocus: ["Media relations", "Investor comms", "Executive messaging"],
+    successMetrics: [
+      "Stronger press-ready narratives",
+      "Timely investor update drafts",
+      "Fewer messaging inconsistencies",
+    ],
+    approvalRules: [
+      "Route all external press and investor messages for approval",
+      "Escalate crisis or sensitive communications immediately",
+    ],
+    toolsNeeded: ["Press list", "Messaging doc", "Approval workflow"],
+    personalityTraits: ["polished", "strategic", "credible"],
+  },
+};
+
+function isDeptNameOnly(roleSeed: string, departmentId?: string | null): boolean {
+  if (!departmentId || departmentId === "custom") return false;
+  const name = DEPT_NAMES[departmentId]?.toLowerCase();
+  return roleSeed.trim().toLowerCase() === name;
+}
 
 const DEPT_ROLE_TITLES: Record<string, string> = {
   product: "Product Manager",
@@ -58,6 +191,8 @@ export function emptyBrief(roleSeed = "", departmentId?: string | null): AiEmplo
     autonomyLevel: "balanced",
     approvalRules: [],
     toolsNeeded: [],
+    assumptions: [],
+    openQuestions: [],
   };
 }
 
@@ -75,6 +210,8 @@ export function mergeBriefPartial(
     personalityTraits: partial.personalityTraits ?? base.personalityTraits,
     approvalRules: partial.approvalRules ?? base.approvalRules,
     toolsNeeded: partial.toolsNeeded ?? base.toolsNeeded,
+    assumptions: partial.assumptions ?? base.assumptions,
+    openQuestions: partial.openQuestions ?? base.openQuestions,
   };
 }
 
@@ -91,6 +228,11 @@ function extractTechnicalTerms(text: string): string[] {
     "media outreach",
     "investor relations",
     "crisis communications",
+    "saas platform architecture",
+    "product engineering",
+    "data science workflows",
+    "ai-enabled systems",
+    "performance reliability",
   ];
   for (const p of patterns) {
     if (lower.includes(p)) terms.push(p.replace(/\b\w/g, (c) => c.toUpperCase()).replace("Ai", "AI"));
@@ -99,17 +241,8 @@ function extractTechnicalTerms(text: string): string[] {
 }
 
 function inferRoleTitle(roleSeed: string, departmentId?: string | null): string {
-  const seed = roleSeed.toLowerCase();
   const dept = departmentId ?? "custom";
-  if (seed.includes("performance") && seed.includes("engineer")) return "AI Performance Engineer";
-  if (seed.includes("pr") || seed.includes("communications")) return "PR Manager";
-  if (seed.includes("engineer")) return DEPT_ROLE_TITLES.engineering;
-  if (roleSeed.trim()) {
-    const words = roleSeed.trim().split(/\s+/);
-    if (words.length <= 6) return roleSeed.trim();
-    return words.slice(0, 4).join(" ");
-  }
-  return DEPT_ROLE_TITLES[dept] ?? "AI Employee";
+  return synthesizeRoleTitle({ roleInput: roleSeed, department: dept });
 }
 
 /** Semantic brief synthesis from conversation (fallback when AI unavailable). */
@@ -124,22 +257,47 @@ export function synthesizeBriefFromConversation(
   const allUserText = userLines.join(" ").toLowerCase();
   const combined = [roleSeed, ...userLines].join(" ");
 
-  const roleTitle = existing?.roleTitle || inferRoleTitle(roleSeed, departmentId);
+  const deptSeed = DEPT_BRIEF_SEEDS[dept];
+  const useDeptSeed = deptSeed && (isDeptNameOnly(roleSeed, departmentId) || userLines.length === 0);
+
+  const roleTitle =
+    existing?.roleTitle ||
+    (isDeptNameOnly(roleSeed, departmentId)
+      ? DEPT_ROLE_TITLES[dept] ?? "AI Employee"
+      : synthesizeRoleTitle({
+          roleInput: combined,
+          department: dept,
+          technicalFocus: existing?.technicalFocus,
+          businessFocus: existing?.businessFocus,
+        }));
+
   const domain =
     existing?.domain ||
     (allUserText.includes("enterprise ai")
       ? "Enterprise AI systems"
+      : allUserText.includes("saas") && allUserText.includes("data")
+        ? "SaaS products, AI systems, and data workflows"
       : allUserText.includes("fintech") || allUserText.includes("finance")
         ? "Finance & fintech"
         : allUserText.includes("saas") || allUserText.includes("tech")
           ? "SaaS & technology"
-          : userLines[0]?.trim() || roleSeed.trim() || "General business");
+          : isDeptNameOnly(roleSeed, departmentId) || !userLines[0]?.trim()
+            ? DEPT_DOMAIN[dept] ?? "General business"
+            : userLines[0]?.trim() || DEPT_DOMAIN[dept] || "General business");
 
   const technicalFocus =
     existing?.technicalFocus?.length
       ? existing.technicalFocus
       : extractTechnicalTerms(combined).length > 0
         ? extractTechnicalTerms(combined)
+        : allUserText.includes("saas") && allUserText.includes("data")
+          ? [
+              "SaaS platform architecture",
+              "Product engineering",
+              "Data science workflows",
+              "AI-enabled systems",
+              "Performance and reliability",
+            ]
         : allUserText.includes("performance") || allUserText.includes("latency")
           ? ["Latency reduction", "Bandwidth optimization", "Performance debugging"]
           : [];
@@ -165,12 +323,24 @@ export function synthesizeBriefFromConversation(
   const mission =
     existing?.mission ||
     (technicalFocus.length > 0
-      ? `Improve latency, bandwidth efficiency, and runtime performance for ${domain.toLowerCase()} workloads.`
-      : `Help the team succeed as a ${roleTitle.toLowerCase()} in ${domain.toLowerCase()}.`);
+      ? allUserText.includes("saas")
+        ? "Help design, build, and improve SaaS platform features, integrations, and data-driven product workflows."
+        : `Improve latency, bandwidth efficiency, and runtime performance for ${domain.toLowerCase()} workloads.`
+      : useDeptSeed
+        ? deptSeed.mission
+        : `Help the team succeed as a ${roleTitle.toLowerCase()} in ${domain.toLowerCase()}.`);
 
   const coreResponsibilities =
     existing?.coreResponsibilities?.length
       ? existing.coreResponsibilities
+      : allUserText.includes("saas") && technicalFocus.length > 0
+        ? [
+            "Build and improve product features across the SaaS platform",
+            "Help design reliable backend and data workflows",
+            "Translate product discussions into implementation tasks",
+            "Identify technical risks and suggest practical improvements",
+            "Support shipping work with clear technical reasoning",
+          ]
       : technicalFocus.length > 0
         ? [
             "Identify bottlenecks in AI system performance",
@@ -178,15 +348,24 @@ export function synthesizeBriefFromConversation(
             "Help evaluate infrastructure tradeoffs",
             "Turn performance discussions into technical tasks",
           ]
-        : [
-            `Own day-to-day ${roleTitle.toLowerCase()} workstreams`,
-            "Turn discussions into clear next steps and follow-ups",
-            "Flag risks and ask for approval before external actions",
-          ];
+        : useDeptSeed
+          ? deptSeed.coreResponsibilities
+          : [
+              `Own day-to-day ${roleTitle.toLowerCase()} workstreams`,
+              "Turn discussions into clear next steps and follow-ups",
+              "Flag risks and ask for approval before external actions",
+            ];
 
   const successMetrics =
     existing?.successMetrics?.length
       ? existing.successMetrics
+      : allUserText.includes("saas") && technicalFocus.length > 0
+        ? [
+            "Features move from idea to implementation faster",
+            "Technical decisions are clearly explained",
+            "Bugs and risks are surfaced early",
+            "Work is broken into clear, shippable tasks",
+          ]
       : technicalFocus.length > 0
         ? [
             "Lower response latency",
@@ -194,11 +373,13 @@ export function synthesizeBriefFromConversation(
             "Reduced bandwidth overhead",
             "Clearer performance roadmap",
           ]
-        : [
-            "Consistent high-quality output",
-            "Follow-ups do not get missed",
-            "Communication matches agreed standards",
-          ];
+        : useDeptSeed
+          ? deptSeed.successMetrics
+          : [
+              "Consistent high-quality output",
+              "Follow-ups do not get missed",
+              "Communication matches agreed standards",
+            ];
 
   const seniorityLevel =
     existing?.seniorityLevel ||
@@ -208,6 +389,24 @@ export function synthesizeBriefFromConversation(
         ? "manager"
         : "specialist");
 
+  const assumptions =
+    existing?.assumptions ??
+    [
+      `This role is currently inferred as a ${roleTitle}.`,
+      ...(technicalFocus.length > 0
+        ? ["The employee should translate technical discussions into practical next steps."]
+        : []),
+    ];
+
+  const openQuestions =
+    existing?.openQuestions ??
+    (technicalFocus.length > 0
+      ? ["Should this employee focus more on frontend, backend, AI infrastructure, or data science?"]
+      : [
+          "What should this employee own day to day?",
+          "Should the role be hands-on, advisory, or balanced?",
+        ]);
+
   return {
     roleTitle,
     department: existing?.department || DEPT_NAMES[dept] || "Custom",
@@ -215,12 +414,20 @@ export function synthesizeBriefFromConversation(
     mission,
     coreResponsibilities,
     technicalFocus,
-    businessFocus: existing?.businessFocus ?? [],
+    businessFocus: existing?.businessFocus?.length
+      ? existing.businessFocus
+      : useDeptSeed
+        ? deptSeed.businessFocus
+        : [],
     successMetrics,
     communicationStyle,
     personalityTraits:
       existing?.personalityTraits ??
-      (technicalFocus.length > 0 ? ["analytical", "precise", "practical"] : ["professional", "clear"]),
+      (technicalFocus.length > 0
+        ? ["analytical", "precise", "practical"]
+        : useDeptSeed
+          ? deptSeed.personalityTraits
+          : ["professional", "clear"]),
     proactivityLevel,
     qualityPreference,
     seniorityLevel,
@@ -228,12 +435,20 @@ export function synthesizeBriefFromConversation(
     approvalRules:
       existing?.approvalRules?.length
         ? existing.approvalRules
-        : [
-            "Ask before sending external emails or messages",
-            "Ask before publishing public statements",
-            "Flag legal, compliance, or reputational risks",
-          ],
-    toolsNeeded: existing?.toolsNeeded ?? [],
+        : useDeptSeed
+          ? deptSeed.approvalRules
+          : [
+              "Ask before sending external emails or messages",
+              "Ask before publishing public statements",
+              "Flag legal, compliance, or reputational risks",
+            ],
+    toolsNeeded: existing?.toolsNeeded?.length
+      ? existing.toolsNeeded
+      : useDeptSeed
+        ? deptSeed.toolsNeeded
+        : [],
+    assumptions,
+    openQuestions,
   };
 }
 
@@ -251,6 +466,9 @@ export function briefToInstructions(brief: AiEmployeeJobBrief): string {
     ...(brief.technicalFocus.length
       ? ["", "Technical focus:", ...brief.technicalFocus.map((t) => `- ${t}`)]
       : []),
+    ...(brief.businessFocus.length
+      ? ["", "Business focus:", ...brief.businessFocus.map((t) => `- ${t}`)]
+      : []),
     "",
     `Communication style: ${brief.communicationStyle}`,
     `Proactivity: ${brief.proactivityLevel}`,
@@ -261,6 +479,12 @@ export function briefToInstructions(brief: AiEmployeeJobBrief): string {
     "",
     "Success metrics:",
     ...brief.successMetrics.map((r) => `- ${r}`),
+    ...(brief.assumptions.length
+      ? ["", "Assumptions:", ...brief.assumptions.map((r) => `- ${r}`)]
+      : []),
+    ...(brief.openQuestions.length
+      ? ["", "Open questions:", ...brief.openQuestions.map((r) => `- ${r}`)]
+      : []),
   ].join("\n");
 }
 

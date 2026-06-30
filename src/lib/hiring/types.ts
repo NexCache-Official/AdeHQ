@@ -27,6 +27,42 @@ export type SeniorityLevel = "assistant" | "specialist" | "manager" | "director"
 export type AutonomyLevel = "low" | "balanced" | "high";
 export type CandidateTier = "high_capacity" | "recommended" | "premium";
 
+export type RecruiterMissingField =
+  | "role_title"
+  | "domain"
+  | "core_work"
+  | "technical_focus"
+  | "business_focus"
+  | "seniority"
+  | "autonomy"
+  | "communication_style"
+  | "quality_preference"
+  | "tools"
+  | "approval_rules";
+
+export type RecruiterReadiness = {
+  score: number;
+  ready: boolean;
+  confidence: "low" | "medium" | "high";
+  missing: RecruiterMissingField[];
+  nextBestQuestion?: string;
+  reason: string;
+};
+
+export type RecruiterSuggestionChip = {
+  id: string;
+  label: string;
+  value: string;
+  intent:
+    | "answer_question"
+    | "draft_brief_now"
+    | "refine_more"
+    | "add_personality"
+    | "add_tools"
+    | "add_approval_rules"
+    | "review_brief";
+};
+
 export type AiEmployeeJobBrief = {
   roleTitle: string;
   department: string;
@@ -44,6 +80,8 @@ export type AiEmployeeJobBrief = {
   autonomyLevel: AutonomyLevel;
   approvalRules: string[];
   toolsNeeded: string[];
+  assumptions: string[];
+  openQuestions: string[];
 };
 
 export type RecruiterChecklist = {
@@ -84,11 +122,15 @@ export type AiEmployeeApplicant = {
 
 export type RecruiterApiResponse = {
   message: string;
+  recruiterMessage?: string;
   chips: string[];
+  suggestionChips?: RecruiterSuggestionChip[];
   briefReady: boolean;
+  canReviewBrief?: boolean;
   brief?: AiEmployeeJobBrief;
   briefPartial?: Partial<AiEmployeeJobBrief>;
   checklist?: RecruiterChecklist;
+  readiness?: RecruiterReadiness;
   usedFallback?: boolean;
 };
 
@@ -103,6 +145,8 @@ export type HiringSessionState = {
   departmentId: string | null;
   recruiterMessages: RecruiterMessage[];
   checklist: RecruiterChecklist;
+  readiness: RecruiterReadiness;
+  suggestionChips: RecruiterSuggestionChip[];
   brief?: AiEmployeeJobBrief;
   briefPartial?: Partial<AiEmployeeJobBrief>;
   briefReady: boolean;

@@ -1,0 +1,112 @@
+const DEPARTMENT_FALLBACKS: Record<string, string> = {
+  product: "Product Manager",
+  engineering: "Software Engineer",
+  design: "Product Designer",
+  research: "Market Research Analyst",
+  marketing: "Marketing Specialist",
+  sales: "Sales Development Representative",
+  support: "Customer Support Specialist",
+  operations: "Operations Coordinator",
+  finance: "Finance Analyst",
+  legal: "Legal Review Specialist",
+  hr: "People Operations Specialist",
+  pr: "PR Manager",
+  gamedev: "Game Developer",
+};
+
+const KNOWN_TITLES = [
+  "software engineer",
+  "product engineer",
+  "full-stack software engineer",
+  "full stack software engineer",
+  "ai systems engineer",
+  "ai performance engineer",
+  "saas platform engineer",
+  "product manager",
+  "pr manager",
+  "sales development representative",
+  "market research analyst",
+  "customer support specialist",
+  "legal review specialist",
+  "data science engineer",
+];
+
+function titleCase(value: string) {
+  return value
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((word) => (word.toLowerCase() === "ai" || word.toLowerCase() === "saas"
+      ? word.toUpperCase()
+      : word[0]?.toUpperCase() + word.slice(1).toLowerCase()))
+    .join(" ");
+}
+
+function includesAny(text: string, words: string[]) {
+  return words.some((word) => text.includes(word));
+}
+
+export function synthesizeRoleTitle(input: {
+  roleInput: string;
+  department?: string | null;
+  domain?: string;
+  technicalFocus?: string[];
+  businessFocus?: string[];
+}): string {
+  const combined = [
+    input.roleInput,
+    input.domain,
+    ...(input.technicalFocus ?? []),
+    ...(input.businessFocus ?? []),
+  ]
+    .join(" ")
+    .toLowerCase();
+  const raw = input.roleInput.trim();
+  const normalized = raw.toLowerCase().replace(/[.,]/g, "").replace(/\s+/g, " ");
+
+  if (KNOWN_TITLES.includes(normalized)) {
+    return titleCase(normalized.replace("full stack", "full-stack"));
+  }
+
+  if (includesAny(combined, ["latency", "bandwidth", "performance", "inference", "throughput"])) {
+    return "AI Performance Engineer";
+  }
+  if (includesAny(combined, ["saas platform", "platform engineering", "platform features"])) {
+    return "SaaS Platform Engineer";
+  }
+  if (includesAny(combined, ["data science", "ml workflow", "machine learning", "analytics workflow"])) {
+    return "Data Science Engineer";
+  }
+  if (
+    includesAny(combined, ["write code", "build and ship", "build, and ship", "ship features", "product features"])
+  ) {
+    return "Product Engineer";
+  }
+  if (includesAny(combined, ["backend", "systems", "api", "infrastructure"])) {
+    return "Backend Systems Engineer";
+  }
+  if (includesAny(combined, ["frontend", "ui", "react", "interface"])) {
+    return "Frontend Product Engineer";
+  }
+  if (includesAny(combined, ["press", "media", "coverage", "investor"])) {
+    return "PR Manager";
+  }
+  if (includesAny(combined, ["leads", "outreach", "sales email", "qualify"])) {
+    return "Sales Development Representative";
+  }
+  if (includesAny(combined, ["competitor", "market size", "research"])) {
+    return "Market Research Analyst";
+  }
+  if (includesAny(combined, ["support tickets", "customers", "customer support"])) {
+    return "Customer Support Specialist";
+  }
+
+  if (input.department && DEPARTMENT_FALLBACKS[input.department]) {
+    return DEPARTMENT_FALLBACKS[input.department];
+  }
+
+  if (raw && raw.split(/\s+/).length <= 4 && /manager|engineer|analyst|designer|specialist|representative/i.test(raw)) {
+    return titleCase(raw);
+  }
+
+  return "AI Employee";
+}

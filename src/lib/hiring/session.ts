@@ -5,7 +5,10 @@ import type {
   HiringStep,
   RecruiterChecklist,
   RecruiterMessage,
+  RecruiterReadiness,
+  RecruiterSuggestionChip,
 } from "./types";
+import { EMPTY_READINESS } from "./recruiter-brain";
 import { emptyChecklist } from "./recruiter-checklist";
 
 export const HIRING_SESSION_KEY = "adehq-hiring-session";
@@ -17,6 +20,8 @@ export function initialHiringSession(): HiringSessionState {
     departmentId: null,
     recruiterMessages: [],
     checklist: emptyChecklist(),
+    readiness: EMPTY_READINESS,
+    suggestionChips: [],
     briefReady: false,
     candidates: [],
     genStep: 0,
@@ -39,6 +44,8 @@ export type HiringAction =
   | { type: "ADD_MESSAGE"; message: RecruiterMessage }
   | { type: "SET_MESSAGES"; messages: RecruiterMessage[] }
   | { type: "SET_CHECKLIST"; checklist: RecruiterChecklist }
+  | { type: "SET_READINESS"; readiness: RecruiterReadiness }
+  | { type: "SET_SUGGESTION_CHIPS"; chips: RecruiterSuggestionChip[] }
   | { type: "SET_BRIEF"; brief: AiEmployeeJobBrief }
   | { type: "SET_BRIEF_PARTIAL"; briefPartial: Partial<AiEmployeeJobBrief> }
   | { type: "SET_BRIEF_READY"; briefReady: boolean }
@@ -56,6 +63,7 @@ export type HiringAction =
   | { type: "SET_ERROR"; error: string | null }
   | { type: "SET_BRIEF_EDITABLE"; editable: boolean }
   | { type: "SET_REGEN_SPIN"; spin: boolean }
+  | { type: "RESET_RECRUITER" }
   | { type: "RESTORE"; state: HiringSessionState };
 
 const BACK_MAP: Partial<Record<HiringStep, HiringStep>> = {
@@ -86,6 +94,10 @@ export function hiringReducer(state: HiringSessionState, action: HiringAction): 
       return { ...state, recruiterMessages: action.messages };
     case "SET_CHECKLIST":
       return { ...state, checklist: action.checklist };
+    case "SET_READINESS":
+      return { ...state, readiness: action.readiness, briefReady: action.readiness.ready };
+    case "SET_SUGGESTION_CHIPS":
+      return { ...state, suggestionChips: action.chips };
     case "SET_BRIEF":
       return { ...state, brief: action.brief, briefPartial: action.brief };
     case "SET_BRIEF_PARTIAL":
@@ -131,6 +143,18 @@ export function hiringReducer(state: HiringSessionState, action: HiringAction): 
       return { ...state, briefEditable: action.editable };
     case "SET_REGEN_SPIN":
       return { ...state, regenSpin: action.spin };
+    case "RESET_RECRUITER":
+      return {
+        ...state,
+        recruiterMessages: [],
+        checklist: emptyChecklist(),
+        readiness: EMPTY_READINESS,
+        suggestionChips: [],
+        brief: undefined,
+        briefPartial: undefined,
+        briefReady: false,
+        briefEditable: false,
+      };
     case "RESTORE":
       return action.state;
     default:

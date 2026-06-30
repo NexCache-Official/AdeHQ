@@ -10,29 +10,47 @@ export function emptyChecklist(): RecruiterChecklist {
   };
 }
 
+/** Only count checklist items the user actually contributed — not auto-filled defaults. */
 export function checklistFromBrief(
   brief: Partial<AiEmployeeJobBrief> | undefined,
   roleSeed: string,
+  messages: RecruiterMessage[] = [],
 ): RecruiterChecklist {
-  if (!brief) {
+  const userText = messages
+    .filter((m) => m.role === "user")
+    .map((m) => m.text.toLowerCase())
+    .join(" ");
+  const userTurns = countUserTurns(messages);
+
+  if (!brief || userTurns === 0) {
     return {
-      roleKnown: Boolean(roleSeed.trim()),
+      roleKnown: Boolean(roleSeed.trim().length > 2),
       domainKnown: false,
       coreWorkKnown: false,
       workStyleKnown: false,
       communicationKnown: false,
     };
   }
+
+  const workStyleMentioned =
+    userText.includes("quality") ||
+    userText.includes("speed") ||
+    userText.includes("proactive") ||
+    userText.includes("balanced") ||
+    userText.includes("direction");
+
   return {
     roleKnown: Boolean(brief.roleTitle?.trim() || roleSeed.trim()),
-    domainKnown: Boolean(brief.domain?.trim()),
+    domainKnown: userTurns >= 1 && Boolean(brief.domain?.trim()),
     coreWorkKnown:
-      (brief.coreResponsibilities?.length ?? 0) > 0 ||
-      (brief.technicalFocus?.length ?? 0) > 0,
-    workStyleKnown: Boolean(brief.qualityPreference && brief.proactivityLevel),
+      userTurns >= 1 &&
+      ((brief.coreResponsibilities?.length ?? 0) > 0 ||
+        (brief.technicalFocus?.length ?? 0) > 0),
+    workStyleKnown: userTurns >= 1 && workStyleMentioned,
     communicationKnown:
-      Boolean(brief.communicationStyle?.trim()) ||
-      (brief.personalityTraits?.length ?? 0) > 0,
+      userTurns >= 1 &&
+      (Boolean(brief.communicationStyle?.trim()) ||
+        (brief.personalityTraits?.length ?? 0) > 0),
   };
 }
 
@@ -54,23 +72,19 @@ export function hasMeaningfulAnswer(messages: RecruiterMessage[], roleSeed: stri
   return userTexts.some((t) => t.length > 3);
 }
 
+/** Optional skip chip — never auto-advances; user must click it explicitly. */
 export function shouldOfferDraftNow(
   messages: RecruiterMessage[],
   roleSeed: string,
-  checklist: RecruiterChecklist,
 ): boolean {
-  if (isChecklistReady(checklist)) return true;
-  if (hasMeaningfulAnswer(messages, roleSeed) && countUserTurns(messages) >= 1) return true;
+  if (countUserTurns(messages) >= 1) return true;
   if (roleSeed.trim().split(/\s+/).length >= 6) return true;
-  return false;
+  return hasMeaningfulAnswer(messages, roleSeed);
 }
 
-export function shouldAutoBriefReady(
-  messages: RecruiterMessage[],
-  checklist: RecruiterChecklist,
-): boolean {
-  const turns = countUserTurns(messages);
-  return turns >= 3 || isChecklistReady(checklist);
+/** Ade suggests review after enough conversation — still requires explicit click. */
+export function shouldAutoBriefReady(messages: RecruiterMessage[]): boolean {
+  return countUserTurns(messages) >= 3;
 }
 
 export const DEFAULT_CHIPS = {

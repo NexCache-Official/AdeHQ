@@ -16,7 +16,6 @@ import {
   ONBOARDING_ROOM_KEY,
 } from "@/lib/hiring/data";
 import { candidateToEmployee } from "@/lib/hiring/map-candidate";
-import { DEFAULT_CHIPS, shouldOfferDraftNow } from "@/lib/hiring/recruiter-checklist";
 import {
   clearHiringSession,
   hiringBackStep,
@@ -29,6 +28,8 @@ import type {
   AiEmployeeJobBrief,
   CandidatesApiResponse,
   RecruiterApiResponse,
+  RecruiterReadiness,
+  RecruiterSuggestionChip,
   RefineMode,
 } from "@/lib/hiring/types";
 import type { ProjectRoom, WorkLogEvent } from "@/lib/types";
@@ -121,35 +122,52 @@ export function HireFlow({ onboarding = false }: HireFlowProps) {
   }, [session.step]);
 
   const applyRecruiterResponse = useCallback((res: RecruiterApiResponse, appendAde = true) => {
-    if (appendAde && res.message) {
-      dispatch({ type: "ADD_MESSAGE", message: { role: "ade", text: res.message } });
+    const recruiterMessage = res.recruiterMessage ?? res.message;
+    if (appendAde && recruiterMessage) {
+      dispatch({ type: "ADD_MESSAGE", message: { role: "ade", text: recruiterMessage } });
     }
     if (res.checklist) dispatch({ type: "SET_CHECKLIST", checklist: res.checklist });
-    if (res.briefPartial) dispatch({ type: "SET_BRIEF_PARTIAL", briefPartial: res.briefPartial });
-    if (res.brief) {
-      dispatch({ type: "SET_BRIEF", brief: res.brief });
-      dispatch({ type: "SET_BRIEF_READY", briefReady: true });
-    } else {
-      dispatch({ type: "SET_BRIEF_READY", briefReady: res.briefReady });
+    if (res.readiness) dispatch({ type: "SET_READINESS", readiness: res.readiness });
+    if (res.suggestionChips) {
+      dispatch({ type: "SET_SUGGESTION_CHIPS", chips: res.suggestionChips });
     }
+    if (res.briefPartial) dispatch({ type: "SET_BRIEF_PARTIAL", briefPartial: res.briefPartial });
+    if (res.brief) dispatch({ type: "SET_BRIEF", brief: res.brief });
   }, []);
+
+  const goToBrief = useCallback(() => {
+    const brief =
+      session.brief ??
+      synthesizeBriefFromConversation(
+        roleSeed,
+        session.recruiterMessages,
+        session.departmentId,
+        session.briefPartial,
+      );
+    dispatch({ type: "SET_BRIEF", brief });
+    dispatch({ type: "SET_STEP", step: "brief" });
+  }, [roleSeed, session.brief, session.briefPartial, session.recruiterMessages, session.departmentId]);
 
   const startRecruiter = async (seed?: string) => {
     const nextSeed = seed ?? roleSeed;
     if (!nextSeed && !session.departmentId) return;
+    dispatch({ type: "RESET_RECRUITER" });
     dispatch({ type: "SET_ERROR", error: null });
     dispatch({ type: "SET_STEP", step: "recruiter" });
-    dispatch({ type: "SET_MESSAGES", messages: [] });
-    dispatch({ type: "SET_BRIEF_READY", briefReady: false });
     dispatch({ type: "SET_BUSY", busy: true });
     try {
       const res = await callRecruiter({
         roleSeed: nextSeed,
-        departmentId: session.departmentId,
-        messages: [],
+        selectedDepartment: session.departmentId,
+        conversation: [],
+        action: "message",
       });
-      dispatch({ type: "SET_MESSAGES", messages: [{ role: "ade", text: res.message }] });
+      dispatch({
+        type: "SET_MESSAGES",
+        messages: [{ role: "ade", text: res.recruiterMessage ?? res.message }],
+      });
       applyRecruiterResponse(res, false);
+      dispatch({ type: "SET_BRIEF_READY", briefReady: false });
     } catch (e) {
       dispatch({
         type: "SET_ERROR",
@@ -160,34 +178,43 @@ export function HireFlow({ onboarding = false }: HireFlowProps) {
     }
   };
 
-  const sendUserMessage = async (text: string, mode?: string) => {
+  const sendUserMessage = async (text: string, action: "message" | "draft_now" | "refine_section" = "message") => {
     const trimmed = text.trim();
     if (!trimmed || session.busy) return;
     dispatch({ type: "SET_ERROR", error: null });
 
-    const isDraftNow = trimmed === DEFAULT_CHIPS.draftNow;
-    const isReview = trimmed === DEFAULT_CHIPS.reviewBrief;
+    const isDraftNow = action === "draft_now";
+    const isReview = action === "message" && trimmed === "Review job brief";
+    const onBriefStep = session.step === "brief";
+
+    if (isReview && !onBriefStep) {
+      goToBrief();
+      return;
+    }
 
     const nextMessages = [...session.recruiterMessages, { role: "user" as const, text: trimmed }];
     dispatch({ type: "SET_MESSAGES", messages: nextMessages });
     dispatch({ type: "SET_BUSY", busy: true });
 
     try {
-      if (isReview && session.brief) {
-        dispatch({ type: "SET_STEP", step: "brief" });
-        return;
-      }
-
       const res = await callRecruiter({
         roleSeed,
-        departmentId: session.departmentId,
-        messages: nextMessages,
-        currentBrief: session.brief,
-        mode: isDraftNow || trimmed === DEFAULT_CHIPS.draftNow ? "draft_now" : mode ?? "chat",
+        selectedDepartment: session.departmentId,
+        conversation: nextMessages,
+        userMessage: trimmed,
+        action: onBriefStep ? "refine_section" : isDraftNow ? "draft_now" : "message",
+        currentBrief: session.brief ?? session.briefPartial,
+        mode: onBriefStep ? "brief_refine" : isDraftNow ? "draft_now" : "chat",
       });
       applyRecruiterResponse(res);
-      if (res.briefReady && res.brief) {
+      if (res.brief) {
         dispatch({ type: "SET_BRIEF", brief: res.brief });
+      }
+      if (res.canReviewBrief || res.briefReady) {
+        dispatch({ type: "SET_BRIEF_READY", briefReady: true });
+      }
+      if (isDraftNow && res.brief) {
+        dispatch({ type: "SET_BRIEF_READY", briefReady: true });
       }
     } catch (e) {
       dispatch({
@@ -209,8 +236,9 @@ export function HireFlow({ onboarding = false }: HireFlowProps) {
     try {
       const res = await callRecruiter({
         roleSeed,
-        departmentId: session.departmentId,
-        messages: session.recruiterMessages,
+        selectedDepartment: session.departmentId,
+        conversation: session.recruiterMessages,
+        action: "refine_section",
         currentBrief: session.brief,
         mode: "refine",
         refineSection: section,
@@ -229,8 +257,8 @@ export function HireFlow({ onboarding = false }: HireFlowProps) {
     try {
       const res = await callRecruiter({
         roleSeed,
-        departmentId: session.departmentId,
-        messages: session.recruiterMessages,
+        selectedDepartment: session.departmentId,
+        conversation: session.recruiterMessages,
         currentBrief: session.brief,
         mode: "regenerate",
       });
@@ -252,8 +280,15 @@ export function HireFlow({ onboarding = false }: HireFlowProps) {
     }
   };
 
-  const generateApplicants = () => {
+  const generateApplicants = (force = false) => {
     if (!session.brief) return;
+    if (!force && !session.readiness.ready) {
+      dispatch({
+        type: "SET_ERROR",
+        error: "This role brief is still light. Ask one more question or choose Generate anyway.",
+      });
+      return;
+    }
     const brief = session.brief;
     dispatch({ type: "SET_STEP", step: "generating_applicants" });
     dispatch({ type: "SET_GEN_STEP", genStep: 0 });
@@ -527,36 +562,24 @@ export function HireFlow({ onboarding = false }: HireFlowProps) {
           <div className="grid w-full grid-cols-1 items-start gap-[18px] lg:grid-cols-[1.45fr_1fr]">
             <RecruiterChat
               messages={session.recruiterMessages}
-              chips={
-                session.briefReady
-                  ? [DEFAULT_CHIPS.reviewBrief]
-                  : [
-                      ...(shouldOfferDraftNow(
-                        session.recruiterMessages,
-                        roleSeed,
-                        session.checklist,
-                      )
-                        ? [DEFAULT_CHIPS.draftNow]
-                        : []),
-                      ...(recruiterTurns >= 1 ? [DEFAULT_CHIPS.refineMore] : []),
-                    ]
-              }
+              chips={session.suggestionChips}
+              readiness={session.readiness}
               briefReady={session.briefReady}
               busy={session.busy}
               onSend={sendUserMessage}
-              onReview={() => dispatch({ type: "SET_STEP", step: "brief" })}
+              onReview={goToBrief}
             />
             <BriefDocumentPreview brief={previewBrief} />
           </div>
         )}
 
         {session.step === "brief" && session.brief && (
-          <div className="grid w-full grid-cols-1 items-start gap-[18px] lg:grid-cols-[1.2fr_0.8fr]">
+          <div className="grid w-full grid-cols-1 items-start gap-[18px] lg:grid-cols-[1.2fr_0.85fr]">
             <div>
               <div className="mb-5">
                 <h1 className="text-[32px] font-semibold tracking-tight">Review the AI employee job brief</h1>
                 <p className="text-[15px] text-ink-2">
-                  Edit anything, then generate three candidate applicants.
+                  Edit the brief on the left. Chat with Ade on the right to refine it in real time.
                 </p>
               </div>
               <BriefEditor
@@ -590,14 +613,48 @@ export function HireFlow({ onboarding = false }: HireFlowProps) {
                 </div>
                 <button
                   type="button"
-                  onClick={generateApplicants}
+                  onClick={() => generateApplicants()}
                   className="rounded-[11px] bg-ink px-5 py-2.5 text-sm font-medium text-white shadow-sm"
                 >
                   Generate applicants →
                 </button>
               </div>
+              {!session.readiness.ready && (
+                <div className="mt-4 rounded-[14px] border border-amber/40 bg-amber/10 p-4">
+                  <div className="text-sm font-semibold">This role brief is still light.</div>
+                  <p className="mt-1 text-sm text-ink-2">
+                    You can generate applicants now, but results may be generic.
+                  </p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => dispatch({ type: "SET_STEP", step: "recruiter" })}
+                      className="rounded-[10px] border border-border bg-surface px-3.5 py-2 text-sm"
+                    >
+                      Ask 1 more question
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => generateApplicants(true)}
+                      className="rounded-[10px] bg-ink px-3.5 py-2 text-sm font-medium text-white"
+                    >
+                      Generate anyway
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
-            <BriefDocumentPreview brief={session.brief} live={false} />
+            <RecruiterChat
+              variant="refinement"
+              messages={session.recruiterMessages}
+              chips={session.suggestionChips.filter((chip) => chip.intent !== "review_brief")}
+              readiness={session.readiness}
+              briefReady={false}
+              busy={session.busy}
+              onSend={sendUserMessage}
+              onReview={goToBrief}
+              placeholder="Tell Ade what to change — e.g. add compliance focus, make more senior…"
+            />
           </div>
         )}
 
@@ -721,17 +778,23 @@ export function HireFlow({ onboarding = false }: HireFlowProps) {
 function RecruiterChat({
   messages,
   chips,
+  readiness,
   briefReady,
   busy,
   onSend,
   onReview,
+  variant = "recruiter",
+  placeholder = "Type your answer…",
 }: {
   messages: { role: "ade" | "user"; text: string }[];
-  chips: string[];
+  chips: RecruiterSuggestionChip[];
+  readiness: RecruiterReadiness;
   briefReady: boolean;
   busy: boolean;
-  onSend: (text: string) => void;
+  onSend: (text: string, action?: "message" | "draft_now" | "refine_section") => void;
   onReview: () => void;
+  variant?: "recruiter" | "refinement";
+  placeholder?: string;
 }) {
   const [input, setInput] = useState("");
   const endRef = useRef<HTMLDivElement>(null);
@@ -739,13 +802,54 @@ function RecruiterChat({
     endRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
+  const allChips =
+    briefReady && variant === "recruiter" && !chips.some((chip) => chip.intent === "review_brief")
+      ? [
+          {
+            id: "review-brief",
+            label: "Review job brief",
+            value: "Review job brief",
+            intent: "review_brief" as const,
+          },
+          ...chips,
+        ]
+      : chips;
+
+  const readinessLabel =
+    readiness.ready ? "Ready to review" : readiness.score >= 50 ? "Almost ready" : "Understanding role…";
+
+  const handleChip = (chip: RecruiterSuggestionChip) => {
+    if (chip.intent === "review_brief") {
+      onReview();
+      return;
+    }
+    onSend(
+      chip.value,
+      chip.intent === "draft_brief_now"
+        ? "draft_now"
+        : chip.intent === "refine_more" ||
+            chip.intent === "add_personality" ||
+            chip.intent === "add_tools" ||
+            chip.intent === "add_approval_rules"
+          ? "message"
+          : "message",
+    );
+  };
+
   return (
-    <div className="flex h-[560px] flex-col overflow-hidden rounded-[18px] border border-border bg-surface shadow-md">
+    <div className="flex h-[560px] flex-col overflow-hidden rounded-[18px] border border-border bg-surface shadow-md lg:sticky lg:top-24">
       <div className="flex items-center gap-2.5 border-b border-border px-5 py-4">
         <AdeOrb size={32} />
         <div>
           <div className="text-sm font-semibold">Ade Recruiter</div>
-          <div className="text-xs text-ink-3">Recruiting manager · guiding your hire</div>
+          <div className="text-xs text-ink-3">
+            {variant === "refinement"
+              ? "Refine the job brief in real time"
+              : "Recruiting manager · guiding your hire"}
+          </div>
+        </div>
+        <div className="ml-auto rounded-full border border-border bg-muted px-2.5 py-1 text-[11px] text-ink-2">
+          {readinessLabel} · {readiness.score}%
         </div>
       </div>
       <div className="flex flex-1 flex-col gap-3 overflow-y-auto p-5">
@@ -781,53 +885,49 @@ function RecruiterChat({
         <div ref={endRef} />
       </div>
       <div className="border-t border-border bg-muted/40 p-4">
-        {!briefReady && chips.length > 0 && (
+        {allChips.length > 0 && (
           <div className="mb-3 flex flex-wrap gap-2">
-            {chips.map((c) => (
+            {allChips.map((c) => (
               <button
-                key={c}
+                key={c.id}
                 type="button"
-                onClick={() => onSend(c)}
+                onClick={() => handleChip(c)}
                 disabled={busy}
-                className="rounded-full border border-border bg-surface px-3.5 py-2 text-[13px] hover:border-ink hover:bg-ink hover:text-white disabled:opacity-50"
+                className={cn(
+                  "rounded-full border px-3.5 py-2 text-[13px] disabled:opacity-50",
+                  c.intent === "review_brief"
+                    ? "border-ink bg-ink text-white hover:bg-ink/90"
+                    : "border-border bg-surface hover:border-ink hover:bg-ink hover:text-white",
+                )}
               >
-                {c}
+                {c.label}
               </button>
             ))}
           </div>
         )}
-        {briefReady ? (
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            onSend(input);
+            setInput("");
+          }}
+          className="flex gap-2"
+        >
+          <textarea
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            placeholder={placeholder}
+            rows={2}
+            className="min-h-[44px] flex-1 resize-none rounded-xl border border-border bg-surface px-3 py-2.5 text-sm outline-none"
+          />
           <button
-            type="button"
-            onClick={onReview}
-            className="w-full rounded-xl bg-ink py-3 text-sm font-medium text-white"
+            type="submit"
+            disabled={busy || !input.trim()}
+            className="rounded-xl bg-ink px-4 py-2.5 text-sm text-white disabled:opacity-40"
           >
-            Review job brief →
+            Send
           </button>
-        ) : (
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              onSend(input);
-              setInput("");
-            }}
-            className="flex gap-2"
-          >
-            <input
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              placeholder="Type your answer…"
-              className="flex-1 rounded-xl border border-border bg-surface px-3 py-2.5 text-sm outline-none"
-            />
-            <button
-              type="submit"
-              disabled={busy || !input.trim()}
-              className="rounded-xl bg-ink px-4 py-2.5 text-sm text-white disabled:opacity-40"
-            >
-              Send
-            </button>
-          </form>
-        )}
+        </form>
       </div>
     </div>
   );

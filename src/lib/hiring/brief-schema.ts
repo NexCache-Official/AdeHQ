@@ -17,6 +17,46 @@ export const briefSchema = z.object({
   autonomyLevel: z.enum(["low", "balanced", "high"]),
   approvalRules: z.array(z.string()).min(1).max(8),
   toolsNeeded: z.array(z.string()).max(10).optional().default([]),
+  assumptions: z.array(z.string()).max(8).optional().default([]),
+  openQuestions: z.array(z.string()).max(8).optional().default([]),
+});
+
+export const readinessSchema = z.object({
+  score: z.number().min(0).max(100),
+  ready: z.boolean(),
+  confidence: z.enum(["low", "medium", "high"]),
+  missing: z.array(
+    z.enum([
+      "role_title",
+      "domain",
+      "core_work",
+      "technical_focus",
+      "business_focus",
+      "seniority",
+      "autonomy",
+      "communication_style",
+      "quality_preference",
+      "tools",
+      "approval_rules",
+    ]),
+  ),
+  nextBestQuestion: z.string().optional(),
+  reason: z.string(),
+});
+
+export const suggestionChipSchema = z.object({
+  id: z.string(),
+  label: z.string(),
+  value: z.string(),
+  intent: z.enum([
+    "answer_question",
+    "draft_brief_now",
+    "refine_more",
+    "add_personality",
+    "add_tools",
+    "add_approval_rules",
+    "review_brief",
+  ]),
 });
 
 export const checklistSchema = z.object({
@@ -34,6 +74,9 @@ export const recruiterResponseSchema = z.object({
   brief: briefSchema.optional(),
   briefPartial: briefSchema.partial().optional(),
   checklist: checklistSchema.optional(),
+  readiness: readinessSchema.optional(),
+  suggestionChips: z.array(suggestionChipSchema).optional(),
+  canReviewBrief: z.boolean().optional(),
 });
 
 export const applicantCopySchema = z.object({

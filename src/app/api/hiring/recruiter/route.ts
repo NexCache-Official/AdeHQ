@@ -12,42 +12,38 @@ import {
   synthesizeBriefFromConversation,
 } from "@/lib/hiring/build-brief";
 import {
-  DEFAULT_CHIPS,
   checklistFromBrief,
-  countUserTurns,
-  shouldAutoBriefReady,
-  shouldOfferDraftNow,
 } from "@/lib/hiring/recruiter-checklist";
-import type { AiEmployeeJobBrief, RecruiterMessage, RefineMode } from "@/lib/hiring/types";
+import {
+  assessRecruiterReadiness,
+  chooseNextRecruiterQuestion,
+  generateSuggestionChips,
+} from "@/lib/hiring/recruiter-brain";
+import type {
+  AiEmployeeJobBrief,
+  RecruiterMessage,
+  RecruiterReadiness,
+  RecruiterSuggestionChip,
+  RefineMode,
+} from "@/lib/hiring/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 type RecruiterBody = {
+  conversation?: RecruiterMessage[];
+  selectedDepartment?: string | null;
+  userMessage?: string;
+  action?: "message" | "draft_now" | "refine_section";
   roleSeed: string;
   departmentId?: string | null;
   messages: RecruiterMessage[];
   currentBrief?: AiEmployeeJobBrief;
-  mode?: "chat" | "regenerate" | "refine" | "draft_now";
+  mode?: "chat" | "regenerate" | "refine" | "draft_now" | "brief_refine";
   refineInstruction?: string;
   refineMode?: RefineMode;
   refineSection?: string;
 };
-
-const SCRIPTED_QUESTIONS = [
-  {
-    ade: "What role do you need — and what domain or industry should they understand?",
-    chips: ["Enterprise AI", "SaaS & tech", "Finance & fintech", "Consumer & retail"],
-  },
-  {
-    ade: "What should they focus on day to day? Be specific about the core work.",
-    chips: ["Performance optimization", "Media outreach", "Product launches", "Investor relations"],
-  },
-  {
-    ade: "How should they work — speed vs quality, and how proactive should they be?",
-    chips: ["Balanced & proactive", "Quality-first", "Fast execution", "Wait for direction"],
-  },
-] as const;
 
 function normalizeBrief(raw: z.infer<typeof briefSchema>): AiEmployeeJobBrief {
   return {
@@ -56,127 +52,134 @@ function normalizeBrief(raw: z.infer<typeof briefSchema>): AiEmployeeJobBrief {
     businessFocus: raw.businessFocus ?? [],
     personalityTraits: raw.personalityTraits ?? [],
     toolsNeeded: raw.toolsNeeded ?? [],
+    assumptions: raw.assumptions ?? [],
+    openQuestions: raw.openQuestions ?? [],
   };
 }
 
-function buildChips(
-  messages: RecruiterMessage[],
-  roleSeed: string,
-  checklist: ReturnType<typeof checklistFromBrief>,
-  briefReady: boolean,
-  extra: string[] = [],
-): string[] {
-  if (briefReady) return [DEFAULT_CHIPS.reviewBrief];
-  const chips = [...extra];
-  if (shouldOfferDraftNow(messages, roleSeed, checklist)) {
-    chips.unshift(DEFAULT_CHIPS.draftNow);
-  }
-  if (countUserTurns(messages) >= 1) {
-    chips.push(DEFAULT_CHIPS.refineMore);
-  }
-  return [...new Set(chips)].slice(0, 6);
+function normalizeBody(body: RecruiterBody) {
+  const conversation = body.conversation ?? body.messages ?? [];
+  const departmentId = body.selectedDepartment ?? body.departmentId ?? null;
+  const action = body.action ?? (body.mode === "draft_now" ? "draft_now" : "message");
+  return { conversation, departmentId, action };
 }
 
-function scriptedResponse(body: RecruiterBody) {
-  const { roleSeed, departmentId, messages } = body;
-  const userTurns = countUserTurns(messages);
-  const lastUser = [...messages].reverse().find((m) => m.role === "user")?.text ?? "";
+function applyInstructionToBrief(brief: AiEmployeeJobBrief, instruction: string): AiEmployeeJobBrief {
+  const lower = instruction.toLowerCase();
+  let next = { ...brief };
 
-  if (body.mode === "draft_now" || body.mode === "regenerate") {
-    const brief = synthesizeBriefFromConversation(
-      roleSeed,
-      messages,
-      departmentId,
-      body.currentBrief,
-    );
-    const checklist = checklistFromBrief(brief, roleSeed);
-    return {
-      message:
-        "I have enough to draft a strong brief. Review it now, or refine personality and tools if you'd like.",
-      chips: buildChips(messages, roleSeed, checklist, true),
-      briefReady: true,
-      brief,
-      briefPartial: brief,
-      checklist,
-      usedFallback: true,
+  if (lower.includes("senior") || lower.includes("advisor")) {
+    next = {
+      ...next,
+      seniorityLevel: lower.includes("advisor") ? "advisor" : "manager",
+      autonomyLevel: "high",
+      assumptions: [
+        ...new Set([
+          ...next.assumptions,
+          "The user wants this employee to operate with more senior judgment.",
+        ]),
+      ],
+    };
+  }
+  if (lower.includes("hands-on") || lower.includes("implementation")) {
+    next = {
+      ...next,
+      autonomyLevel: next.autonomyLevel === "low" ? "balanced" : next.autonomyLevel,
+      coreResponsibilities: [
+        ...new Set([
+          ...next.coreResponsibilities,
+          "Work hands-on to turn ideas into clear implementation tasks",
+        ]),
+      ],
+    };
+  }
+  if (lower.includes("tool")) {
+    next = {
+      ...next,
+      toolsNeeded: [...new Set([...next.toolsNeeded, "Project docs", "Issue tracker", "Relevant workspace tools"])],
+    };
+  }
+  if (lower.includes("approval") || lower.includes("risk")) {
+    next = {
+      ...next,
+      approvalRules: [
+        ...new Set([...next.approvalRules, "Ask for approval before high-risk or external-facing actions"]),
+      ],
     };
   }
 
-  if (body.mode === "refine" && body.currentBrief) {
-    let brief = { ...body.currentBrief };
-    const section = body.refineSection ?? "mission";
-    const instruction = body.refineInstruction?.trim() ?? "";
+  return next;
+}
 
-    if (body.refineMode === "improve" && instruction) {
-      if (section === "mission") {
-        brief = { ...brief, mission: `${brief.mission} (Refined: ${instruction})` };
-      } else if (section === "coreResponsibilities") {
-        brief = {
-          ...brief,
-          coreResponsibilities: brief.coreResponsibilities.map((r) =>
-            r.includes(instruction) ? r : `${r}`,
-          ),
-        };
-      }
-    } else {
-      brief = synthesizeBriefFromConversation(roleSeed, messages, departmentId, brief);
-    }
-
-    const checklist = checklistFromBrief(brief, roleSeed);
-    return {
-      message: `Updated the ${section.replace(/([A-Z])/g, " $1").toLowerCase()} section. Review the changes.`,
-      chips: buildChips(messages, roleSeed, checklist, true),
-      briefReady: true,
-      brief,
-      briefPartial: brief,
-      checklist,
-      usedFallback: true,
-    };
+function recruiterMessageFor(
+  readiness: RecruiterReadiness,
+  conversation: RecruiterMessage[],
+  currentBrief: AiEmployeeJobBrief,
+) {
+  const lastUser = [...conversation].reverse().find((m) => m.role === "user")?.text.toLowerCase() ?? "";
+  if (lastUser.includes("don't know") || lastUser.includes("not sure") || lastUser.includes("help me decide")) {
+    return "No problem. For this kind of role, I’d usually suggest a few directions: product engineering for shipping features, AI infrastructure for performance and scale, or data workflows for analysis and ML-heavy work. Which feels closest?";
   }
+  return chooseNextRecruiterQuestion(readiness, currentBrief);
+}
 
-  if (lastUser === DEFAULT_CHIPS.draftNow) {
-    return scriptedResponse({ ...body, mode: "draft_now" });
+function openingMessage(body: RecruiterBody, departmentId: string | null) {
+  const roleSeed = body.roleSeed?.trim() ?? "";
+  const dept = departmentLabel(departmentId);
+  if (roleSeed && roleSeed.split(/\s+/).length >= 3) {
+    return `Got it — I’ll treat this as a ${synthesizeBriefFromConversation(roleSeed, [], departmentId).roleTitle} role for now. What kind of work should this employee focus on day to day?`;
   }
-
-  if (userTurns === 0) {
-    const partial = synthesizeBriefFromConversation(roleSeed, [], departmentId);
-    const checklist = checklistFromBrief(partial, roleSeed);
-    return {
-      message: SCRIPTED_QUESTIONS[0].ade,
-      chips: buildChips(messages, roleSeed, checklist, false, [...SCRIPTED_QUESTIONS[0].chips]),
-      briefReady: false,
-      briefPartial: partial,
-      checklist,
-      usedFallback: true,
-    };
+  if (departmentId && departmentId !== "custom") {
+    return `Hello! I’m Ade Recruiter. For ${dept}, what kind of AI employee do you want to hire, and what problem should they own first?`;
   }
+  return "What kind of AI employee do you want to hire, and what should they help with first?";
+}
 
-  const partial = synthesizeBriefFromConversation(roleSeed, messages, departmentId);
-  const checklist = checklistFromBrief(partial, roleSeed);
-
-  if (shouldAutoBriefReady(messages, checklist) || lastUser === DEFAULT_CHIPS.refineMore) {
-    const brief = synthesizeBriefFromConversation(roleSeed, messages, departmentId, partial);
-    return {
-      message:
-        "I have enough to prepare the job brief. Want to review it now or refine personality and tools first?",
-      chips: buildChips(messages, roleSeed, checklistFromBrief(brief, roleSeed), true),
-      briefReady: true,
-      brief,
-      briefPartial: brief,
-      checklist: checklistFromBrief(brief, roleSeed),
-      usedFallback: true,
-    };
+function buildResponse(input: {
+  body: RecruiterBody;
+  brief: AiEmployeeJobBrief;
+  conversation: RecruiterMessage[];
+  message?: string;
+  usedFallback: boolean;
+  forceCanReview?: boolean;
+}) {
+  const readiness = assessRecruiterReadiness(input.conversation, input.brief);
+  const canReviewBrief = input.forceCanReview || readiness.ready;
+  let suggestionChips = generateSuggestionChips(readiness, input.brief);
+  if (canReviewBrief && !suggestionChips.some((chip) => chip.intent === "review_brief")) {
+    suggestionChips = [
+      {
+        id: "review-brief",
+        label: "Review job brief",
+        value: "Review job brief",
+        intent: "review_brief",
+      },
+      ...suggestionChips,
+    ];
   }
+  const userTurns = input.conversation.filter((m) => m.role === "user").length;
+  const departmentId = input.body.selectedDepartment ?? input.body.departmentId ?? null;
+  const message =
+    input.message ??
+    (userTurns === 0
+      ? openingMessage(input.body, departmentId)
+      : canReviewBrief
+        ? "I have enough to draft a strong job brief. You can review it now, or keep refining the role."
+        : recruiterMessageFor(readiness, input.conversation, input.brief));
+  const checklist = checklistFromBrief(input.brief, input.body.roleSeed, input.conversation);
 
-  const qIndex = Math.min(userTurns, SCRIPTED_QUESTIONS.length - 1);
-  const q = SCRIPTED_QUESTIONS[qIndex];
   return {
-    message: q.ade,
-    chips: buildChips(messages, roleSeed, checklist, false, [...q.chips]),
-    briefReady: false,
-    briefPartial: partial,
+    recruiterMessage: message,
+    message,
+    brief: input.brief,
+    briefPartial: input.brief,
+    readiness,
+    suggestionChips,
+    canReviewBrief,
+    briefReady: canReviewBrief,
+    chips: suggestionChips.map((chip) => chip.label),
     checklist,
-    usedFallback: true,
+    usedFallback: input.usedFallback,
   };
 }
 
@@ -187,15 +190,15 @@ Role seed: "${body.roleSeed || "unspecified"}"
 Department: ${departmentLabel(body.departmentId ?? null)}
 
 RULES:
-1. Extract semantics from ALL user messages — NEVER map answers by question order.
-2. Technical topics (latency, bandwidth, performance) → technicalFocus and successMetrics — NEVER communicationStyle or proactivityLevel.
-3. communicationStyle = how they communicate (e.g. "technical, precise"). proactivityLevel = low|balanced|high. qualityPreference = speed|balanced|quality.
-4. Ask at most ONE question per turn. Stop after 3 user answers if you have role, domain, core work, and work style.
-5. Set briefReady true when enough context exists OR user says "Draft brief now".
-6. Never ask about channels, rooms, or start location.
-7. Include briefPartial on every response with whatever you've inferred so far.
-8. Always include chips: "Draft brief now" once role+core work are known; "Refine more" after first answer.
-9. seniorityLevel: assistant|specialist|manager|director|advisor. autonomyLevel: low|balanced|high.
+1. Do not behave like a form or a fixed wizard.
+2. Extract semantics from ALL user messages — NEVER map answers by question order.
+3. Infer professional role titles. Do not use raw phrases like "write code, build, and ship" as a title.
+4. Technical topics (latency, bandwidth, performance) → technicalFocus and successMetrics — NEVER communicationStyle or proactivityLevel.
+5. Ask at most ONE useful question per turn.
+6. If enough information exists, say the brief is ready but keep the user free to refine.
+7. Always include an updated semantic brief or partial brief.
+8. Include assumptions and openQuestions while confidence is low.
+9. Never ask about channels, rooms, or start location.
 
 Mode: ${body.mode ?? "chat"}
 ${body.refineInstruction ? `Refine (${body.refineMode ?? "improve"}) section ${body.refineSection}: ${body.refineInstruction}` : ""}
@@ -208,21 +211,42 @@ export async function POST(request: NextRequest) {
     await requireAuthUser(request);
     const body = (await request.json()) as RecruiterBody;
 
-    if (!body.roleSeed?.trim() && !body.departmentId) {
+    const { conversation, departmentId, action } = normalizeBody(body);
+
+    if (!body.roleSeed?.trim() && !departmentId) {
       return NextResponse.json({ error: "roleSeed or departmentId required." }, { status: 400 });
     }
 
-    if (body.mode === "draft_now") {
-      return NextResponse.json(scriptedResponse(body));
-    }
+    const baseBrief = synthesizeBriefFromConversation(
+      body.roleSeed,
+      conversation,
+      departmentId,
+      body.currentBrief,
+    );
 
     if (!isSiliconFlowConfigured()) {
-      return NextResponse.json(scriptedResponse(body));
+      const instruction = [...conversation].reverse().find((m) => m.role === "user")?.text ?? "";
+      const brief = body.currentBrief && (body.mode === "brief_refine" || action === "refine_section")
+        ? applyInstructionToBrief(baseBrief, instruction)
+        : baseBrief;
+      return NextResponse.json(
+        buildResponse({
+          body,
+          brief,
+          conversation,
+          message:
+            action === "draft_now"
+              ? "I have enough to draft a strong job brief. You can review it now, or keep refining the role."
+              : undefined,
+          usedFallback: true,
+          forceCanReview: action === "draft_now",
+        }),
+      );
     }
 
     const modelId = resolveModel("siliconflow", "balanced");
     const model = siliconFlowChatModel(modelId);
-    const history = (body.messages ?? [])
+    const history = conversation
       .map((m) => `${m.role === "ade" ? "Ade" : "User"}: ${m.text}`)
       .join("\n");
 
@@ -242,50 +266,38 @@ export async function POST(request: NextRequest) {
       });
 
       let brief = object.brief ? normalizeBrief(object.brief) : undefined;
-      let briefPartial = object.briefPartial
+      const briefPartial = object.briefPartial
         ? mergeBriefPartial(
-            synthesizeBriefFromConversation(body.roleSeed, body.messages ?? [], body.departmentId),
+            baseBrief,
             object.briefPartial,
           )
         : brief;
 
-      const checklist =
-        object.checklist ??
-        checklistFromBrief(briefPartial ?? brief, body.roleSeed);
-
-      let briefReady = object.briefReady;
-      if (!briefReady && shouldAutoBriefReady(body.messages ?? [], checklist)) {
-        briefReady = true;
-      }
-      if (briefReady && !brief) {
-        brief = synthesizeBriefFromConversation(
-          body.roleSeed,
-          body.messages ?? [],
-          body.departmentId,
-          briefPartial,
-        );
-        briefPartial = brief;
+      brief = brief ?? briefPartial ?? baseBrief;
+      if (body.currentBrief && (body.mode === "brief_refine" || action === "refine_section")) {
+        const instruction = [...conversation].reverse().find((m) => m.role === "user")?.text ?? "";
+        brief = applyInstructionToBrief(brief, instruction);
       }
 
-      const chips = buildChips(
-        body.messages ?? [],
-        body.roleSeed,
-        checklist,
-        briefReady,
-        object.chips,
+      return NextResponse.json(
+        buildResponse({
+          body,
+          brief,
+          conversation,
+          message: object.message,
+          usedFallback: false,
+          forceCanReview: action === "draft_now",
+        }),
       );
-
-      return NextResponse.json({
-        message: object.message,
-        chips,
-        briefReady,
-        brief,
-        briefPartial,
-        checklist,
-        usedFallback: false,
-      });
     } catch {
-      return NextResponse.json(scriptedResponse(body));
+      return NextResponse.json(
+        buildResponse({
+          body,
+          brief: baseBrief,
+          conversation,
+          usedFallback: true,
+        }),
+      );
     }
   } catch (err) {
     if (err instanceof AuthError) {

@@ -63,9 +63,33 @@ export function BriefDocumentPreview({
           </BriefSectionBlock>
         )}
 
+        {(b.businessFocus?.length ?? 0) > 0 && (
+          <BriefSectionBlock label="Business Focus">
+            <BulletList items={b.businessFocus} />
+          </BriefSectionBlock>
+        )}
+
+        {(b.approvalRules?.length ?? 0) > 0 && (
+          <BriefSectionBlock label="Approval Rules">
+            <BulletList items={b.approvalRules} />
+          </BriefSectionBlock>
+        )}
+
         <BriefSectionBlock label="Success Metrics" empty={!b.successMetrics?.length}>
           <BulletList items={b.successMetrics} placeholder="Defining success metrics…" />
         </BriefSectionBlock>
+
+        {(b.assumptions?.length ?? 0) > 0 && (
+          <BriefSectionBlock label="Assumptions">
+            <BulletList items={b.assumptions} />
+          </BriefSectionBlock>
+        )}
+
+        {(b.openQuestions?.length ?? 0) > 0 && (
+          <BriefSectionBlock label="Open Questions">
+            <BulletList items={b.openQuestions} />
+          </BriefSectionBlock>
+        )}
 
         <div className="flex flex-wrap gap-x-4 gap-y-1 border-t border-border/70 pt-4">
           <MetaLine label="Seniority" value={b.seniorityLevel} />
