@@ -19,6 +19,9 @@ import {
   defaultModelModeForRole,
   MODEL_MODE_LABELS,
 } from "@/lib/ai/model-catalog";
+import { isMayaEmployee, isSystemEmployee } from "@/lib/maya-employee";
+import { MAYA_EMPLOYEE_NAME } from "@/lib/hiring/maya";
+import { storeMayaEmployeeContext } from "@/components/maya/MayaDmEmptyState";
 import {
   ArrowLeft,
   Bot,
@@ -40,6 +43,7 @@ export default function EmployeeProfilePage() {
   const [taskOpen, setTaskOpen] = useState(false);
 
   const employee = state.employees.find((e) => e.id === employeeId);
+  const maya = state.employees.find(isMayaEmployee);
 
   if (!employee) {
     return (
@@ -108,6 +112,27 @@ export default function EmployeeProfilePage() {
             </div>
           </div>
           <div className="flex flex-wrap gap-2">
+            {!isSystemEmployee(employee) && maya && (
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => {
+                  storeMayaEmployeeContext({
+                    employeeId: employee.id,
+                    name: employee.name,
+                    role: employee.role,
+                    instructions: employee.instructions,
+                    communicationStyle: employee.communicationStyle,
+                    modelMode: employee.modelMode,
+                    successCriteria: employee.successCriteria,
+                  });
+                  const dm = actions.openOrCreateDM(maya.id);
+                  router.push(`/rooms/${dm.id}?intent=improve_employee`);
+                }}
+              >
+                Ask {MAYA_EMPLOYEE_NAME} to improve this employee
+              </Button>
+            )}
             <Button size="sm" onClick={() => router.push(room ? `/rooms/${room.id}` : "/rooms")}>
               <MessageSquare className="h-4 w-4" /> Message
             </Button>

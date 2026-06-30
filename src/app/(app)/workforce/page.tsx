@@ -4,6 +4,8 @@ import { useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useStore } from "@/lib/demo-store";
 import { useShellUI } from "@/components/AppShell";
+import { partitionWorkforce } from "@/lib/maya-employee";
+import { MAYA_EMPLOYEE_NAME, MAYA_WORKFORCE_BADGE } from "@/lib/hiring/maya";
 import { EmployeeCard } from "@/components/EmployeeCard";
 import { avatarGradient, initials } from "@/lib/utils";
 import { Bot, Plus, Sparkles, UserPlus } from "lucide-react";
@@ -41,13 +43,15 @@ export default function WorkforcePage() {
     router.push(`/rooms/${dm.id}`);
   };
 
+  const { maya, hired } = partitionWorkforce(state.employees);
+
   const deptCounts = useMemo(() => {
     const counts = DEPARTMENTS.map((d) => ({ ...d, count: 0 }));
-    state.employees.forEach((e, i) => {
+    hired.forEach((e, i) => {
       counts[i % counts.length].count += 1;
     });
     return counts;
-  }, [state.employees]);
+  }, [hired]);
 
   const recentWork = useMemo(
     () =>
@@ -64,8 +68,8 @@ export default function WorkforcePage() {
           <div>
             <h1 className="text-2xl font-bold tracking-tight text-ink">AI Workforce</h1>
             <p className="mt-1 text-sm text-ink-2">
-              {state.employees.length} employees across {DEPARTMENTS.length} departments · 118 of 200
-              AI work-hours used this week
+              {hired.length} hired employee{hired.length === 1 ? "" : "s"}
+              {maya.length > 0 ? ` · ${MAYA_EMPLOYEE_NAME} included` : ""} · 118 of 200 AI work-hours used this week
             </p>
           </div>
           <button
@@ -98,15 +102,31 @@ export default function WorkforcePage() {
 
         <div className="grid items-start gap-6 lg:grid-cols-[1.6fr_1fr]">
           <div>
-            <h2 className="mb-3 text-base font-bold text-ink">Active employees</h2>
-            {state.employees.length === 0 ? (
+            {maya.length > 0 && (
+              <>
+                <h2 className="mb-3 text-base font-bold text-ink">{MAYA_WORKFORCE_BADGE}</h2>
+                <div className="mb-6 grid gap-3 sm:grid-cols-2">
+                  {maya.map((employee) => (
+                    <EmployeeCard
+                      key={employee.id}
+                      employee={employee}
+                      badge={MAYA_WORKFORCE_BADGE}
+                      onMessage={(emp) => openEmployeeDm(emp.id)}
+                    />
+                  ))}
+                </div>
+              </>
+            )}
+
+            <h2 className="mb-3 text-base font-bold text-ink">Your AI employees</h2>
+            {hired.length === 0 ? (
               <div className="rounded-2xl border border-dashed border-border px-6 py-12 text-center text-sm text-ink-3">
                 <Bot className="mx-auto mb-2 h-8 w-8 opacity-40" />
                 No AI employees yet. Hire your first teammate to get started.
               </div>
             ) : (
               <div className="grid gap-3 sm:grid-cols-2">
-                {state.employees.map((e) => (
+                {hired.map((e) => (
                   <EmployeeCard key={e.id} employee={e} onMessage={(emp) => openEmployeeDm(emp.id)} />
                 ))}
               </div>

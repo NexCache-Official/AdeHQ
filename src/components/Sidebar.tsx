@@ -10,6 +10,8 @@ import {
   getGroupChannels,
   isDirectMessage,
 } from "@/lib/rooms";
+import { isMayaEmployee, partitionWorkforce } from "@/lib/maya-employee";
+import { MAYA_WORKFORCE_BADGE } from "@/lib/hiring/maya";
 import { useStore } from "@/lib/demo-store";
 import { ENABLE_DEMO_MODE } from "@/lib/config/features";
 import { useShellUI } from "./AppShell";
@@ -61,6 +63,8 @@ export function Sidebar() {
   const pendingApprovals = state.approvals.filter((a) => a.status === "pending").length;
   const openTasks = state.tasks.filter((t) => t.status !== "done").length;
   const channels = getGroupChannels(state.rooms);
+  const { maya, hired } = partitionWorkforce(state.employees);
+  const sidebarDmEmployees = [...maya, ...hired];
   const dmRooms = getDirectMessages(state.rooms);
   const hasDmUnread = dmRooms.some((r) => r.unread > 0);
 
@@ -161,19 +165,20 @@ export function Sidebar() {
           label="Direct messages"
           icon={MessageSquare}
           href="/dm"
-          count={state.employees.length}
+          count={sidebarDmEmployees.length}
           showUnreadDot={hasDmUnread}
           isSectionActive={pathname === "/dm" || !!onDmRoom}
           forceOpen={!!onDmRoom}
         >
-          {state.employees.length === 0 ? (
+          {sidebarDmEmployees.length === 0 ? (
             <p className="px-2 py-1.5 text-[11px] leading-relaxed text-white/35">
-              Hire an AI employee to DM
+              Maya will appear here once your workspace loads
             </p>
           ) : (
-            state.employees.slice(0, MAX_SIDEBAR_ITEMS).map((employee) => {
+            sidebarDmEmployees.slice(0, MAX_SIDEBAR_ITEMS).map((employee) => {
               const dm = findDmRoomForEmployee(state.rooms, employee.id);
               const active = dm ? activeRoomId === dm.id : false;
+              const isMaya = isMayaEmployee(employee);
               return (
                 <SidebarNestedButton
                   key={employee.id}
@@ -183,21 +188,29 @@ export function Sidebar() {
                     <EmployeeAvatar
                       employee={employee}
                       size="xs"
-                      showStatus={false}
+                      showStatus={!isMaya}
                       className="!h-4 !w-4 !rounded-[5px] !text-[8px]"
                     />
                   }
                   label={employee.name}
-                  badge={dm ? unreadBadge(dm.unread) : undefined}
+                  badge={
+                    isMaya ? (
+                      <span className="ml-auto shrink-0 rounded-full bg-white/10 px-1.5 font-mono text-[9px] text-white/60">
+                        {MAYA_WORKFORCE_BADGE}
+                      </span>
+                    ) : dm ? (
+                      unreadBadge(dm.unread)
+                    ) : undefined
+                  }
                 />
               );
             })
           )}
-          {state.employees.length > MAX_SIDEBAR_ITEMS && (
+          {sidebarDmEmployees.length > MAX_SIDEBAR_ITEMS && (
             <SidebarNestedLink
               href="/dm"
               icon={<MessageSquare className="h-3.5 w-3.5" strokeWidth={2} />}
-              label={`+${state.employees.length - MAX_SIDEBAR_ITEMS} more`}
+              label={`+${sidebarDmEmployees.length - MAX_SIDEBAR_ITEMS} more`}
             />
           )}
         </SidebarCollapsibleSection>

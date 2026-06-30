@@ -27,6 +27,7 @@ import {
   Settings2,
   Sparkles,
   TerminalSquare,
+  UserPlus,
   Wrench,
   type LucideIcon,
 } from "lucide-react";
@@ -78,6 +79,7 @@ export const ROLE_ICONS: Record<EmployeeRoleKey, LucideIcon> = {
   operations: Settings2,
   sales: Briefcase,
   support: MessageSquare,
+  recruiting_manager: UserPlus,
 };
 
 export function roleIcon(key: EmployeeRoleKey): LucideIcon {

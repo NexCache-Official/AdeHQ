@@ -4,6 +4,7 @@ import { TOOL_CATALOG } from "@/lib/demo";
 import { isEmailConfirmed } from "@/lib/auth/session";
 import { ensureToolCatalog } from "@/lib/server/tool-catalog";
 import { AccountLifecycleError } from "@/lib/server/account-lifecycle";
+import { ensureMayaForWorkspace } from "@/lib/server/ensure-maya";
 
 type DbRow = Record<string, unknown>;
 
@@ -137,6 +138,7 @@ export async function bootstrapWorkspaceForUser(
 
   await ensureMemberRow(client, workspaceId, user.id);
   await seedWorkspaceTools(client, workspaceId);
+  await ensureMayaForWorkspace(client, workspaceId);
 
   return { workspaceId, workspaceName: name, created: true };
 }

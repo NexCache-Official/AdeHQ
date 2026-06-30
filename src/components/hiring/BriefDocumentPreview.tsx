@@ -4,6 +4,12 @@ import { motion } from "framer-motion";
 import type { AiEmployeeJobBrief } from "@/lib/hiring/types";
 import type { BriefComposeSection } from "@/lib/hiring/detect-brief-change";
 import {
+  MAYA_BRIEF_ATTRIBUTION,
+  MAYA_EMPLOYEE_NAME,
+} from "@/lib/hiring/maya";
+import type { BriefUpdateState } from "@/lib/hiring/maya-recruiter-state";
+import { briefSectionToComposeKey, primaryUpdatingLabel } from "@/lib/hiring/maya-recruiter-state";
+import {
   BriefSectionBlock,
   BulletList,
   LiveBriefCursor,
@@ -16,16 +22,44 @@ export function BriefDocumentPreview({
   live = true,
   composing = false,
   composingSection = null,
+  updateState,
 }: {
   brief?: Partial<AiEmployeeJobBrief>;
   live?: boolean;
   composing?: boolean;
   composingSection?: BriefComposeSection | null;
+  updateState?: BriefUpdateState;
 }) {
   const b = brief ?? {};
   const hasTitle = Boolean(b.roleTitle?.trim());
   const sectionActive = (key: BriefComposeSection) => composing && composingSection === key;
-  const isThinking = composing && !composingSection;
+  const isUpdating = updateState?.status === "updating";
+  const isUpdated = updateState?.status === "updated";
+  const isThinking = (composing && !composingSection) || isUpdating;
+
+  const sectionTag = (composeKey: BriefComposeSection) => {
+    if (!updateState || updateState.status === "idle") return null;
+    const updatingKeys = updateState.sectionsUpdating
+      .map(briefSectionToComposeKey)
+      .filter(Boolean) as BriefComposeSection[];
+    if (updateState.status === "updating" && updatingKeys.includes(composeKey)) {
+      return "updating" as const;
+    }
+    if (updateState.status === "updated" && sectionActive(composeKey)) {
+      return "updated" as const;
+    }
+    return null;
+  };
+
+  const statusLabel = isUpdating
+    ? `Updating ${primaryUpdatingLabel(updateState?.sectionsUpdating ?? [])}…`
+    : isUpdated
+      ? "Brief updated"
+      : isThinking
+        ? "updating…"
+        : composing
+          ? "editing live"
+          : "live";
 
   return (
     <motion.div
@@ -38,10 +72,8 @@ export function BriefDocumentPreview({
         </span>
         {live && (
           <span className="flex items-center gap-1.5 text-[11px] text-ink-3">
-            <span
-              className={cnPulseDot(composing)}
-            />
-            {isThinking ? "updating…" : composing ? "editing live" : "live"}
+            <span className={cnPulseDot(isThinking || composing)} />
+            {statusLabel}
           </span>
         )}
       </div>
@@ -53,13 +85,18 @@ export function BriefDocumentPreview({
             animate={{ opacity: 1, y: 0 }}
             className={cnTitleBlock(sectionActive("title"))}
           >
-            <h2 className="text-xl font-semibold tracking-tight text-ink">
-              {sectionActive("title") ? (
-                <TypewriterText text={b.roleTitle!} active />
-              ) : (
-                b.roleTitle
+            <div className="mb-1 flex items-center justify-between gap-2">
+              <h2 className="text-xl font-semibold tracking-tight text-ink">
+                {sectionActive("title") ? (
+                  <TypewriterText text={b.roleTitle!} active />
+                ) : (
+                  b.roleTitle
+                )}
+              </h2>
+              {sectionTag("title") && (
+                <span className="font-mono text-[10px] normal-case text-accent">{sectionTag("title")}…</span>
               )}
-            </h2>
+            </div>
             {b.domain && (
               <p className="mt-1 text-[13px] text-ink-2">
                 {sectionActive("title") ? (
@@ -81,6 +118,7 @@ export function BriefDocumentPreview({
           label="Mission"
           empty={!b.mission}
           active={sectionActive("mission")}
+          updateTag={sectionTag("mission")}
         >
           <p className="font-serif text-[17px] italic leading-relaxed text-ink">
             {sectionActive("mission") ? (
@@ -95,6 +133,7 @@ export function BriefDocumentPreview({
           label="Responsibilities"
           empty={!b.coreResponsibilities?.length}
           active={sectionActive("coreResponsibilities")}
+          updateTag={sectionTag("coreResponsibilities")}
         >
           <BulletList
             items={b.coreResponsibilities}
@@ -103,32 +142,38 @@ export function BriefDocumentPreview({
           />
         </BriefSectionBlock>
 
-        {(b.technicalFocus?.length ?? 0) > 0 && (
+        {((b.technicalFocus?.length ?? 0) > 0 || sectionTag("technicalFocus") === "updating") && (
           <BriefSectionBlock
             label="Technical Focus"
             active={sectionActive("technicalFocus")}
+            updateTag={sectionTag("technicalFocus")}
+            empty={!b.technicalFocus?.length}
           >
             <BulletList
               items={b.technicalFocus}
               composing={sectionActive("technicalFocus")}
+              placeholder="Refining technical focus…"
             />
           </BriefSectionBlock>
         )}
 
-        {(b.businessFocus?.length ?? 0) > 0 && (
+        {((b.businessFocus?.length ?? 0) > 0 || sectionTag("businessFocus") === "updating") && (
           <BriefSectionBlock
             label="Business Focus"
             active={sectionActive("businessFocus")}
+            updateTag={sectionTag("businessFocus")}
+            empty={!b.businessFocus?.length}
           >
             <BulletList
               items={b.businessFocus}
               composing={sectionActive("businessFocus")}
+              placeholder="Refining business focus…"
             />
           </BriefSectionBlock>
         )}
 
         {(b.approvalRules?.length ?? 0) > 0 && (
-          <BriefSectionBlock label="Approval Rules">
+          <BriefSectionBlock label="Approval Rules" updateTag={sectionTag("meta")}>
             <BulletList items={b.approvalRules} />
           </BriefSectionBlock>
         )}
@@ -137,6 +182,7 @@ export function BriefDocumentPreview({
           label="Success Metrics"
           empty={!b.successMetrics?.length}
           active={sectionActive("successMetrics")}
+          updateTag={sectionTag("successMetrics")}
         >
           <BulletList
             items={b.successMetrics}
@@ -169,9 +215,7 @@ export function BriefDocumentPreview({
           </BriefSectionBlock>
         )}
 
-        <div
-          className={cnMetaBlock(sectionActive("meta"))}
-        >
+        <div className={cnMetaBlock(sectionActive("meta"))}>
           <MetaLine label="Seniority" value={b.seniorityLevel} composing={sectionActive("meta")} />
           <MetaLine label="Autonomy" value={b.autonomyLevel} composing={sectionActive("meta")} />
           <MetaLine label="Style" value={b.communicationStyle} composing={sectionActive("meta")} />
@@ -183,9 +227,17 @@ export function BriefDocumentPreview({
         {isThinking && (
           <div className="mt-4 flex items-center gap-2 text-[12px] text-ink-3">
             <LiveBriefCursor />
-            <span>Ade is updating the brief…</span>
+            <span>
+              {isUpdating
+                ? `${MAYA_EMPLOYEE_NAME} is updating ${primaryUpdatingLabel(updateState?.sectionsUpdating ?? [])}…`
+                : `${MAYA_EMPLOYEE_NAME} is updating the brief…`}
+            </span>
           </div>
         )}
+
+        <p className="mt-5 border-t border-border/70 pt-4 text-[13px] text-ink-3">
+          {MAYA_BRIEF_ATTRIBUTION}
+        </p>
       </div>
     </motion.div>
   );

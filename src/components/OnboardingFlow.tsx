@@ -30,8 +30,8 @@ const STEPS = [
     sub: "Choose where humans and AI employees will collaborate.",
   },
   {
-    title: "Meet Ade Recruiter",
-    sub: "Hire your first AI employee with a guided recruiting conversation.",
+    title: "Meet Maya",
+    sub: "Hire your first AI employee with Maya, your AI recruiting manager.",
   },
 ];
 
@@ -179,7 +179,7 @@ export function OnboardingFlow() {
                     <div className="grid gap-6 sm:grid-cols-2">
                       <FeatureCard
                         icon={UserRound}
-                        title="Ade Recruiting Manager"
+                        title="AI Recruiting Manager"
                         description="A free AI recruiter helps you define the role, write the job brief, and shortlist candidates."
                       />
                       <FeatureCard
@@ -199,7 +199,7 @@ export function OnboardingFlow() {
                       />
                       <p className="sm:col-span-2 rounded-2xl bg-accent-50 px-4 py-3 text-sm text-accent-900">
                         Welcome, {state.user?.name?.split(" ")[0] ?? "there"}. Pick a room, then
-                        Ade Recruiter will guide you through hiring your first AI employee.
+                        Maya will guide you through hiring your first AI employee.
                       </p>
                     </div>
                   )}
@@ -256,12 +256,12 @@ export function OnboardingFlow() {
                         <div className="mb-4 flex items-center gap-3">
                           <div className="h-12 w-12 rounded-full bg-gradient-to-br from-emerald-400 to-sky-500" />
                           <div>
-                            <div className="text-lg font-semibold text-slate-900">Ade Recruiter</div>
+                            <div className="text-lg font-semibold text-slate-900">Maya</div>
                             <div className="text-sm text-slate-500">Your AI recruiting manager · free during hiring</div>
                           </div>
                         </div>
                         <p className="text-sm leading-relaxed text-slate-600">
-                          Describe who you need to hire — or pick a department. Ade will ask the
+                          Describe who you need to hire — or pick a department. Maya will ask the
                           right questions about role, industry, tone, and priorities, then draft a
                           job brief and shortlist three AI employee candidates for you.
                         </p>
@@ -298,7 +298,7 @@ export function OnboardingFlow() {
               ) : (
                 <Button size="sm" onClick={goToHire}>
                   <Rocket className="h-4 w-4" />
-                  Continue with Ade Recruiter →
+                  Continue with Maya →
                 </Button>
               )}
             </div>

@@ -30,6 +30,8 @@ import {
 } from "lucide-react";
 import { EmployeeStatusDot } from "./EmployeeStatusBadge";
 import { STATUS_META } from "@/lib/icons";
+import { isMayaEmployee } from "@/lib/maya-employee";
+import { MayaDmEmptyState } from "@/components/maya/MayaDmEmptyState";
 
 type PendingSend = {
   clientMessageId: string;
@@ -610,8 +612,14 @@ export function RoomChat({
                 </span>
               </div>
               <div className="flex items-center gap-1.5 text-[11.5px] text-ink-2">
-                <EmployeeStatusDot status={dmEmployee.status} />
-                {STATUS_META[dmEmployee.status].label} · {dmEmployee.provider} · {dmEmployee.model}
+                {dmEmployee && isMayaEmployee(dmEmployee) ? (
+                  <span>{dmEmployee.role}</span>
+                ) : (
+                  <>
+                    <EmployeeStatusDot status={dmEmployee.status} />
+                    {STATUS_META[dmEmployee.status].label} · {dmEmployee.provider} · {dmEmployee.model}
+                  </>
+                )}
               </div>
             </div>
           </>
@@ -687,6 +695,14 @@ export function RoomChat({
           </div>
         )}
         {topicMessages.length === 0 ? (
+          isDm && dmEmployee && isMayaEmployee(dmEmployee) ? (
+            <MayaDmEmptyState
+              firstName={state.user?.name?.split(" ")[0] ?? "there"}
+              onSendMessage={(text) => {
+                void handleSend(text);
+              }}
+            />
+          ) : (
           <div className="flex h-full flex-col items-center justify-center gap-4">
             <EmptyState
               icon={MessagesSquare}
@@ -705,6 +721,7 @@ export function RoomChat({
               </Button>
             </div>
           </div>
+          )
         ) : (
           <div className="mx-auto max-w-[760px]">
             <div className="mb-[18px] mt-1.5 text-center">

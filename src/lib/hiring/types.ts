@@ -16,6 +16,7 @@ export type HiringScreen = HiringStep | "landing" | "generating" | "profile";
 export type RecruiterMessage = {
   role: "ade" | "user";
   text: string;
+  isOptimistic?: boolean;
 };
 
 /** @deprecated Use RecruiterMessage */

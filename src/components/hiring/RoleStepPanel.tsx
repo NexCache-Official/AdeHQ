@@ -14,6 +14,7 @@ import {
 } from "@/lib/hiring/role-library";
 import { inferRoleFromText } from "@/lib/hiring/role-inference";
 import { WORKFLOW_CARDS, DISCOVERY_OUTCOME_CHIPS } from "@/lib/hiring/workflow-cards";
+import { MAYA_EMPLOYEE_NAME } from "@/lib/hiring/maya";
 import { HIRE_EXAMPLES } from "@/lib/hiring/data";
 
 export type RoleStepSelection =
@@ -90,7 +91,7 @@ export function RoleStepPanel({
           Who do you want to hire?
         </h1>
         <p className="mx-auto max-w-[560px] text-[17px] leading-relaxed text-ink-2">
-          Describe the job you need done, or pick a real business role below.
+          Describe the role. {MAYA_EMPLOYEE_NAME} will ask what&apos;s missing, draft a job brief, and shortlist three AI employee candidates.
         </p>
       </div>
 
@@ -110,7 +111,7 @@ export function RoleStepPanel({
             disabled={!roleInput.trim() || busy}
             className="whitespace-nowrap rounded-xl bg-ink px-5 py-3.5 text-sm font-medium text-white shadow-sm hover:bg-ink/90 disabled:opacity-40"
           >
-            Continue with Ade Recruiter →
+            Continue with {MAYA_EMPLOYEE_NAME} →
           </button>
         </div>
         {roleInput.trim().length >= 2 && searchResults.length > 0 && (
@@ -265,7 +266,7 @@ export function RoleStepPanel({
           onClick={() => setShowDiscovery(true)}
           className="rounded-full border border-dashed border-border px-5 py-2.5 text-[13px] text-ink-2 hover:border-ink/30 hover:text-ink"
         >
-          Not sure what role I need — let Ade choose
+          Not sure what role I need — ask {MAYA_EMPLOYEE_NAME}
         </button>
       </div>
 

@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useStore } from "@/lib/demo-store";
+import { partitionWorkforce } from "@/lib/maya-employee";
+import { MAYA_EMPLOYEE_NAME } from "@/lib/hiring/maya";
 import { getGroupChannels } from "@/lib/rooms";
 import { useShellUI } from "@/components/AppShell";
 import { PageContainer } from "@/components/Page";
@@ -48,12 +50,13 @@ export default function HomePage() {
   const recentLog = [...state.workLog]
     .sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt))
     .slice(0, 6);
-  const workingCount = employees.filter((e) => e.status === "working").length;
+  const { hired, maya } = partitionWorkforce(employees);
+  const workingCount = hired.filter((e) => e.status === "working").length;
   const channels = getGroupChannels(state.rooms);
   const firstName = state.user?.name?.split(" ")[0] ?? "there";
 
   const stats = [
-    { label: "AI employees", value: employees.length, sub: `${workingCount} working now`, href: "/workforce" },
+    { label: "AI employees", value: hired.length, sub: maya.length ? `${MAYA_EMPLOYEE_NAME} included · ${workingCount} working` : `${workingCount} working now`, href: "/workforce" },
     { label: "Channels", value: channels.length, sub: "Active project rooms", href: "/rooms" },
     { label: "Open tasks", value: activeTasks.length, sub: "Across all rooms", href: "/tasks" },
     { label: "Approvals", value: pendingApprovals.length, sub: pendingApprovals.length ? "Needs review" : "All clear", href: "/approvals", alert: pendingApprovals.length > 0 },

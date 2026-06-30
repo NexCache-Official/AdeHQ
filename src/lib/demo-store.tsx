@@ -34,6 +34,8 @@ import {
 } from "./types";
 import { getEmailRedirectUrl, setAuthNextPath } from "@/lib/auth/callback-session";
 import { isEmailConfirmed } from "@/lib/auth/session";
+import { mayaWelcomeMessage } from "@/lib/hiring/maya";
+import { isMayaEmployee, isSystemEmployee, mergeMayaIntoState } from "@/lib/maya-employee";
 import { isGroupChannel } from "@/lib/rooms";
 import { nowISO, uid } from "./utils";
 import { SUPABASE_WORKSPACE_TABLES } from "./supabase/config";
@@ -228,12 +230,18 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 
   const setRemoteState = useCallback((loaded: DemoState) => {
     setState((previous) => {
-      const next = {
-        ...loaded,
-        settings: previous.settings ?? loaded.settings,
-      };
-      stateRef.current = next;
-      return next;
+      const merged = mergeMayaIntoState(
+        {
+          ...loaded,
+          settings: previous.settings ?? loaded.settings,
+        },
+        loaded.user?.id,
+        loaded.user?.name
+          ? mayaWelcomeMessage(loaded.user.name.split(" ")[0] ?? "there")
+          : undefined,
+      );
+      stateRef.current = merged;
+      return merged;
     });
   }, []);
 
@@ -663,6 +671,11 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 
       removeEmployee: (id) => {
         const current = stateRef.current;
+        const target = current.employees.find((e) => e.id === id);
+        if (target && isSystemEmployee(target)) {
+          setError("Maya is a permanent workspace guide and cannot be removed.");
+          return;
+        }
         const roomsWithEmployee = current.rooms.filter((room) => room.aiEmployees.includes(id));
 
         set((s) => ({
@@ -735,6 +748,10 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         if (!userId) throw new Error("Sign in to open a direct message.");
         const id = uid("dm");
         const timestamp = nowISO();
+        const isMaya = employee ? isMayaEmployee(employee) : false;
+        const welcomeContent = isMaya && s.user?.name
+          ? mayaWelcomeMessage(s.user.name.split(" ")[0] ?? "there")
+          : `This is the start of your direct message with ${employee?.name ?? "your employee"}.`;
         const created: ProjectRoom = {
           id,
           name: employee?.name ?? "Direct message",
@@ -748,10 +765,10 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
             {
               id: uid("msg"),
               roomId: id,
-              senderType: "system",
-              senderId: "system",
-              senderName: "AdeHQ",
-              content: `This is the start of your direct message with ${employee?.name ?? "your employee"}.`,
+              senderType: isMaya ? "ai" : "system",
+              senderId: isMaya ? employeeId : "system",
+              senderName: isMaya ? employee?.name ?? "Maya" : "AdeHQ",
+              content: welcomeContent,
               createdAt: timestamp,
             },
           ],
@@ -789,6 +806,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       },
 
       addEmployeeToRoom: (roomId, employeeId) => {
+        const employee = stateRef.current.employees.find((e) => e.id === employeeId);
+        if (employee?.metadata?.canBeAssignedToChannels === false) return;
         const current = stateRef.current.rooms.find((room) => room.id === roomId);
         if (!current || !isGroupChannel(current) || current.aiEmployees.includes(employeeId)) return;
         const updated = {

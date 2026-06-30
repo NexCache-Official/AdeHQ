@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { AIEmployee } from "@/lib/types";
+import { isSystemEmployee } from "@/lib/maya-employee";
 import { EmployeeAvatar } from "./EmployeeAvatar";
 import { EmployeeStatusBadge } from "./EmployeeStatusBadge";
 import { MessageSquare, Sparkles } from "lucide-react";
@@ -15,12 +16,16 @@ export function EmployeeCard({
   employee,
   onMessage,
   compact,
+  badge,
 }: {
   employee: AIEmployee;
   onMessage?: (e: AIEmployee) => void;
   compact?: boolean;
+  badge?: string;
 }) {
   const capacity = capacityPercent(employee);
+  const systemGuide = isSystemEmployee(employee);
+  const badgeLabel = badge ?? (systemGuide ? "Guide" : "AI");
 
   if (compact) {
     return (
@@ -33,7 +38,7 @@ export function EmployeeCard({
           <div className="flex items-center gap-1.5">
             <span className="truncate text-sm font-semibold text-ink">{employee.name}</span>
             <span className="rounded-[5px] bg-accent-soft px-1.5 py-0.5 text-[9px] font-bold text-accent">
-              AI
+              {badgeLabel}
             </span>
           </div>
           <p className="truncate text-xs text-ink-2">{employee.role}</p>
@@ -56,24 +61,31 @@ export function EmployeeCard({
               {employee.name}
             </Link>
             <span className="rounded-[5px] bg-accent-soft px-1.5 py-0.5 text-[9px] font-bold text-accent">
-              AI
+              {badgeLabel}
             </span>
           </div>
           <p className="truncate text-xs text-ink-2">{employee.role}</p>
-          <div className="mt-2">
-            <EmployeeStatusBadge status={employee.status} />
-          </div>
+          {!systemGuide && (
+            <div className="mt-2">
+              <EmployeeStatusBadge status={employee.status} />
+            </div>
+          )}
         </div>
       </div>
 
       <div className="mt-3 flex items-center gap-1.5 text-[11px] text-ink-3">
-        <Sparkles className="h-3.5 w-3.5 shrink-0" strokeWidth={1.9} />
-        <span className="truncate">
-          {employee.provider} · {employee.model}
-        </span>
+        {!systemGuide && (
+          <>
+            <Sparkles className="h-3.5 w-3.5 shrink-0" strokeWidth={1.9} />
+            <span className="truncate">
+              {employee.provider} · {employee.model}
+            </span>
+          </>
+        )}
+        {systemGuide && <span>Your workforce recruiting & employee-ops manager</span>}
       </div>
 
-      {employee.tools.length > 0 && (
+      {!systemGuide && employee.tools.length > 0 && (
         <div className="mt-2.5 flex flex-wrap gap-1">
           {employee.tools.slice(0, 4).map((t) => (
             <span
@@ -91,15 +103,17 @@ export function EmployeeCard({
         </div>
       )}
 
-      <div className="mt-3 flex items-center gap-2">
-        <div className="h-[5px] flex-1 overflow-hidden rounded bg-muted">
-          <div
-            className="h-full rounded bg-accent transition-all"
-            style={{ width: `${capacity}%` }}
-          />
+      {!systemGuide && (
+        <div className="mt-3 flex items-center gap-2">
+          <div className="h-[5px] flex-1 overflow-hidden rounded bg-muted">
+            <div
+              className="h-full rounded bg-accent transition-all"
+              style={{ width: `${capacity}%` }}
+            />
+          </div>
+          <span className="shrink-0 font-mono text-[10.5px] text-ink-3">{capacity}% capacity</span>
         </div>
-        <span className="shrink-0 font-mono text-[10.5px] text-ink-3">{capacity}% capacity</span>
-      </div>
+      )}
 
       <div className="mt-3 flex gap-1.5">
         {onMessage && (

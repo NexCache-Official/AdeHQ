@@ -24,6 +24,17 @@ import {
   persistHiringSession,
 } from "@/lib/hiring/session";
 import { detectBriefChange, type BriefComposeSection } from "@/lib/hiring/detect-brief-change";
+import {
+  INITIAL_BRIEF_UPDATE_STATE,
+  inferSectionsUpdating,
+  pickOptimisticAck,
+  type BriefUpdateState,
+  type MayaRecruiterState,
+} from "@/lib/hiring/maya-recruiter-state";
+import {
+  MAYA_EMPLOYEE_NAME,
+  MAYA_EMPLOYEE_TITLE,
+} from "@/lib/hiring/maya";
 import { finalizeReadinessScore } from "@/lib/hiring/recruiter-brain";
 import type {
   AiEmployeeApplicant,
@@ -93,6 +104,8 @@ export function HireFlow({ onboarding = false }: HireFlowProps) {
     active: boolean;
     section: BriefComposeSection | null;
   }>({ active: false, section: null });
+  const [mayaState, setMayaState] = useState<MayaRecruiterState>("idle");
+  const [briefUpdateState, setBriefUpdateState] = useState<BriefUpdateState>(INITIAL_BRIEF_UPDATE_STATE);
 
   const roleSeed = useMemo(() => {
     if (session.roleInput.trim()) return session.roleInput.trim();
@@ -182,10 +195,16 @@ export function HireFlow({ onboarding = false }: HireFlowProps) {
   }, [session.step]);
 
   const applyRecruiterResponse = useCallback(
-    (res: RecruiterApiResponse, appendAde = true) => {
+    (res: RecruiterApiResponse, conversationBase?: { role: "ade" | "user"; text: string; isOptimistic?: boolean }[], appendMaya = true) => {
       const recruiterMessage = res.recruiterMessage ?? res.message;
-      if (appendAde && recruiterMessage) {
-        dispatch({ type: "ADD_MESSAGE", message: { role: "ade", text: recruiterMessage } });
+      if (appendMaya && recruiterMessage) {
+        const base =
+          conversationBase ??
+          session.recruiterMessages.filter((message) => !message.isOptimistic);
+        dispatch({
+          type: "SET_MESSAGES",
+          messages: [...base, { role: "ade", text: recruiterMessage }],
+        });
       }
       if (res.checklist) dispatch({ type: "SET_CHECKLIST", checklist: res.checklist });
       if (res.readiness) dispatch({ type: "SET_READINESS", readiness: res.readiness });
@@ -206,7 +225,7 @@ export function HireFlow({ onboarding = false }: HireFlowProps) {
       if (res.briefPartial) dispatch({ type: "SET_BRIEF_PARTIAL", briefPartial: res.briefPartial });
       if (res.brief) dispatch({ type: "SET_BRIEF", brief: res.brief });
     },
-    [clearBriefCompose, triggerBriefCompose],
+    [clearBriefCompose, triggerBriefCompose, session.recruiterMessages],
   );
 
   const goToBrief = useCallback(() => {
@@ -250,7 +269,7 @@ export function HireFlow({ onboarding = false }: HireFlowProps) {
         type: "SET_MESSAGES",
         messages: [{ role: "ade", text: opening }],
       });
-      applyRecruiterResponse(res, false);
+      applyRecruiterResponse(res, undefined, false);
       dispatch({ type: "SET_BRIEF_READY", briefReady: false });
     } catch (e) {
       dispatch({
@@ -337,11 +356,22 @@ export function HireFlow({ onboarding = false }: HireFlowProps) {
     }
 
     const nextMessages = [...session.recruiterMessages, { role: "user" as const, text: trimmed }];
-    dispatch({ type: "SET_MESSAGES", messages: nextMessages });
+    const optimisticAck = pickOptimisticAck(trimmed);
+    const sectionsUpdating = inferSectionsUpdating(trimmed);
+    dispatch({
+      type: "SET_MESSAGES",
+      messages: [
+        ...nextMessages,
+        { role: "ade", text: optimisticAck, isOptimistic: true },
+      ],
+    });
+    setMayaState("acknowledging");
+    setBriefUpdateState({ status: "updating", sectionsUpdating });
     dispatch({ type: "SET_BUSY", busy: true });
     setBriefCompose({ active: true, section: null });
 
     try {
+      setMayaState("thinking");
       const res = await callRecruiter(
         recruiterPayload({
           conversation: nextMessages,
@@ -351,17 +381,31 @@ export function HireFlow({ onboarding = false }: HireFlowProps) {
           mode: onBriefStep ? "brief_refine" : isDraftNow ? "draft_now" : "chat",
         }),
       );
-      applyRecruiterResponse(res);
+      setMayaState("updating_brief");
+      applyRecruiterResponse(res, nextMessages);
       if (res.brief) {
         dispatch({ type: "SET_BRIEF", brief: res.brief });
       }
       if (res.canReviewBrief || res.briefReady) {
         dispatch({ type: "SET_BRIEF_READY", briefReady: true });
+        setMayaState("ready_to_review");
+      } else {
+        setMayaState("idle");
       }
+      setBriefUpdateState({
+        status: "updated",
+        sectionsUpdating,
+        lastUpdatedAt: new Date().toISOString(),
+      });
+      setTimeout(() => {
+        setBriefUpdateState(INITIAL_BRIEF_UPDATE_STATE);
+      }, 2400);
       if (isDraftNow && res.brief) {
         dispatch({ type: "SET_BRIEF_READY", briefReady: true });
       }
     } catch (e) {
+      setMayaState("error");
+      setBriefUpdateState({ status: "error", sectionsUpdating: [] });
       dispatch({
         type: "SET_ERROR",
         error: e instanceof Error ? e.message : "Message failed.",
@@ -539,7 +583,7 @@ export function HireFlow({ onboarding = false }: HireFlowProps) {
           roomId: room.id,
           employeeId: employee.id,
           action: "Onboarding hire complete",
-          summary: `${employee.name} joined via Ade Recruiter.`,
+          summary: `${employee.name} joined via ${MAYA_EMPLOYEE_NAME}.`,
           status: "success",
           createdAt: nowISO(),
         };
@@ -638,6 +682,7 @@ export function HireFlow({ onboarding = false }: HireFlowProps) {
               readiness={displayReadiness}
               briefReady={session.briefReady}
               busy={session.busy}
+              mayaState={mayaState}
               onSend={sendUserMessage}
               onReview={goToBrief}
             />
@@ -645,6 +690,7 @@ export function HireFlow({ onboarding = false }: HireFlowProps) {
               brief={previewBrief}
               composing={session.busy || briefCompose.active}
               composingSection={briefCompose.section}
+              updateState={briefUpdateState}
             />
           </div>
         )}
@@ -655,7 +701,7 @@ export function HireFlow({ onboarding = false }: HireFlowProps) {
               <div className="mb-5">
                 <h1 className="text-[32px] font-semibold tracking-tight">Review the AI employee job brief</h1>
                 <p className="text-[15px] text-ink-2">
-                  Edit the brief on the left. Chat with Ade on the right to refine it in real time.
+                  Edit the brief on the left. Chat with {MAYA_EMPLOYEE_NAME} on the right to refine it in real time.
                 </p>
               </div>
               <BriefEditor
@@ -727,9 +773,10 @@ export function HireFlow({ onboarding = false }: HireFlowProps) {
               readiness={session.readiness}
               briefReady={false}
               busy={session.busy}
+              mayaState={mayaState}
               onSend={sendUserMessage}
               onReview={goToBrief}
-              placeholder="Tell Ade what to change — e.g. add compliance focus, make more senior…"
+              placeholder={`Tell ${MAYA_EMPLOYEE_NAME} what to change — e.g. add compliance focus, make more senior…`}
             />
           </div>
         )}
@@ -857,16 +904,18 @@ function RecruiterChat({
   readiness,
   briefReady,
   busy,
+  mayaState = "idle",
   onSend,
   onReview,
   variant = "recruiter",
   placeholder = "Type your answer…",
 }: {
-  messages: { role: "ade" | "user"; text: string }[];
+  messages: { role: "ade" | "user"; text: string; isOptimistic?: boolean }[];
   chips: RecruiterSuggestionChip[];
   readiness: RecruiterReadiness;
   briefReady: boolean;
   busy: boolean;
+  mayaState?: MayaRecruiterState;
   onSend: (text: string, action?: "message" | "draft_now" | "refine_section") => void;
   onReview: () => void;
   variant?: "recruiter" | "refinement";
@@ -912,16 +961,23 @@ function RecruiterChat({
     );
   };
 
+  const thinkingLabel =
+    mayaState === "acknowledging"
+      ? `${MAYA_EMPLOYEE_NAME} is updating the brief…`
+      : mayaState === "updating_brief"
+        ? `${MAYA_EMPLOYEE_NAME} is refining the brief…`
+        : `${MAYA_EMPLOYEE_NAME} is thinking…`;
+
   return (
     <div className="flex h-[min(720px,calc(100vh-11rem))] flex-col overflow-hidden rounded-[18px] border border-border bg-surface shadow-md lg:sticky lg:top-24">
       <div className="flex items-center gap-2.5 border-b border-border px-5 py-4">
-        <AdeOrb size={32} />
+        <AdeOrb size={32} initials="M" />
         <div>
-          <div className="text-sm font-semibold">Ade Recruiter</div>
+          <div className="text-sm font-semibold">{MAYA_EMPLOYEE_NAME}</div>
           <div className="text-xs text-ink-3">
             {variant === "refinement"
               ? "Refine the job brief in real time"
-              : "Recruiting manager · guiding your hire"}
+              : `${MAYA_EMPLOYEE_TITLE} · helping you build your workforce`}
           </div>
         </div>
         <div className="ml-auto rounded-full border border-border bg-muted px-2.5 py-1 text-[11px] text-ink-2">
@@ -935,26 +991,28 @@ function RecruiterChat({
             className={cn(
               "animate-[hireMsgIn_0.35s_ease_both]",
               m.role === "ade" ? "flex items-start gap-2" : "flex justify-end",
+              m.isOptimistic && "opacity-90",
             )}
           >
-            {m.role === "ade" && <AdeOrb size={26} />}
+            {m.role === "ade" && <AdeOrb size={26} initials="M" />}
             <div
               className={cn(
                 "max-w-[84%] px-3.5 py-2.5 text-sm leading-relaxed",
                 m.role === "ade"
                   ? "rounded-[4px_14px_14px_14px] border border-border bg-muted"
                   : "rounded-[14px_14px_4px_14px] bg-ink text-white",
+                m.isOptimistic && m.role === "ade" && "border-accent/30 bg-accent-soft/20",
               )}
             >
               {m.text}
             </div>
           </div>
         ))}
-        {busy && (
+        {busy && !messages.some((m) => m.isOptimistic) && (
           <div className="flex items-start gap-2">
-            <AdeOrb size={26} />
+            <AdeOrb size={26} initials="M" />
             <div className="rounded-[4px_14px_14px_14px] border border-border bg-muted px-3.5 py-2.5 text-sm text-ink-2">
-              Thinking…
+              {thinkingLabel}
             </div>
           </div>
         )}
@@ -980,6 +1038,9 @@ function RecruiterChat({
               </button>
             ))}
           </div>
+        )}
+        {busy && (
+          <p className="mb-2 text-[11px] text-ink-3">{MAYA_EMPLOYEE_NAME} is updating the brief…</p>
         )}
         <form
           onSubmit={(e) => {

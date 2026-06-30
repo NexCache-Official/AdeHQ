@@ -27,6 +27,9 @@ import type {
 import { normalizeLiveProvider } from "@/lib/config/features";
 import { authHeaders } from "@/lib/api/auth-client";
 import { isEmailConfirmed } from "@/lib/auth/session";
+import { mayaWelcomeMessage } from "@/lib/hiring/maya";
+import { isMayaEmployee, mergeMayaIntoState } from "@/lib/maya-employee";
+import type { SystemEmployeeMetadata } from "@/lib/types";
 import { topicFromRow, topicMemberFromRow } from "@/lib/server/topic-helpers";
 import { nowISO } from "@/lib/utils";
 import { supabase } from "./client";
@@ -527,6 +530,56 @@ export async function loadWorkspaceState(
     ...((pendingInvitationsResult.data as DbRow[] | null) ?? []),
   ]);
 
+  let finalEmployees = employees;
+  let finalRooms = rooms;
+  if (!employees.some(isMayaEmployee)) {
+    try {
+      const headers = await authHeaders();
+      const res = await fetch("/api/workspaces/ensure-maya", { method: "POST", headers });
+      if (res.ok) {
+        const [empRefresh, roomRefresh, memberRefresh, msgRefresh] = await Promise.all([
+          supabase.from("ai_employees").select("*").eq("workspace_id", workspaceId),
+          supabase.from("project_rooms").select("*").eq("workspace_id", workspaceId).eq("kind", "dm"),
+          supabase.from("room_members").select("*").eq("workspace_id", workspaceId),
+          supabase.from("messages").select("*").eq("workspace_id", workspaceId),
+        ]);
+        if (!empRefresh.error && empRefresh.data) {
+          finalEmployees = (empRefresh.data as DbRow[])
+            .map((row) => employeeFromRow(row, employeeToolsByEmployee.get(row.id) ?? []))
+            .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+        }
+        if (!roomRefresh.error && roomRefresh.data) {
+          const refreshedMembers = (memberRefresh.data as DbRow[] | null) ?? [];
+          const refreshedMessages = ((msgRefresh.data as DbRow[] | null) ?? [])
+            .map(messageFromRow)
+            .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+          const refreshedMessagesByRoom = groupBy(refreshedMessages, (message) => message.roomId);
+          const dmRooms = (roomRefresh.data as DbRow[]).map((row) =>
+            roomFromRow(
+              row,
+              refreshedMembers.filter((m) => m.room_id === row.id),
+              refreshedMessagesByRoom.get(row.id) ?? [],
+              tasksByRoom.get(row.id)?.map((task) => task.id) ?? [],
+              memoryByRoom.get(row.id)?.map((entry) => entry.id) ?? [],
+            ),
+          );
+          const dmIds = new Set(dmRooms.map((r) => r.id));
+          finalRooms = [...dmRooms, ...rooms.filter((r) => !dmIds.has(r.id))].sort((a, b) =>
+            b.updatedAt.localeCompare(a.updatedAt),
+          );
+        }
+      }
+    } catch {
+      const merged = mergeMayaIntoState(
+        { employees, rooms },
+        profile.id,
+        mayaWelcomeMessage(profile.name?.split(" ")[0] ?? "there"),
+      );
+      finalEmployees = merged.employees;
+      finalRooms = merged.rooms;
+    }
+  }
+
   return {
     version: buildDemoState().version,
     user: profile,
@@ -534,8 +587,8 @@ export async function loadWorkspaceState(
     workspaceMembers,
     workspaceInvitations,
     onboardingComplete: Boolean(workspaceRow.onboarding_complete),
-    employees,
-    rooms,
+    employees: finalEmployees,
+    rooms: finalRooms,
     topics,
     topicMembers,
     tasks,
@@ -693,6 +746,9 @@ function employeeFromRow(row: DbRow, tools: ToolAccess[]): AIEmployee {
     accent: row.accent ?? "#f97316",
     defaultRoomId: row.default_room_id ?? undefined,
     participationStyle: row.participation_style ?? "balanced_teammate",
+    isSystemEmployee: Boolean(row.is_system_employee),
+    systemEmployeeKey: row.system_employee_key ?? undefined,
+    metadata: jsonObject<SystemEmployeeMetadata>(row.metadata, {}),
     lastActiveAt: row.last_active_at ?? row.updated_at ?? nowISO(),
     createdAt: row.created_at ?? nowISO(),
   };
@@ -847,6 +903,10 @@ function employeeRow(workspaceId: string, employee: AIEmployee): DbRow {
     trust_score: employee.trustScore,
     accent: employee.accent,
     default_room_id: employee.defaultRoomId ?? null,
+    participation_style: employee.participationStyle ?? "balanced_teammate",
+    is_system_employee: employee.isSystemEmployee ?? false,
+    system_employee_key: employee.systemEmployeeKey ?? null,
+    metadata: employee.metadata ?? {},
     last_active_at: employee.lastActiveAt,
     created_at: employee.createdAt,
   };

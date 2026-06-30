@@ -1,5 +1,8 @@
 "use client";
 
+import {
+  MAYA_EMPLOYEE_NAME,
+} from "@/lib/hiring/maya";
 import { cn } from "@/lib/utils";
 import type { HiringStep } from "@/lib/hiring/types";
 import { ArrowLeft } from "lucide-react";
@@ -37,7 +40,7 @@ export function HireHeader({
         <div className="relative h-6 w-6 rounded-full bg-gradient-to-br from-emerald-400 to-sky-500">
           <span className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-green ring-2 ring-surface" />
         </div>
-        <span className="text-[13px] font-medium text-ink-2">Ade Recruiter</span>
+        <span className="text-[13px] font-medium text-ink-2">{MAYA_EMPLOYEE_NAME}</span>
       </div>
     </header>
   );

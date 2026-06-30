@@ -8,13 +8,16 @@ import { PageContainer } from "@/components/Page";
 import { EmployeeAvatar } from "@/components/EmployeeAvatar";
 import { EmployeeStatusBadge } from "@/components/EmployeeStatusBadge";
 import { findDmRoomForEmployee, getDirectMessages } from "@/lib/rooms";
+import { partitionWorkforce, isMayaEmployee } from "@/lib/maya-employee";
+import { MAYA_EMPLOYEE_NAME, MAYA_EMPLOYEE_TITLE, MAYA_WORKFORCE_BADGE } from "@/lib/hiring/maya";
 import { UserPlus } from "lucide-react";
 
 export default function DirectMessagesPage() {
   const { state, actions } = useStore();
   const ui = useShellUI();
   const router = useRouter();
-  const dmRooms = getDirectMessages(state.rooms);
+  const { maya, hired } = partitionWorkforce(state.employees);
+  const dmEmployees = [...maya, ...hired];
 
   const openEmployeeDm = (employeeId: string) => {
     const dm = actions.openOrCreateDM(employeeId);
@@ -40,7 +43,7 @@ export default function DirectMessagesPage() {
         </button>
       </div>
 
-      {state.employees.length === 0 ? (
+      {dmEmployees.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-border px-6 py-14 text-center">
           <p className="text-sm text-ink-3">No AI employees yet.</p>
           <button
@@ -53,8 +56,9 @@ export default function DirectMessagesPage() {
         </div>
       ) : (
         <div className="grid gap-3 sm:grid-cols-2">
-          {state.employees.map((employee) => {
+          {dmEmployees.map((employee) => {
             const dm = findDmRoomForEmployee(state.rooms, employee.id);
+            const isMaya = isMayaEmployee(employee);
             const latest =
               dm?.messages.filter((m) => m.senderType !== "system").at(-1)?.content?.slice(0, 56) ??
               "Start a conversation";
@@ -71,14 +75,22 @@ export default function DirectMessagesPage() {
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-1.5">
                       <span className="truncate text-sm font-semibold text-ink">{employee.name}</span>
-                      <span className="rounded-[5px] bg-accent-soft px-[5px] py-0.5 text-[9px] font-bold text-accent">
-                        AI
-                      </span>
+                      {isMaya ? (
+                        <span className="rounded-[5px] bg-muted px-[5px] py-0.5 text-[9px] font-bold text-ink-2">
+                          {MAYA_WORKFORCE_BADGE}
+                        </span>
+                      ) : (
+                        <span className="rounded-[5px] bg-accent-soft px-[5px] py-0.5 text-[9px] font-bold text-accent">
+                          AI
+                        </span>
+                      )}
                     </div>
-                    <p className="truncate text-xs text-ink-2">{employee.role}</p>
-                    <div className="mt-2">
-                      <EmployeeStatusBadge status={employee.status} compact />
-                    </div>
+                    <p className="truncate text-xs text-ink-2">{isMaya ? MAYA_EMPLOYEE_TITLE : employee.role}</p>
+                    {!isMaya && (
+                      <div className="mt-2">
+                        <EmployeeStatusBadge status={employee.status} compact />
+                      </div>
+                    )}
                   </div>
                   {dm && dm.unread > 0 && (
                     <span className="shrink-0 rounded-full bg-accent px-1.5 font-mono text-[10px] font-semibold text-white">
@@ -105,10 +117,9 @@ export default function DirectMessagesPage() {
         </div>
       )}
 
-      {dmRooms.length > 0 && (
+      {getDirectMessages(state.rooms).length > 0 && (
         <p className="mt-6 text-center text-xs text-ink-3">
-          {dmRooms.length} active conversation{dmRooms.length === 1 ? "" : "s"} · pick any employee above to
-          switch
+          {getDirectMessages(state.rooms).length} active conversation{getDirectMessages(state.rooms).length === 1 ? "" : "s"} · {MAYA_EMPLOYEE_NAME} is always available
         </p>
       )}
     </PageContainer>

@@ -23,6 +23,11 @@ import {
   inferDepartmentId,
   isEngineeringBrief,
 } from "@/lib/hiring/recruiter-brain";
+import {
+  MAYA_EMPLOYEE_NAME,
+  MAYA_EMPLOYEE_SYSTEM_PROMPT,
+  MAYA_EMPLOYEE_TITLE,
+} from "@/lib/hiring/maya";
 import type {
   AiEmployeeJobBrief,
   RecruiterMessage,
@@ -162,7 +167,7 @@ function openingMessage(body: RecruiterBody, departmentId: string | null, roleKe
     return `Got it — I'll treat this as a ${brief.roleTitle} role. What kind of work should this employee focus on day to day?`;
   }
   if (departmentId && departmentId !== "custom") {
-    return `Hello! I'm Ade Recruiter. For ${dept}, what kind of employee do you want to hire, and what should they own first?`;
+    return `Hi — I'm ${MAYA_EMPLOYEE_NAME}, your ${MAYA_EMPLOYEE_TITLE.toLowerCase()}. For ${dept}, what kind of employee do you want to hire, and what should they own first?`;
   }
   return "What kind of employee do you want to hire, and what should they help with first?";
 }
@@ -227,7 +232,9 @@ Department group: ${role.departmentLabel}
 Default responsibilities: ${role.defaultResponsibilities.slice(0, 4).join("; ")}
 Ask role-specific follow-ups. Do not ask generic department questions.`
     : "";
-  return `You are Ade Recruiting Manager at AdeHQ — a sharp, warm recruiter helping hire an AI employee.
+  return `You are ${MAYA_EMPLOYEE_NAME}, ${MAYA_EMPLOYEE_TITLE} at AdeHQ — a sharp, warm recruiter helping hire and improve AI employees.
+
+${MAYA_EMPLOYEE_SYSTEM_PROMPT.trim()}
 
 Role seed: "${body.roleSeed || "unspecified"}"
 Department: ${departmentLabel(departmentId)}

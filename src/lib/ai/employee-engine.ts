@@ -271,6 +271,7 @@ const GENERATORS: Record<EmployeeRoleKey, Generator> = {
   operations: generic,
   sales: generic,
   support: generic,
+  recruiting_manager: generic,
 };
 
 // ---------------------------------------------------------------------------

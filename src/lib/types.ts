@@ -89,6 +89,13 @@ export type EmployeePermissions = {
   approvalBeforeBilling: boolean;
 };
 
+export type SystemEmployeeMetadata = {
+  dmOnly?: boolean;
+  canBeArchived?: boolean;
+  canBeAssignedToChannels?: boolean;
+  purpose?: string;
+};
+
 export type AIEmployee = {
   id: string;
   name: string;
@@ -114,6 +121,9 @@ export type AIEmployee = {
   accent: string; // hex used for avatar gradient
   defaultRoomId?: string;
   participationStyle?: ParticipationStyle;
+  isSystemEmployee?: boolean;
+  systemEmployeeKey?: string | null;
+  metadata?: SystemEmployeeMetadata;
   lastActiveAt: string;
   createdAt: string;
 };
@@ -127,7 +137,8 @@ export type EmployeeRoleKey =
   | "gamedev"
   | "operations"
   | "sales"
-  | "support";
+  | "support"
+  | "recruiting_manager";
 
 export type ModelMode =
   | "cheap"

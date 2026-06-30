@@ -34,6 +34,7 @@ export const ROLE_DEFAULT_MODE: Record<EmployeeRoleKey, ModelMode> = {
   engineering: "coding",
   gamedev: "coding",
   support: "cheap",
+  recruiting_manager: "balanced",
 };
 
 const OUTPUT_TOKEN_CAPS: Record<ModelMode, number> = {

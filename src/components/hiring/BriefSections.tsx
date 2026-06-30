@@ -64,12 +64,14 @@ export function BriefSectionBlock({
   empty,
   className,
   active = false,
+  updateTag,
 }: {
   label: string;
   children: React.ReactNode;
   empty?: boolean;
   className?: string;
   active?: boolean;
+  updateTag?: "updating" | "updated" | null;
 }) {
   const isActive = active;
 
@@ -78,12 +80,19 @@ export function BriefSectionBlock({
       className={cn(
         "border-t border-border/70 py-4 first:border-t-0 first:pt-0 transition-colors duration-300",
         isActive && "relative -mx-2 rounded-xl bg-accent-soft/35 px-2 ring-1 ring-accent/25",
+        updateTag === "updated" && "relative -mx-2 rounded-xl bg-green/10 px-2 ring-1 ring-green/25",
         className,
       )}
     >
       <div className="mb-2 flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.08em] text-ink-3">
         <span>{label}</span>
-        {isActive && (
+        {updateTag === "updating" && (
+          <span className="normal-case tracking-normal text-accent animate-pulse">updating…</span>
+        )}
+        {updateTag === "updated" && (
+          <span className="normal-case tracking-normal text-green">updated</span>
+        )}
+        {isActive && !updateTag && (
           <span className="flex items-center gap-1 normal-case tracking-normal text-accent">
             <LiveBriefCursor className="h-3 w-[2px]" />
             <span className="text-[10px]">editing</span>

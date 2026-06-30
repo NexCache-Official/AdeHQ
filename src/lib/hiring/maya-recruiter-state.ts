@@ -1,0 +1,124 @@
+import type { BriefComposeSection } from "./detect-brief-change";
+
+export type MayaRecruiterState =
+  | "idle"
+  | "acknowledging"
+  | "thinking"
+  | "updating_brief"
+  | "ready_to_review"
+  | "error";
+
+export type BriefUpdateSection =
+  | "roleTitle"
+  | "mission"
+  | "coreResponsibilities"
+  | "technicalFocus"
+  | "businessFocus"
+  | "successMetrics"
+  | "communicationStyle"
+  | "approvalRules";
+
+export type BriefUpdateState = {
+  status: "idle" | "updating" | "updated" | "error";
+  sectionsUpdating: BriefUpdateSection[];
+  lastUpdatedAt?: string;
+};
+
+export const INITIAL_BRIEF_UPDATE_STATE: BriefUpdateState = {
+  status: "idle",
+  sectionsUpdating: [],
+};
+
+const OPTIMISTIC_ACKS = [
+  "Got it — I'm updating the role brief with that.",
+  "That helps. I'm folding this into the job brief now.",
+  "Great context. I'll update the role brief and ask one sharper follow-up if anything is missing.",
+  "Understood — shaping the brief around that now.",
+];
+
+export function pickOptimisticAck(seed?: string): string {
+  if (!seed?.trim()) {
+    return OPTIMISTIC_ACKS[0];
+  }
+  let hash = 0;
+  for (let i = 0; i < seed.length; i += 1) {
+    hash = (hash + seed.charCodeAt(i) * (i + 1)) % OPTIMISTIC_ACKS.length;
+  }
+  return OPTIMISTIC_ACKS[hash];
+}
+
+export function inferSectionsUpdating(message: string): BriefUpdateSection[] {
+  const lower = message.toLowerCase();
+  const sections = new Set<BriefUpdateSection>();
+
+  if (
+    /\b(api|code|engineering|frontend|backend|infra|technical|stack|deploy|database|latency|performance|ai|ml|data)\b/.test(
+      lower,
+    )
+  ) {
+    sections.add("technicalFocus");
+  }
+  if (/\b(metric|kpi|goal|success|outcome|target|measure)\b/.test(lower)) {
+    sections.add("successMetrics");
+  }
+  if (/\b(tone|personality|communication|style|voice|verbose|proactive|friendly|formal)\b/.test(lower)) {
+    sections.add("communicationStyle");
+  }
+  if (/\b(approval|permission|risk|sign.?off|escalat)\b/.test(lower)) {
+    sections.add("approvalRules");
+  }
+  if (/\b(revenue|customer|sales|market|business|growth|pipeline)\b/.test(lower)) {
+    sections.add("businessFocus");
+  }
+  if (/\b(title|role|position|senior|manager|director|advisor)\b/.test(lower)) {
+    sections.add("roleTitle");
+  }
+
+  if (sections.size === 0) {
+    sections.add("mission");
+    sections.add("coreResponsibilities");
+  }
+
+  return [...sections];
+}
+
+export function briefSectionToComposeKey(section: BriefUpdateSection): BriefComposeSection | null {
+  switch (section) {
+    case "roleTitle":
+      return "title";
+    case "mission":
+      return "mission";
+    case "coreResponsibilities":
+      return "coreResponsibilities";
+    case "technicalFocus":
+      return "technicalFocus";
+    case "businessFocus":
+      return "businessFocus";
+    case "successMetrics":
+      return "successMetrics";
+    case "communicationStyle":
+    case "approvalRules":
+      return "meta";
+    default:
+      return null;
+  }
+}
+
+export function sectionUpdatingLabel(section: BriefUpdateSection): string {
+  const labels: Record<BriefUpdateSection, string> = {
+    roleTitle: "role title",
+    mission: "mission",
+    coreResponsibilities: "responsibilities",
+    technicalFocus: "technical focus",
+    businessFocus: "business focus",
+    successMetrics: "success metrics",
+    communicationStyle: "communication style",
+    approvalRules: "approval rules",
+  };
+  return labels[section];
+}
+
+export function primaryUpdatingLabel(sections: BriefUpdateSection[]): string {
+  if (sections.length === 0) return "job brief";
+  return sectionUpdatingLabel(sections[0]);
+}
