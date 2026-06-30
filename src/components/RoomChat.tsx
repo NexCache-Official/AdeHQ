@@ -164,6 +164,7 @@ export function RoomChat({
       const sequential =
         !panelMode &&
         (queuedRuns.some((r) => r.conversationMode === "lead_collaborator") ||
+          queuedRuns.some((r) => r.conversationMode === "ambient_collaboration") ||
           queuedRuns.length === 1);
 
       const processOneRun = async (run: QueuedRunClient) => {
@@ -441,6 +442,7 @@ export function RoomChat({
           blockedRuns: payload.blockedRuns,
           code: payload.code,
           hint: payload.hint,
+          orchestratorDebug: payload.orchestratorDebug,
           error: payload.error,
         },
       );

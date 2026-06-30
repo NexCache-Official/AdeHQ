@@ -10,6 +10,9 @@ export const GREETING_MAX_OUTPUT_TOKENS = 120;
 export const AMBIENT_RESPONSE_REASONS: ResponseReason[] = [
   "group_greeting",
   "smart_assist_role_match",
+  "ambient_help_request",
+  "ambient_role_match",
+  "ambient_collaboration_lead",
 ];
 
 const GREETING_PATTERNS = [
@@ -156,6 +159,16 @@ export function responseReasonLabel(
       return employeeName ? `${employeeName} — panel perspective` : "Panel response";
     case "sequential_dependent":
       return employeeName ? `${employeeName} — sequential step` : "Sequential dependent";
+    case "ambient_help_request":
+      return employeeName ? `${employeeName} — help request match` : "Ambient help request";
+    case "ambient_role_match":
+      return employeeName ? `${employeeName} — role domain match` : "Ambient role match";
+    case "ambient_collaboration_lead":
+      return employeeName ? `${employeeName} — leading ambient collaboration` : "Ambient collaboration lead";
+    case "ambient_collaboration_collaborator":
+      return employeeName
+        ? `${employeeName} — ambient collaboration follow-up`
+        : "Ambient collaboration collaborator";
     default:
       return reason;
   }

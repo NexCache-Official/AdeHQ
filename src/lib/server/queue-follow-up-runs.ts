@@ -251,7 +251,7 @@ async function hasCollaboratorRun(
     .eq("workspace_id", workspaceId)
     .eq("employee_id", employeeId)
     .eq("depends_on_run_id", dependsOnRunId)
-    .eq("response_reason", "collaboration_collaborator")
+    .in("response_reason", ["collaboration_collaborator", "ambient_collaboration_collaborator"])
     .in("status", ["queued", "waiting", "running", "completed"])
     .limit(1)
     .maybeSingle();
@@ -307,12 +307,18 @@ export async function queueCollaboratorRuns(
       continue;
     }
 
+    const conversationMode = params.runMetadata.conversationMode ?? "lead_collaborator";
+    const collabReason: ResponseReason =
+      conversationMode === "ambient_collaboration"
+        ? "ambient_collaboration_collaborator"
+        : "collaboration_collaborator";
+
     responders.push({
       employee,
-      reason: "collaboration_collaborator",
+      reason: collabReason,
       runMetadata: {
         collaborationId,
-        conversationMode: params.runMetadata.conversationMode ?? "lead_collaborator",
+        conversationMode,
         collaborationRole: "collaborator",
         collaborationStatus: "active",
         participants,

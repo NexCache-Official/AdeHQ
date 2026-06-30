@@ -29,7 +29,7 @@ export function CollaborationPlanBanner({
   activeEmployeeName?: string;
   className?: string;
 }) {
-  if (plan.mode !== "lead_collaborator" && plan.mode !== "panel_response") return null;
+  if (plan.mode !== "lead_collaborator" && plan.mode !== "ambient_collaboration" && plan.mode !== "panel_response") return null;
 
   return (
     <div

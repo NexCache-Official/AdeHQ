@@ -2,14 +2,14 @@ import type { AIEmployee, AiParticipationMode, ParticipationStyle } from "@/lib/
 import { isBroadcastToEveryone } from "@/lib/server/channel-governance";
 
 const ROLE_KEYWORDS: Record<string, string[]> = {
-  pm: ["roadmap", "plan", "feature", "priority", "user", "onboarding", "requirements", "milestone", "scope"],
-  engineering: ["bug", "api", "database", "build", "code", "deploy", "error", "schema", "server", "fix"],
-  design: ["ui", "ux", "layout", "screen", "flow", "design", "confusing", "visual", "wireframe"],
-  research: ["competitor", "market", "research", "find", "compare", "analysis", "benchmark"],
-  marketing: ["launch", "copy", "landing", "content", "distribution", "campaign", "growth"],
+  pm: ["roadmap", "plan", "feature", "priority", "user", "onboarding", "requirements", "milestone", "scope", "product", "problem", "solution"],
+  engineering: ["bug", "api", "database", "build", "code", "deploy", "error", "schema", "server", "fix", "technical", "implementation"],
+  design: ["ui", "ux", "layout", "screen", "flow", "design", "confusing", "visual", "wireframe", "onboarding"],
+  research: ["competitor", "market", "industry", "research", "find", "compare", "analysis", "benchmark", "booming", "segment", "trend"],
+  marketing: ["launch", "copy", "landing", "content", "distribution", "campaign", "growth", "positioning", "brand"],
   gamedev: ["game", "unity", "godot", "asset", "level", "mechanics", "prototype", "plinko"],
   operations: ["process", "workflow", "ops", "incident", "support", "ticket"],
-  sales: ["deal", "pipeline", "customer", "pricing", "demo", "prospect"],
+  sales: ["deal", "pipeline", "customer", "pricing", "demo", "prospect", "sales", "outreach", "sell", "lead", "leads"],
   support: ["help", "issue", "ticket", "customer", "support", "escalation"],
 };
 

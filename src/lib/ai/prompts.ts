@@ -66,7 +66,16 @@ Greeting mode:
 
   const collaborationRules =
     options?.collaborationRole === "lead"
-      ? `
+      ? options?.conversationMode === "ambient_collaboration"
+        ? `
+Ambient collaboration (you are leading):
+- The user asked the AI team for help without explicitly mentioning you.
+- You were selected as the lead because your role best matches the request.
+- Take ownership of your part, explain the first useful step, and mention that collaborators may help after your output.
+- Produce work in YOUR domain only — do not fully answer the collaborator's domain.
+- Use handoffTo when ready to pass substantive output to a named teammate.
+`
+        : `
 Collaboration (you are leading):
 - Acknowledge collaborator(s) by name in your reply.
 - Produce work in YOUR domain only — do not fully answer the collaborator's domain.
@@ -76,6 +85,7 @@ Collaboration (you are leading):
       : options?.collaborationRole === "collaborator" && options.leadEmployeeName
         ? `
 Collaboration (you are the collaborator after ${options.leadEmployeeName}):
+- The lead employee has completed their first response. Use their output as context and contribute only from your role.
 - Build on ${options.leadEmployeeName}'s output in YOUR domain only. Do not redo their analysis.
 - Example: "Using ${options.leadEmployeeName}'s segments, here is the outreach strategy."
 - Reference their findings naturally; add your role-specific contribution.

@@ -18,6 +18,11 @@ import {
 import { getEffectiveParticipationMode, filterAllowedEmployees } from "@/lib/topic-ai-control";
 import { isGeneralTopic } from "@/lib/topics";
 import { pickSmartResponders } from "@/lib/server/smart-participation";
+import {
+  isHelpRequest,
+  planAmbientCollaboration,
+  type AmbientOrchestratorDebug,
+} from "@/lib/server/ambient-collaboration";
 import { extractMentionsInOrder, uid } from "@/lib/utils";
 import type { ResponderDecision } from "@/lib/server/decide-responders";
 
@@ -104,6 +109,7 @@ function buildLeadCollaboratorPlan(
   mentionedInOrder: AIEmployee[],
   collaborationId: string,
   rootTriggerMessageId?: string,
+  mode: ConversationMode = "lead_collaborator",
 ): ConversationPlan {
   const lead = mentionedInOrder[0];
   const collaborators = mentionedInOrder.slice(1);
@@ -120,7 +126,7 @@ function buildLeadCollaboratorPlan(
   ];
 
   return {
-    mode: "lead_collaborator",
+    mode,
     collaborationId,
     rootTriggerMessageId,
     status: "active",
@@ -156,6 +162,12 @@ export type PlanConversationOptions = {
   rootTriggerMessageId?: string;
 };
 
+export type PlanConversationResult = {
+  plan: ConversationPlan;
+  decisions: ResponderDecision[];
+  debug?: AmbientOrchestratorDebug;
+};
+
 export function planConversation(
   content: string,
   topic: RoomTopic,
@@ -163,7 +175,7 @@ export function planConversation(
   employees: AIEmployee[],
   mentionsJson?: MentionRef[],
   options?: PlanConversationOptions,
-): { plan: ConversationPlan; decisions: ResponderDecision[] } {
+): PlanConversationResult {
   const max = options?.maxParallel ?? 3;
   const participation = getEffectiveParticipationMode(topic);
   const isDM = room.kind === "dm";
@@ -298,14 +310,14 @@ export function planConversation(
     };
   }
 
-  if (governance?.lastMessageSenderType === "ai" && !isDM) {
+  if (governance?.lastMessageSenderType === "ai" && !isDM && !isHelpRequest(content)) {
     return {
       plan: { mode: "silent", collaborationId, status: "active", participants: [], pendingParticipants: [] },
       decisions: [],
     };
   }
 
-  if (isRoomCooldownActive(governance ?? {})) {
+  if (isRoomCooldownActive(governance ?? {}) && !isHelpRequest(content)) {
     return {
       plan: { mode: "silent", collaborationId, status: "active", participants: [], pendingParticipants: [] },
       decisions: [],
@@ -326,6 +338,86 @@ export function planConversation(
         decisions: [{ employee: greeter, reason: "group_greeting", isGreetingRun: true }],
       };
     }
+  }
+
+  const ambient = planAmbientCollaboration(content, allowed, participation);
+  if (ambient?.kind === "collaboration") {
+    const ordered = [ambient.lead, ...ambient.collaborators];
+    const plan = buildLeadCollaboratorPlan(
+      ordered,
+      collaborationId,
+      options?.rootTriggerMessageId,
+      "ambient_collaboration",
+    );
+    const orchestratedCollaboratorIds = ambient.collaborators.map((e) => e.id);
+    const debug: AmbientOrchestratorDebug = {
+      conversationMode: "ambient_collaboration",
+      helpRequest: ambient.helpRequest,
+      teamAddressed: ambient.teamAddressed,
+      detectedDomains: ambient.detectedDomains,
+      lead: ambient.lead.name,
+      collaborators: ambient.collaborators.map((e) => e.name),
+    };
+    return {
+      plan,
+      decisions: [
+        {
+          employee: ambient.lead,
+          reason: ambient.leadReason,
+          runMetadata: {
+            collaborationId,
+            conversationMode: "ambient_collaboration",
+            collaborationRole: "lead",
+            collaborationStatus: "active",
+            rootTriggerMessageId: options?.rootTriggerMessageId,
+            participants: plan.participants,
+            pendingCollaboratorIds: orchestratedCollaboratorIds,
+            orchestratedCollaborators: orchestratedCollaboratorIds,
+            detectedDomains: ambient.detectedDomains,
+            helpRequest: ambient.helpRequest,
+            teamAddressed: ambient.teamAddressed,
+          },
+        },
+      ],
+      debug,
+    };
+  }
+
+  if (ambient?.kind === "single") {
+    const debug: AmbientOrchestratorDebug = {
+      conversationMode: "ambient_smart",
+      helpRequest: ambient.helpRequest,
+      teamAddressed: ambient.teamAddressed,
+      detectedDomains: ambient.detectedDomains,
+      lead: ambient.employee.name,
+    };
+    return {
+      plan: {
+        mode: "ambient_smart",
+        collaborationId,
+        status: "active",
+        participants: [
+          {
+            employeeId: ambient.employee.id,
+            employeeName: ambient.employee.name,
+            role: "lead",
+          },
+        ],
+        pendingParticipants: [],
+      },
+      decisions: [
+        {
+          employee: ambient.employee,
+          reason: ambient.reason,
+          runMetadata: {
+            detectedDomains: ambient.detectedDomains,
+            helpRequest: ambient.helpRequest,
+            teamAddressed: ambient.teamAddressed,
+          },
+        },
+      ],
+      debug,
+    };
   }
 
   const smart = pickSmartResponders(content, allowed, participation, max);

@@ -12,6 +12,7 @@ import { planConversation } from "@/lib/server/conversation-orchestrator";
 import { queueAgentRuns } from "@/lib/server/queue-agent-runs";
 import { loadChannelGovernanceContext } from "@/lib/server/channel-governance";
 import { isAiQueueingBlocked } from "@/lib/topic-ai-control";
+import { getAiParticipationMode, isSmartAssistMode } from "@/lib/topics";
 import { loadMaxParallelRuns } from "@/lib/ai/cost-guard";
 import { messageError } from "@/lib/server/message-errors";
 import type { MentionRef, ProjectRoom } from "@/lib/types";
@@ -135,7 +136,7 @@ export async function POST(
       humanMessage.id,
     );
 
-    const { plan: conversationPlan, decisions } = isAiQueueingBlocked(topic)
+    const planResult = isAiQueueingBlocked(topic)
       ? {
           plan: {
             mode: "silent" as const,
@@ -156,6 +157,8 @@ export async function POST(
           { maxParallel, governance, rootTriggerMessageId: humanMessage.id },
         );
 
+    const { plan: conversationPlan, decisions, debug: orchestratorDebug } = planResult;
+
     const { queued, blocked } = await queueAgentRuns(client, {
       workspaceId,
       roomId: params.roomId,
@@ -165,7 +168,7 @@ export async function POST(
       content: trimmed,
     });
 
-    if (process.env.NODE_ENV === "development") {
+    if (process.env.NODE_ENV === "development" || request.headers.get("X-AdeHQ-Debug") === "true") {
       console.info("[AdeHQ messages]", {
         roomId: params.roomId,
         topicId,
@@ -173,7 +176,20 @@ export async function POST(
         queued: queued.length,
         blocked: blocked.length,
         decisions: decisions.length,
+        conversationMode: conversationPlan.mode,
+        orchestratorDebug,
       });
+    }
+
+    const participation = getAiParticipationMode(topic);
+    let hint: string | undefined;
+    if (queued.length === 0 && decisions.length === 0) {
+      if (participation === "manual_only" || participation === "silent_observation") {
+        hint = "Mention an employee with @ to get a response";
+      } else if (isSmartAssistMode(participation) || participation === "active_team") {
+        hint =
+          "No employee joined automatically. Mention someone with @ or switch this topic to Active Team.";
+      }
     }
 
     return NextResponse.json({
@@ -181,12 +197,10 @@ export async function POST(
       queuedRuns: queued,
       blockedRuns: blocked,
       collaborationPlan: conversationPlan,
+      orchestratorDebug,
       aiResponses: [],
       aiMessages: [],
-      hint:
-        queued.length === 0 && decisions.length === 0
-          ? "Mention an employee with @ to get a response"
-          : undefined,
+      hint,
     });
   } catch (error) {
     if (error instanceof AuthError) {

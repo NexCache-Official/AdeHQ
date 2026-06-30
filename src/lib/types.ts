@@ -182,7 +182,11 @@ export type ResponseReason =
   | "collaboration_lead"
   | "collaboration_collaborator"
   | "panel_response"
-  | "sequential_dependent";
+  | "sequential_dependent"
+  | "ambient_help_request"
+  | "ambient_role_match"
+  | "ambient_collaboration_lead"
+  | "ambient_collaboration_collaborator";
 
 export type ConversationMode =
   | "direct_reply"
@@ -191,6 +195,7 @@ export type ConversationMode =
   | "lead_collaborator"
   | "handoff"
   | "ambient_smart"
+  | "ambient_collaboration"
   | "silent";
 
 export type CollaborationRole = "lead" | "collaborator" | "reviewer" | "observer";
