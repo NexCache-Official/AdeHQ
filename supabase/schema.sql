@@ -325,7 +325,7 @@ create table if not exists public.agent_runs (
   trigger_message_id text not null,
   response_message_id text,
   status text not null check (status in (
-    'queued','running','waiting_approval','completed','failed','blocked'
+    'queued','waiting','running','waiting_approval','completed','failed','blocked','cancelled'
   )),
   provider text not null,
   model text not null,

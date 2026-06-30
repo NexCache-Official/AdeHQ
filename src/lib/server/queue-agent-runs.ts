@@ -102,7 +102,7 @@ export async function queueAgentRuns(
         provider,
         model: estimate.model,
         modelMode,
-        status: "queued",
+        status: params.dependsOnRunId ? "waiting" : "queued",
         estimatedCostUsd: estimate.cost,
       });
 

@@ -28,6 +28,25 @@ function collaborationPlanFromRun(row: Record<string, unknown>): ConversationPla
   };
 }
 
+function isDependencyCompleted(
+  rows: Record<string, unknown>[],
+  dependsOnRunId: unknown,
+): boolean {
+  if (!dependsOnRunId) return true;
+  return rows.some(
+    (r) => String(r.id) === String(dependsOnRunId) && String(r.status) === "completed",
+  );
+}
+
+function isRunProcessable(row: Record<string, unknown>, rows: Record<string, unknown>[]): boolean {
+  const status = String(row.status);
+  const depMet = isDependencyCompleted(rows, row.depends_on_run_id);
+
+  if (status === "running") return false;
+  if (status === "queued" || status === "waiting") return depMet;
+  return false;
+}
+
 export async function GET(
   request: NextRequest,
   { params }: { params: { roomId: string; topicId: string } },
@@ -46,12 +65,12 @@ export async function GET(
     const sinceMs = 10 * 60 * 1000;
     const since = new Date(Date.now() - sinceMs).toISOString();
     const statusFilter = request.nextUrl.searchParams.get("status") ?? "queued,waiting,running";
-    const statuses = statusFilter.split(",").map((s) => s.trim());
+    const statuses = statusFilter.split(",").map((s) => s.trim()).filter(Boolean);
 
     const { data, error } = await client
       .from("agent_runs")
       .select(
-        "id, employee_id, status, started_at, response_reason, depends_on_run_id, root_trigger_message_id, run_metadata, ai_employees(name)",
+        "id, employee_id, status, started_at, response_reason, depends_on_run_id, root_trigger_message_id, run_metadata",
       )
       .eq("workspace_id", workspaceId)
       .eq("room_id", params.roomId)
@@ -59,10 +78,27 @@ export async function GET(
       .in("status", statuses)
       .gte("started_at", since)
       .order("started_at", { ascending: true });
+
     if (error) throw error;
 
     const now = Date.now();
     const rows = (data as Record<string, unknown>[] | null) ?? [];
+
+    const employeeIds = [...new Set(rows.map((r) => String(r.employee_id)).filter(Boolean))];
+    const employeeNameById = new Map<string, string>();
+
+    if (employeeIds.length > 0) {
+      const { data: employees, error: empError } = await client
+        .from("ai_employees")
+        .select("id, name")
+        .eq("workspace_id", workspaceId)
+        .in("id", employeeIds);
+
+      if (empError) throw empError;
+      for (const emp of employees ?? []) {
+        employeeNameById.set(String(emp.id), String(emp.name ?? "AI Employee"));
+      }
+    }
 
     const runs = rows.map((row) => {
       const startedAt = String(row.started_at ?? "");
@@ -71,12 +107,12 @@ export async function GET(
         status === "running" &&
         startedAt &&
         now - +new Date(startedAt) > STALE_RUNNING_MS;
-      const employee = row.ai_employees as { name?: string } | null;
       const meta = (row.run_metadata as Record<string, unknown> | null) ?? {};
+      const employeeId = String(row.employee_id);
       return {
         runId: String(row.id),
-        employeeId: String(row.employee_id),
-        employeeName: employee?.name ?? "AI Employee",
+        employeeId,
+        employeeName: employeeNameById.get(employeeId) ?? "AI Employee",
         status,
         reason: row.response_reason ? String(row.response_reason) : undefined,
         dependsOnRunId: row.depends_on_run_id ? String(row.depends_on_run_id) : undefined,
@@ -85,15 +121,7 @@ export async function GET(
         conversationMode:
           typeof meta.conversationMode === "string" ? meta.conversationMode : undefined,
         stale,
-        processable:
-          status === "queued" ||
-          (status === "waiting" && !row.depends_on_run_id) ||
-          (status === "waiting" &&
-            rows.some(
-              (r) =>
-                String(r.id) === String(row.depends_on_run_id) &&
-                String(r.status) === "completed",
-            )),
+        processable: isRunProcessable(row, rows),
       };
     });
 
