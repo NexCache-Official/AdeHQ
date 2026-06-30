@@ -18,6 +18,7 @@ export const dynamic = "force-dynamic";
 type CandidatesBody = {
   brief: AiEmployeeJobBrief;
   departmentId?: string | null;
+  roleKey?: string | null;
 };
 
 const copyOnlySchema = z.object({
@@ -59,6 +60,7 @@ Match the job brief domain and role.`,
     const candidates = generateDeterministicCandidates(
       body.brief,
       body.departmentId ?? null,
+      body.roleKey ?? null,
       copies,
     );
 

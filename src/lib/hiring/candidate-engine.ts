@@ -5,7 +5,8 @@ import {
 } from "@/lib/ai/model-catalog";
 import type { EmployeeRoleKey } from "@/lib/types";
 import type { AiEmployeeApplicant, AiEmployeeJobBrief, CandidateTier } from "./types";
-import { departmentToRoleKey } from "./map-candidate";
+import { getRoleByKey } from "./role-library";
+import { hiringRoleToEmployeeRoleKey } from "./map-candidate";
 
 const TIER_GRADS: Record<CandidateTier, string> = {
   high_capacity: "linear-gradient(135deg,#fbbf24,#f97316 55%,#ef4444)",
@@ -124,19 +125,36 @@ export type ApplicantCopy = Partial<
   >
 >;
 
+function personaCopy(
+  tier: CandidateTier,
+  roleKey?: string | null,
+): ApplicantCopy | undefined {
+  const role = getRoleByKey(roleKey ?? undefined);
+  if (!role) return undefined;
+  const persona = role.candidatePersonas[tier];
+  return {
+    title: persona.title,
+    strengths: persona.strengths,
+    bestFor: persona.bestFor,
+    whyThisCandidate: persona.whyRecommended ?? persona.bestFor,
+  };
+}
+
 export function buildDeterministicApplicant(
   tier: CandidateTier,
   brief: AiEmployeeJobBrief,
   departmentId: string | null,
+  roleKey?: string | null,
   copy?: ApplicantCopy,
 ): AiEmployeeApplicant {
-  const roleKey = departmentToRoleKey(departmentId);
-  const modelMode = tierModelMode(tier, roleKey);
+  const employeeRoleKey = hiringRoleToEmployeeRoleKey(roleKey, departmentId);
+  const modelMode = tierModelMode(tier, employeeRoleKey);
   const resolvedModelId = resolveModel("siliconflow", modelMode);
   const metrics = tierMetrics(tier);
+  const personaDefaults = personaCopy(tier, roleKey);
   const defaults = defaultNames(brief, tier);
   const name = copy?.name ?? defaults.name;
-  const title = copy?.title ?? defaults.title;
+  const title = copy?.title ?? personaDefaults?.title ?? defaults.title;
   const first = name.split(" ")[0] ?? name;
 
   return {
@@ -155,16 +173,17 @@ export function buildDeterministicApplicant(
     qualityLevel: metrics.qualityLevel,
     speedLevel: metrics.speedLevel,
     costLevel: metrics.costLevel,
-    strengths: copy?.strengths ?? defaultStrengths(tier, brief),
+    strengths: copy?.strengths ?? personaDefaults?.strengths ?? defaultStrengths(tier, brief),
     watchOuts: copy?.watchOuts ?? defaultWatchOuts(tier),
-    bestFor:
-      copy?.bestFor ??
-      (tier === "high_capacity"
+    bestFor: copy?.bestFor ?? personaDefaults?.bestFor ?? (tier === "high_capacity"
         ? "Fast execution and high-volume work"
         : tier === "premium"
           ? `Important ${brief.domain.toLowerCase()} decisions`
           : `Day-to-day ${brief.roleTitle.toLowerCase()} work`),
-    whyThisCandidate: copy?.whyThisCandidate ?? defaultWhy(tier, brief),
+    whyThisCandidate:
+      copy?.whyThisCandidate ??
+      personaDefaults?.whyThisCandidate ??
+      defaultWhy(tier, brief),
     recommended: tier === "recommended",
     personalityTags:
       copy?.personalityTags ??
@@ -184,10 +203,17 @@ export function buildDeterministicApplicant(
 export function generateDeterministicCandidates(
   brief: AiEmployeeJobBrief,
   departmentId: string | null,
+  roleKey?: string | null,
   copies?: Partial<Record<CandidateTier, ApplicantCopy>>,
 ): AiEmployeeApplicant[] {
   const tiers: CandidateTier[] = ["high_capacity", "recommended", "premium"];
   return tiers.map((tier) =>
-    buildDeterministicApplicant(tier, brief, departmentId, copies?.[tier]),
+    buildDeterministicApplicant(
+      tier,
+      brief,
+      departmentId,
+      roleKey,
+      copies?.[tier] ?? personaCopy(tier, roleKey),
+    ),
   );
 }

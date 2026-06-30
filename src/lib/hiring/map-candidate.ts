@@ -2,6 +2,7 @@ import { ROLE_TEMPLATES, TOOL_CATALOG, defaultPermissions } from "@/lib/demo";
 import type { AiEmployeeApplicant, AiEmployeeJobBrief } from "./types";
 import type { AIEmployee, EmployeeRoleKey } from "@/lib/types";
 import { briefToInstructions } from "./build-brief";
+import { getRoleByKey, legacyDepartmentIdForRole } from "./role-library";
 import { nowISO, uid } from "@/lib/utils";
 
 const DEPT_ROLE_KEY: Record<string, EmployeeRoleKey> = {
@@ -32,20 +33,30 @@ export function departmentToRoleKey(departmentId?: string | null): EmployeeRoleK
   return DEPT_ROLE_KEY[departmentId] ?? "pm";
 }
 
+export function hiringRoleToEmployeeRoleKey(
+  roleKey?: string | null,
+  departmentId?: string | null,
+): EmployeeRoleKey {
+  const libraryRole = getRoleByKey(roleKey ?? undefined);
+  if (libraryRole) return libraryRole.employeeRoleKey;
+  return departmentToRoleKey(departmentId ?? legacyDepartmentIdForRole(roleKey));
+}
+
 export function candidateToEmployee(
   candidate: AiEmployeeApplicant,
   brief: AiEmployeeJobBrief,
   departmentId: string | null,
+  roleKey?: string | null,
 ): AIEmployee {
-  const roleKey = departmentToRoleKey(departmentId);
-  const template = ROLE_TEMPLATES.find((t) => t.key === roleKey) ?? ROLE_TEMPLATES[0];
+  const employeeRoleKey = hiringRoleToEmployeeRoleKey(roleKey, departmentId);
+  const template = ROLE_TEMPLATES.find((t) => t.key === employeeRoleKey) ?? ROLE_TEMPLATES[0];
   const timestamp = nowISO();
 
   return {
     id: uid("emp"),
     name: candidate.name,
     role: brief.roleTitle || template.role,
-    roleKey,
+    roleKey: employeeRoleKey,
     provider: "siliconflow",
     model: candidate.resolvedModelId,
     modelMode: candidate.modelMode,

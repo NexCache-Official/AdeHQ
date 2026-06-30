@@ -6,16 +6,16 @@ import { motion } from "framer-motion";
 import { authHeaders } from "@/lib/api/auth-client";
 import { useStore } from "@/lib/demo-store";
 import {
-  synthesizeBriefFromConversation,
+  synthesizeBriefForHiringContext,
   welcomeMessage,
 } from "@/lib/hiring/build-brief";
 import {
-  DEPARTMENT_CARDS,
-  HIRE_EXAMPLES,
   INTERVIEW_ANSWERS,
   ONBOARDING_ROOM_KEY,
 } from "@/lib/hiring/data";
 import { candidateToEmployee } from "@/lib/hiring/map-candidate";
+import { legacyDepartmentIdForRole, getRoleByKey } from "@/lib/hiring/role-library";
+import { inferRoleFromText, inferenceOpeningMessage } from "@/lib/hiring/role-inference";
 import {
   clearHiringSession,
   hiringBackStep,
@@ -40,6 +40,7 @@ import { cn, nowISO, uid } from "@/lib/utils";
 import { BriefDocumentPreview } from "./BriefDocumentPreview";
 import { BriefEditor } from "./BriefEditor";
 import { AdeOrb, HireHeader, HireStepper } from "./HireChrome";
+import { RoleStepPanel, type RoleStepSelection } from "./RoleStepPanel";
 import {
   ApplicantCard,
   AssignScreen,
@@ -65,12 +66,16 @@ async function callRecruiter(payload: Record<string, unknown>): Promise<Recruite
   return res.json();
 }
 
-async function callCandidates(brief: AiEmployeeJobBrief, departmentId: string | null) {
+async function callCandidates(
+  brief: AiEmployeeJobBrief,
+  departmentId: string | null,
+  roleKey?: string | null,
+) {
   const headers = await authHeaders();
   const res = await fetch("/api/hiring/candidates", {
     method: "POST",
     headers,
-    body: JSON.stringify({ brief, departmentId }),
+    body: JSON.stringify({ brief, departmentId, roleKey }),
   });
   if (!res.ok) throw new Error("Could not generate candidates");
   return res.json() as Promise<CandidatesApiResponse>;
@@ -91,9 +96,36 @@ export function HireFlow({ onboarding = false }: HireFlowProps) {
 
   const roleSeed = useMemo(() => {
     if (session.roleInput.trim()) return session.roleInput.trim();
-    const dept = DEPARTMENT_CARDS.find((d) => d.id === session.departmentId);
-    return dept && dept.id !== "custom" ? dept.name : "";
-  }, [session.roleInput, session.departmentId]);
+    if (session.roleKey) {
+      return getRoleByKey(session.roleKey)?.title ?? session.roleKey;
+    }
+    return "";
+  }, [session.roleInput, session.roleKey]);
+
+  const effectiveDepartmentId = useMemo(
+    () => session.departmentId ?? legacyDepartmentIdForRole(session.roleKey),
+    [session.departmentId, session.roleKey],
+  );
+
+  const recruiterPayload = useCallback(
+    (extra: Record<string, unknown> = {}) => ({
+      roleSeed,
+      selectedDepartment: effectiveDepartmentId,
+      roleKey: session.roleKey,
+      departmentGroupId: session.departmentGroupId,
+      discoveryMode: session.discoveryMode,
+      customRoleTitle: session.customRoleTitle,
+      ...extra,
+    }),
+    [
+      roleSeed,
+      effectiveDepartmentId,
+      session.roleKey,
+      session.departmentGroupId,
+      session.discoveryMode,
+      session.customRoleTitle,
+    ],
+  );
 
   const recruiterTurns = session.recruiterMessages.filter((m) => m.role === "user").length;
   const previewBrief = session.briefPartial ?? session.brief;
@@ -180,33 +212,43 @@ export function HireFlow({ onboarding = false }: HireFlowProps) {
   const goToBrief = useCallback(() => {
     const brief =
       session.brief ??
-      synthesizeBriefFromConversation(
+      synthesizeBriefForHiringContext({
         roleSeed,
-        session.recruiterMessages,
-        session.departmentId,
-        session.briefPartial,
-      );
+        messages: session.recruiterMessages,
+        departmentId: effectiveDepartmentId,
+        roleKey: session.roleKey,
+        existing: session.briefPartial,
+      });
     dispatch({ type: "SET_BRIEF", brief });
     dispatch({ type: "SET_STEP", step: "brief" });
-  }, [roleSeed, session.brief, session.briefPartial, session.recruiterMessages, session.departmentId]);
+  }, [
+    roleSeed,
+    session.brief,
+    session.briefPartial,
+    session.recruiterMessages,
+    effectiveDepartmentId,
+    session.roleKey,
+  ]);
 
-  const startRecruiter = async (seed?: string) => {
-    const nextSeed = seed ?? roleSeed;
-    if (!nextSeed && !session.departmentId) return;
+  const beginRecruiter = async (seed: string, opts?: { roleKey?: string | null; openingMessage?: string }) => {
+    if (!seed && !opts?.roleKey && !effectiveDepartmentId) return;
     dispatch({ type: "RESET_RECRUITER" });
     dispatch({ type: "SET_ERROR", error: null });
     dispatch({ type: "SET_STEP", step: "recruiter" });
     dispatch({ type: "SET_BUSY", busy: true });
     try {
-      const res = await callRecruiter({
-        roleSeed: nextSeed,
-        selectedDepartment: session.departmentId,
-        conversation: [],
-        action: "message",
-      });
+      const res = await callRecruiter(
+        recruiterPayload({
+          roleSeed: seed,
+          roleKey: opts?.roleKey ?? session.roleKey,
+          conversation: [],
+          action: "message",
+        }),
+      );
+      const opening = opts?.openingMessage ?? res.recruiterMessage ?? res.message;
       dispatch({
         type: "SET_MESSAGES",
-        messages: [{ role: "ade", text: res.recruiterMessage ?? res.message }],
+        messages: [{ role: "ade", text: opening }],
       });
       applyRecruiterResponse(res, false);
       dispatch({ type: "SET_BRIEF_READY", briefReady: false });
@@ -218,6 +260,66 @@ export function HireFlow({ onboarding = false }: HireFlowProps) {
     } finally {
       dispatch({ type: "SET_BUSY", busy: false });
     }
+  };
+
+  const handleRoleStepSelect = async (selection: RoleStepSelection) => {
+    if (selection.type === "role") {
+      dispatch({ type: "SET_ROLE_INPUT", roleInput: selection.title });
+      dispatch({
+        type: "SET_ROLE_KEY",
+        roleKey: selection.roleKey,
+        departmentGroupId: selection.departmentGroupId,
+      });
+      dispatch({
+        type: "SET_DEPARTMENT",
+        departmentId: legacyDepartmentIdForRole(selection.roleKey),
+      });
+      dispatch({ type: "SET_DISCOVERY", discoveryMode: false });
+      await beginRecruiter(selection.title, { roleKey: selection.roleKey });
+      return;
+    }
+
+    if (selection.type === "discovery") {
+      dispatch({ type: "SET_DISCOVERY", discoveryMode: true, discoveryStep: "outcome" });
+      return;
+    }
+
+    const text = selection.title;
+    dispatch({ type: "SET_ROLE_INPUT", roleInput: text });
+    const inference = inferRoleFromText(text);
+
+    if (selection.custom || inference.matchType === "custom") {
+      dispatch({ type: "SET_ROLE_KEY", roleKey: "custom" });
+      dispatch({ type: "SET_CUSTOM_ROLE_TITLE", customRoleTitle: text });
+      dispatch({ type: "SET_INFERENCE", confidence: "low", suggestedRoleKeys: inference.nearMatchAlternatives ?? [] });
+      await beginRecruiter(text, {
+        roleKey: "custom",
+        openingMessage: inferenceOpeningMessage(text, inference),
+      });
+      return;
+    }
+
+    if (selection.roleKey) {
+      dispatch({ type: "SET_ROLE_KEY", roleKey: selection.roleKey });
+      dispatch({ type: "SET_DEPARTMENT", departmentId: legacyDepartmentIdForRole(selection.roleKey) });
+      dispatch({
+        type: "SET_INFERENCE",
+        confidence: inference.confidence,
+        suggestedRoleKeys: inference.matches.map((m) => m.roleKey),
+      });
+      await beginRecruiter(selection.roleKey ? getRoleByKey(selection.roleKey)?.title ?? text : text, {
+        roleKey: selection.roleKey,
+        openingMessage: inferenceOpeningMessage(text, inference),
+      });
+      return;
+    }
+
+    dispatch({
+      type: "SET_INFERENCE",
+      confidence: inference.confidence,
+      suggestedRoleKeys: inference.matches.map((m) => m.roleKey),
+    });
+    await beginRecruiter(text, { openingMessage: inferenceOpeningMessage(text, inference) });
   };
 
   const sendUserMessage = async (text: string, action: "message" | "draft_now" | "refine_section" = "message") => {
@@ -240,15 +342,15 @@ export function HireFlow({ onboarding = false }: HireFlowProps) {
     setBriefCompose({ active: true, section: null });
 
     try {
-      const res = await callRecruiter({
-        roleSeed,
-        selectedDepartment: session.departmentId,
-        conversation: nextMessages,
-        userMessage: trimmed,
-        action: onBriefStep ? "refine_section" : isDraftNow ? "draft_now" : "message",
-        currentBrief: session.brief ?? session.briefPartial,
-        mode: onBriefStep ? "brief_refine" : isDraftNow ? "draft_now" : "chat",
-      });
+      const res = await callRecruiter(
+        recruiterPayload({
+          conversation: nextMessages,
+          userMessage: trimmed,
+          action: onBriefStep ? "refine_section" : isDraftNow ? "draft_now" : "message",
+          currentBrief: session.brief ?? session.briefPartial,
+          mode: onBriefStep ? "brief_refine" : isDraftNow ? "draft_now" : "chat",
+        }),
+      );
       applyRecruiterResponse(res);
       if (res.brief) {
         dispatch({ type: "SET_BRIEF", brief: res.brief });
@@ -277,17 +379,17 @@ export function HireFlow({ onboarding = false }: HireFlowProps) {
     if (!session.brief) return;
     dispatch({ type: "SET_BUSY", busy: true });
     try {
-      const res = await callRecruiter({
-        roleSeed,
-        selectedDepartment: session.departmentId,
-        conversation: session.recruiterMessages,
-        action: "refine_section",
-        currentBrief: session.brief,
-        mode: "refine",
-        refineSection: section,
-        refineMode: mode,
-        refineInstruction: instruction ?? `Refine the ${section} section`,
-      });
+      const res = await callRecruiter(
+        recruiterPayload({
+          conversation: session.recruiterMessages,
+          action: "refine_section",
+          currentBrief: session.brief,
+          mode: "refine",
+          refineSection: section,
+          refineMode: mode,
+          refineInstruction: instruction ?? `Refine the ${section} section`,
+        }),
+      );
       if (res.brief) dispatch({ type: "SET_BRIEF", brief: res.brief });
     } finally {
       dispatch({ type: "SET_BUSY", busy: false });
@@ -298,23 +400,24 @@ export function HireFlow({ onboarding = false }: HireFlowProps) {
     dispatch({ type: "SET_REGEN_SPIN", spin: true });
     dispatch({ type: "SET_BUSY", busy: true });
     try {
-      const res = await callRecruiter({
-        roleSeed,
-        selectedDepartment: session.departmentId,
-        conversation: session.recruiterMessages,
-        currentBrief: session.brief,
-        mode: "regenerate",
-      });
+      const res = await callRecruiter(
+        recruiterPayload({
+          conversation: session.recruiterMessages,
+          currentBrief: session.brief,
+          mode: "regenerate",
+        }),
+      );
       if (res.brief) dispatch({ type: "SET_BRIEF", brief: res.brief });
       else if (session.brief) {
         dispatch({
           type: "SET_BRIEF",
-          brief: synthesizeBriefFromConversation(
+          brief: synthesizeBriefForHiringContext({
             roleSeed,
-            session.recruiterMessages,
-            session.departmentId,
-            session.brief,
-          ),
+            messages: session.recruiterMessages,
+            departmentId: effectiveDepartmentId,
+            roleKey: session.roleKey,
+            existing: session.brief,
+          }),
         });
       }
     } finally {
@@ -338,13 +441,13 @@ export function HireFlow({ onboarding = false }: HireFlowProps) {
 
     void (async () => {
       try {
-        const { candidates } = await callCandidates(brief, session.departmentId);
+        const { candidates } = await callCandidates(brief, effectiveDepartmentId, session.roleKey);
         dispatch({ type: "SET_CANDIDATES", candidates });
       } catch {
         const { generateDeterministicCandidates } = await import("@/lib/hiring/candidate-engine");
         dispatch({
           type: "SET_CANDIDATES",
-          candidates: generateDeterministicCandidates(brief, session.departmentId),
+          candidates: generateDeterministicCandidates(brief, effectiveDepartmentId, session.roleKey),
         });
       }
     })();
@@ -375,7 +478,7 @@ export function HireFlow({ onboarding = false }: HireFlowProps) {
 
   const confirmHire = async () => {
     if (!hired || !session.brief || !appState.user) return;
-    const employee = candidateToEmployee(hired, session.brief, session.departmentId);
+    const employee = candidateToEmployee(hired, session.brief, effectiveDepartmentId, session.roleKey);
     employee.id = uid("emp");
 
     try {
@@ -519,86 +622,12 @@ export function HireFlow({ onboarding = false }: HireFlowProps) {
         )}
 
         {session.step === "role" && (
-          <motion.div initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-[920px]">
-            <div className="mb-8 mt-2 text-center">
-              <div className="mb-5 inline-flex items-center gap-1.5 rounded-full border border-border bg-surface px-3 py-1.5 text-[12.5px] text-ink-2 shadow-sm">
-                <span className="h-1.5 w-1.5 rounded-full bg-green" />
-                Your AI workforce, hired like real teammates
-              </div>
-              <h1 className="mb-3 text-[42px] font-semibold leading-[1.04] tracking-[-1.6px]">
-                Who do you want to hire?
-              </h1>
-              <p className="mx-auto max-w-[560px] text-[17px] leading-relaxed text-ink-2">
-                Describe the role. Ade Recruiter will ask only what&apos;s missing, draft a job brief,
-                and shortlist three candidates.
-              </p>
-            </div>
-            <div className="rounded-[18px] border border-border bg-surface p-2 shadow-md">
-              <div className="flex flex-wrap items-center gap-2.5 px-4 py-1.5 sm:flex-nowrap">
-                <span className="whitespace-nowrap text-base text-ink-3">I need someone who can…</span>
-                <input
-                  value={session.roleInput}
-                  onChange={(e) => dispatch({ type: "SET_ROLE_INPUT", roleInput: e.target.value })}
-                  placeholder="optimize enterprise AI performance"
-                  className="min-w-0 flex-1 border-none bg-transparent py-2.5 text-base outline-none"
-                  onKeyDown={(e) => e.key === "Enter" && startRecruiter()}
-                />
-                <button
-                  type="button"
-                  onClick={() => startRecruiter()}
-                  disabled={!session.roleInput.trim() && !session.departmentId}
-                  className="whitespace-nowrap rounded-xl bg-ink px-5 py-3.5 text-sm font-medium text-white shadow-sm hover:bg-ink/90 disabled:opacity-40"
-                >
-                  Continue with Ade Recruiter →
-                </button>
-              </div>
-            </div>
-            <div className="mt-4 flex flex-wrap justify-center gap-2">
-              {HIRE_EXAMPLES.map((ex) => (
-                <button
-                  key={ex}
-                  type="button"
-                  onClick={() => dispatch({ type: "SET_ROLE_INPUT", roleInput: ex })}
-                  className="rounded-full border border-border bg-surface px-3.5 py-2 text-[13px] text-ink-2 hover:border-ink/30"
-                >
-                  {ex}
-                </button>
-              ))}
-            </div>
-            <div className="my-8 flex items-center gap-3.5">
-              <div className="h-px flex-1 bg-border" />
-              <span className="font-mono text-xs uppercase tracking-wider text-ink-3">
-                Or pick a department
-              </span>
-              <div className="h-px flex-1 bg-border" />
-            </div>
-            <div className="grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-2.5">
-              {DEPARTMENT_CARDS.map((rc) => (
-                <button
-                  key={rc.id}
-                  type="button"
-                  onClick={() => {
-                    dispatch({ type: "SET_DEPARTMENT", departmentId: rc.id });
-                    if (rc.id !== "custom") startRecruiter(rc.name);
-                  }}
-                  className={cn(
-                    "flex flex-col gap-2 rounded-[14px] border p-3.5 text-left transition hover:-translate-y-0.5 hover:shadow-md",
-                    session.departmentId === rc.id
-                      ? "border-accent/40 bg-accent-soft/30"
-                      : "border-border bg-surface",
-                  )}
-                >
-                  <div className="flex items-center gap-2.5">
-                    <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-muted font-mono text-[11px]">
-                      {rc.mono}
-                    </div>
-                    <span className="text-sm font-semibold">{rc.name}</span>
-                  </div>
-                  <span className="text-[12.5px] text-ink-2">{rc.desc}</span>
-                </button>
-              ))}
-            </div>
-          </motion.div>
+          <RoleStepPanel
+            roleInput={session.roleInput}
+            onRoleInputChange={(value) => dispatch({ type: "SET_ROLE_INPUT", roleInput: value })}
+            onSelect={handleRoleStepSelect}
+            busy={session.busy}
+          />
         )}
 
         {session.step === "recruiter" && (

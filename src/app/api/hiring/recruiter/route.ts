@@ -9,8 +9,9 @@ import { briefSchema, recruiterResponseSchema } from "@/lib/hiring/brief-schema"
 import {
   departmentLabel,
   mergeBriefPartial,
-  synthesizeBriefFromConversation,
+  synthesizeBriefForHiringContext,
 } from "@/lib/hiring/build-brief";
+import { getRoleByKey } from "@/lib/hiring/role-library";
 import {
   checklistFromBrief,
 } from "@/lib/hiring/recruiter-checklist";
@@ -40,6 +41,10 @@ type RecruiterBody = {
   action?: "message" | "draft_now" | "refine_section";
   roleSeed: string;
   departmentId?: string | null;
+  roleKey?: string | null;
+  departmentGroupId?: string | null;
+  discoveryMode?: boolean;
+  customRoleTitle?: string | null;
   messages: RecruiterMessage[];
   currentBrief?: AiEmployeeJobBrief;
   mode?: "chat" | "regenerate" | "refine" | "draft_now" | "brief_refine";
@@ -63,8 +68,9 @@ function normalizeBrief(raw: z.infer<typeof briefSchema>): AiEmployeeJobBrief {
 function normalizeBody(body: RecruiterBody) {
   const conversation = body.conversation ?? body.messages ?? [];
   const departmentId = body.selectedDepartment ?? body.departmentId ?? null;
+  const roleKey = body.roleKey ?? null;
   const action = body.action ?? (body.mode === "draft_now" ? "draft_now" : "message");
-  return { conversation, departmentId, action };
+  return { conversation, departmentId, roleKey, action };
 }
 
 function applyInstructionToBrief(brief: AiEmployeeJobBrief, instruction: string): AiEmployeeJobBrief {
@@ -118,9 +124,14 @@ function recruiterMessageFor(
   readiness: RecruiterReadiness,
   conversation: RecruiterMessage[],
   currentBrief: AiEmployeeJobBrief,
+  roleKey?: string | null,
 ) {
   const lastUser = [...conversation].reverse().find((m) => m.role === "user")?.text.toLowerCase() ?? "";
   if (lastUser.includes("don't know") || lastUser.includes("not sure") || lastUser.includes("help me decide")) {
+    const role = getRoleByKey(roleKey ?? undefined);
+    if (role?.questionTemplates.coreWorkChips.length) {
+      return `No problem. For ${role.title} roles, common starting points are ${role.questionTemplates.coreWorkChips.slice(0, 4).join(", ").toLowerCase()}. Which feels closest?`;
+    }
     const deptId = inferDepartmentId(currentBrief);
     if (deptId === "pr") {
       return "No problem. For PR roles, common starting points are press releases, media pitching, internal comms, or crisis response. Which feels closest to what you need?";
@@ -134,21 +145,26 @@ function recruiterMessageFor(
     if (isEngineeringBrief(currentBrief)) {
       return "No problem. For engineering roles, common directions are frontend product work, backend systems, AI infrastructure, or data workflows. Which feels closest?";
     }
-    return "No problem. Tell me whether you want someone more strategic, more execution-focused, or a mix — and I’ll shape the brief from there.";
+    return "No problem. Tell me whether you want someone more strategic, more execution-focused, or a mix — and I'll shape the brief from there.";
   }
-  return chooseNextRecruiterQuestion(readiness, currentBrief);
+  return chooseNextRecruiterQuestion(readiness, currentBrief, roleKey);
 }
 
-function openingMessage(body: RecruiterBody, departmentId: string | null) {
+function openingMessage(body: RecruiterBody, departmentId: string | null, roleKey?: string | null) {
+  const role = getRoleByKey(roleKey ?? undefined);
+  if (role) {
+    return `Great — let's hire a ${role.title}. ${role.questionTemplates.coreWork}`;
+  }
   const roleSeed = body.roleSeed?.trim() ?? "";
   const dept = departmentLabel(departmentId);
   if (roleSeed && roleSeed.split(/\s+/).length >= 3) {
-    return `Got it — I’ll treat this as a ${synthesizeBriefFromConversation(roleSeed, [], departmentId).roleTitle} role for now. What kind of work should this employee focus on day to day?`;
+    const brief = synthesizeBriefForHiringContext({ roleSeed, departmentId, roleKey });
+    return `Got it — I'll treat this as a ${brief.roleTitle} role. What kind of work should this employee focus on day to day?`;
   }
   if (departmentId && departmentId !== "custom") {
-    return `Hello! I’m Ade Recruiter. For ${dept}, what kind of AI employee do you want to hire, and what problem should they own first?`;
+    return `Hello! I'm Ade Recruiter. For ${dept}, what kind of employee do you want to hire, and what should they own first?`;
   }
-  return "What kind of AI employee do you want to hire, and what should they help with first?";
+  return "What kind of employee do you want to hire, and what should they help with first?";
 }
 
 function buildResponse(input: {
@@ -162,7 +178,8 @@ function buildResponse(input: {
   const baseReadiness = assessRecruiterReadiness(input.conversation, input.brief);
   const canReviewBrief = input.forceCanReview || baseReadiness.ready;
   const readiness = finalizeReadinessScore(baseReadiness, input.brief, canReviewBrief);
-  let suggestionChips = generateSuggestionChips(readiness, input.brief, input.conversation);
+  const roleKey = input.body.roleKey ?? null;
+  let suggestionChips = generateSuggestionChips(readiness, input.brief, input.conversation, roleKey);
   if (canReviewBrief && !suggestionChips.some((chip) => chip.intent === "review_brief")) {
     suggestionChips = [
       {
@@ -179,10 +196,10 @@ function buildResponse(input: {
   const message =
     input.message ??
     (userTurns === 0
-      ? openingMessage(input.body, departmentId)
+      ? openingMessage(input.body, departmentId, roleKey)
       : canReviewBrief
         ? "I have enough to draft a strong job brief. You can review it now, or keep refining the role."
-        : recruiterMessageFor(readiness, input.conversation, input.brief));
+        : recruiterMessageFor(readiness, input.conversation, input.brief, roleKey));
   const checklist = checklistFromBrief(input.brief, input.body.roleSeed, input.conversation);
 
   return {
@@ -197,14 +214,24 @@ function buildResponse(input: {
     chips: suggestionChips.map((chip) => chip.label),
     checklist,
     usedFallback: input.usedFallback,
+    roleKey,
   };
 }
 
 function systemPrompt(body: RecruiterBody) {
+  const departmentId = body.selectedDepartment ?? body.departmentId ?? null;
+  const role = getRoleByKey(body.roleKey ?? undefined);
+  const roleBlock = role
+    ? `Selected role: ${role.title} (${role.roleKey})
+Department group: ${role.departmentLabel}
+Default responsibilities: ${role.defaultResponsibilities.slice(0, 4).join("; ")}
+Ask role-specific follow-ups. Do not ask generic department questions.`
+    : "";
   return `You are Ade Recruiting Manager at AdeHQ — a sharp, warm recruiter helping hire an AI employee.
 
 Role seed: "${body.roleSeed || "unspecified"}"
-Department: ${departmentLabel(body.departmentId ?? null)}
+Department: ${departmentLabel(departmentId)}
+${roleBlock}
 
 RULES:
 1. Do not behave like a form or a fixed wizard.
@@ -228,18 +255,19 @@ export async function POST(request: NextRequest) {
     await requireAuthUser(request);
     const body = (await request.json()) as RecruiterBody;
 
-    const { conversation, departmentId, action } = normalizeBody(body);
+    const { conversation, departmentId, roleKey, action } = normalizeBody(body);
 
-    if (!body.roleSeed?.trim() && !departmentId) {
-      return NextResponse.json({ error: "roleSeed or departmentId required." }, { status: 400 });
+    if (!body.roleSeed?.trim() && !departmentId && !roleKey) {
+      return NextResponse.json({ error: "roleSeed, roleKey, or departmentId required." }, { status: 400 });
     }
 
-    const baseBrief = synthesizeBriefFromConversation(
-      body.roleSeed,
-      conversation,
+    const baseBrief = synthesizeBriefForHiringContext({
+      roleSeed: body.roleSeed,
+      messages: conversation,
       departmentId,
-      body.currentBrief,
-    );
+      roleKey,
+      existing: body.currentBrief,
+    });
 
     if (!isSiliconFlowConfigured()) {
       const instruction = [...conversation].reverse().find((m) => m.role === "user")?.text ?? "";

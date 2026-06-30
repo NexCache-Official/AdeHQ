@@ -132,6 +132,8 @@ export type RecruiterApiResponse = {
   checklist?: RecruiterChecklist;
   readiness?: RecruiterReadiness;
   usedFallback?: boolean;
+  roleKey?: string | null;
+  inferenceConfidence?: "high" | "medium" | "low" | null;
 };
 
 export type CandidatesApiResponse = {
@@ -143,6 +145,13 @@ export type HiringSessionState = {
   step: HiringStep;
   roleInput: string;
   departmentId: string | null;
+  roleKey: string | null;
+  departmentGroupId: string | null;
+  discoveryMode: boolean;
+  discoveryStep: "outcome" | "narrow" | null;
+  inferenceConfidence: "high" | "medium" | "low" | null;
+  suggestedRoleKeys: string[];
+  customRoleTitle: string | null;
   recruiterMessages: RecruiterMessage[];
   checklist: RecruiterChecklist;
   readiness: RecruiterReadiness;

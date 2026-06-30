@@ -25,12 +25,12 @@ type LegacyDemoApplicant = {
 };
 
 export const HIRE_EXAMPLES = [
-  "get my startup press coverage",
-  "help me write investor updates",
-  "build product specs from messy ideas",
-  "qualify sales leads and draft outreach",
-  "debug my app and plan engineering tasks",
+  "help me test my app and find bugs",
+  "find more customers for my startup",
   "research competitors every week",
+  "write blog posts and marketing copy",
+  "handle customer support tickets",
+  "improve our operations and admin work",
 ];
 
 export const DEPARTMENT_CARDS = [

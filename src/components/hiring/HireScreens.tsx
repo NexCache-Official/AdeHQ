@@ -127,6 +127,11 @@ export function ApplicantCard({
       <div className="mb-3 rounded-[10px] bg-muted/50 px-3 py-2 text-[12.5px] text-ink-2">
         <span className="text-ink-3">Best for</span> · {a.bestFor}
       </div>
+      {a.recommended && a.whyThisCandidate && (
+        <div className="mb-3 rounded-[10px] border border-accent/20 bg-accent-soft/20 px-3 py-2 text-[12.5px] leading-relaxed text-ink-2">
+          <span className="font-medium text-ink">Why recommended</span> · {a.whyThisCandidate}
+        </div>
+      )}
       <button
         type="button"
         onClick={onToggleAdv}

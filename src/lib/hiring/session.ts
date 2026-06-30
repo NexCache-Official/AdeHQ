@@ -10,6 +10,7 @@ import type {
 } from "./types";
 import { EMPTY_READINESS } from "./recruiter-brain";
 import { emptyChecklist } from "./recruiter-checklist";
+import { migrateLegacyDepartmentId } from "./role-library";
 
 export const HIRING_SESSION_KEY = "adehq-hiring-session";
 
@@ -18,6 +19,13 @@ export function initialHiringSession(): HiringSessionState {
     step: "role",
     roleInput: "",
     departmentId: null,
+    roleKey: null,
+    departmentGroupId: null,
+    discoveryMode: false,
+    discoveryStep: null,
+    inferenceConfidence: null,
+    suggestedRoleKeys: [],
+    customRoleTitle: null,
     recruiterMessages: [],
     checklist: emptyChecklist(),
     readiness: EMPTY_READINESS,
@@ -41,6 +49,11 @@ export type HiringAction =
   | { type: "SET_STEP"; step: HiringStep }
   | { type: "SET_ROLE_INPUT"; roleInput: string }
   | { type: "SET_DEPARTMENT"; departmentId: string | null }
+  | { type: "SET_ROLE_KEY"; roleKey: string | null; departmentGroupId?: string | null }
+  | { type: "SET_DEPARTMENT_GROUP"; departmentGroupId: string | null }
+  | { type: "SET_DISCOVERY"; discoveryMode: boolean; discoveryStep?: "outcome" | "narrow" | null }
+  | { type: "SET_INFERENCE"; confidence: "high" | "medium" | "low" | null; suggestedRoleKeys: string[] }
+  | { type: "SET_CUSTOM_ROLE_TITLE"; customRoleTitle: string | null }
   | { type: "ADD_MESSAGE"; message: RecruiterMessage }
   | { type: "SET_MESSAGES"; messages: RecruiterMessage[] }
   | { type: "SET_CHECKLIST"; checklist: RecruiterChecklist }
@@ -85,6 +98,29 @@ export function hiringReducer(state: HiringSessionState, action: HiringAction): 
       return { ...state, roleInput: action.roleInput };
     case "SET_DEPARTMENT":
       return { ...state, departmentId: action.departmentId };
+    case "SET_ROLE_KEY":
+      return {
+        ...state,
+        roleKey: action.roleKey,
+        departmentGroupId: action.departmentGroupId ?? state.departmentGroupId,
+        departmentId: action.roleKey ? state.departmentId : state.departmentId,
+      };
+    case "SET_DEPARTMENT_GROUP":
+      return { ...state, departmentGroupId: action.departmentGroupId };
+    case "SET_DISCOVERY":
+      return {
+        ...state,
+        discoveryMode: action.discoveryMode,
+        discoveryStep: action.discoveryStep ?? (action.discoveryMode ? "outcome" : null),
+      };
+    case "SET_INFERENCE":
+      return {
+        ...state,
+        inferenceConfidence: action.confidence,
+        suggestedRoleKeys: action.suggestedRoleKeys,
+      };
+    case "SET_CUSTOM_ROLE_TITLE":
+      return { ...state, customRoleTitle: action.customRoleTitle };
     case "ADD_MESSAGE":
       return {
         ...state,
@@ -154,6 +190,7 @@ export function hiringReducer(state: HiringSessionState, action: HiringAction): 
         briefPartial: undefined,
         briefReady: false,
         briefEditable: false,
+        discoveryStep: state.discoveryMode ? state.discoveryStep : null,
       };
     case "RESTORE":
       return action.state;
@@ -181,7 +218,15 @@ export function loadHiringSession(): HiringSessionState | null {
   try {
     const raw = sessionStorage.getItem(HIRING_SESSION_KEY);
     if (!raw) return null;
-    return { ...initialHiringSession(), ...JSON.parse(raw) };
+    const parsed = JSON.parse(raw) as Partial<HiringSessionState>;
+    const base = { ...initialHiringSession(), ...parsed };
+    if (!base.roleKey && base.departmentId) {
+      const migrated = migrateLegacyDepartmentId(base.departmentId, base.roleInput);
+      if (migrated) {
+        base.roleKey = migrated;
+      }
+    }
+    return base;
   } catch {
     return null;
   }

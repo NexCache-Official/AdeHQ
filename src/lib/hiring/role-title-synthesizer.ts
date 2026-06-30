@@ -79,7 +79,7 @@ export function synthesizeRoleTitle(input: {
   if (
     includesAny(combined, ["write code", "build and ship", "build, and ship", "ship features", "product features"])
   ) {
-    return "Product Engineer";
+    return "Software Engineer";
   }
   if (includesAny(combined, ["backend", "systems", "api", "infrastructure"])) {
     return "Backend Systems Engineer";

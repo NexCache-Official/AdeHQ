@@ -1,4 +1,5 @@
 import { DEPARTMENT_CARDS } from "./data";
+import { getRoleByKey } from "./role-library";
 import type {
   AiEmployeeJobBrief,
   RecruiterMessage,
@@ -342,6 +343,7 @@ export function generateSuggestionChips(
   readiness: RecruiterReadiness,
   currentBrief: AiEmployeeJobBrief,
   conversation: RecruiterMessage[] = [],
+  roleKey?: string | null,
 ): RecruiterSuggestionChip[] {
   if (readiness.ready) {
     const chips: RecruiterSuggestionChip[] = [];
@@ -351,6 +353,7 @@ export function generateSuggestionChips(
     return chips;
   }
 
+  const role = getRoleByKey(roleKey ?? undefined);
   const deptId = inferDepartmentId(currentBrief);
   const primary = primaryMissingField(readiness.missing);
   const lastAde = [...conversation].reverse().find((m) => m.role === "ade")?.text ?? "";
@@ -364,6 +367,16 @@ export function generateSuggestionChips(
     const chips = chipsFromLabels(fromQuestion, "answer_question", 4);
     pushChip(chips, NOT_SURE, NOT_SURE);
     return chips;
+  }
+
+  if (role && primary === "core_work" && role.questionTemplates.coreWorkChips.length > 0) {
+    return chipsFromLabels(role.questionTemplates.coreWorkChips);
+  }
+  if (role && primary === "business_focus" && role.questionTemplates.focusChips?.length) {
+    return chipsFromLabels(role.questionTemplates.focusChips);
+  }
+  if (role?.questionTemplates.toolsChips?.length && primary === "tools") {
+    return chipsFromLabels(role.questionTemplates.toolsChips, "add_tools");
   }
 
   switch (primary) {

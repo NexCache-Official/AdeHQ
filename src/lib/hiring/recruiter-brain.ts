@@ -5,6 +5,7 @@ import type {
   RecruiterReadiness,
 } from "./types";
 import { inferDepartmentId, isEngineeringBrief } from "./suggestion-chips";
+import { getRoleByKey } from "./role-library";
 
 export { generateSuggestionChips, inferDepartmentId, isEngineeringBrief } from "./suggestion-chips";
 
@@ -77,6 +78,7 @@ export function assessRecruiterReadiness(
       nextBestQuestion: chooseNextRecruiterQuestion(
         { score, ready, confidence, missing, reason: "" },
         currentBrief,
+        undefined,
       ),
       reason: ready
         ? "The brief has enough role, domain, and work detail to review."
@@ -124,8 +126,10 @@ export function finalizeReadinessScore(
 export function chooseNextRecruiterQuestion(
   readiness: RecruiterReadiness,
   currentBrief: AiEmployeeJobBrief,
+  roleKey?: string | null,
 ): string {
   const missing = readiness.missing;
+  const role = getRoleByKey(roleKey ?? undefined);
   const deptId = inferDepartmentId(currentBrief);
 
   if (readiness.ready) {
@@ -138,6 +142,7 @@ export function chooseNextRecruiterQuestion(
     return `What domain or product area should this ${currentBrief.roleTitle || "employee"} understand best?`;
   }
   if (missing.includes("core_work")) {
+    if (role?.questionTemplates.coreWork) return role.questionTemplates.coreWork;
     if (deptId === "pr") {
       return "What should this employee focus on day to day — press releases, media relations, internal comms, crisis response, or something else?";
     }

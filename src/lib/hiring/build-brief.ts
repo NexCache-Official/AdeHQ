@@ -1,5 +1,6 @@
 import { DEPARTMENT_CARDS } from "./data";
 import { synthesizeRoleTitle } from "./role-title-synthesizer";
+import { getRoleByKey, legacyDepartmentIdForRole } from "./role-library";
 import type { AiEmployeeJobBrief, RecruiterMessage } from "./types";
 
 const DEPT_NAMES: Record<string, string> = {
@@ -213,6 +214,64 @@ export function mergeBriefPartial(
     assumptions: partial.assumptions ?? base.assumptions,
     openQuestions: partial.openQuestions ?? base.openQuestions,
   };
+}
+
+/** Seed brief from role library entry (V19). */
+export function synthesizeBriefFromRole(
+  roleKey: string,
+  messages: RecruiterMessage[] = [],
+  existing?: Partial<AiEmployeeJobBrief>,
+): AiEmployeeJobBrief {
+  const role = getRoleByKey(roleKey);
+  if (!role) {
+    return synthesizeBriefFromConversation(existing?.roleTitle ?? "", messages, "custom", existing);
+  }
+
+  const userLines = messages.filter((m) => m.role === "user").map((m) => m.text);
+  const base = emptyBrief(role.title, role.legacyDepartmentId ?? "custom");
+
+  const brief: AiEmployeeJobBrief = {
+    ...base,
+    roleTitle: existing?.roleTitle || role.seniorityVariants?.specialist || role.title,
+    department: role.departmentLabel,
+    domain: existing?.domain || role.defaultBusinessFocus?.[0] || role.departmentLabel,
+    mission:
+      existing?.mission ||
+      `Help the team succeed as a ${role.title} — ${role.description.toLowerCase()}.`,
+    coreResponsibilities:
+      existing?.coreResponsibilities?.length ? existing.coreResponsibilities : [...role.defaultResponsibilities],
+    technicalFocus: existing?.technicalFocus?.length ? existing.technicalFocus : [...(role.defaultTechnicalFocus ?? [])],
+    businessFocus: existing?.businessFocus?.length ? existing.businessFocus : [...(role.defaultBusinessFocus ?? [])],
+    successMetrics:
+      existing?.successMetrics?.length ? existing.successMetrics : [...role.defaultSuccessMetrics],
+    toolsNeeded: existing?.toolsNeeded?.length ? existing.toolsNeeded : [...role.defaultTools],
+    approvalRules: existing?.approvalRules?.length ? existing.approvalRules : [...role.defaultApprovalRules],
+    assumptions: existing?.assumptions ?? [],
+    openQuestions:
+      userLines.length === 0
+        ? [`What specific ${role.title.toLowerCase()} focus areas matter most for your team?`]
+        : (existing?.openQuestions ?? []),
+  };
+
+  if (userLines.length > 0) {
+    return synthesizeBriefFromConversation(role.title, messages, role.legacyDepartmentId ?? "custom", brief);
+  }
+  return brief;
+}
+
+export function synthesizeBriefForHiringContext(input: {
+  roleSeed: string;
+  messages?: RecruiterMessage[];
+  departmentId?: string | null;
+  roleKey?: string | null;
+  existing?: Partial<AiEmployeeJobBrief>;
+}): AiEmployeeJobBrief {
+  const messages = input.messages ?? [];
+  if (input.roleKey && input.roleKey !== "custom") {
+    return synthesizeBriefFromRole(input.roleKey, messages, input.existing);
+  }
+  const dept = input.roleKey === "custom" ? "custom" : (input.departmentId ?? legacyDepartmentIdForRole(input.roleKey) ?? "custom");
+  return synthesizeBriefFromConversation(input.roleSeed, messages, dept, input.existing);
 }
 
 function extractTechnicalTerms(text: string): string[] {
