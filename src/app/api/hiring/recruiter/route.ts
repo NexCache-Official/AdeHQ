@@ -27,6 +27,7 @@ import {
   MAYA_EMPLOYEE_NAME,
   MAYA_EMPLOYEE_SYSTEM_PROMPT,
   MAYA_EMPLOYEE_TITLE,
+  MAYA_HIRE_LANGUAGE_RULE,
 } from "@/lib/hiring/maya";
 import type {
   AiEmployeeJobBrief,
@@ -155,6 +156,19 @@ function recruiterMessageFor(
   return chooseNextRecruiterQuestion(readiness, currentBrief, roleKey);
 }
 
+function useRecruiterLlm(
+  body: RecruiterBody,
+  conversation: RecruiterMessage[],
+  action: string,
+): boolean {
+  const mode = body.mode ?? "chat";
+  if (mode === "refine" || mode === "brief_refine" || mode === "regenerate") return true;
+  if (action === "refine_section") return true;
+  const lastUser = [...conversation].reverse().find((m) => m.role === "user")?.text ?? "";
+  if (lastUser.length > 220) return true;
+  return false;
+}
+
 function openingMessage(body: RecruiterBody, departmentId: string | null, roleKey?: string | null) {
   const role = getRoleByKey(roleKey ?? undefined);
   if (role) {
@@ -250,6 +264,7 @@ RULES:
 7. Always include an updated semantic brief or partial brief.
 8. Include assumptions and openQuestions while confidence is low.
 9. Never ask about channels, rooms, or start location.
+10. ${MAYA_HIRE_LANGUAGE_RULE}
 
 Mode: ${body.mode ?? "chat"}
 ${body.refineInstruction ? `Refine (${body.refineMode ?? "improve"}) section ${body.refineSection}: ${body.refineInstruction}` : ""}
@@ -276,11 +291,30 @@ export async function POST(request: NextRequest) {
       existing: body.currentBrief,
     });
 
-    if (!isSiliconFlowConfigured()) {
-      const instruction = [...conversation].reverse().find((m) => m.role === "user")?.text ?? "";
-      const brief = body.currentBrief && (body.mode === "brief_refine" || action === "refine_section")
+    const instruction = [...conversation].reverse().find((m) => m.role === "user")?.text ?? "";
+    const refinedBrief =
+      body.currentBrief && (body.mode === "brief_refine" || action === "refine_section")
         ? applyInstructionToBrief(baseBrief, instruction)
         : baseBrief;
+
+    if (!useRecruiterLlm(body, conversation, action)) {
+      return NextResponse.json(
+        buildResponse({
+          body,
+          brief: refinedBrief,
+          conversation,
+          message:
+            action === "draft_now"
+              ? "I have enough to draft a strong job brief. You can review it now, or keep refining the role."
+              : undefined,
+          usedFallback: true,
+          forceCanReview: action === "draft_now",
+        }),
+      );
+    }
+
+    if (!isSiliconFlowConfigured()) {
+      const brief = refinedBrief;
       return NextResponse.json(
         buildResponse({
           body,
@@ -296,7 +330,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const modelId = resolveModel("siliconflow", "balanced");
+    const modelId = resolveModel("siliconflow", "cheap");
     const model = siliconFlowChatModel(modelId);
     const history = conversation
       .map((m) => `${m.role === "ade" ? "Ade" : "User"}: ${m.text}`)
@@ -313,7 +347,7 @@ export async function POST(request: NextRequest) {
         ]
           .filter(Boolean)
           .join("\n\n"),
-        maxOutputTokens: 2200,
+        maxOutputTokens: 1400,
         providerOptions: siliconFlowProviderOptions(modelId),
       });
 

@@ -139,7 +139,7 @@ export function inferRoleFromText(text: string): RoleInferenceResult {
 
 export function inferenceOpeningMessage(text: string, result: RoleInferenceResult): string {
   if (result.confidence === "high" && result.matches[0]) {
-    return `Sounds like you need a ${result.matches[0].title}. Let's shape the job brief — I'll ask a few role-specific questions.`;
+    return `Sounds like you need a ${result.matches[0].title}. I'll help you hire the right match — just a few quick questions to shape the job brief.`;
   }
   if (result.confidence === "medium" && result.matches.length > 0) {
     const options = result.matches.map((m) => m.title).join(", ");

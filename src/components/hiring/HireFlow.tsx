@@ -26,6 +26,7 @@ import {
 import { detectBriefChange, type BriefComposeSection } from "@/lib/hiring/detect-brief-change";
 import {
   INITIAL_BRIEF_UPDATE_STATE,
+  briefSectionToComposeKey,
   inferSectionsUpdating,
   pickOptimisticAck,
   type BriefUpdateState,
@@ -34,6 +35,7 @@ import {
 import {
   MAYA_EMPLOYEE_NAME,
   MAYA_EMPLOYEE_TITLE,
+  MAYA_RECRUITER_TAGLINE,
 } from "@/lib/hiring/maya";
 import { finalizeReadinessScore } from "@/lib/hiring/recruiter-brain";
 import type {
@@ -50,6 +52,7 @@ import { getGroupChannels } from "@/lib/rooms";
 import { cn, nowISO, uid } from "@/lib/utils";
 import { BriefDocumentPreview } from "./BriefDocumentPreview";
 import { BriefEditor } from "./BriefEditor";
+import { TypewriterText } from "./BriefSections";
 import { AdeOrb, HireHeader, HireStepper } from "./HireChrome";
 import { RoleStepPanel, type RoleStepSelection } from "./RoleStepPanel";
 import {
@@ -254,6 +257,29 @@ export function HireFlow({ onboarding = false }: HireFlowProps) {
     dispatch({ type: "RESET_RECRUITER" });
     dispatch({ type: "SET_ERROR", error: null });
     dispatch({ type: "SET_STEP", step: "recruiter" });
+
+    const opening =
+      opts?.openingMessage ??
+      `Great — let's hire for this role. What should this AI employee own first?`;
+    const localBrief = synthesizeBriefForHiringContext({
+      roleSeed: seed,
+      messages: [],
+      departmentId: effectiveDepartmentId,
+      roleKey: opts?.roleKey ?? session.roleKey,
+    });
+
+    dispatch({
+      type: "SET_MESSAGES",
+      messages: [{ role: "ade", text: opening }],
+    });
+    dispatch({ type: "SET_BRIEF_PARTIAL", briefPartial: localBrief });
+    prevBriefRef.current = { ...localBrief };
+    dispatch({ type: "SET_BRIEF_READY", briefReady: false });
+    setBriefCompose({ active: true, section: "title" });
+    composeTimerRef.current = setTimeout(() => {
+      setBriefCompose({ active: false, section: null });
+    }, 2600);
+
     dispatch({ type: "SET_BUSY", busy: true });
     try {
       const res = await callRecruiter(
@@ -264,13 +290,7 @@ export function HireFlow({ onboarding = false }: HireFlowProps) {
           action: "message",
         }),
       );
-      const opening = opts?.openingMessage ?? res.recruiterMessage ?? res.message;
-      dispatch({
-        type: "SET_MESSAGES",
-        messages: [{ role: "ade", text: opening }],
-      });
-      applyRecruiterResponse(res, undefined, false);
-      dispatch({ type: "SET_BRIEF_READY", briefReady: false });
+      applyRecruiterResponse(res, [{ role: "ade", text: opening }], true);
     } catch (e) {
       dispatch({
         type: "SET_ERROR",
@@ -358,6 +378,21 @@ export function HireFlow({ onboarding = false }: HireFlowProps) {
     const nextMessages = [...session.recruiterMessages, { role: "user" as const, text: trimmed }];
     const optimisticAck = pickOptimisticAck(trimmed);
     const sectionsUpdating = inferSectionsUpdating(trimmed);
+    const composeSection = briefSectionToComposeKey(sectionsUpdating[0]) ?? "mission";
+
+    const localBrief = synthesizeBriefForHiringContext({
+      roleSeed,
+      messages: nextMessages,
+      departmentId: effectiveDepartmentId,
+      roleKey: session.roleKey,
+      existing: session.brief ?? session.briefPartial,
+    });
+    const localSection = detectBriefChange(prevBriefRef.current, localBrief);
+    if (localSection) {
+      prevBriefRef.current = { ...localBrief };
+    }
+    dispatch({ type: "SET_BRIEF_PARTIAL", briefPartial: localBrief });
+
     dispatch({
       type: "SET_MESSAGES",
       messages: [
@@ -367,8 +402,12 @@ export function HireFlow({ onboarding = false }: HireFlowProps) {
     });
     setMayaState("acknowledging");
     setBriefUpdateState({ status: "updating", sectionsUpdating });
+    setBriefCompose({ active: true, section: localSection ?? composeSection });
+    if (composeTimerRef.current) clearTimeout(composeTimerRef.current);
+    composeTimerRef.current = setTimeout(() => {
+      setBriefCompose({ active: false, section: null });
+    }, 3200);
     dispatch({ type: "SET_BUSY", busy: true });
-    setBriefCompose({ active: true, section: null });
 
     try {
       setMayaState("thinking");
@@ -977,7 +1016,7 @@ function RecruiterChat({
           <div className="text-xs text-ink-3">
             {variant === "refinement"
               ? "Refine the job brief in real time"
-              : `${MAYA_EMPLOYEE_TITLE} · helping you build your workforce`}
+              : `${MAYA_EMPLOYEE_TITLE} · ${MAYA_RECRUITER_TAGLINE}`}
           </div>
         </div>
         <div className="ml-auto rounded-full border border-border bg-muted px-2.5 py-1 text-[11px] text-ink-2">
@@ -986,35 +1025,24 @@ function RecruiterChat({
       </div>
       <div className="flex flex-1 flex-col gap-3 overflow-y-auto p-5">
         {messages.map((m, i) => (
-          <div
-            key={i}
-            className={cn(
-              "animate-[hireMsgIn_0.35s_ease_both]",
-              m.role === "ade" ? "flex items-start gap-2" : "flex justify-end",
-              m.isOptimistic && "opacity-90",
-            )}
-          >
-            {m.role === "ade" && <AdeOrb size={26} initials="M" />}
-            <div
-              className={cn(
-                "max-w-[84%] px-3.5 py-2.5 text-sm leading-relaxed",
-                m.role === "ade"
-                  ? "rounded-[4px_14px_14px_14px] border border-border bg-muted"
-                  : "rounded-[14px_14px_4px_14px] bg-ink text-white",
-                m.isOptimistic && m.role === "ade" && "border-accent/30 bg-accent-soft/20",
-              )}
-            >
-              {m.text}
-            </div>
-          </div>
+          <RecruiterMessageRow
+            key={`${i}-${m.text.slice(0, 24)}`}
+            message={m}
+            index={i}
+            typeOut={m.role === "ade" && i === messages.length - 1 && !m.isOptimistic}
+          />
         ))}
         {busy && !messages.some((m) => m.isOptimistic) && (
-          <div className="flex items-start gap-2">
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="flex items-start gap-2"
+          >
             <AdeOrb size={26} initials="M" />
             <div className="rounded-[4px_14px_14px_14px] border border-border bg-muted px-3.5 py-2.5 text-sm text-ink-2">
               {thinkingLabel}
             </div>
-          </div>
+          </motion.div>
         )}
         <div ref={endRef} />
       </div>
@@ -1067,5 +1095,50 @@ function RecruiterChat({
         </form>
       </div>
     </div>
+  );
+}
+
+function RecruiterMessageRow({
+  message,
+  index,
+  typeOut = false,
+}: {
+  message: { role: "ade" | "user"; text: string; isOptimistic?: boolean };
+  index: number;
+  typeOut?: boolean;
+}) {
+  const isUser = message.role === "user";
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, x: isUser ? 28 : -20, y: 10 }}
+      animate={{ opacity: 1, x: 0, y: 0 }}
+      transition={{
+        duration: 0.32,
+        delay: Math.min(index * 0.04, 0.2),
+        ease: [0.22, 1, 0.36, 1],
+      }}
+      className={cn(
+        isUser ? "flex justify-end" : "flex items-start gap-2",
+        message.isOptimistic && "opacity-95",
+      )}
+    >
+      {!isUser && <AdeOrb size={26} initials="M" />}
+      <div
+        className={cn(
+          "max-w-[84%] px-3.5 py-2.5 text-sm leading-relaxed",
+          isUser
+            ? "rounded-[14px_14px_4px_14px] bg-ink text-white shadow-[0_8px_24px_-16px_rgba(17,17,19,0.55)]"
+            : "rounded-[4px_14px_14px_14px] border border-border bg-muted",
+          message.isOptimistic && !isUser && "border-accent/30 bg-accent-soft/25",
+        )}
+      >
+        {typeOut ? (
+          <TypewriterText text={message.text} active speed={10} />
+        ) : (
+          message.text
+        )}
+      </div>
+    </motion.div>
   );
 }

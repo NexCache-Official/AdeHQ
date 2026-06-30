@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import { motion } from "framer-motion";
 import type { AiEmployeeJobBrief } from "@/lib/hiring/types";
 import type { BriefComposeSection } from "@/lib/hiring/detect-brief-change";
@@ -31,6 +32,8 @@ export function BriefDocumentPreview({
   updateState?: BriefUpdateState;
 }) {
   const b = brief ?? {};
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const sectionRefs = useRef<Partial<Record<BriefComposeSection, HTMLDivElement | null>>>({});
   const hasTitle = Boolean(b.roleTitle?.trim());
   const sectionActive = (key: BriefComposeSection) => composing && composingSection === key;
   const isUpdating = updateState?.status === "updating";
@@ -61,6 +64,20 @@ export function BriefDocumentPreview({
           ? "editing live"
           : "live";
 
+  useEffect(() => {
+    if (!composingSection) return;
+    const node = sectionRefs.current[composingSection];
+    if (!node || !scrollRef.current) return;
+    const frame = requestAnimationFrame(() => {
+      node.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [composingSection, b.roleTitle, b.mission, b.coreResponsibilities?.length]);
+
+  const setSectionRef = (key: BriefComposeSection) => (node: HTMLDivElement | null) => {
+    sectionRefs.current[key] = node;
+  };
+
   return (
     <motion.div
       layout
@@ -78,7 +95,11 @@ export function BriefDocumentPreview({
         )}
       </div>
 
-      <div className="max-h-[min(720px,calc(100vh-11rem))] overflow-y-auto px-5 py-5">
+      <div
+        ref={scrollRef}
+        className="max-h-[min(720px,calc(100vh-11rem))] overflow-y-auto px-5 py-5"
+      >
+        <div ref={setSectionRef("title")}>
         {hasTitle ? (
           <motion.div
             initial={{ opacity: 0, y: 6 }}
@@ -113,7 +134,9 @@ export function BriefDocumentPreview({
             <div className="h-4 w-1/2 animate-pulse rounded bg-muted/70" />
           </div>
         )}
+        </div>
 
+        <div ref={setSectionRef("mission")}>
         <BriefSectionBlock
           label="Mission"
           empty={!b.mission}
@@ -128,7 +151,9 @@ export function BriefDocumentPreview({
             )}
           </p>
         </BriefSectionBlock>
+        </div>
 
+        <div ref={setSectionRef("coreResponsibilities")}>
         <BriefSectionBlock
           label="Responsibilities"
           empty={!b.coreResponsibilities?.length}
@@ -139,10 +164,13 @@ export function BriefDocumentPreview({
             items={b.coreResponsibilities}
             placeholder="Gathering responsibilities…"
             composing={sectionActive("coreResponsibilities")}
+            composeAll={sectionActive("coreResponsibilities")}
           />
         </BriefSectionBlock>
+        </div>
 
         {((b.technicalFocus?.length ?? 0) > 0 || sectionTag("technicalFocus") === "updating") && (
+          <div ref={setSectionRef("technicalFocus")}>
           <BriefSectionBlock
             label="Technical Focus"
             active={sectionActive("technicalFocus")}
@@ -152,12 +180,15 @@ export function BriefDocumentPreview({
             <BulletList
               items={b.technicalFocus}
               composing={sectionActive("technicalFocus")}
+              composeAll={sectionActive("technicalFocus")}
               placeholder="Refining technical focus…"
             />
           </BriefSectionBlock>
+          </div>
         )}
 
         {((b.businessFocus?.length ?? 0) > 0 || sectionTag("businessFocus") === "updating") && (
+          <div ref={setSectionRef("businessFocus")}>
           <BriefSectionBlock
             label="Business Focus"
             active={sectionActive("businessFocus")}
@@ -167,17 +198,26 @@ export function BriefDocumentPreview({
             <BulletList
               items={b.businessFocus}
               composing={sectionActive("businessFocus")}
+              composeAll={sectionActive("businessFocus")}
               placeholder="Refining business focus…"
             />
           </BriefSectionBlock>
+          </div>
         )}
 
         {(b.approvalRules?.length ?? 0) > 0 && (
+          <div ref={setSectionRef("meta")}>
           <BriefSectionBlock label="Approval Rules" updateTag={sectionTag("meta")}>
-            <BulletList items={b.approvalRules} />
+            <BulletList
+              items={b.approvalRules}
+              composing={sectionActive("meta")}
+              composeAll={sectionActive("meta")}
+            />
           </BriefSectionBlock>
+          </div>
         )}
 
+        <div ref={setSectionRef("successMetrics")}>
         <BriefSectionBlock
           label="Success Metrics"
           empty={!b.successMetrics?.length}
@@ -188,10 +228,13 @@ export function BriefDocumentPreview({
             items={b.successMetrics}
             placeholder="Defining success metrics…"
             composing={sectionActive("successMetrics")}
+            composeAll={sectionActive("successMetrics")}
           />
         </BriefSectionBlock>
+        </div>
 
         {(b.assumptions?.length ?? 0) > 0 && (
+          <div ref={setSectionRef("assumptions")}>
           <BriefSectionBlock
             label="Assumptions"
             active={sectionActive("assumptions")}
@@ -199,11 +242,14 @@ export function BriefDocumentPreview({
             <BulletList
               items={b.assumptions}
               composing={sectionActive("assumptions")}
+              composeAll={sectionActive("assumptions")}
             />
           </BriefSectionBlock>
+          </div>
         )}
 
         {(b.openQuestions?.length ?? 0) > 0 && (
+          <div ref={setSectionRef("openQuestions")}>
           <BriefSectionBlock
             label="Open Questions"
             active={sectionActive("openQuestions")}
@@ -211,11 +257,13 @@ export function BriefDocumentPreview({
             <BulletList
               items={b.openQuestions}
               composing={sectionActive("openQuestions")}
+              composeAll={sectionActive("openQuestions")}
             />
           </BriefSectionBlock>
+          </div>
         )}
 
-        <div className={cnMetaBlock(sectionActive("meta"))}>
+        <div ref={setSectionRef("meta")} className={cnMetaBlock(sectionActive("meta"))}>
           <MetaLine label="Seniority" value={b.seniorityLevel} composing={sectionActive("meta")} />
           <MetaLine label="Autonomy" value={b.autonomyLevel} composing={sectionActive("meta")} />
           <MetaLine label="Style" value={b.communicationStyle} composing={sectionActive("meta")} />

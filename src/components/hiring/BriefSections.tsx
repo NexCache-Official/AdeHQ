@@ -25,35 +25,49 @@ export function TypewriterText({
   active,
   className,
   speed = 14,
+  delay = 0,
 }: {
   text: string;
   active: boolean;
   className?: string;
   speed?: number;
+  delay?: number;
 }) {
   const [displayed, setDisplayed] = useState(text);
+  const [typing, setTyping] = useState(false);
 
   useEffect(() => {
     if (!active || !text) {
       setDisplayed(text);
+      setTyping(false);
       return;
     }
 
     setDisplayed("");
-    let index = 0;
-    const timer = setInterval(() => {
-      index += 1;
-      setDisplayed(text.slice(0, index));
-      if (index >= text.length) clearInterval(timer);
-    }, speed);
+    setTyping(true);
+    let timer: ReturnType<typeof setInterval> | undefined;
+    const start = setTimeout(() => {
+      let index = 0;
+      timer = setInterval(() => {
+        index += 1;
+        setDisplayed(text.slice(0, index));
+        if (index >= text.length) {
+          if (timer) clearInterval(timer);
+          setTyping(false);
+        }
+      }, speed);
+    }, delay);
 
-    return () => clearInterval(timer);
-  }, [text, active, speed]);
+    return () => {
+      clearTimeout(start);
+      if (timer) clearInterval(timer);
+    };
+  }, [text, active, speed, delay]);
 
   return (
     <span className={className}>
       {displayed}
-      {active && <LiveBriefCursor />}
+      {typing && <LiveBriefCursor />}
     </span>
   );
 }
@@ -113,17 +127,19 @@ export function BulletList({
   placeholder,
   composing,
   composeFromIndex,
+  composeAll = false,
 }: {
   items?: string[];
   placeholder?: string;
   composing?: boolean;
   composeFromIndex?: number;
+  composeAll?: boolean;
 }) {
   if (!items?.length) {
     return <p className="text-sm italic text-ink-3">{placeholder ?? "—"}</p>;
   }
 
-  const startIndex = composeFromIndex ?? (composing ? Math.max(0, items.length - 1) : -1);
+  const startIndex = composeFromIndex ?? (composing && !composeAll ? Math.max(0, items.length - 1) : -1);
 
   return (
     <ul className="space-y-2">
@@ -131,12 +147,12 @@ export function BulletList({
         <li key={i} className="flex gap-2.5 text-[14px] leading-relaxed text-ink">
           <span className="text-ink/25">•</span>
           <span>
-            {composing && i === startIndex ? (
-              <TypewriterText text={item} active />
+            {composing && (composeAll || i === startIndex) ? (
+              <TypewriterText text={item} active speed={composeAll ? 9 : 12} delay={composeAll ? i * 180 : 0} />
             ) : (
               item
             )}
-            {composing && i === items.length - 1 && i !== startIndex && <LiveBriefCursor />}
+            {composing && !composeAll && i === items.length - 1 && i !== startIndex && <LiveBriefCursor />}
           </span>
         </li>
       ))}
