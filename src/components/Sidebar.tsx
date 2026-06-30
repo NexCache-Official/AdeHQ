@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import {
@@ -11,6 +11,7 @@ import {
   isDirectMessage,
 } from "@/lib/rooms";
 import { useStore } from "@/lib/demo-store";
+import { ENABLE_DEMO_MODE } from "@/lib/config/features";
 import { useShellUI } from "./AppShell";
 import { WorkspaceSwitcher } from "./WorkspaceSwitcher";
 import { EmployeeAvatar } from "./EmployeeAvatar";
@@ -33,7 +34,11 @@ import {
   Plus,
   Search,
   Settings,
+  LogOut,
+  RotateCcw,
+  ChevronUp,
 } from "lucide-react";
+import { AnimatePresence, motion } from "framer-motion";
 
 const WORKFORCE_NAV = [
   { href: "/workforce", label: "AI Workforce", icon: Bot },
@@ -49,8 +54,9 @@ const MAX_SIDEBAR_ITEMS = 12;
 export function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
-  const { state, actions } = useStore();
+  const { state, actions, backend } = useStore();
   const ui = useShellUI();
+  const [profileOpen, setProfileOpen] = useState(false);
 
   const pendingApprovals = state.approvals.filter((a) => a.status === "pending").length;
   const openTasks = state.tasks.filter((t) => t.status !== "done").length;
@@ -233,8 +239,19 @@ export function Sidebar() {
         })}
       </div>
 
-      <div className="mt-auto px-3 pb-3 pt-3">
-        <div className="flex items-center gap-2.5 rounded-xl border border-white/[0.07] p-2">
+      <div className="relative mt-auto px-3 pb-3 pt-3">
+        <button
+          type="button"
+          onClick={() => setProfileOpen((v) => !v)}
+          className={cn(
+            "flex w-full items-center gap-2.5 rounded-xl border p-2 text-left transition-colors",
+            profileOpen
+              ? "border-white/[0.14] bg-white/[0.08]"
+              : "border-white/[0.07] hover:bg-white/[0.06]",
+          )}
+          aria-expanded={profileOpen}
+          aria-haspopup="menu"
+        >
           <div className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-[9px] bg-gradient-to-br from-[#3B4C6B] to-[#5A6E94] text-xs font-bold text-white">
             {(state.user?.name ?? "U").slice(0, 2).toUpperCase()}
           </div>
@@ -244,14 +261,74 @@ export function Sidebar() {
             </div>
             <div className="text-[11px] text-white/40">Owner</div>
           </div>
-          <Link
-            href="/settings"
-            className="rounded-lg p-1 text-white/45 transition-colors hover:bg-white/[0.08] hover:text-white"
-            title="Settings"
-          >
-            <Settings className="h-[15px] w-[15px]" strokeWidth={1.8} />
-          </Link>
-        </div>
+          <ChevronUp
+            className={cn(
+              "h-4 w-4 shrink-0 text-white/45 transition-transform duration-200",
+              profileOpen && "rotate-180",
+            )}
+            strokeWidth={2}
+          />
+        </button>
+
+        <AnimatePresence>
+          {profileOpen && (
+            <>
+              <div className="fixed inset-0 z-30" onClick={() => setProfileOpen(false)} />
+              <motion.div
+                initial={{ opacity: 0, y: 8, scale: 0.97 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: 8, scale: 0.97 }}
+                transition={{ duration: 0.15 }}
+                className="absolute bottom-full left-0 right-0 z-40 mb-2 overflow-hidden rounded-xl border border-white/[0.1] bg-rail-2 shadow-[0_-8px_30px_-8px_rgba(0,0,0,0.45)]"
+              >
+                <div className="border-b border-white/[0.08] px-3 py-2.5">
+                  <div className="truncate text-sm font-medium text-white">{state.user?.name}</div>
+                  <div className="truncate text-xs text-white/45">{state.user?.email}</div>
+                </div>
+                <div className="p-1.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setProfileOpen(false);
+                      router.push("/settings");
+                    }}
+                    className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm text-white/75 transition-colors hover:bg-white/[0.08] hover:text-white"
+                  >
+                    <Settings className="h-4 w-4" strokeWidth={1.8} /> Settings
+                  </button>
+                  {backend === "demo" && ENABLE_DEMO_MODE && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (
+                          confirm(
+                            "Reset all demo data? This restores the original demo workspace.",
+                          )
+                        ) {
+                          actions.resetDemoData();
+                          setProfileOpen(false);
+                        }
+                      }}
+                      className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm text-white/75 transition-colors hover:bg-white/[0.08] hover:text-white"
+                    >
+                      <RotateCcw className="h-4 w-4" strokeWidth={1.8} /> Reset demo data
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      actions.logout();
+                      router.replace("/login");
+                    }}
+                    className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm text-[#f0a9a3] transition-colors hover:bg-white/[0.08]"
+                  >
+                    <LogOut className="h-4 w-4" strokeWidth={1.8} /> Log out
+                  </button>
+                </div>
+              </motion.div>
+            </>
+          )}
+        </AnimatePresence>
       </div>
     </aside>
   );
