@@ -3,6 +3,7 @@ import { Schibsted_Grotesk, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { StoreProvider } from "@/lib/demo-store";
 import { AuthConfirmHandler } from "@/components/auth/AuthConfirmHandler";
+import { Analytics } from "@vercel/analytics/next";
 
 const sans = Schibsted_Grotesk({
   subsets: ["latin"],
@@ -36,6 +37,7 @@ export default function RootLayout({
           <AuthConfirmHandler />
           {children}
         </StoreProvider>
+        <Analytics />
       </body>
     </html>
   );
