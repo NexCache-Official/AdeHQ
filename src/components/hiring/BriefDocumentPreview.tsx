@@ -2,17 +2,30 @@
 
 import { motion } from "framer-motion";
 import type { AiEmployeeJobBrief } from "@/lib/hiring/types";
-import { BriefSectionBlock, BulletList, MetaLine } from "./BriefSections";
+import type { BriefComposeSection } from "@/lib/hiring/detect-brief-change";
+import {
+  BriefSectionBlock,
+  BulletList,
+  LiveBriefCursor,
+  MetaLine,
+  TypewriterText,
+} from "./BriefSections";
 
 export function BriefDocumentPreview({
   brief,
   live = true,
+  composing = false,
+  composingSection = null,
 }: {
   brief?: Partial<AiEmployeeJobBrief>;
   live?: boolean;
+  composing?: boolean;
+  composingSection?: BriefComposeSection | null;
 }) {
   const b = brief ?? {};
   const hasTitle = Boolean(b.roleTitle?.trim());
+  const sectionActive = (key: BriefComposeSection) => composing && composingSection === key;
+  const isThinking = composing && !composingSection;
 
   return (
     <motion.div
@@ -25,18 +38,36 @@ export function BriefDocumentPreview({
         </span>
         {live && (
           <span className="flex items-center gap-1.5 text-[11px] text-ink-3">
-            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-green" />
-            live
+            <span
+              className={cnPulseDot(composing)}
+            />
+            {isThinking ? "updating…" : composing ? "editing live" : "live"}
           </span>
         )}
       </div>
 
-      <div className="max-h-[min(520px,70vh)] overflow-y-auto px-5 py-5">
+      <div className="max-h-[min(720px,calc(100vh-11rem))] overflow-y-auto px-5 py-5">
         {hasTitle ? (
-          <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}>
-            <h2 className="text-xl font-semibold tracking-tight text-ink">{b.roleTitle}</h2>
+          <motion.div
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            className={cnTitleBlock(sectionActive("title"))}
+          >
+            <h2 className="text-xl font-semibold tracking-tight text-ink">
+              {sectionActive("title") ? (
+                <TypewriterText text={b.roleTitle!} active />
+              ) : (
+                b.roleTitle
+              )}
+            </h2>
             {b.domain && (
-              <p className="mt-1 text-[13px] text-ink-2">{b.domain}</p>
+              <p className="mt-1 text-[13px] text-ink-2">
+                {sectionActive("title") ? (
+                  <TypewriterText text={b.domain} active speed={10} />
+                ) : (
+                  b.domain
+                )}
+              </p>
             )}
           </motion.div>
         ) : (
@@ -46,26 +77,53 @@ export function BriefDocumentPreview({
           </div>
         )}
 
-        <BriefSectionBlock label="Mission" empty={!b.mission}>
-          <p className="font-serif text-[17px] italic leading-relaxed text-ink">{b.mission}</p>
+        <BriefSectionBlock
+          label="Mission"
+          empty={!b.mission}
+          active={sectionActive("mission")}
+        >
+          <p className="font-serif text-[17px] italic leading-relaxed text-ink">
+            {sectionActive("mission") ? (
+              <TypewriterText text={b.mission!} active speed={12} />
+            ) : (
+              b.mission
+            )}
+          </p>
         </BriefSectionBlock>
 
         <BriefSectionBlock
           label="Responsibilities"
           empty={!b.coreResponsibilities?.length}
+          active={sectionActive("coreResponsibilities")}
         >
-          <BulletList items={b.coreResponsibilities} placeholder="Gathering responsibilities…" />
+          <BulletList
+            items={b.coreResponsibilities}
+            placeholder="Gathering responsibilities…"
+            composing={sectionActive("coreResponsibilities")}
+          />
         </BriefSectionBlock>
 
         {(b.technicalFocus?.length ?? 0) > 0 && (
-          <BriefSectionBlock label="Technical Focus">
-            <BulletList items={b.technicalFocus} />
+          <BriefSectionBlock
+            label="Technical Focus"
+            active={sectionActive("technicalFocus")}
+          >
+            <BulletList
+              items={b.technicalFocus}
+              composing={sectionActive("technicalFocus")}
+            />
           </BriefSectionBlock>
         )}
 
         {(b.businessFocus?.length ?? 0) > 0 && (
-          <BriefSectionBlock label="Business Focus">
-            <BulletList items={b.businessFocus} />
+          <BriefSectionBlock
+            label="Business Focus"
+            active={sectionActive("businessFocus")}
+          >
+            <BulletList
+              items={b.businessFocus}
+              composing={sectionActive("businessFocus")}
+            />
           </BriefSectionBlock>
         )}
 
@@ -75,30 +133,76 @@ export function BriefDocumentPreview({
           </BriefSectionBlock>
         )}
 
-        <BriefSectionBlock label="Success Metrics" empty={!b.successMetrics?.length}>
-          <BulletList items={b.successMetrics} placeholder="Defining success metrics…" />
+        <BriefSectionBlock
+          label="Success Metrics"
+          empty={!b.successMetrics?.length}
+          active={sectionActive("successMetrics")}
+        >
+          <BulletList
+            items={b.successMetrics}
+            placeholder="Defining success metrics…"
+            composing={sectionActive("successMetrics")}
+          />
         </BriefSectionBlock>
 
         {(b.assumptions?.length ?? 0) > 0 && (
-          <BriefSectionBlock label="Assumptions">
-            <BulletList items={b.assumptions} />
+          <BriefSectionBlock
+            label="Assumptions"
+            active={sectionActive("assumptions")}
+          >
+            <BulletList
+              items={b.assumptions}
+              composing={sectionActive("assumptions")}
+            />
           </BriefSectionBlock>
         )}
 
         {(b.openQuestions?.length ?? 0) > 0 && (
-          <BriefSectionBlock label="Open Questions">
-            <BulletList items={b.openQuestions} />
+          <BriefSectionBlock
+            label="Open Questions"
+            active={sectionActive("openQuestions")}
+          >
+            <BulletList
+              items={b.openQuestions}
+              composing={sectionActive("openQuestions")}
+            />
           </BriefSectionBlock>
         )}
 
-        <div className="flex flex-wrap gap-x-4 gap-y-1 border-t border-border/70 pt-4">
-          <MetaLine label="Seniority" value={b.seniorityLevel} />
-          <MetaLine label="Autonomy" value={b.autonomyLevel} />
-          <MetaLine label="Style" value={b.communicationStyle} />
-          <MetaLine label="Proactivity" value={b.proactivityLevel} />
-          <MetaLine label="Priority" value={b.qualityPreference} />
+        <div
+          className={cnMetaBlock(sectionActive("meta"))}
+        >
+          <MetaLine label="Seniority" value={b.seniorityLevel} composing={sectionActive("meta")} />
+          <MetaLine label="Autonomy" value={b.autonomyLevel} composing={sectionActive("meta")} />
+          <MetaLine label="Style" value={b.communicationStyle} composing={sectionActive("meta")} />
+          <MetaLine label="Proactivity" value={b.proactivityLevel} composing={sectionActive("meta")} />
+          <MetaLine label="Priority" value={b.qualityPreference} composing={sectionActive("meta")} />
+          {sectionActive("meta") && <LiveBriefCursor />}
         </div>
+
+        {isThinking && (
+          <div className="mt-4 flex items-center gap-2 text-[12px] text-ink-3">
+            <LiveBriefCursor />
+            <span>Ade is updating the brief…</span>
+          </div>
+        )}
       </div>
     </motion.div>
   );
+}
+
+function cnPulseDot(active: boolean) {
+  return `h-1.5 w-1.5 rounded-full ${active ? "animate-pulse bg-accent" : "animate-pulse bg-green"}`;
+}
+
+function cnTitleBlock(active: boolean) {
+  return active
+    ? "-mx-2 rounded-xl bg-accent-soft/35 px-2 py-2 ring-1 ring-accent/25 transition-colors duration-300"
+    : "";
+}
+
+function cnMetaBlock(active: boolean) {
+  return `flex flex-wrap gap-x-4 gap-y-1 border-t border-border/70 pt-4 ${
+    active ? "-mx-2 rounded-xl bg-accent-soft/35 px-2 ring-1 ring-accent/25" : ""
+  }`;
 }

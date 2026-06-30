@@ -80,15 +80,56 @@ export function assessRecruiterReadiness(
   const ready = hasUserTurns && score >= 70 && roleKnown && domainKnown && coreKnown;
   const confidence: RecruiterReadiness["confidence"] = score >= 78 ? "high" : score >= 50 ? "medium" : "low";
 
-  return {
-    score,
+  return finalizeReadinessScore(
+    {
+      score,
+      ready,
+      confidence,
+      missing,
+      nextBestQuestion: chooseNextRecruiterQuestion(
+        { score, ready, confidence, missing, reason: "" },
+        currentBrief,
+      ),
+      reason: ready
+        ? "The brief has enough role, domain, and work detail to review."
+        : `Still missing ${missing.slice(0, 3).join(", ").replaceAll("_", " ")}.`,
+    },
+    currentBrief,
     ready,
-    confidence,
-    missing,
-    nextBestQuestion: chooseNextRecruiterQuestion({ score, ready, confidence, missing, reason: "" }, currentBrief),
-    reason: ready
-      ? "The brief has enough role, domain, and work detail to review."
-      : `Still missing ${missing.slice(0, 3).join(", ").replaceAll("_", " ")}.`,
+  );
+}
+
+/** Align displayed score with review readiness — core brief complete should read 92–100%, not 85%. */
+export function finalizeReadinessScore(
+  readiness: RecruiterReadiness,
+  brief: AiEmployeeJobBrief,
+  canReviewBrief: boolean,
+): RecruiterReadiness {
+  if (!canReviewBrief && !readiness.ready) return readiness;
+
+  let displayScore = 92;
+  if (brief.coreResponsibilities.length >= 3) displayScore += 2;
+  if (brief.technicalFocus.length > 0 || brief.businessFocus.length > 0) displayScore += 2;
+  if (brief.successMetrics.length >= 3) displayScore += 1;
+  if (brief.communicationStyle?.trim() || brief.personalityTraits.length > 0) displayScore += 1;
+  if (brief.seniorityLevel && brief.autonomyLevel) displayScore += 1;
+  if (brief.toolsNeeded.length > 0 || brief.approvalRules.length > 0) displayScore += 1;
+  displayScore = Math.min(100, displayScore);
+
+  const optionalOnly = readiness.missing.every((field) =>
+    ["tools", "approval_rules", "quality_preference"].includes(field),
+  );
+
+  return {
+    ...readiness,
+    ready: true,
+    score: displayScore,
+    confidence: displayScore >= 97 ? "high" : "medium",
+    missing: optionalOnly ? readiness.missing.filter((f) => f !== "tools" && f !== "approval_rules") : readiness.missing,
+    reason: "The brief has enough role, domain, and work detail to review.",
+    nextBestQuestion:
+      readiness.nextBestQuestion ??
+      "I have enough to draft a strong job brief. You can review it now, or keep refining the role.",
   };
 }
 

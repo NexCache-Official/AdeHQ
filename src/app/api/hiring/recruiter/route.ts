@@ -17,6 +17,7 @@ import {
 import {
   assessRecruiterReadiness,
   chooseNextRecruiterQuestion,
+  finalizeReadinessScore,
   generateSuggestionChips,
 } from "@/lib/hiring/recruiter-brain";
 import type {
@@ -143,8 +144,9 @@ function buildResponse(input: {
   usedFallback: boolean;
   forceCanReview?: boolean;
 }) {
-  const readiness = assessRecruiterReadiness(input.conversation, input.brief);
-  const canReviewBrief = input.forceCanReview || readiness.ready;
+  const baseReadiness = assessRecruiterReadiness(input.conversation, input.brief);
+  const canReviewBrief = input.forceCanReview || baseReadiness.ready;
+  const readiness = finalizeReadinessScore(baseReadiness, input.brief, canReviewBrief);
   let suggestionChips = generateSuggestionChips(readiness, input.brief);
   if (canReviewBrief && !suggestionChips.some((chip) => chip.intent === "review_brief")) {
     suggestionChips = [

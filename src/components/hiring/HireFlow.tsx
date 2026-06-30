@@ -23,6 +23,8 @@ import {
   initialHiringSession,
   persistHiringSession,
 } from "@/lib/hiring/session";
+import { detectBriefChange, type BriefComposeSection } from "@/lib/hiring/detect-brief-change";
+import { finalizeReadinessScore } from "@/lib/hiring/recruiter-brain";
 import type {
   AiEmployeeApplicant,
   AiEmployeeJobBrief,
@@ -80,6 +82,12 @@ export function HireFlow({ onboarding = false }: HireFlowProps) {
   const [session, dispatch] = useReducer(hiringReducer, undefined, initialHiringSession);
   const sucTimer = useRef<ReturnType<typeof setInterval>>();
   const chatEndRef = useRef<HTMLDivElement>(null);
+  const prevBriefRef = useRef<Partial<AiEmployeeJobBrief>>();
+  const composeTimerRef = useRef<ReturnType<typeof setTimeout>>();
+  const [briefCompose, setBriefCompose] = useState<{
+    active: boolean;
+    section: BriefComposeSection | null;
+  }>({ active: false, section: null });
 
   const roleSeed = useMemo(() => {
     if (session.roleInput.trim()) return session.roleInput.trim();
@@ -89,6 +97,12 @@ export function HireFlow({ onboarding = false }: HireFlowProps) {
 
   const recruiterTurns = session.recruiterMessages.filter((m) => m.role === "user").length;
   const previewBrief = session.briefPartial ?? session.brief;
+  const displayReadiness = useMemo(() => {
+    const base = session.readiness;
+    const canReview = session.briefReady || base.ready;
+    if (!canReview) return base;
+    return finalizeReadinessScore(base, previewBrief as AiEmployeeJobBrief, true);
+  }, [session.readiness, session.briefReady, previewBrief]);
   const hired =
     session.candidates.find((c) => c.id === session.selectedCandidateId) ??
     session.candidates.find((c) => c.recommended) ??
@@ -113,7 +127,21 @@ export function HireFlow({ onboarding = false }: HireFlowProps) {
   useEffect(() => {
     return () => {
       if (sucTimer.current) clearInterval(sucTimer.current);
+      if (composeTimerRef.current) clearTimeout(composeTimerRef.current);
     };
+  }, []);
+
+  const clearBriefCompose = useCallback(() => {
+    if (composeTimerRef.current) clearTimeout(composeTimerRef.current);
+    setBriefCompose({ active: false, section: null });
+  }, []);
+
+  const triggerBriefCompose = useCallback((section: BriefComposeSection) => {
+    if (composeTimerRef.current) clearTimeout(composeTimerRef.current);
+    setBriefCompose({ active: true, section });
+    composeTimerRef.current = setTimeout(() => {
+      setBriefCompose({ active: false, section: null });
+    }, 2800);
   }, []);
 
   const goBack = useCallback(() => {
@@ -121,19 +149,33 @@ export function HireFlow({ onboarding = false }: HireFlowProps) {
     if (prev) dispatch({ type: "SET_STEP", step: prev });
   }, [session.step]);
 
-  const applyRecruiterResponse = useCallback((res: RecruiterApiResponse, appendAde = true) => {
-    const recruiterMessage = res.recruiterMessage ?? res.message;
-    if (appendAde && recruiterMessage) {
-      dispatch({ type: "ADD_MESSAGE", message: { role: "ade", text: recruiterMessage } });
-    }
-    if (res.checklist) dispatch({ type: "SET_CHECKLIST", checklist: res.checklist });
-    if (res.readiness) dispatch({ type: "SET_READINESS", readiness: res.readiness });
-    if (res.suggestionChips) {
-      dispatch({ type: "SET_SUGGESTION_CHIPS", chips: res.suggestionChips });
-    }
-    if (res.briefPartial) dispatch({ type: "SET_BRIEF_PARTIAL", briefPartial: res.briefPartial });
-    if (res.brief) dispatch({ type: "SET_BRIEF", brief: res.brief });
-  }, []);
+  const applyRecruiterResponse = useCallback(
+    (res: RecruiterApiResponse, appendAde = true) => {
+      const recruiterMessage = res.recruiterMessage ?? res.message;
+      if (appendAde && recruiterMessage) {
+        dispatch({ type: "ADD_MESSAGE", message: { role: "ade", text: recruiterMessage } });
+      }
+      if (res.checklist) dispatch({ type: "SET_CHECKLIST", checklist: res.checklist });
+      if (res.readiness) dispatch({ type: "SET_READINESS", readiness: res.readiness });
+      if (res.suggestionChips) {
+        dispatch({ type: "SET_SUGGESTION_CHIPS", chips: res.suggestionChips });
+      }
+
+      const nextBrief = res.brief ?? res.briefPartial;
+      if (nextBrief) {
+        const section = detectBriefChange(prevBriefRef.current, nextBrief);
+        if (section) triggerBriefCompose(section);
+        else {
+          composeTimerRef.current = setTimeout(() => clearBriefCompose(), 350);
+        }
+        prevBriefRef.current = { ...nextBrief };
+      }
+
+      if (res.briefPartial) dispatch({ type: "SET_BRIEF_PARTIAL", briefPartial: res.briefPartial });
+      if (res.brief) dispatch({ type: "SET_BRIEF", brief: res.brief });
+    },
+    [clearBriefCompose, triggerBriefCompose],
+  );
 
   const goToBrief = useCallback(() => {
     const brief =
@@ -195,6 +237,7 @@ export function HireFlow({ onboarding = false }: HireFlowProps) {
     const nextMessages = [...session.recruiterMessages, { role: "user" as const, text: trimmed }];
     dispatch({ type: "SET_MESSAGES", messages: nextMessages });
     dispatch({ type: "SET_BUSY", busy: true });
+    setBriefCompose({ active: true, section: null });
 
     try {
       const res = await callRecruiter({
@@ -468,7 +511,7 @@ export function HireFlow({ onboarding = false }: HireFlowProps) {
       />
       <HireStepper step={session.step} recruiterTurns={recruiterTurns} />
 
-      <main className="mx-auto flex w-full max-w-[1140px] flex-1 flex-col items-center px-5 pb-20 pt-4">
+      <main className="mx-auto flex w-full max-w-[1360px] flex-1 flex-col items-center px-5 pb-20 pt-4">
         {session.error && (
           <div className="mb-4 w-full rounded-xl border border-danger/30 bg-danger-soft px-4 py-3 text-sm text-danger">
             {session.error}
@@ -559,17 +602,21 @@ export function HireFlow({ onboarding = false }: HireFlowProps) {
         )}
 
         {session.step === "recruiter" && (
-          <div className="grid w-full grid-cols-1 items-start gap-[18px] lg:grid-cols-[1.45fr_1fr]">
+          <div className="grid w-full grid-cols-1 items-start gap-5 lg:grid-cols-[1.5fr_1fr]">
             <RecruiterChat
               messages={session.recruiterMessages}
               chips={session.suggestionChips}
-              readiness={session.readiness}
+              readiness={displayReadiness}
               briefReady={session.briefReady}
               busy={session.busy}
               onSend={sendUserMessage}
               onReview={goToBrief}
             />
-            <BriefDocumentPreview brief={previewBrief} />
+            <BriefDocumentPreview
+              brief={previewBrief}
+              composing={session.busy || briefCompose.active}
+              composingSection={briefCompose.section}
+            />
           </div>
         )}
 
@@ -837,7 +884,7 @@ function RecruiterChat({
   };
 
   return (
-    <div className="flex h-[560px] flex-col overflow-hidden rounded-[18px] border border-border bg-surface shadow-md lg:sticky lg:top-24">
+    <div className="flex h-[min(720px,calc(100vh-11rem))] flex-col overflow-hidden rounded-[18px] border border-border bg-surface shadow-md lg:sticky lg:top-24">
       <div className="flex items-center gap-2.5 border-b border-border px-5 py-4">
         <AdeOrb size={32} />
         <div>
