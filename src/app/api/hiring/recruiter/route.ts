@@ -11,6 +11,7 @@ import {
   mergeBriefPartial,
   synthesizeBriefForHiringContext,
 } from "@/lib/hiring/build-brief";
+import { buildRecruiterOpeningMessage } from "@/lib/hiring/recruiter-openings";
 import { getRoleByKey } from "@/lib/hiring/role-library";
 import {
   checklistFromBrief,
@@ -170,20 +171,11 @@ function useRecruiterLlm(
 }
 
 function openingMessage(body: RecruiterBody, departmentId: string | null, roleKey?: string | null) {
-  const role = getRoleByKey(roleKey ?? undefined);
-  if (role) {
-    return `Great — let's hire a ${role.title}. ${role.questionTemplates.coreWork}`;
-  }
-  const roleSeed = body.roleSeed?.trim() ?? "";
-  const dept = departmentLabel(departmentId);
-  if (roleSeed && roleSeed.split(/\s+/).length >= 3) {
-    const brief = synthesizeBriefForHiringContext({ roleSeed, departmentId, roleKey });
-    return `Got it — I'll treat this as a ${brief.roleTitle} role. What kind of work should this employee focus on day to day?`;
-  }
-  if (departmentId && departmentId !== "custom") {
-    return `Hi — I'm ${MAYA_EMPLOYEE_NAME}, your ${MAYA_EMPLOYEE_TITLE.toLowerCase()}. For ${dept}, what kind of employee do you want to hire, and what should they own first?`;
-  }
-  return "What kind of employee do you want to hire, and what should they help with first?";
+  return buildRecruiterOpeningMessage({
+    roleSeed: body.roleSeed,
+    roleKey,
+    departmentId,
+  });
 }
 
 function buildResponse(input: {

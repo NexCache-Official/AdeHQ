@@ -15,6 +15,7 @@ import {
 } from "@/lib/hiring/data";
 import { candidateToEmployee } from "@/lib/hiring/map-candidate";
 import { legacyDepartmentIdForRole, getRoleByKey } from "@/lib/hiring/role-library";
+import { buildRecruiterOpeningMessage } from "@/lib/hiring/recruiter-openings";
 import { inferRoleFromText, inferenceOpeningMessage } from "@/lib/hiring/role-inference";
 import {
   clearHiringSession,
@@ -258,14 +259,19 @@ export function HireFlow({ onboarding = false }: HireFlowProps) {
     dispatch({ type: "SET_ERROR", error: null });
     dispatch({ type: "SET_STEP", step: "recruiter" });
 
+    const roleKey = opts?.roleKey ?? session.roleKey;
     const opening =
       opts?.openingMessage ??
-      `Great — let's hire for this role. What should this AI employee own first?`;
+      buildRecruiterOpeningMessage({
+        roleSeed: seed,
+        roleKey,
+        departmentId: effectiveDepartmentId,
+      });
     const localBrief = synthesizeBriefForHiringContext({
       roleSeed: seed,
       messages: [],
       departmentId: effectiveDepartmentId,
-      roleKey: opts?.roleKey ?? session.roleKey,
+      roleKey,
     });
 
     dispatch({
@@ -285,12 +291,16 @@ export function HireFlow({ onboarding = false }: HireFlowProps) {
       const res = await callRecruiter(
         recruiterPayload({
           roleSeed: seed,
-          roleKey: opts?.roleKey ?? session.roleKey,
+          roleKey,
           conversation: [],
           action: "message",
         }),
       );
-      applyRecruiterResponse(res, [{ role: "ade", text: opening }], true);
+      const finalOpening = res.recruiterMessage ?? res.message ?? opening;
+      if (finalOpening !== opening) {
+        dispatch({ type: "SET_MESSAGES", messages: [{ role: "ade", text: finalOpening }] });
+      }
+      applyRecruiterResponse(res, undefined, false);
     } catch (e) {
       dispatch({
         type: "SET_ERROR",
@@ -314,7 +324,14 @@ export function HireFlow({ onboarding = false }: HireFlowProps) {
         departmentId: legacyDepartmentIdForRole(selection.roleKey),
       });
       dispatch({ type: "SET_DISCOVERY", discoveryMode: false });
-      await beginRecruiter(selection.title, { roleKey: selection.roleKey });
+      await beginRecruiter(selection.title, {
+        roleKey: selection.roleKey,
+        openingMessage: buildRecruiterOpeningMessage({
+          roleSeed: selection.title,
+          roleKey: selection.roleKey,
+          departmentId: legacyDepartmentIdForRole(selection.roleKey),
+        }),
+      });
       return;
     }
 
