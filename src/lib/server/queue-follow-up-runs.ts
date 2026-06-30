@@ -27,6 +27,7 @@ export type FollowUpParams = {
   handoffTo?: string[];
   handoffDepth: number;
   isGreetingRun?: boolean;
+  runMetadata?: Record<string, unknown>;
 };
 
 function resolveHandoffTargets(
@@ -149,9 +150,19 @@ export async function queueFollowUpRuns(
     params.sourceEmployee.id,
   ).filter((e) => !isEmployeeBlockedInTopic(params.topic, e.id));
 
+  const orchestrated = new Set(
+    Array.isArray(params.runMetadata?.orchestratedCollaborators)
+      ? (params.runMetadata.orchestratedCollaborators as string[])
+      : [],
+  );
+
   const responders: ResponderDecision[] = [];
 
   for (const employee of targets) {
+    if (orchestrated.has(employee.id)) {
+      skipped.push(`${employee.id}:orchestrated_collaborator`);
+      continue;
+    }
     if (chain.respondedEmployeeIds.has(employee.id)) {
       skipped.push(`${employee.id}:already_responded`);
       continue;
@@ -212,4 +223,125 @@ export async function queueFollowUpRuns(
   });
 
   return { followUpRuns: queued, skipped };
+}
+
+export type CollaboratorActivationParams = {
+  workspaceId: string;
+  roomId: string;
+  topic: RoomTopic;
+  employees: AIEmployee[];
+  leadRunId: string;
+  leadEmployee: AIEmployee;
+  leadReply: string;
+  leadAiMessageId: string;
+  rootTriggerMessageId: string;
+  runMetadata: Record<string, unknown>;
+};
+
+async function hasCollaboratorRun(
+  client: SupabaseClient,
+  workspaceId: string,
+  collaborationId: string,
+  employeeId: string,
+  dependsOnRunId: string,
+): Promise<boolean> {
+  const { data } = await client
+    .from("agent_runs")
+    .select("id")
+    .eq("workspace_id", workspaceId)
+    .eq("employee_id", employeeId)
+    .eq("depends_on_run_id", dependsOnRunId)
+    .eq("response_reason", "collaboration_collaborator")
+    .in("status", ["queued", "waiting", "running", "completed"])
+    .limit(1)
+    .maybeSingle();
+  return Boolean(data);
+}
+
+export async function queueCollaboratorRuns(
+  client: SupabaseClient,
+  params: CollaboratorActivationParams,
+): Promise<{ activatedRuns: QueuedRun[]; skipped: string[] }> {
+  const skipped: string[] = [];
+  if (isAiQueueingBlocked(params.topic)) {
+    return { activatedRuns: [], skipped: ["ai_stopped"] };
+  }
+
+  const collaborationId = String(params.runMetadata.collaborationId ?? "");
+  const pendingIds = Array.isArray(params.runMetadata.pendingCollaboratorIds)
+    ? (params.runMetadata.pendingCollaboratorIds as string[])
+    : [];
+
+  if (!pendingIds.length) {
+    return { activatedRuns: [], skipped: ["no_pending_collaborators"] };
+  }
+
+  const participants = Array.isArray(params.runMetadata.participants)
+    ? (params.runMetadata.participants as { employeeId: string; employeeName?: string }[])
+    : [];
+
+  const responders: ResponderDecision[] = [];
+
+  for (const employeeId of pendingIds) {
+    if (isEmployeeBlockedInTopic(params.topic, employeeId)) {
+      skipped.push(`${employeeId}:blocked`);
+      continue;
+    }
+
+    const employee = params.employees.find((e) => e.id === employeeId);
+    if (!employee) {
+      skipped.push(`${employeeId}:not_found`);
+      continue;
+    }
+
+    if (
+      await hasCollaboratorRun(
+        client,
+        params.workspaceId,
+        collaborationId,
+        employeeId,
+        params.leadRunId,
+      )
+    ) {
+      skipped.push(`${employeeId}:duplicate`);
+      continue;
+    }
+
+    responders.push({
+      employee,
+      reason: "collaboration_collaborator",
+      runMetadata: {
+        collaborationId,
+        conversationMode: params.runMetadata.conversationMode ?? "lead_collaborator",
+        collaborationRole: "collaborator",
+        collaborationStatus: "active",
+        participants,
+        leadEmployeeId: params.leadEmployee.id,
+        leadEmployeeName: params.leadEmployee.name,
+        leadReply: params.leadReply,
+        leadAiMessageId: params.leadAiMessageId,
+        orchestratedCollaborators: pendingIds,
+        dependsOnRunId: params.leadRunId,
+      },
+    });
+  }
+
+  if (!responders.length) {
+    return { activatedRuns: [], skipped };
+  }
+
+  const { queued } = await queueAgentRuns(client, {
+    workspaceId: params.workspaceId,
+    roomId: params.roomId,
+    topicId: params.topic.id,
+    triggerMessageId: params.leadAiMessageId,
+    rootTriggerMessageId: params.rootTriggerMessageId,
+    parentRunId: params.leadRunId,
+    dependsOnRunId: params.leadRunId,
+    handoffDepth: 1,
+    responders,
+    content: `${params.leadReply}\n\n(Collaborating after ${params.leadEmployee.name}'s analysis.)`,
+  });
+
+  return { activatedRuns: queued, skipped };
 }

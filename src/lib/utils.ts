@@ -95,12 +95,33 @@ export function extractMentions(
   text: string,
   candidates: { id: string; name: string }[],
 ): string[] {
-  const found = new Set<string>();
+  return extractMentionsInOrder(text, candidates).map((m) => m.id);
+}
+
+/** Extract @mentions in order of first appearance in text. */
+export function extractMentionsInOrder(
+  text: string,
+  candidates: { id: string; name: string }[],
+): { id: string; name: string }[] {
+  const lower = text.toLowerCase();
+  const hits: { id: string; name: string; index: number }[] = [];
+
   for (const c of candidates) {
-    // match "@Name" tolerant of partial/full name up to the mention boundary
     const escaped = c.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    const re = new RegExp(`@${escaped}`, "i");
-    if (re.test(text)) found.add(c.id);
+    const re = new RegExp(`@${escaped}`, "gi");
+    const match = re.exec(lower);
+    if (match) {
+      hits.push({ id: c.id, name: c.name, index: match.index });
+    }
   }
-  return [...found];
+
+  hits.sort((a, b) => a.index - b.index);
+  const seen = new Set<string>();
+  const ordered: { id: string; name: string }[] = [];
+  for (const h of hits) {
+    if (seen.has(h.id)) continue;
+    seen.add(h.id);
+    ordered.push({ id: h.id, name: h.name });
+  }
+  return ordered;
 }

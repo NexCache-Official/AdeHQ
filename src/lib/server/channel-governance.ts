@@ -56,6 +56,8 @@ export function isActionOriented(content: string): boolean {
 
 export function pickGreetingEmployee(employees: AIEmployee[]): AIEmployee | undefined {
   if (!employees.length) return undefined;
+  const social = employees.find((e) => e.participationStyle === "social_coordinator");
+  if (social) return social;
   const byRole = (key: AIEmployee["roleKey"]) =>
     employees.find((e) => e.roleKey === key);
   return (
@@ -146,6 +148,14 @@ export function responseReasonLabel(
       return "Blocked — room cooldown";
     case "blocked_policy":
       return "Blocked — AI paused or policy";
+    case "collaboration_lead":
+      return employeeName ? `${employeeName} — leading collaboration` : "Collaboration lead";
+    case "collaboration_collaborator":
+      return employeeName ? `${employeeName} — collaboration follow-up` : "Collaboration collaborator";
+    case "panel_response":
+      return employeeName ? `${employeeName} — panel perspective` : "Panel response";
+    case "sequential_dependent":
+      return employeeName ? `${employeeName} — sequential step` : "Sequential dependent";
     default:
       return reason;
   }

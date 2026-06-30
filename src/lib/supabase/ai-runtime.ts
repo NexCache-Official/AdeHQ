@@ -22,11 +22,13 @@ export type WorkspaceAiSettings = {
 
 export type AgentRunStatus =
   | "queued"
+  | "waiting"
   | "running"
   | "waiting_approval"
   | "completed"
   | "failed"
-  | "blocked";
+  | "blocked"
+  | "cancelled";
 
 export type UsageStatus = "reserved" | "success" | "failed" | "blocked" | "fallback";
 
@@ -132,6 +134,7 @@ export async function createAgentRun(
     triggerMessageId: string;
     rootTriggerMessageId?: string;
     parentRunId?: string;
+    dependsOnRunId?: string;
     handoffDepth?: number;
     responseReason?: string;
     runMetadata?: Record<string, unknown>;
@@ -151,6 +154,7 @@ export async function createAgentRun(
     trigger_message_id: params.triggerMessageId,
     root_trigger_message_id: params.rootTriggerMessageId ?? params.triggerMessageId,
     parent_run_id: params.parentRunId ?? null,
+    depends_on_run_id: params.dependsOnRunId ?? null,
     handoff_depth: params.handoffDepth ?? 0,
     response_reason: params.responseReason ?? null,
     run_metadata: params.runMetadata ?? {},
@@ -163,6 +167,62 @@ export async function createAgentRun(
   });
   if (error) throw error;
   return params.runId;
+}
+
+export type ClaimAgentRunResult =
+  | { ok: true; run: DbRow }
+  | { ok: false; code: "not_found" | "already_claimed_or_not_ready" | "cancelled" };
+
+/** Atomically claim a queued/waiting run for processing. */
+export async function claimAgentRun(
+  client: SupabaseClient,
+  workspaceId: string,
+  runId: string,
+): Promise<ClaimAgentRunResult> {
+  const { data: row, error: fetchError } = await client
+    .from("agent_runs")
+    .select("*")
+    .eq("workspace_id", workspaceId)
+    .eq("id", runId)
+    .maybeSingle();
+
+  if (fetchError) throw fetchError;
+  if (!row) return { ok: false, code: "not_found" };
+
+  const run = row as DbRow;
+  const status = String(run.status);
+
+  if (status === "cancelled") return { ok: false, code: "cancelled" };
+  if (!["queued", "waiting"].includes(status)) {
+    return { ok: false, code: "already_claimed_or_not_ready" };
+  }
+
+  const dependsOn = run.depends_on_run_id ? String(run.depends_on_run_id) : null;
+  if (dependsOn) {
+    const { data: dep } = await client
+      .from("agent_runs")
+      .select("status")
+      .eq("workspace_id", workspaceId)
+      .eq("id", dependsOn)
+      .maybeSingle();
+    if (!dep || String(dep.status) !== "completed") {
+      return { ok: false, code: "already_claimed_or_not_ready" };
+    }
+  }
+
+  const { data: claimed, error: claimError } = await client
+    .from("agent_runs")
+    .update({ status: "running", started_at: nowISO(), error_message: null })
+    .eq("workspace_id", workspaceId)
+    .eq("id", runId)
+    .eq("status", status)
+    .select("*")
+    .maybeSingle();
+
+  if (claimError) throw claimError;
+  if (!claimed) return { ok: false, code: "already_claimed_or_not_ready" };
+
+  return { ok: true, run: claimed as DbRow };
 }
 
 export async function completeAgentRun(

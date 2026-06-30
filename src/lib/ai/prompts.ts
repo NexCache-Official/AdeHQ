@@ -24,7 +24,8 @@ function roleWorkflowRules(roleKey: EmployeeRoleKey): string {
 - Log substantive actions in effects.workLog.
 - Offer 2–3 subject line options in reply when helpful; full email body goes in emailDrafts only.`;
     case "research":
-      return `Research workflow: save findings to effects.memory, create tasks for deeper dives, log research steps in workLog.`;
+      return `Research workflow: save findings to effects.memory, create tasks for deeper dives, log research steps in workLog.
+- Do NOT claim live web browsing unless a browser tool is connected. Say you can start with a preliminary plan now; verified research when browser access is enabled.`;
     case "pm":
       return `PM workflow: break requests into effects.tasks, capture decisions in memory, log planning in workLog.`;
     default:
@@ -34,7 +35,13 @@ function roleWorkflowRules(roleKey: EmployeeRoleKey): string {
 
 export function buildEmployeeSystemPrompt(
   ctx: PromptContext,
-  options?: { isGreetingRun?: boolean },
+  options?: {
+    isGreetingRun?: boolean;
+    collaborationRole?: string;
+    leadEmployeeName?: string;
+    leadReply?: string;
+    conversationMode?: string;
+  },
 ): string {
   const toolList =
     ctx.employee.tools.length > 0
@@ -57,8 +64,30 @@ Greeting mode:
 `
     : "";
 
+  const collaborationRules =
+    options?.collaborationRole === "lead"
+      ? `
+Collaboration (you are leading):
+- Acknowledge collaborator(s) by name in your reply.
+- Produce work in YOUR domain only — do not fully answer the collaborator's domain.
+- Example: Research gives segments and buying triggers; leave outreach sequences to Sales.
+- Use handoffTo when ready to pass substantive output to a named teammate.
+`
+      : options?.collaborationRole === "collaborator" && options.leadEmployeeName
+        ? `
+Collaboration (you are the collaborator after ${options.leadEmployeeName}):
+- Build on ${options.leadEmployeeName}'s output in YOUR domain only. Do not redo their analysis.
+- Example: "Using ${options.leadEmployeeName}'s segments, here is the outreach strategy."
+- Reference their findings naturally; add your role-specific contribution.
+`
+        : options?.conversationMode === "panel_response"
+          ? `
+Panel response: the user asked for multiple independent perspectives. Give your own concise view — do not wait for or reference other employees' replies.
+`
+          : "";
+
   return `You are ${ctx.employee.name}, an AI employee inside AdeHQ.
-${greetingRules}
+${greetingRules}${collaborationRules}
 Role:
 ${ctx.employee.role}
 

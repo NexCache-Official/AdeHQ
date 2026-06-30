@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ProjectRoom, RoomTopic } from "@/lib/types";
+import { ProjectRoom, RoomTopic, type ConversationPlan } from "@/lib/types";
+import { CollaborationPlanBanner } from "./CollaborationPlanBanner";
 import { useStore } from "@/lib/demo-store";
 import { ENABLE_DEMO_MODE } from "@/lib/config/features";
 import { useResponder } from "@/lib/ai/use-responder";
@@ -35,8 +36,28 @@ type ActiveRun = {
   runId: string;
   employeeId: string;
   employeeName: string;
-  phase: "queued" | "reading" | "thinking" | "typing" | "done" | "failed";
+  phase:
+    | "queued"
+    | "reading"
+    | "thinking"
+    | "typing"
+    | "waiting_on"
+    | "done"
+    | "failed"
+    | "cancelled";
   error?: string;
+  collaborationRole?: string;
+  waitingOnEmployeeName?: string;
+};
+
+type QueuedRunClient = {
+  runId: string;
+  employeeId: string;
+  employeeName: string;
+  conversationMode?: string;
+  collaborationId?: string;
+  collaborationRole?: string;
+  staggerIndex?: number;
 };
 
 const MESSAGE_PAGE = 50;
@@ -63,6 +84,11 @@ export function RoomChat({
   const [failedSend, setFailedSend] = useState<PendingSend | null>(null);
   const [sendError, setSendError] = useState<string | null>(null);
   const [activeRuns, setActiveRuns] = useState<ActiveRun[]>([]);
+  const [collaborationPlan, setCollaborationPlan] = useState<ConversationPlan | null>(null);
+  const [collabBanner, setCollabBanner] = useState<{
+    leadFinishedName?: string;
+    activeEmployeeName?: string;
+  }>({});
   const [messageLimit, setMessageLimit] = useState(MESSAGE_PAGE);
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -115,14 +141,8 @@ export function RoomChat({
   };
 
   const processQueuedRuns = useCallback(
-    async (
-      queuedRuns: {
-        runId: string;
-        employeeId: string;
-        employeeName: string;
-      }[],
-    ) => {
-      if (!queuedRuns.length || !topic) return;
+    async (queuedRuns: QueuedRunClient[], waitingRuns: ActiveRun[] = []) => {
+      if ((!queuedRuns.length && !waitingRuns.length) || !topic) return;
 
       trace("agent-run", "info", `Processing ${queuedRuns.length} queued run(s)`, {
         runs: queuedRuns,
@@ -130,17 +150,23 @@ export function RoomChat({
         topicId: topic.id,
       });
 
-      setActiveRuns(
-        queuedRuns.map((r) => ({
+      setActiveRuns([
+        ...queuedRuns.map((r) => ({
           ...r,
           phase: "queued" as const,
+          collaborationRole: r.collaborationRole,
         })),
-      );
+        ...waitingRuns,
+      ]);
 
       const headers = await withDebugHeaders();
+      const panelMode = queuedRuns.some((r) => r.conversationMode === "panel_response");
+      const sequential =
+        !panelMode &&
+        (queuedRuns.some((r) => r.conversationMode === "lead_collaborator") ||
+          queuedRuns.length === 1);
 
-      await Promise.allSettled(
-        queuedRuns.map(async (run) => {
+      const processOneRun = async (run: QueuedRunClient) => {
           trace("agent-run", "info", `${run.employeeName} → reading context`, { runId: run.runId });
           setActiveRuns((prev) =>
             prev.map((r) =>
@@ -177,6 +203,15 @@ export function RoomChat({
 
             const data = await res.json();
             const ms = Date.now() - started;
+
+            if (res.status === 409) {
+              trace("agent-run", "info", `${run.employeeName} already claimed or not ready`, {
+                runId: run.runId,
+                code: data.code,
+              });
+              setActiveRuns((prev) => prev.filter((r) => r.runId !== run.runId));
+              return;
+            }
 
             if (!res.ok || !data.ok) {
               trace("agent-run", "error", `${run.employeeName} process failed (${ms}ms)`, {
@@ -225,11 +260,21 @@ export function RoomChat({
               });
             }
 
-            if (Array.isArray(data.followUpRuns) && data.followUpRuns.length) {
-              trace("agent-run", "info", `Follow-up runs queued (${data.followUpRuns.length})`, {
-                followUpRuns: data.followUpRuns,
+            if (Array.isArray(data.activatedRuns) && data.activatedRuns.length) {
+              setCollabBanner({
+                leadFinishedName: run.employeeName,
+                activeEmployeeName: data.activatedRuns[0]?.employeeName,
               });
-              void processQueuedRuns(data.followUpRuns);
+              setActiveRuns((prev) =>
+                prev
+                  .filter((r) => !r.runId.startsWith("waiting_"))
+                  .map((r) =>
+                    r.runId === run.runId ? { ...r, phase: "done", error: undefined } : r,
+                  ),
+              );
+              await processQueuedRuns(data.activatedRuns as QueuedRunClient[]);
+            } else if (Array.isArray(data.followUpRuns) && data.followUpRuns.length) {
+              void processQueuedRuns(data.followUpRuns as QueuedRunClient[]);
             }
 
             setActiveRuns((prev) =>
@@ -250,12 +295,32 @@ export function RoomChat({
               ),
             );
           }
-        }),
-      );
+      };
+
+      if (panelMode) {
+        await Promise.allSettled(
+          queuedRuns.map((run, index) =>
+            new Promise<void>((resolve) => {
+              setTimeout(() => {
+                void processOneRun(run).finally(resolve);
+              }, (run.staggerIndex ?? index) * 1500);
+            }),
+          ),
+        );
+      } else if (sequential) {
+        for (const run of queuedRuns) {
+          await processOneRun(run);
+        }
+      } else {
+        await Promise.allSettled(queuedRuns.map((run) => processOneRun(run)));
+      }
 
       setTimeout(() => {
-        setActiveRuns((prev) => prev.filter((r) => r.phase !== "done"));
-      }, 3000);
+        setActiveRuns((prev) =>
+          prev.filter((r) => r.phase !== "done" && r.phase !== "waiting_on"),
+        );
+        setCollabBanner({});
+      }, 4000);
 
       void actions.refreshTopics(room.id);
     },
@@ -270,20 +335,38 @@ export function RoomChat({
       try {
         const headers = await withDebugHeaders();
         const res = await fetch(
-          `/api/rooms/${room.id}/topics/${topic.id}/agent-runs?status=queued,running&since=10m`,
+          `/api/rooms/${room.id}/topics/${topic.id}/agent-runs?status=queued,waiting,running&since=10m`,
           { headers },
         );
         if (!res.ok || cancelled) return;
         const data = await res.json();
+        if (data.collaborationPlan && !cancelled) {
+          setCollaborationPlan(data.collaborationPlan);
+        }
         const queued = (data.runs ?? []).filter(
-          (r: { status: string; stale?: boolean }) =>
+          (r: { status: string; stale?: boolean; processable?: boolean }) =>
             r.status === "queued" && !r.stale,
         );
-        if (queued.length && !cancelled) {
+        const waiting = (data.collaborationPlan?.pendingParticipants ?? []).map(
+          (p: {
+            employeeId: string;
+            employeeName: string;
+            waitingOnEmployeeName?: string;
+            role?: string;
+          }) => ({
+            runId: `waiting_${p.employeeId}`,
+            employeeId: p.employeeId,
+            employeeName: p.employeeName,
+            phase: "waiting_on" as const,
+            waitingOnEmployeeName: p.waitingOnEmployeeName,
+            collaborationRole: p.role,
+          }),
+        );
+        if ((queued.length || waiting.length) && !cancelled) {
           trace("agent-run", "info", `Recovering ${queued.length} queued run(s)`, {
             topicId: topic.id,
           });
-          void processQueuedRuns(queued);
+          void processQueuedRuns(queued, waiting);
         }
       } catch {
         // non-blocking
@@ -388,8 +471,28 @@ export function RoomChat({
         });
       }
 
-      if (payload.queuedRuns?.length) {
-        void processQueuedRuns(payload.queuedRuns);
+      if (payload.collaborationPlan) {
+        setCollaborationPlan(payload.collaborationPlan);
+      }
+
+      const waitingRuns: ActiveRun[] = (payload.collaborationPlan?.pendingParticipants ?? []).map(
+        (p: {
+          employeeId: string;
+          employeeName: string;
+          waitingOnEmployeeName?: string;
+          role?: string;
+        }) => ({
+          runId: `waiting_${p.employeeId}`,
+          employeeId: p.employeeId,
+          employeeName: p.employeeName,
+          phase: "waiting_on" as const,
+          waitingOnEmployeeName: p.waitingOnEmployeeName,
+          collaborationRole: p.role,
+        }),
+      );
+
+      if (payload.queuedRuns?.length || waitingRuns.length) {
+        void processQueuedRuns(payload.queuedRuns ?? [], waitingRuns);
       } else if (payload.blockedRuns?.length) {
         const reason = payload.blockedRuns
           .map((b: { employeeName?: string; reason: string }) => b.reason)
@@ -519,6 +622,13 @@ export function RoomChat({
           </div>
         ) : (
           <div className="mx-auto max-w-3xl">
+            {collaborationPlan && (
+              <CollaborationPlanBanner
+                plan={collaborationPlan}
+                leadFinishedName={collabBanner.leadFinishedName}
+                activeEmployeeName={collabBanner.activeEmployeeName}
+              />
+            )}
             {topicMessages.map((m) => (
               <RoomMessageItem key={m.id} message={m} />
             ))}
@@ -527,17 +637,21 @@ export function RoomChat({
               .map((run) => {
                 const emp = roomEmployees.find((e) => e.id === run.employeeId);
                 const phaseLabel =
-                  run.phase === "queued"
-                    ? "has seen your message"
-                    : run.phase === "reading"
-                      ? "is reading…"
-                      : run.phase === "thinking"
-                        ? "is thinking…"
-                        : run.phase === "typing"
-                          ? "is typing…"
-                          : run.phase === "failed"
-                            ? "couldn't respond"
-                            : "";
+                  run.phase === "waiting_on"
+                    ? run.waitingOnEmployeeName
+                      ? `is waiting for ${run.waitingOnEmployeeName}…`
+                      : "is waiting…"
+                    : run.phase === "queued"
+                      ? "has seen your message"
+                      : run.phase === "reading"
+                        ? "is reading…"
+                        : run.phase === "thinking"
+                          ? "is thinking…"
+                          : run.phase === "typing"
+                            ? "is typing…"
+                            : run.phase === "failed"
+                              ? "couldn't respond"
+                              : "";
                 return (
                   <div
                     key={run.runId}
@@ -546,7 +660,7 @@ export function RoomChat({
                     {emp && <EmployeeAvatar employee={emp} size="xs" />}
                     {run.phase === "failed" ? (
                       <AlertCircle className="h-3 w-3 shrink-0 text-rose-500" />
-                    ) : (
+                    ) : run.phase === "waiting_on" ? null : (
                       <Loader2 className="h-3 w-3 animate-spin text-accent-600" />
                     )}
                     <span className="min-w-0 flex-1">

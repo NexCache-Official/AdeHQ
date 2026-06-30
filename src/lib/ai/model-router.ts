@@ -38,6 +38,10 @@ export type RouteOptions = {
   maxOutputTokens?: number;
   timeoutMs?: number;
   isGreetingRun?: boolean;
+  collaborationRole?: string;
+  leadEmployeeName?: string;
+  leadReply?: string;
+  conversationMode?: string;
   context?: RouteContext;
 };
 
@@ -229,6 +233,10 @@ export async function routeEmployeeResponse(
   try {
     const system = buildEmployeeSystemPrompt(promptContext, {
       isGreetingRun: options.isGreetingRun,
+      collaborationRole: options.collaborationRole,
+      leadEmployeeName: options.leadEmployeeName,
+      leadReply: options.leadReply,
+      conversationMode: options.conversationMode,
     });
     const prompt = buildEmployeeUserPrompt(promptContext);
 

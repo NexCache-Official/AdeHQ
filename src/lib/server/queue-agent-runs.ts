@@ -18,6 +18,10 @@ export type QueuedRun = {
   employeeId: string;
   employeeName: string;
   reason: ResponderDecision["reason"];
+  conversationMode?: string;
+  collaborationId?: string;
+  collaborationRole?: string;
+  staggerIndex?: number;
 };
 
 export async function queueAgentRuns(
@@ -29,6 +33,7 @@ export async function queueAgentRuns(
     triggerMessageId: string;
     rootTriggerMessageId?: string;
     parentRunId?: string;
+    dependsOnRunId?: string;
     handoffDepth?: number;
     responders: ResponderDecision[];
     content: string;
@@ -75,7 +80,7 @@ export async function queueAgentRuns(
 
     const runId = newAgentRunId();
     const usageId = newUsageId();
-    const runMetadata = {
+    const runMetadata: Record<string, unknown> = {
       ...(isGreetingRun ? { isGreetingRun: true } : {}),
       ...(decision.runMetadata ?? {}),
     };
@@ -90,6 +95,7 @@ export async function queueAgentRuns(
         triggerMessageId: params.triggerMessageId,
         rootTriggerMessageId,
         parentRunId: params.parentRunId,
+        dependsOnRunId: params.dependsOnRunId,
         handoffDepth: params.handoffDepth ?? 0,
         responseReason: reason,
         runMetadata: Object.keys(runMetadata).length ? runMetadata : undefined,
@@ -122,6 +128,20 @@ export async function queueAgentRuns(
         employeeId: employee.id,
         employeeName: employee.name,
         reason,
+        conversationMode:
+          typeof runMetadata.conversationMode === "string"
+            ? runMetadata.conversationMode
+            : undefined,
+        collaborationId:
+          typeof runMetadata.collaborationId === "string"
+            ? runMetadata.collaborationId
+            : undefined,
+        collaborationRole:
+          typeof runMetadata.collaborationRole === "string"
+            ? runMetadata.collaborationRole
+            : undefined,
+        staggerIndex:
+          typeof runMetadata.staggerIndex === "number" ? runMetadata.staggerIndex : undefined,
       });
     } catch (err) {
       blocked.push({

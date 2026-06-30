@@ -8,7 +8,7 @@ import {
   parseEmployeeMentions,
 } from "@/lib/server/room-messages";
 import { assertTopicInRoom, ensureGeneralTopic } from "@/lib/server/topic-helpers";
-import { decideResponders } from "@/lib/server/decide-responders";
+import { planConversation } from "@/lib/server/conversation-orchestrator";
 import { queueAgentRuns } from "@/lib/server/queue-agent-runs";
 import { loadChannelGovernanceContext } from "@/lib/server/channel-governance";
 import { isAiQueueingBlocked } from "@/lib/topic-ai-control";
@@ -135,15 +135,25 @@ export async function POST(
       humanMessage.id,
     );
 
-    const decisions = isAiQueueingBlocked(topic)
-      ? []
-      : decideResponders(
+    const { plan: conversationPlan, decisions } = isAiQueueingBlocked(topic)
+      ? {
+          plan: {
+            mode: "silent" as const,
+            collaborationId: `collab_${humanMessage.id}`,
+            rootTriggerMessageId: humanMessage.id,
+            status: "active" as const,
+            participants: [],
+            pendingParticipants: [],
+          },
+          decisions: [],
+        }
+      : planConversation(
           trimmed,
           topic,
           roomForDecisions,
           respondersCtx.employees,
           mentionsJson,
-          { maxParallel, governance },
+          { maxParallel, governance, rootTriggerMessageId: humanMessage.id },
         );
 
     const { queued, blocked } = await queueAgentRuns(client, {
@@ -170,6 +180,7 @@ export async function POST(
       humanMessage,
       queuedRuns: queued,
       blockedRuns: blocked,
+      collaborationPlan: conversationPlan,
       aiResponses: [],
       aiMessages: [],
       hint:

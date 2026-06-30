@@ -92,12 +92,44 @@ export async function POST(
     if (updateError) throw updateError;
 
     if (body.action === "stop_all") {
-      await client
+      const { data: activeRuns } = await client
         .from("agent_runs")
-        .update({ status: "failed", error_message: "Stopped by user" })
+        .select("id, run_metadata, status")
         .eq("workspace_id", workspaceId)
         .eq("topic_id", params.topicId)
-        .in("status", ["queued", "running"]);
+        .in("status", ["queued", "waiting", "running"]);
+
+      for (const row of (activeRuns as Record<string, unknown>[] | null) ?? []) {
+        const runId = String(row.id);
+        const status = String(row.status);
+        const meta = { ...((row.run_metadata as Record<string, unknown>) ?? {}) };
+        meta.collaborationStatus = "cancelled";
+        meta.cancelReason = "cancelled_by_user";
+
+        if (status === "queued" || status === "waiting") {
+          await client
+            .from("agent_runs")
+            .update({
+              status: "cancelled",
+              error_message: "Stopped by user",
+              run_metadata: meta,
+              completed_at: nowISO(),
+            })
+            .eq("workspace_id", workspaceId)
+            .eq("id", runId);
+        } else if (status === "running") {
+          await client
+            .from("agent_runs")
+            .update({
+              status: "failed",
+              error_message: "Stopped by user",
+              run_metadata: meta,
+              completed_at: nowISO(),
+            })
+            .eq("workspace_id", workspaceId)
+            .eq("id", runId);
+        }
+      }
     }
 
     return NextResponse.json({ topic: topicFromRow(updated as Record<string, unknown>) });

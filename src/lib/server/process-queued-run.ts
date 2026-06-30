@@ -9,15 +9,50 @@ import {
   getTimeoutMs,
   type ModelMode,
 } from "@/lib/ai/model-catalog";
-import { appendRunStep, completeAgentRun, finalizeUsage } from "@/lib/supabase/ai-runtime";
+import {
+  appendRunStep,
+  claimAgentRun,
+  completeAgentRun,
+  finalizeUsage,
+} from "@/lib/supabase/ai-runtime";
 import { loadTopicContext, persistEmployeeEffects } from "@/lib/server/room-messages";
-import { queueFollowUpRuns } from "@/lib/server/queue-follow-up-runs";
+import {
+  queueCollaboratorRuns,
+  queueFollowUpRuns,
+} from "@/lib/server/queue-follow-up-runs";
 import { GREETING_MAX_OUTPUT_TOKENS } from "@/lib/server/channel-governance";
 import type { QueuedRun } from "@/lib/server/queue-agent-runs";
+import type { CollaborationRole, ConversationPlan } from "@/lib/types";
 import { serializeUnknownError } from "@/lib/server/message-errors";
 import { nowISO } from "@/lib/utils";
 
 type DbRow = Record<string, unknown>;
+
+export class AgentRunClaimError extends Error {
+  code: "already_claimed_or_not_ready" | "cancelled" | "not_found";
+  constructor(code: AgentRunClaimError["code"]) {
+    super(code);
+    this.code = code;
+    this.name = "AgentRunClaimError";
+  }
+}
+
+function planFromMetadata(
+  runMetadata: Record<string, unknown>,
+  rootTriggerMessageId: string,
+): ConversationPlan | undefined {
+  if (!runMetadata.collaborationId) return undefined;
+  return {
+    mode: (runMetadata.conversationMode as ConversationPlan["mode"]) ?? "lead_collaborator",
+    collaborationId: String(runMetadata.collaborationId),
+    rootTriggerMessageId,
+    status: (runMetadata.collaborationStatus as ConversationPlan["status"]) ?? "active",
+    participants: Array.isArray(runMetadata.participants)
+      ? (runMetadata.participants as ConversationPlan["participants"])
+      : [],
+    pendingParticipants: [],
+  };
+}
 
 export async function processQueuedAgentRun(
   client: SupabaseClient,
@@ -40,21 +75,15 @@ export async function processQueuedAgentRun(
     structuredOutputSuccess?: boolean;
   };
   followUpRuns?: QueuedRun[];
+  activatedRuns?: QueuedRun[];
+  collaborationPlan?: ConversationPlan;
 }> {
-  const { data: runRow, error: runError } = await client
-    .from("agent_runs")
-    .select("*")
-    .eq("workspace_id", workspaceId)
-    .eq("id", runId)
-    .single();
-  if (runError || !runRow) throw new Error("Agent run not found.");
-
-  const run = runRow as DbRow;
-  const status = String(run.status);
-  if (!["queued", "running"].includes(status)) {
-    throw new Error(`Agent run is ${status}, not processable.`);
+  const claim = await claimAgentRun(client, workspaceId, runId);
+  if (!claim.ok) {
+    throw new AgentRunClaimError(claim.code);
   }
 
+  const run = claim.run;
   const employeeId = String(run.employee_id);
   const roomId = String(run.room_id);
   const topicId = run.topic_id ? String(run.topic_id) : "";
@@ -66,6 +95,11 @@ export async function processQueuedAgentRun(
   const runMetadata = (run.run_metadata as Record<string, unknown> | null) ?? {};
   const isGreetingRun = Boolean(runMetadata.isGreetingRun);
   const collaborationOnly = Boolean(runMetadata.collaborationOnly);
+  const collaborationRole = runMetadata.collaborationRole as CollaborationRole | undefined;
+  const leadReply =
+    typeof runMetadata.leadReply === "string" ? runMetadata.leadReply : undefined;
+  const leadEmployeeName =
+    typeof runMetadata.leadEmployeeName === "string" ? runMetadata.leadEmployeeName : undefined;
 
   if (!topicId) throw new Error("Agent run missing topic.");
 
@@ -81,12 +115,6 @@ export async function processQueuedAgentRun(
     ? Number(usageRow.estimated_max_output_tokens)
     : undefined;
 
-  await client
-    .from("agent_runs")
-    .update({ status: "running", error_message: null })
-    .eq("workspace_id", workspaceId)
-    .eq("id", runId);
-
   try {
     const ctx = await loadTopicContext(client, workspaceId, roomId, topicId, {
       lean: true,
@@ -101,7 +129,11 @@ export async function processQueuedAgentRun(
       .eq("id", triggerMessageId)
       .maybeSingle();
 
-    const content = options.content ?? (triggerMsg?.content ? String(triggerMsg.content) : "");
+    let content = options.content ?? (triggerMsg?.content ? String(triggerMsg.content) : "");
+
+    if (collaborationRole === "collaborator" && leadReply && leadEmployeeName) {
+      content = `${content}\n\n---\n${leadEmployeeName} (lead) completed:\n${leadReply}`;
+    }
 
     await client
       .from("ai_employees")
@@ -222,6 +254,13 @@ export async function processQueuedAgentRun(
         maxOutputTokens: outputCap,
         timeoutMs: getTimeoutMs(modelMode),
         isGreetingRun,
+        collaborationRole,
+        leadEmployeeName,
+        leadReply,
+        conversationMode:
+          typeof runMetadata.conversationMode === "string"
+            ? runMetadata.conversationMode
+            : undefined,
         context: {
           workspaceId,
           roomId,
@@ -273,7 +312,29 @@ export async function processQueuedAgentRun(
       .eq("id", employeeId);
 
     let followUpRuns: QueuedRun[] = [];
+    let activatedRuns: QueuedRun[] = [];
+
     if (!isGreetingRun && isLive) {
+      const pendingCollaborators = Array.isArray(runMetadata.pendingCollaboratorIds)
+        ? (runMetadata.pendingCollaboratorIds as string[])
+        : [];
+
+      if (pendingCollaborators.length && collaborationRole !== "collaborator") {
+        const collab = await queueCollaboratorRuns(client, {
+          workspaceId,
+          roomId,
+          topic: ctx.topic,
+          employees: ctx.employees,
+          leadRunId: runId,
+          leadEmployee: employee,
+          leadReply: response.reply,
+          leadAiMessageId: aiMessage.id,
+          rootTriggerMessageId,
+          runMetadata,
+        });
+        activatedRuns = collab.activatedRuns;
+      }
+
       const followUp = await queueFollowUpRuns(client, {
         workspaceId,
         roomId,
@@ -287,9 +348,12 @@ export async function processQueuedAgentRun(
         handoffTo: response.effect.handoffTo,
         handoffDepth,
         isGreetingRun,
+        runMetadata,
       });
       followUpRuns = followUp.followUpRuns;
     }
+
+    const collaborationPlan = planFromMetadata(runMetadata, rootTriggerMessageId);
 
     return {
       reply: response.reply,
@@ -299,6 +363,8 @@ export async function processQueuedAgentRun(
       employeeName: employee.name,
       artifacts,
       followUpRuns,
+      activatedRuns,
+      collaborationPlan,
       metrics: metrics
         ? {
             ...metrics,

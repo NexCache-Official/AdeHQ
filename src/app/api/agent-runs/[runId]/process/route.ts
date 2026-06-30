@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { AuthError, requireAuthUser, requireWorkspaceMembership } from "@/lib/supabase/auth-server";
 import { assertCanAccessRoom } from "@/lib/server/room-access";
-import { processQueuedAgentRun } from "@/lib/server/process-queued-run";
+import { processQueuedAgentRun, AgentRunClaimError } from "@/lib/server/process-queued-run";
 import { createServiceRoleClient } from "@/lib/supabase/server";
 import { debugErrorPayload, serializeUnknownError } from "@/lib/server/message-errors";
 
@@ -71,6 +71,8 @@ export async function POST(
       runId: params.runId,
       ...result,
       followUpRuns: result.followUpRuns ?? [],
+      activatedRuns: result.activatedRuns ?? [],
+      collaborationPlan: result.collaborationPlan,
       responseReason: runRow.response_reason
         ? String(runRow.response_reason)
         : undefined,
@@ -88,6 +90,12 @@ export async function POST(
       metrics: result.metrics,
     });
   } catch (error) {
+    if (error instanceof AgentRunClaimError) {
+      return NextResponse.json(
+        { ok: false, error: error.code, code: error.code },
+        { status: 409 },
+      );
+    }
     if (error instanceof AuthError) {
       return NextResponse.json({ error: error.message }, { status: error.status });
     }

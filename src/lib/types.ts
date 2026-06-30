@@ -178,7 +178,43 @@ export type ResponseReason =
   | "handoff"
   | "slash_command"
   | "blocked_cooldown"
-  | "blocked_policy";
+  | "blocked_policy"
+  | "collaboration_lead"
+  | "collaboration_collaborator"
+  | "panel_response"
+  | "sequential_dependent";
+
+export type ConversationMode =
+  | "direct_reply"
+  | "broadcast_social"
+  | "panel_response"
+  | "lead_collaborator"
+  | "handoff"
+  | "ambient_smart"
+  | "silent";
+
+export type CollaborationRole = "lead" | "collaborator" | "reviewer" | "observer";
+
+export type CollaborationPlanStatus = "active" | "completed" | "cancelled";
+
+export type ConversationParticipant = {
+  employeeId: string;
+  employeeName: string;
+  role: CollaborationRole;
+  waitingOnEmployeeId?: string;
+  waitingOnEmployeeName?: string;
+  runId?: string;
+};
+
+export type ConversationPlan = {
+  mode: ConversationMode;
+  collaborationId: string;
+  rootTriggerMessageId?: string;
+  status: CollaborationPlanStatus;
+  participants: ConversationParticipant[];
+  pendingParticipants: ConversationParticipant[];
+  staggerMs?: number;
+};
 
 export type TopicStatus = "active" | "paused" | "resolved" | "archived";
 export type TopicPriority = "low" | "normal" | "high" | "urgent";
@@ -397,11 +433,13 @@ export type WorkspaceAiSettings = {
 
 export type AgentRunStatus =
   | "queued"
+  | "waiting"
   | "running"
   | "waiting_approval"
   | "completed"
   | "failed"
-  | "blocked";
+  | "blocked"
+  | "cancelled";
 
 export type AgentRun = {
   workspaceId: string;

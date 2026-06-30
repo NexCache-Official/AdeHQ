@@ -1,0 +1,10 @@
+{
+  "plugins": {
+    "mintlify-cursor-plugin": {
+      "enabled": true
+    },
+    "supabase": {
+      "enabled": true
+    }
+  }
+}
