@@ -165,23 +165,22 @@ export function TopicPanel({
   };
 
   return (
-    <div className="flex h-full min-h-0">
-      <nav className="flex w-[108px] shrink-0 flex-col gap-0.5 border-r border-border bg-muted/80 p-2">
+    <div className="flex h-full min-h-0 bg-surface">
+      <nav className="flex w-[50px] shrink-0 flex-col items-center gap-1 border-r border-border py-3.5 px-1.5">
         {TABS.map((tb) => (
           <button
             key={tb.id}
+            type="button"
+            title={tb.label}
             onClick={() => setTab(tb.id)}
             className={cn(
-              "flex flex-col items-center gap-1 rounded-lg px-1 py-2 text-[10px] font-medium leading-tight transition-colors",
-              tab === tb.id
-                ? "bg-accent-500/15 text-accent-d"
-                : "text-ink-3 hover:bg-surface hover:text-ink",
+              "insbtn relative flex h-9 w-9 items-center justify-center rounded-[10px] transition-all duration-150",
+              tab === tb.id ? "ins-tab-active" : "text-ink-3 hover:bg-muted hover:text-ink-2",
             )}
           >
-            <tb.icon className="h-4 w-4 shrink-0" />
-            <span className="text-center">{tb.label}</span>
+            <tb.icon className="h-[17px] w-[17px]" strokeWidth={1.9} />
             {counts[tb.id] > 0 && (
-              <span className="rounded-full bg-muted px-1.5 text-[9px] text-ink-2">
+              <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-accent px-0.5 text-[8px] font-bold text-white">
                 {counts[tb.id]}
               </span>
             )}

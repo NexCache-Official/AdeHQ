@@ -46,8 +46,8 @@ export function ProjectRoomCard({ room }: { room: ProjectRoom }) {
             {employees.slice(0, 4).map(
               (e) =>
                 e && (
-                  <div key={e.id} className="ring-2 ring-surface rounded-2xl">
-                    <EmployeeAvatar employee={e} size="sm" showStatus={false} className="!h-8 !w-8" />
+                  <div key={e.id} className="rounded-[10px] ring-2 ring-surface">
+                    <EmployeeAvatar employee={e} size="sm" showStatus={false} className="!h-8 !w-8 !rounded-[10px]" />
                   </div>
                 ),
             )}

@@ -319,7 +319,7 @@ export function ChatComposer({
         <div className="fixed inset-0 z-0" onClick={() => setShowCommands(false)} />
       )}
 
-      <div className="relative z-10 rounded-2xl border border-border bg-muted p-2 transition-colors focus-within:border-accent-500/40">
+      <div className="relative z-10 flex items-end gap-1 rounded-[17px] border border-border bg-muted px-3 py-1 transition-colors focus-within:border-accent/40">
         <textarea
           ref={inputRef}
           value={value}
@@ -332,30 +332,35 @@ export function ChatComposer({
           }}
           rows={1}
           placeholder={placeholder ?? "Message the room… use @ to mention an employee"}
-          className="max-h-32 min-h-[40px] w-full resize-none bg-transparent px-2 py-2 text-sm text-ink outline-none placeholder:text-ink-3"
+          className="max-h-32 min-h-[40px] w-full flex-1 resize-none bg-transparent py-2 text-sm text-ink outline-none placeholder:text-ink-3"
         />
-        <div className="flex items-center gap-1 px-1">
-          <ComposerButton icon={Slash} label="Commands" onClick={() => setShowCommands((v) => !v)} active={showCommands} />
-          <ComposerButton
-            icon={AtSign}
-            label="Mention"
-            onClick={() => {
-              setValue((v) => v + "@");
-              setMentionQuery("");
-              inputRef.current?.focus();
-            }}
-          />
-          <ComposerButton icon={Paperclip} label="Attach" onClick={() => {}} />
-          <ComposerButton icon={Mic} label="Voice" onClick={() => {}} />
-          <button
-            type="button"
-            onClick={() => void send()}
-            disabled={!value.trim() || disabled}
-            className="ml-auto flex h-9 items-center gap-1.5 rounded-xl bg-accent-600 px-3.5 text-sm font-medium text-white transition-all hover:bg-accent-500 disabled:opacity-40 active:scale-95"
-          >
-            Send <SendHorizontal className="h-4 w-4" />
-          </button>
-        </div>
+        <button
+          type="button"
+          onClick={() => void send()}
+          disabled={!value.trim() || disabled}
+          className="mb-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-[11px] bg-accent text-white transition-all hover:brightness-105 disabled:opacity-40 active:scale-95"
+          aria-label="Send message"
+        >
+          <SendHorizontal className="h-4 w-4" strokeWidth={2} />
+        </button>
+      </div>
+      <div className="flex flex-wrap gap-3.5 px-1 pt-1.5 text-[11px] text-ink-3">
+        <button
+          type="button"
+          onClick={() => {
+            setValue((v) => v + "@");
+            setMentionQuery("");
+            inputRef.current?.focus();
+          }}
+          className="hover:text-ink-2"
+        >
+          @ mention
+        </button>
+        <button type="button" onClick={() => setShowCommands((v) => !v)} className="hover:text-ink-2">
+          / commands
+        </button>
+        <ComposerButton icon={Paperclip} label="Attach" onClick={() => {}} compact />
+        <ComposerButton icon={Mic} label="Voice" onClick={() => {}} compact />
       </div>
     </div>
   );
@@ -366,12 +371,21 @@ function ComposerButton({
   label,
   onClick,
   active,
+  compact,
 }: {
   icon: typeof AtSign;
   label: string;
   onClick: () => void;
   active?: boolean;
+  compact?: boolean;
 }) {
+  if (compact) {
+    return (
+      <button type="button" onClick={onClick} title={label} className="hover:text-ink-2">
+        {label.toLowerCase()}
+      </button>
+    );
+  }
   return (
     <button
       type="button"
@@ -379,7 +393,7 @@ function ComposerButton({
       title={label}
       className={cn(
         "flex h-9 w-9 items-center justify-center rounded-lg text-ink-3 transition-colors hover:bg-muted hover:text-ink-2",
-        active && "bg-accent-500/15 text-accent-d",
+        active && "bg-accent-soft text-accent-d",
       )}
     >
       <Icon className="h-4 w-4" />

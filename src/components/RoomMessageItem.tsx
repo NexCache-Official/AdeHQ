@@ -14,7 +14,6 @@ import {
   ScrollText,
   ShieldAlert,
 } from "lucide-react";
-import { motion } from "framer-motion";
 import { Button } from "./ui";
 
 const ARTIFACT_META = {
@@ -107,12 +106,7 @@ export function RoomMessageItem({ message }: { message: RoomMessage }) {
   const otherArtifacts = message.artifacts?.filter((a) => a.type !== "email_draft") ?? [];
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
-      className="flex gap-3 px-1 py-2"
-    >
+    <div className="group/msg relative flex gap-3 rounded-[10px] px-0 py-1">
       <div className="shrink-0">
         {isHuman ? (
           <HumanAvatar name={message.senderName} size="md" />
@@ -124,36 +118,30 @@ export function RoomMessageItem({ message }: { message: RoomMessage }) {
       </div>
 
       <div className="min-w-0 flex-1">
-        <div className="flex items-baseline gap-2">
-          <span className="text-sm font-semibold text-ink">{message.senderName}</span>
+        <div className="mb-0.5 flex flex-wrap items-center gap-1.5">
+          <span className="text-[13.5px] font-semibold text-ink">{message.senderName}</span>
           {!isHuman && (
-            <span className="rounded-md bg-accent-500/10 px-1.5 py-0.5 text-[10px] font-medium text-accent-d">
+            <span className="rounded-[5px] bg-accent-soft px-1.5 py-0.5 text-[9px] font-bold text-accent">
               AI
             </span>
           )}
           {!isHuman && employee && (
-            <span className="rounded-md bg-muted px-1.5 py-0.5 text-[10px] text-ink-3">
-              {employee.role}
-            </span>
+            <span className="text-[11px] text-ink-3">{employee.role}</span>
           )}
-          <span className="text-[11px] text-ink-3">{formatTime(message.createdAt)}</span>
+          <span className="font-mono text-[10.5px] text-ink-3">{formatTime(message.createdAt)}</span>
           {message.failed && (
             <span className="text-[11px] font-medium text-rose-600">Failed to send</span>
           )}
         </div>
 
         {message.pending ? (
-          <div className="mt-1.5 flex items-center gap-1.5 rounded-2xl rounded-tl-sm bg-muted px-3.5 py-3 w-fit">
+          <div className="flex w-fit items-center gap-1.5 rounded-[13px] border border-border bg-surface px-3.5 py-2.5">
             <span className="typing-dot" />
             <span className="typing-dot" />
             <span className="typing-dot" />
           </div>
         ) : (
-          <div
-            className={cn(
-              "mt-1 whitespace-pre-wrap text-[14px] leading-relaxed text-ink-2",
-            )}
-          >
+          <div className="whitespace-pre-wrap text-[14px] leading-[1.55] text-ink">
             {renderContent(message.content)}
           </div>
         )}
@@ -183,6 +171,6 @@ export function RoomMessageItem({ message }: { message: RoomMessage }) {
           </div>
         )}
       </div>
-    </motion.div>
+    </div>
   );
 }

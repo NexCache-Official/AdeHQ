@@ -115,8 +115,14 @@ body {
   .hero-dark {
     background: linear-gradient(135deg, #1f1b16 0%, #2c2419 60%, #3a2a1a 100%);
   }
-  .stat-mono {
-    font-family: var(--font-geist-mono), ui-monospace, monospace;
+  .ins-tab-active {
+    @apply bg-accent-soft text-accent-d;
+  }
+  .insbtn {
+    @apply border-0 bg-transparent;
+  }
+  .topicrow:hover {
+    @apply bg-black/[0.035];
   }
 }
 

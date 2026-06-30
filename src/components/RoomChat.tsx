@@ -581,17 +581,19 @@ export function RoomChat({
       : `Discuss ${topic.title}… use @ to mention an employee`;
 
   return (
-    <div className="flex h-full flex-col">
-      <div className="shrink-0 border-b border-slate-200 bg-white px-4 py-2.5 sm:px-6">
-        <div className="mx-auto max-w-3xl">
-          <h2 className="text-sm font-semibold text-slate-900">{displayTitle}</h2>
-          {topic.description && !isMainChat && (
-            <p className="mt-0.5 text-xs text-slate-500 line-clamp-1">{topic.description}</p>
-          )}
+    <div className="flex h-full flex-col bg-canvas">
+      <div className="flex h-14 shrink-0 items-center border-b border-border bg-surface px-5">
+        <div className="mx-auto flex w-full max-w-[760px] items-center justify-between gap-3">
+          <div className="min-w-0">
+            <h2 className="truncate text-sm font-semibold text-ink">{displayTitle}</h2>
+            {topic.description && !isMainChat && (
+              <p className="mt-0.5 line-clamp-1 text-xs text-ink-2">{topic.description}</p>
+            )}
+          </div>
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-4 py-4 sm:px-6">
+      <div className="flex-1 overflow-y-auto px-5 py-4 sm:px-6">
         {hasOlder && (
           <div className="mx-auto mb-3 max-w-3xl text-center">
             <Button
@@ -623,7 +625,7 @@ export function RoomChat({
             </div>
           </div>
         ) : (
-          <div className="mx-auto max-w-3xl">
+          <div className="mx-auto max-w-[760px]">
             {collaborationPlan && (
               <CollaborationPlanBanner
                 plan={collaborationPlan}
@@ -657,7 +659,7 @@ export function RoomChat({
                 return (
                   <div
                     key={run.runId}
-                    className="flex items-center gap-2 px-1 py-2 text-xs text-slate-500"
+                    className="flex items-center gap-2 px-1 py-2 text-xs text-ink-3"
                   >
                     {emp && <EmployeeAvatar employee={emp} size="xs" />}
                     {run.phase === "failed" ? (
@@ -666,7 +668,7 @@ export function RoomChat({
                       <Loader2 className="h-3 w-3 animate-spin text-accent-600" />
                     )}
                     <span className="min-w-0 flex-1">
-                      <span className="font-medium text-slate-700">{run.employeeName}</span>{" "}
+                      <span className="font-medium text-ink-2">{run.employeeName}</span>{" "}
                       {phaseLabel}
                       {run.phase === "failed" && run.error && (
                         <span className="block text-[10px] text-rose-600">{run.error}</span>
@@ -704,8 +706,8 @@ export function RoomChat({
         </div>
       )}
 
-      <div className="border-t border-slate-200 bg-slate-50 px-4 py-3 sm:px-6">
-        <div className="mx-auto max-w-3xl">
+      <div className="border-t border-border bg-canvas px-5 py-3 sm:px-6">
+        <div className="mx-auto max-w-[760px]">
           <ChatComposer
             employees={roomEmployees}
             onSend={handleSend}
@@ -716,7 +718,7 @@ export function RoomChat({
             onSlashCommand={onSlashCommand}
           />
           {useServerApi && roomEmployees.length > 0 && (
-            <p className="mt-2 px-1 text-[11px] text-slate-600">
+            <p className="mt-1.5 px-1 text-[11px] text-ink-3">
               {roomEmployees.length} AI employee{roomEmployees.length === 1 ? "" : "s"} in this room · mention with @ for a reply · type /help for commands
             </p>
           )}

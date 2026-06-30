@@ -2,14 +2,14 @@
 
 import { AIEmployee, EmployeeStatus } from "@/lib/types";
 import { cn, avatarGradient, initials } from "@/lib/utils";
-import { roleIcon, STATUS_META } from "@/lib/icons";
+import { STATUS_META } from "@/lib/icons";
 
 const SIZES = {
-  xs: { box: "h-7 w-7", icon: "h-3.5 w-3.5", dot: "h-2 w-2", text: "text-[10px]" },
-  sm: { box: "h-9 w-9", icon: "h-4 w-4", dot: "h-2.5 w-2.5", text: "text-xs" },
-  md: { box: "h-11 w-11", icon: "h-5 w-5", dot: "h-3 w-3", text: "text-sm" },
-  lg: { box: "h-14 w-14", icon: "h-6 w-6", dot: "h-3.5 w-3.5", text: "text-base" },
-  xl: { box: "h-20 w-20", icon: "h-9 w-9", dot: "h-4 w-4", text: "text-2xl" },
+  xs: { box: "h-[22px] w-[22px] rounded-[7px] text-[9px]", dot: "h-2 w-2 border-2" },
+  sm: { box: "h-[30px] w-[30px] rounded-[9px] text-[11px]", dot: "h-2.5 w-2.5 border-2" },
+  md: { box: "h-[38px] w-[38px] rounded-[11px] text-[13px]", dot: "h-2.5 w-2.5 border-2" },
+  lg: { box: "h-[46px] w-[46px] rounded-[14px] text-base", dot: "h-3 w-3 border-[3px]" },
+  xl: { box: "h-[72px] w-[72px] rounded-[20px] text-[26px]", dot: "h-4 w-4 border-[3px]" },
 };
 
 export function EmployeeAvatar({
@@ -24,7 +24,6 @@ export function EmployeeAvatar({
   className?: string;
 }) {
   const s = SIZES[size];
-  const Icon = roleIcon(employee.roleKey);
   const status: EmployeeStatus = employee.status;
   const meta = STATUS_META[status];
 
@@ -32,17 +31,17 @@ export function EmployeeAvatar({
     <div className={cn("relative shrink-0", className)}>
       <div
         className={cn(
-          "flex items-center justify-center rounded-2xl text-white shadow-glow-sm ring-1 ring-white/20",
+          "flex items-center justify-center font-bold text-white",
           s.box,
         )}
         style={{ backgroundImage: avatarGradient(employee.accent) }}
       >
-        <Icon className={s.icon} strokeWidth={2} />
+        {initials(employee.name)}
       </div>
       {showStatus && (
         <span
           className={cn(
-            "absolute -bottom-0.5 -right-0.5 rounded-full ring-2 ring-white",
+            "absolute -bottom-0.5 -right-0.5 rounded-full border-surface",
             s.dot,
             meta.dot,
             status === "working" && "animate-pulse-ring",
@@ -56,7 +55,7 @@ export function EmployeeAvatar({
 export function HumanAvatar({
   name,
   size = "md",
-  accent = "#f97316",
+  accent = "#3B4C6B",
   className,
 }: {
   name: string;
@@ -68,14 +67,37 @@ export function HumanAvatar({
   return (
     <div
       className={cn(
-        "flex shrink-0 items-center justify-center rounded-2xl font-semibold text-white ring-1 ring-white/20",
+        "flex shrink-0 items-center justify-center font-bold text-white",
         s.box,
-        s.text,
         className,
       )}
       style={{ backgroundImage: avatarGradient(accent) }}
     >
       {initials(name)}
+    </div>
+  );
+}
+
+/** Muted square icon container for channels (prototype style). */
+export function ChannelIcon({
+  className,
+  accent,
+}: {
+  className?: string;
+  accent?: string;
+}) {
+  return (
+    <div
+      className={cn(
+        "flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-[10px] text-ink-2",
+        !accent && "bg-muted",
+        className,
+      )}
+      style={accent ? { background: accent } : undefined}
+    >
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9">
+        <path d="M9 4 7 20M17 4l-2 16M4 9h16M3 15h16" />
+      </svg>
     </div>
   );
 }

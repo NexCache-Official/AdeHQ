@@ -315,8 +315,8 @@ export default function RoomDetailPage() {
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
-      <div className="flex shrink-0 items-center gap-3 border-b border-border bg-surface px-4 py-3 sm:px-6">
+    <div className="flex h-full min-h-0 flex-col bg-canvas">
+      <div className="flex shrink-0 items-center gap-3 border-b border-border bg-surface px-4 py-3 sm:px-6 lg:hidden">
         <button
           onClick={() => router.push("/rooms")}
           className="rounded-lg p-1.5 text-ink-3 hover:bg-muted hover:text-ink lg:hidden"
@@ -364,7 +364,7 @@ export default function RoomDetailPage() {
       </div>
 
       <div className="flex min-h-0 flex-1">
-        <div className="hidden w-[220px] shrink-0 lg:block xl:w-[260px]">
+        <div className="hidden w-[266px] shrink-0 lg:block">
           <TopicList
             topics={roomTopics}
             topicMembers={roomTopicMembers}
@@ -372,12 +372,14 @@ export default function RoomDetailPage() {
             selectedTopicId={selectedTopic?.id}
             userId={state.user?.id}
             isDm={isDm}
+            room={isDm ? undefined : room}
+            dmEmployee={isDm ? roomEmployees[0] : undefined}
             onSelect={selectTopic}
             onNewTopic={() => setNewTopicOpen(true)}
           />
         </div>
 
-        <div className="min-w-0 flex-1 border-r border-border">
+        <div className="min-w-0 flex-1 border-r border-border bg-canvas">
           {slashNotice && (
             <div className="border-b border-accent-200 bg-accent-50 px-4 py-1.5 text-center text-xs text-accent-800">
               {slashNotice}
@@ -393,7 +395,7 @@ export default function RoomDetailPage() {
           />
         </div>
 
-        <div className="hidden w-[300px] shrink-0 xl:block xl:w-[340px]">
+        <div className="hidden w-[344px] shrink-0 xl:block">
           {selectedTopic ? (
             <TopicPanel
               topic={selectedTopic}
