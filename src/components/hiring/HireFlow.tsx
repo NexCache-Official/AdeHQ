@@ -28,6 +28,7 @@ import type {
 import type { ProjectRoom, WorkLogEvent } from "@/lib/types";
 import { cn, nowISO, uid } from "@/lib/utils";
 import { getGroupChannels } from "@/lib/rooms";
+import { authHeaders } from "@/lib/api/auth-client";
 import { AdeOrb, HireHeader, HireStepper, MetricDots } from "./HireChrome";
 
 type HireFlowProps = {
@@ -35,9 +36,10 @@ type HireFlowProps = {
 };
 
 async function callRecruiter(payload: Record<string, unknown>): Promise<RecruiterApiResponse> {
+  const headers = await authHeaders();
   const res = await fetch("/api/hiring/recruiter", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers,
     body: JSON.stringify(payload),
   });
   if (!res.ok) {
