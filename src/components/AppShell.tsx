@@ -12,7 +12,6 @@ import { useStore } from "@/lib/demo-store";
 import { Sidebar } from "./Sidebar";
 import { Topbar } from "./Topbar";
 import { CommandBar } from "./CommandBar";
-import { HireEmployeeModal } from "./HireEmployeeModal";
 import { CreateRoomModal } from "./CreateRoomModal";
 import { LoadingState } from "./States";
 import { DebugProvider, useDebugTraceListener } from "./DebugProvider";
@@ -48,7 +47,6 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
 
   const [commandOpen, setCommandOpen] = useState(false);
-  const [hireOpen, setHireOpen] = useState(false);
   const [roomOpen, setRoomOpen] = useState(false);
 
   useEffect(() => {
@@ -74,10 +72,10 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
   const ui = useMemo<ShellUI>(
     () => ({
       openCommand: () => setCommandOpen(true),
-      openHire: () => setHireOpen(true),
+      openHire: () => router.push("/hire"),
       openCreateRoom: () => setRoomOpen(true),
     }),
-    [],
+    [router],
   );
 
   const isImmersive = pathname.startsWith("/rooms/") && pathname !== "/rooms";
@@ -111,7 +109,6 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
         onHire={ui.openHire}
         onCreateRoom={ui.openCreateRoom}
       />
-      <HireEmployeeModal open={hireOpen} onClose={() => setHireOpen(false)} />
       <CreateRoomModal open={roomOpen} onClose={() => setRoomOpen(false)} />
     </ShellUIContext.Provider>
   );
