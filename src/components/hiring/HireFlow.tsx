@@ -16,6 +16,7 @@ import {
 import { candidateToEmployee } from "@/lib/hiring/map-candidate";
 import { legacyDepartmentIdForRole, getRoleByKey } from "@/lib/hiring/role-library";
 import { buildRecruiterOpeningMessage } from "@/lib/hiring/recruiter-openings";
+import { assessRecruiterReadiness, generateSuggestionChips } from "@/lib/hiring/recruiter-brain";
 import { inferRoleFromText, inferenceOpeningMessage } from "@/lib/hiring/role-inference";
 import {
   clearHiringSession,
@@ -279,6 +280,13 @@ export function HireFlow({ onboarding = false }: HireFlowProps) {
       messages: [{ role: "ade", text: opening }],
     });
     dispatch({ type: "SET_BRIEF_PARTIAL", briefPartial: localBrief });
+    const openingConversation = [{ role: "ade" as const, text: opening }];
+    const localReadiness = assessRecruiterReadiness(openingConversation, localBrief);
+    dispatch({ type: "SET_READINESS", readiness: localReadiness });
+    dispatch({
+      type: "SET_SUGGESTION_CHIPS",
+      chips: generateSuggestionChips(localReadiness, localBrief, openingConversation, roleKey),
+    });
     prevBriefRef.current = { ...localBrief };
     dispatch({ type: "SET_BRIEF_READY", briefReady: false });
     setBriefCompose({ active: true, section: "title" });

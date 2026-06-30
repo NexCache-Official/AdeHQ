@@ -30,7 +30,7 @@ import {
 } from "lucide-react";
 import { EmployeeStatusDot } from "./EmployeeStatusBadge";
 import { STATUS_META } from "@/lib/icons";
-import { isMayaEmployee } from "@/lib/maya-employee";
+import { effectiveEmployeeStatus, isMayaEmployee } from "@/lib/maya-employee";
 import { MayaDmEmptyState } from "@/components/maya/MayaDmEmptyState";
 
 type PendingSend = {
@@ -613,7 +613,10 @@ export function RoomChat({
               </div>
               <div className="flex items-center gap-1.5 text-[11.5px] text-ink-2">
                 {dmEmployee && isMayaEmployee(dmEmployee) ? (
-                  <span>{dmEmployee.role}</span>
+                  <>
+                    <EmployeeStatusDot status={effectiveEmployeeStatus(dmEmployee)} />
+                    Online · {dmEmployee.role}
+                  </>
                 ) : (
                   <>
                     <EmployeeStatusDot status={dmEmployee.status} />

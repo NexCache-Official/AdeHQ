@@ -7,7 +7,8 @@ import {
   MAYA_EMPLOYEE_TITLE,
   MAYA_SYSTEM_EMPLOYEE_KEY,
 } from "@/lib/hiring/maya";
-import type { AIEmployee, EmployeePermissions, ProjectRoom } from "@/lib/types";
+import type { AIEmployee, EmployeePermissions, ProjectRoom, RoomTopic, TopicMember } from "@/lib/types";
+import { isGeneralTopic } from "@/lib/topics";
 import { nowISO, uid } from "@/lib/utils";
 
 export type SystemEmployeeMetadata = {
@@ -45,10 +46,90 @@ export function isSystemEmployee(
   return Boolean(employee.isSystemEmployee || employee.systemEmployeeKey);
 }
 
+export function mayaEmployeeStatus(): AIEmployee["status"] {
+  return "online";
+}
+
+export function effectiveEmployeeStatus(
+  employee: Pick<AIEmployee, "status" | "systemEmployeeKey" | "id">,
+): AIEmployee["status"] {
+  return isMayaEmployee(employee) ? mayaEmployeeStatus() : employee.status;
+}
+
 export function partitionWorkforce(employees: AIEmployee[]) {
   const maya = employees.filter(isMayaEmployee);
   const hired = employees.filter((e) => !isSystemEmployee(e));
   return { maya, hired, all: employees };
+}
+
+export function mayaDmRoomId(): string {
+  return `dm-${MAYA_EMPLOYEE_ID}`;
+}
+
+export function mayaDmGeneralTopicId(roomId = mayaDmRoomId()): string {
+  return `topic-general-${roomId}`;
+}
+
+export function buildMayaDmGeneralTopic(
+  workspaceId: string,
+  roomId: string,
+  timestamp: string,
+  messageCount = 1,
+): RoomTopic {
+  return {
+    id: mayaDmGeneralTopicId(roomId),
+    workspaceId,
+    roomId,
+    title: "General",
+    description: "Default topic for existing room messages.",
+    status: "active",
+    priority: "normal",
+    createdByType: "system",
+    lastMessageAt: timestamp,
+    lastActivityAt: timestamp,
+    messageCount,
+    taskCount: 0,
+    openTaskCount: 0,
+    memoryCount: 0,
+    approvalCount: 0,
+    agentRunCount: 0,
+    metadata: { isMainChat: true, aiParticipationMode: "smart_assist_lite" },
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  };
+}
+
+export function buildMayaDmTopicMembers(
+  workspaceId: string,
+  roomId: string,
+  topicId: string,
+  userId: string,
+  timestamp: string,
+): TopicMember[] {
+  return [
+    {
+      id: `tm-${roomId}-human`,
+      workspaceId,
+      roomId,
+      topicId,
+      memberType: "human",
+      memberId: userId,
+      role: "owner",
+      notificationLevel: "normal",
+      createdAt: timestamp,
+    },
+    {
+      id: `tm-${roomId}-${MAYA_EMPLOYEE_ID}`,
+      workspaceId,
+      roomId,
+      topicId,
+      memberType: "ai",
+      memberId: MAYA_EMPLOYEE_ID,
+      role: "participant",
+      notificationLevel: "normal",
+      createdAt: timestamp,
+    },
+  ];
 }
 
 export function buildMayaEmployee(timestamp = nowISO()): AIEmployee {
@@ -61,7 +142,7 @@ export function buildMayaEmployee(timestamp = nowISO()): AIEmployee {
     model: DEFAULT_SILICONFLOW_MODEL,
     modelMode: "balanced",
     seniority: "Manager",
-    status: "idle",
+    status: mayaEmployeeStatus(),
     instructions: MAYA_EMPLOYEE_SYSTEM_PROMPT.trim(),
     communicationStyle: "Warm, sharp, practical, and efficient",
     successCriteria: "Help users hire and improve AI employees quickly",
@@ -89,8 +170,9 @@ export function buildMayaEmployee(timestamp = nowISO()): AIEmployee {
 }
 
 export function buildMayaDmRoom(userId: string, welcomeContent: string): ProjectRoom {
-  const id = `dm-${MAYA_EMPLOYEE_ID}`;
+  const id = mayaDmRoomId();
   const timestamp = nowISO();
+  const topicId = mayaDmGeneralTopicId(id);
   return {
     id,
     name: MAYA_EMPLOYEE_NAME,
@@ -104,6 +186,7 @@ export function buildMayaDmRoom(userId: string, welcomeContent: string): Project
       {
         id: uid("msg"),
         roomId: id,
+        topicId,
         senderType: "ai",
         senderId: MAYA_EMPLOYEE_ID,
         senderName: MAYA_EMPLOYEE_NAME,
@@ -120,28 +203,87 @@ export function buildMayaDmRoom(userId: string, welcomeContent: string): Project
   };
 }
 
-export function mergeMayaIntoState<T extends { employees: AIEmployee[]; rooms: ProjectRoom[] }>(
-  state: T,
-  userId?: string,
-  welcomeContent?: string,
-): T {
-  if (state.employees.some(isMayaEmployee)) {
-    return state;
-  }
-  const maya = buildMayaEmployee();
-  const next: T = {
-    ...state,
-    employees: [maya, ...state.employees],
-  };
-  if (!userId || !welcomeContent) return next;
+function ensureMayaDmTopicsInState<
+  T extends {
+    employees: AIEmployee[];
+    rooms: ProjectRoom[];
+    topics?: RoomTopic[];
+    topicMembers?: TopicMember[];
+    workspace?: { id: string };
+  },
+>(state: T, userId?: string): T {
+  const dmRoom = state.rooms.find((room) => room.kind === "dm" && room.dmEmployeeId === MAYA_EMPLOYEE_ID);
+  if (!dmRoom || !userId) return state;
 
-  const existingDm = state.rooms.find(
-    (r) => r.kind === "dm" && r.dmEmployeeId === MAYA_EMPLOYEE_ID,
+  const hasGeneralTopic = (state.topics ?? []).some(
+    (topic) => topic.roomId === dmRoom.id && isGeneralTopic(topic),
   );
-  if (existingDm) return next;
+  if (hasGeneralTopic) return state;
+
+  const workspaceId = state.workspace?.id ?? "local";
+  const topic = buildMayaDmGeneralTopic(
+    workspaceId,
+    dmRoom.id,
+    dmRoom.updatedAt ?? dmRoom.createdAt,
+    dmRoom.messages.length,
+  );
+  const topicMembers = buildMayaDmTopicMembers(
+    workspaceId,
+    dmRoom.id,
+    topic.id,
+    userId,
+    dmRoom.createdAt,
+  );
+  const topicId = topic.id;
+  const rooms = state.rooms.map((room) =>
+    room.id === dmRoom.id
+      ? {
+          ...room,
+          messages: room.messages.map((message) =>
+            message.topicId ? message : { ...message, topicId },
+          ),
+        }
+      : room,
+  );
 
   return {
-    ...next,
-    rooms: [buildMayaDmRoom(userId, welcomeContent), ...state.rooms],
+    ...state,
+    rooms,
+    topics: [...(state.topics ?? []), topic],
+    topicMembers: [...(state.topicMembers ?? []), ...topicMembers],
   };
+}
+
+export function mergeMayaIntoState<
+  T extends {
+    employees: AIEmployee[];
+    rooms: ProjectRoom[];
+    topics?: RoomTopic[];
+    topicMembers?: TopicMember[];
+    workspace?: { id: string };
+  },
+>(state: T, userId?: string, welcomeContent?: string): T {
+  let next = state;
+
+  if (!state.employees.some(isMayaEmployee)) {
+    const maya = buildMayaEmployee();
+    next = {
+      ...next,
+      employees: [maya, ...state.employees],
+    };
+  }
+
+  if (userId && welcomeContent) {
+    const existingDm = next.rooms.find(
+      (room) => room.kind === "dm" && room.dmEmployeeId === MAYA_EMPLOYEE_ID,
+    );
+    if (!existingDm) {
+      next = {
+        ...next,
+        rooms: [buildMayaDmRoom(userId, welcomeContent), ...next.rooms],
+      };
+    }
+  }
+
+  return ensureMayaDmTopicsInState(next, userId);
 }

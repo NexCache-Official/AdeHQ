@@ -3,6 +3,7 @@
 // ===========================================================================
 
 export type EmployeeStatus =
+  | "online"
   | "idle"
   | "working"
   | "waiting_approval"

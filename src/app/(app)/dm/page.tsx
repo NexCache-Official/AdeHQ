@@ -8,7 +8,7 @@ import { PageContainer } from "@/components/Page";
 import { EmployeeAvatar } from "@/components/EmployeeAvatar";
 import { EmployeeStatusBadge } from "@/components/EmployeeStatusBadge";
 import { findDmRoomForEmployee, getDirectMessages } from "@/lib/rooms";
-import { partitionWorkforce, isMayaEmployee } from "@/lib/maya-employee";
+import { partitionWorkforce, isMayaEmployee, effectiveEmployeeStatus } from "@/lib/maya-employee";
 import { MAYA_EMPLOYEE_NAME, MAYA_EMPLOYEE_TITLE, MAYA_WORKFORCE_BADGE } from "@/lib/hiring/maya";
 import { UserPlus } from "lucide-react";
 
@@ -86,11 +86,12 @@ export default function DirectMessagesPage() {
                       )}
                     </div>
                     <p className="truncate text-xs text-ink-2">{isMaya ? MAYA_EMPLOYEE_TITLE : employee.role}</p>
-                    {!isMaya && (
-                      <div className="mt-2">
-                        <EmployeeStatusBadge status={employee.status} compact />
-                      </div>
-                    )}
+                    <div className="mt-2">
+                      <EmployeeStatusBadge
+                        status={effectiveEmployeeStatus(employee)}
+                        compact
+                      />
+                    </div>
                   </div>
                   {dm && dm.unread > 0 && (
                     <span className="shrink-0 rounded-full bg-accent px-1.5 font-mono text-[10px] font-semibold text-white">

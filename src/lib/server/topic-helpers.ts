@@ -119,6 +119,21 @@ export async function ensureGeneralTopic(
   return topic;
 }
 
+export async function backfillOrphanMessagesToGeneralTopic(
+  client: SupabaseClient,
+  workspaceId: string,
+  roomId: string,
+): Promise<void> {
+  const topic = await ensureGeneralTopic(client, workspaceId, roomId);
+  const { error } = await client
+    .from("messages")
+    .update({ topic_id: topic.id })
+    .eq("workspace_id", workspaceId)
+    .eq("room_id", roomId)
+    .is("topic_id", null);
+  if (error) throw error;
+}
+
 async function ensureTopicMembersFromRoom(
   client: SupabaseClient,
   workspaceId: string,

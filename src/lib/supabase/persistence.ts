@@ -27,8 +27,9 @@ import type {
 import { normalizeLiveProvider } from "@/lib/config/features";
 import { authHeaders } from "@/lib/api/auth-client";
 import { isEmailConfirmed } from "@/lib/auth/session";
-import { mayaWelcomeMessage } from "@/lib/hiring/maya";
-import { isMayaEmployee, mergeMayaIntoState } from "@/lib/maya-employee";
+import { mayaWelcomeMessage, MAYA_EMPLOYEE_ID } from "@/lib/hiring/maya";
+import { isMayaEmployee, mergeMayaIntoState, effectiveEmployeeStatus } from "@/lib/maya-employee";
+import { isGeneralTopic } from "@/lib/topics";
 import type { SystemEmployeeMetadata } from "@/lib/types";
 import { topicFromRow, topicMemberFromRow } from "@/lib/server/topic-helpers";
 import { nowISO } from "@/lib/utils";
@@ -532,16 +533,28 @@ export async function loadWorkspaceState(
 
   let finalEmployees = employees;
   let finalRooms = rooms;
-  if (!employees.some(isMayaEmployee)) {
+  let finalTopics = topics;
+  let finalTopicMembers = topicMembers;
+
+  const mayaDmRoom = rooms.find((room) => room.kind === "dm" && room.dmEmployeeId === MAYA_EMPLOYEE_ID);
+  const needsMayaBootstrap = !employees.some(isMayaEmployee);
+  const needsMayaTopics =
+    Boolean(mayaDmRoom) &&
+    !topics.some((topic) => topic.roomId === mayaDmRoom?.id && isGeneralTopic(topic));
+
+  if (needsMayaBootstrap || needsMayaTopics) {
     try {
       const headers = await authHeaders();
       const res = await fetch("/api/workspaces/ensure-maya", { method: "POST", headers });
       if (res.ok) {
-        const [empRefresh, roomRefresh, memberRefresh, msgRefresh] = await Promise.all([
+        const [empRefresh, roomRefresh, memberRefresh, msgRefresh, topicsRefresh, topicMembersRefresh] =
+          await Promise.all([
           supabase.from("ai_employees").select("*").eq("workspace_id", workspaceId),
           supabase.from("project_rooms").select("*").eq("workspace_id", workspaceId).eq("kind", "dm"),
           supabase.from("room_members").select("*").eq("workspace_id", workspaceId),
           supabase.from("messages").select("*").eq("workspace_id", workspaceId),
+          supabase.from("room_topics").select("*").eq("workspace_id", workspaceId),
+          supabase.from("topic_members").select("*").eq("workspace_id", workspaceId),
         ]);
         if (!empRefresh.error && empRefresh.data) {
           finalEmployees = (empRefresh.data as DbRow[])
@@ -568,17 +581,37 @@ export async function loadWorkspaceState(
             b.updatedAt.localeCompare(a.updatedAt),
           );
         }
+        if (!topicsRefresh.error && topicsRefresh.data) {
+          finalTopics = (topicsRefresh.data as DbRow[]).map(topicFromRow);
+        }
+        if (!topicMembersRefresh.error && topicMembersRefresh.data) {
+          finalTopicMembers = (topicMembersRefresh.data as DbRow[]).map(topicMemberFromRow);
+        }
       }
     } catch {
       const merged = mergeMayaIntoState(
-        { employees, rooms },
+        { employees: finalEmployees, rooms: finalRooms, topics: finalTopics, topicMembers: finalTopicMembers, workspace },
         profile.id,
         mayaWelcomeMessage(profile.name?.split(" ")[0] ?? "there"),
       );
       finalEmployees = merged.employees;
       finalRooms = merged.rooms;
+      finalTopics = merged.topics ?? finalTopics;
+      finalTopicMembers = merged.topicMembers ?? finalTopicMembers;
     }
   }
+
+  const mergedState = mergeMayaIntoState(
+    {
+      employees: finalEmployees,
+      rooms: finalRooms,
+      topics: finalTopics,
+      topicMembers: finalTopicMembers,
+      workspace,
+    },
+    profile.id,
+    mayaWelcomeMessage(profile.name?.split(" ")[0] ?? "there"),
+  );
 
   return {
     version: buildDemoState().version,
@@ -587,10 +620,10 @@ export async function loadWorkspaceState(
     workspaceMembers,
     workspaceInvitations,
     onboardingComplete: Boolean(workspaceRow.onboarding_complete),
-    employees: finalEmployees,
-    rooms: finalRooms,
-    topics,
-    topicMembers,
+    employees: mergedState.employees,
+    rooms: mergedState.rooms,
+    topics: mergedState.topics ?? finalTopics,
+    topicMembers: mergedState.topicMembers ?? finalTopicMembers,
     tasks,
     memory,
     approvals,
@@ -730,7 +763,11 @@ function employeeFromRow(row: DbRow, tools: ToolAccess[]): AIEmployee {
     model: row.model,
     modelMode: row.model_mode ?? undefined,
     seniority: row.seniority,
-    status: row.status,
+    status: effectiveEmployeeStatus({
+      id: String(row.id),
+      systemEmployeeKey: row.system_employee_key ? String(row.system_employee_key) : undefined,
+      status: row.status,
+    }),
     currentTask: row.current_task ?? undefined,
     instructions: row.instructions,
     communicationStyle: row.communication_style,

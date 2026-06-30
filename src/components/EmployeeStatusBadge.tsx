@@ -7,6 +7,7 @@ const STATUS_STYLE: Record<
   EmployeeStatus,
   { label: string; color: string; soft: string; dot: string }
 > = {
+  online: { label: "Online", color: "#16A34A", soft: "#DCFCE7", dot: "bg-emerald-500" },
   idle: { label: "Idle", color: "#9B968B", soft: "#F0EDE6", dot: "bg-ink-3" },
   working: { label: "Working", color: "#E85D2C", soft: "#FBE9DE", dot: "bg-accent" },
   waiting_approval: {
@@ -43,7 +44,7 @@ export function EmployeeStatusBadge({
           "rounded-full",
           compact ? "h-2 w-2" : "h-2 w-2",
           meta.dot,
-          status === "working" && "animate-pulse-ring",
+          (status === "working" || status === "online") && "animate-pulse-ring",
         )}
       />
       {meta.label}
@@ -64,7 +65,7 @@ export function EmployeeStatusDot({
       className={cn(
         "inline-block h-2 w-2 shrink-0 rounded-full",
         meta.dot,
-        status === "working" && "animate-pulse-ring",
+        (status === "working" || status === "online") && "animate-pulse-ring",
         className,
       )}
     />

@@ -34,13 +34,16 @@ export function assessRecruiterReadiness(
 
   const roleKnown = hasRealValue(currentBrief.roleTitle);
   const domainKnown = hasRealValue(currentBrief.domain);
-  const coreKnown = currentBrief.coreResponsibilities.length >= 2;
-  const focusKnown = currentBrief.technicalFocus.length > 0 || currentBrief.businessFocus.length > 0;
-  const qualityKnown = Boolean(currentBrief.qualityPreference);
-  const seniorityKnown = Boolean(currentBrief.seniorityLevel && currentBrief.autonomyLevel);
+  // Role-library briefs are seeded before the first reply — don't treat placeholders as confirmed.
+  const coreKnown = hasUserTurns && currentBrief.coreResponsibilities.length >= 2;
+  const focusKnown =
+    hasUserTurns && (currentBrief.technicalFocus.length > 0 || currentBrief.businessFocus.length > 0);
+  const qualityKnown = hasUserTurns && Boolean(currentBrief.qualityPreference);
+  const seniorityKnown = hasUserTurns && Boolean(currentBrief.seniorityLevel && currentBrief.autonomyLevel);
   const communicationKnown =
-    Boolean(currentBrief.communicationStyle?.trim()) || currentBrief.personalityTraits.length > 0;
-  const workflowKnown = currentBrief.toolsNeeded.length > 0 || currentBrief.approvalRules.length > 0;
+    hasUserTurns &&
+    (Boolean(currentBrief.communicationStyle?.trim()) || currentBrief.personalityTraits.length > 0);
+  const workflowKnown = hasUserTurns && (currentBrief.toolsNeeded.length > 0 || currentBrief.approvalRules.length > 0);
 
   if (roleKnown) score += 15;
   else missing.push("role_title");

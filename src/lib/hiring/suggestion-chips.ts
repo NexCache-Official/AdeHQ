@@ -303,27 +303,13 @@ export function primaryMissingField(missing: RecruiterMissingField[]): Recruiter
   return null;
 }
 
-/** Pull example answers from Ade's last question when she lists options inline. */
-export function extractExamplesFromRecruiterMessage(text: string): string[] {
-  const lower = text.toLowerCase();
-  let segment = "";
+function parseInlineOptionList(segment: string): string[] {
+  let cleaned = segment.split("?")[0].split("\n")[0];
+  cleaned = cleaned.replace(/^(will it focus on|should it|could it|would it)\s+/i, "");
+  cleaned = cleaned.replace(/\s+or something else.*$/i, "");
+  cleaned = cleaned.replace(/\s+just give me.*$/i, "");
 
-  for (const marker of ["for example", "such as", "e.g.", "like "]) {
-    const idx = lower.indexOf(marker);
-    if (idx >= 0) {
-      segment = text.slice(idx + marker.length);
-      break;
-    }
-  }
-
-  if (!segment.trim()) return [];
-
-  segment = segment.split("?")[0].split("\n")[0];
-  segment = segment.replace(/^(will it focus on|should it|could it|would it)\s+/i, "");
-  segment = segment.replace(/\s+or something else.*$/i, "");
-  segment = segment.replace(/\s+just give me.*$/i, "");
-
-  const parts = segment
+  const parts = cleaned
     .split(/,\s*/)
     .flatMap((part) => part.split(/\s+or\s+/i))
     .map((part) =>
@@ -333,10 +319,43 @@ export function extractExamplesFromRecruiterMessage(text: string): string[] {
         .replace(/^on\s+/i, "")
         .replace(/^to\s+/i, ""),
     )
-    .filter((part) => part.length > 4 && part.length < 80)
+    .filter((part) => part.length > 2 && part.length < 80)
     .filter((part) => !/something else|not sure|help me decide/i.test(part));
 
   return parts.map((part) => part.charAt(0).toUpperCase() + part.slice(1));
+}
+
+/** Pull example answers from Ade's last question when she lists options inline. */
+export function extractExamplesFromRecruiterMessage(text: string): string[] {
+  const segments: string[] = [];
+  const lower = text.toLowerCase();
+
+  const dashIdx = text.lastIndexOf("—");
+  if (dashIdx >= 0) {
+    segments.push(text.slice(dashIdx + 1));
+  }
+
+  const colonMatch = text.match(
+    /(?:what|which|are they|should they|is it|who)\s+[^:?\n]{0,120}:\s*([^?\n]+)/i,
+  );
+  if (colonMatch?.[1]) {
+    segments.push(colonMatch[1]);
+  }
+
+  for (const marker of ["for example", "such as", "e.g.", "like "]) {
+    const idx = lower.indexOf(marker);
+    if (idx >= 0) {
+      segments.push(text.slice(idx + marker.length));
+      break;
+    }
+  }
+
+  for (const segment of segments) {
+    const parts = parseInlineOptionList(segment);
+    if (parts.length >= 2) return parts;
+  }
+
+  return [];
 }
 
 export function generateSuggestionChips(
@@ -356,17 +375,18 @@ export function generateSuggestionChips(
   const role = getRoleByKey(roleKey ?? undefined);
   const deptId = inferDepartmentId(currentBrief);
   const primary = primaryMissingField(readiness.missing);
+  const userTurns = conversation.filter((message) => message.role === "user").length;
   const lastAde = [...conversation].reverse().find((m) => m.role === "ade")?.text ?? "";
   const fromQuestion = extractExamplesFromRecruiterMessage(lastAde);
 
-  if (
-    fromQuestion.length >= 2 &&
-    primary &&
-    ["core_work", "business_focus", "domain", "tools", "approval_rules"].includes(primary)
-  ) {
+  if (fromQuestion.length >= 2) {
     const chips = chipsFromLabels(fromQuestion, "answer_question", 4);
     pushChip(chips, NOT_SURE, NOT_SURE);
     return chips;
+  }
+
+  if (userTurns === 0 && role?.questionTemplates.coreWorkChips.length) {
+    return chipsFromLabels(role.questionTemplates.coreWorkChips);
   }
 
   if (role && primary === "core_work" && role.questionTemplates.coreWorkChips.length > 0) {

@@ -92,6 +92,7 @@ export const STATUS_META: Record<
   EmployeeStatus,
   { label: string; dot: string; text: string; ring: string }
 > = {
+  online: { label: "Online", dot: "bg-emerald-400", text: "text-emerald-700", ring: "ring-emerald-400/20" },
   idle: { label: "Idle", dot: "bg-slate-400", text: "text-slate-600", ring: "ring-slate-400/20" },
   working: { label: "Working", dot: "bg-emerald-400", text: "text-emerald-700", ring: "ring-emerald-400/20" },
   waiting_approval: { label: "Waiting for approval", dot: "bg-amber-400", text: "text-amber-700", ring: "ring-amber-400/20" },

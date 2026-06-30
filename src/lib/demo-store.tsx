@@ -35,7 +35,7 @@ import {
 import { getEmailRedirectUrl, setAuthNextPath } from "@/lib/auth/callback-session";
 import { isEmailConfirmed } from "@/lib/auth/session";
 import { mayaWelcomeMessage } from "@/lib/hiring/maya";
-import { isMayaEmployee, isSystemEmployee, mergeMayaIntoState } from "@/lib/maya-employee";
+import { isMayaEmployee, isSystemEmployee, mergeMayaIntoState, mayaEmployeeStatus } from "@/lib/maya-employee";
 import { isGroupChannel } from "@/lib/rooms";
 import { nowISO, uid } from "./utils";
 import { SUPABASE_WORKSPACE_TABLES } from "./supabase/config";
@@ -661,7 +661,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       updateEmployee: (id, patch) => {
         const current = stateRef.current.employees.find((e) => e.id === id);
         if (!current) return;
-        const updated = { ...current, ...patch };
+        const safePatch = isMayaEmployee(current) ? { ...patch, status: mayaEmployeeStatus() } : patch;
+        const updated = { ...current, ...safePatch };
         set((s) => ({
           ...s,
           employees: s.employees.map((e) => (e.id === id ? updated : e)),

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { AIEmployee } from "@/lib/types";
-import { isSystemEmployee } from "@/lib/maya-employee";
+import { effectiveEmployeeStatus, isSystemEmployee } from "@/lib/maya-employee";
 import { EmployeeAvatar } from "./EmployeeAvatar";
 import { EmployeeStatusBadge } from "./EmployeeStatusBadge";
 import { MessageSquare, Sparkles } from "lucide-react";
@@ -43,7 +43,7 @@ export function EmployeeCard({
           </div>
           <p className="truncate text-xs text-ink-2">{employee.role}</p>
         </div>
-        <EmployeeStatusBadge status={employee.status} />
+        <EmployeeStatusBadge status={effectiveEmployeeStatus(employee)} />
       </Link>
     );
   }
@@ -65,11 +65,9 @@ export function EmployeeCard({
             </span>
           </div>
           <p className="truncate text-xs text-ink-2">{employee.role}</p>
-          {!systemGuide && (
-            <div className="mt-2">
-              <EmployeeStatusBadge status={employee.status} />
-            </div>
-          )}
+          <div className="mt-2">
+            <EmployeeStatusBadge status={effectiveEmployeeStatus(employee)} />
+          </div>
         </div>
       </div>
 

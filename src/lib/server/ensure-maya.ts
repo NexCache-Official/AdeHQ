@@ -12,6 +12,7 @@ import {
   buildMayaEmployee,
   isMayaEmployee,
 } from "@/lib/maya-employee";
+import { ensureGeneralTopic, backfillOrphanMessagesToGeneralTopic } from "@/lib/server/topic-helpers";
 import type { AIEmployee, ProjectRoom } from "@/lib/types";
 import { nowISO, uid } from "@/lib/utils";
 
@@ -66,6 +67,11 @@ export async function ensureMayaForWorkspace(
 
   if (lookupError) throw lookupError;
   if (existing) {
+    await client
+      .from("ai_employees")
+      .update({ status: "online", updated_at: nowISO() })
+      .eq("workspace_id", workspaceId)
+      .eq("system_employee_key", MAYA_SYSTEM_EMPLOYEE_KEY);
     return buildMayaEmployee(String(existing.updated_at ?? existing.created_at ?? nowISO()));
   }
 
@@ -104,6 +110,9 @@ export async function ensureMayaDM(
 
   if (existingRoom) {
     const roomId = String(existingRoom.id);
+    await ensureGeneralTopic(client, workspaceId, roomId);
+    await backfillOrphanMessagesToGeneralTopic(client, workspaceId, roomId);
+
     const { data: members, error: membersError } = await client
       .from("room_members")
       .select("*")
@@ -136,10 +145,12 @@ export async function ensureMayaDM(
     if (messagesError) throw messagesError;
 
     if (!messages?.length) {
+      const generalTopic = await ensureGeneralTopic(client, workspaceId, roomId);
       const welcomeMessage = {
         workspace_id: workspaceId,
         id: uid("msg"),
         room_id: roomId,
+        topic_id: generalTopic.id,
         sender_type: "ai",
         sender_id: MAYA_EMPLOYEE_ID,
         sender_name: MAYA_EMPLOYEE_NAME,
@@ -188,12 +199,15 @@ export async function ensureMayaDM(
     .upsert(memberRows, { onConflict: "workspace_id,room_id,member_type,member_id" });
   if (membersError) throw membersError;
 
+  const generalTopic = await ensureGeneralTopic(client, workspaceId, room.id);
+
   if (room.messages[0]) {
     const msg = room.messages[0];
     const { error: messageError } = await client.from("messages").insert({
       workspace_id: workspaceId,
       id: msg.id,
       room_id: room.id,
+      topic_id: generalTopic.id,
       sender_type: msg.senderType,
       sender_id: msg.senderId,
       sender_name: msg.senderName,
@@ -202,6 +216,8 @@ export async function ensureMayaDM(
     });
     if (messageError) throw messageError;
   }
+
+  await backfillOrphanMessagesToGeneralTopic(client, workspaceId, room.id);
 
   return room;
 }

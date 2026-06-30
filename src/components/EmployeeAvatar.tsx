@@ -1,5 +1,6 @@
 "use client";
 
+import { effectiveEmployeeStatus } from "@/lib/maya-employee";
 import { AIEmployee, EmployeeStatus } from "@/lib/types";
 import { cn, avatarGradient, initials } from "@/lib/utils";
 import { STATUS_META } from "@/lib/icons";
@@ -18,13 +19,13 @@ export function EmployeeAvatar({
   showStatus = true,
   className,
 }: {
-  employee: Pick<AIEmployee, "name" | "accent" | "roleKey" | "status">;
+  employee: Pick<AIEmployee, "name" | "accent" | "roleKey" | "status" | "id" | "systemEmployeeKey">;
   size?: keyof typeof SIZES;
   showStatus?: boolean;
   className?: string;
 }) {
   const s = SIZES[size];
-  const status: EmployeeStatus = employee.status;
+  const status: EmployeeStatus = effectiveEmployeeStatus(employee);
   const meta = STATUS_META[status];
 
   return (
@@ -44,7 +45,7 @@ export function EmployeeAvatar({
             "absolute -bottom-0.5 -right-0.5 rounded-full border-surface",
             s.dot,
             meta.dot,
-            status === "working" && "animate-pulse-ring",
+            (status === "working" || status === "online") && "animate-pulse-ring",
           )}
         />
       )}

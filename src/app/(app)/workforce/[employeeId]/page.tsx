@@ -19,7 +19,7 @@ import {
   defaultModelModeForRole,
   MODEL_MODE_LABELS,
 } from "@/lib/ai/model-catalog";
-import { isMayaEmployee, isSystemEmployee } from "@/lib/maya-employee";
+import { isMayaEmployee, isSystemEmployee, effectiveEmployeeStatus } from "@/lib/maya-employee";
 import { MAYA_EMPLOYEE_NAME } from "@/lib/hiring/maya";
 import { storeMayaEmployeeContext } from "@/components/maya/MayaDmEmptyState";
 import {
@@ -99,7 +99,7 @@ export default function EmployeeProfilePage() {
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
               <h1 className="text-2xl font-semibold tracking-tight text-slate-900">{employee.name}</h1>
-              <EmployeeStatusBadge status={employee.status} />
+              <EmployeeStatusBadge status={effectiveEmployeeStatus(employee)} />
             </div>
             <p className="mt-0.5 text-sm text-slate-500">{employee.role} · {employee.seniority}</p>
             <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-500">
@@ -343,14 +343,16 @@ function EditEmployeeModal({ open, onClose, employeeId }: { open: boolean; onClo
           <span className="text-xs font-medium text-slate-500">Standing instructions</span>
           <textarea className="input-field min-h-[88px] resize-none" value={instructions} onChange={(e) => setInstructions(e.target.value)} />
         </label>
+        {!isMayaEmployee(employee) && (
         <label className="block space-y-1.5">
           <span className="text-xs font-medium text-slate-500">Status</span>
           <select className="input-field" value={statusVal} onChange={(e) => setStatusVal(e.target.value as EmployeeStatus)}>
-            {(["idle", "working", "waiting_approval", "on_call", "blocked"] as EmployeeStatus[]).map((s) => (
+            {(["online", "idle", "working", "waiting_approval", "on_call", "blocked"] as EmployeeStatus[]).map((s) => (
               <option key={s} value={s}>{s.replace("_", " ")}</option>
             ))}
           </select>
         </label>
+        )}
         <label className="block space-y-1.5">
           <span className="text-xs font-medium text-slate-500">AI provider</span>
           <select className="input-field" value={provider} onChange={(e) => setProvider(e.target.value)}>

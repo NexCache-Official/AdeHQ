@@ -10,6 +10,7 @@ import {
   sortTopics,
   topicUnreadCount,
 } from "@/lib/topics";
+import { effectiveEmployeeStatus } from "@/lib/maya-employee";
 import { cn } from "@/lib/utils";
 import { ChannelIcon, EmployeeAvatar } from "./EmployeeAvatar";
 import { EmployeeStatusBadge } from "./EmployeeStatusBadge";
@@ -189,7 +190,7 @@ export function TopicList({
             </div>
           </div>
           <div className="mt-[11px]">
-            <EmployeeStatusBadge status={dmEmployee.status} />
+            <EmployeeStatusBadge status={effectiveEmployeeStatus(dmEmployee)} />
           </div>
         </div>
       ) : room ? (
