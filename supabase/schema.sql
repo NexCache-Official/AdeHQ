@@ -137,7 +137,11 @@ create table if not exists public.project_rooms (
   accent text not null default '#f97316',
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
-  primary key (workspace_id, id)
+  primary key (workspace_id, id),
+  constraint project_rooms_kind_shape check (
+    (kind = 'dm' and dm_employee_id is not null)
+    or (kind <> 'dm' and dm_employee_id is null)
+  )
 );
 
 create table if not exists public.room_members (

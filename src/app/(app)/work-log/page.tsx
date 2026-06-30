@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useStore } from "@/lib/demo-store";
+import { getGroupChannels } from "@/lib/rooms";
 import { PageContainer, PageHeader } from "@/components/Page";
 import { WorkLogTimeline } from "@/components/WorkLogTimeline";
 import { Card } from "@/components/ui";
@@ -13,6 +14,8 @@ export default function WorkLogPage() {
   const [employee, setEmployee] = useState("all");
   const [room, setRoom] = useState("all");
   const [statusF, setStatusF] = useState("all");
+
+  const groupChannels = getGroupChannels(state.rooms);
 
   const events = state.workLog
     .filter((w) => employee === "all" || w.employeeId === employee)
@@ -35,7 +38,7 @@ export default function WorkLogPage() {
         </select>
         <select className="input-field sm:w-52" value={room} onChange={(e) => setRoom(e.target.value)}>
           <option value="all">All rooms</option>
-          {state.rooms.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
+          {groupChannels.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
         </select>
         <select className="input-field sm:w-44" value={statusF} onChange={(e) => setStatusF(e.target.value)}>
           <option value="all">All statuses</option>

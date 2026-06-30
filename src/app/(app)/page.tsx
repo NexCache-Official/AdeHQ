@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useStore } from "@/lib/demo-store";
+import { getGroupChannels } from "@/lib/rooms";
 import { useShellUI } from "@/components/AppShell";
 import { PageContainer } from "@/components/Page";
 import { EmployeeCard } from "@/components/EmployeeCard";
@@ -24,9 +25,14 @@ import {
 } from "lucide-react";
 
 export default function HomePage() {
-  const { state } = useStore();
+  const { state, actions } = useStore();
   const ui = useShellUI();
   const router = useRouter();
+
+  const openEmployeeDm = (employeeId: string) => {
+    const dm = actions.openOrCreateDM(employeeId);
+    router.push(`/rooms/${dm.id}`);
+  };
 
   const employees = state.employees;
   const pendingApprovals = state.approvals.filter((a) => a.status === "pending");
@@ -35,7 +41,7 @@ export default function HomePage() {
     .sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt))
     .slice(0, 6);
   const workingCount = employees.filter((e) => e.status === "working").length;
-  const channels = state.rooms.filter((r) => r.kind !== "dm");
+  const channels = getGroupChannels(state.rooms);
 
   const quickActions = [
     { label: "Hire AI Employee", icon: UserPlus, onClick: ui.openHire },
@@ -113,7 +119,7 @@ export default function HomePage() {
             <SectionHeader title="Workforce status" href="/workforce" linkLabel="View all" />
             <div className="grid gap-3 sm:grid-cols-2">
               {employees.slice(0, 4).map((e) => (
-                <EmployeeCard key={e.id} employee={e} onMessage={(emp) => router.push(emp.defaultRoomId ? `/rooms/${emp.defaultRoomId}` : "/rooms")} />
+                <EmployeeCard key={e.id} employee={e} onMessage={(emp) => openEmployeeDm(emp.id)} />
               ))}
             </div>
           </section>

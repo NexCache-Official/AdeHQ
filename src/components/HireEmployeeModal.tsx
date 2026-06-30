@@ -18,6 +18,7 @@ import {
 } from "@/lib/demo";
 import { AIEmployee, EmployeePermissions, ToolAccess } from "@/lib/types";
 import { roleIcon, toolIcon } from "@/lib/icons";
+import { getGroupChannels } from "@/lib/rooms";
 import { cn, uid, nowISO, avatarGradient } from "@/lib/utils";
 import { EmployeeAvatar } from "./EmployeeAvatar";
 import {
@@ -113,6 +114,8 @@ export function HireEmployeeModal({
     });
   };
 
+  const groupChannels = useMemo(() => getGroupChannels(state.rooms), [state.rooms]);
+
   const selectedToolList = useMemo<ToolAccess[]>(
     () =>
       Object.entries(tools).map(([id, permission]) => {
@@ -153,7 +156,8 @@ export function HireEmployeeModal({
       avgResponseTime: "—",
       trustScore: 75,
       accent: template.accent,
-      defaultRoomId: roomId || undefined,
+      defaultRoomId:
+        roomId && groupChannels.some((r) => r.id === roomId) ? roomId : undefined,
       lastActiveAt: nowISO(),
       createdAt: nowISO(),
     };
@@ -170,8 +174,8 @@ export function HireEmployeeModal({
       {hired ? (
         <HireSuccess
           employee={hired}
-          roomId={roomId}
-          rooms={state.rooms}
+          roomId={roomId && groupChannels.some((r) => r.id === roomId) ? roomId : ""}
+          rooms={groupChannels}
           onAddToRoom={(rid) => {
             actions.addEmployeeToRoom(rid, hired.id);
             close();
@@ -315,7 +319,7 @@ export function HireEmployeeModal({
                 <Field label="Default room / project">
                   <select className="input-field" value={roomId} onChange={(e) => setRoomId(e.target.value)}>
                     <option value="">No default room</option>
-                    {state.rooms.map((r) => (
+                    {groupChannels.map((r) => (
                       <option key={r.id} value={r.id}>{r.name}</option>
                     ))}
                   </select>
@@ -412,7 +416,7 @@ export function HireEmployeeModal({
                   </div>
                 </div>
                 <ReviewRow label="Standing instructions" value={instructions} />
-                <ReviewRow label="Default room" value={state.rooms.find((r) => r.id === roomId)?.name ?? "None"} />
+                <ReviewRow label="Default room" value={groupChannels.find((r) => r.id === roomId)?.name ?? "None"} />
                 <div>
                   <div className="mb-1.5 section-title">Tools ({selectedToolList.length})</div>
                   <div className="flex flex-wrap gap-1.5">
@@ -494,6 +498,8 @@ function HireSuccess({
   onDone: () => void;
 }) {
   const [selectedRoom, setSelectedRoom] = useState(roomId || rooms[0]?.id || "");
+  const hasChannels = rooms.length > 0;
+
   return (
     <div className="px-8 py-10 text-center">
       <motion.div
@@ -521,18 +527,26 @@ function HireSuccess({
       </p>
 
       <div className="mx-auto mt-6 max-w-sm space-y-3">
-        <select
-          value={selectedRoom}
-          onChange={(e) => setSelectedRoom(e.target.value)}
-          className="input-field"
-        >
-          {rooms.map((r) => (
-            <option key={r.id} value={r.id}>{r.name}</option>
-          ))}
-        </select>
-        <Button className="w-full" onClick={() => onAddToRoom(selectedRoom)} disabled={!selectedRoom}>
-          Add to room & open
-        </Button>
+        {hasChannels ? (
+          <>
+            <select
+              value={selectedRoom}
+              onChange={(e) => setSelectedRoom(e.target.value)}
+              className="input-field"
+            >
+              {rooms.map((r) => (
+                <option key={r.id} value={r.id}>{r.name}</option>
+              ))}
+            </select>
+            <Button className="w-full" onClick={() => onAddToRoom(selectedRoom)} disabled={!selectedRoom}>
+              Add to room & open
+            </Button>
+          </>
+        ) : (
+          <p className="rounded-lg bg-slate-100 px-3 py-2 text-sm text-slate-600">
+            Create a group channel first, then add {employee.name} from Workforce or the channel settings.
+          </p>
+        )}
         <div className="flex gap-2">
           <Button variant="secondary" className="flex-1" onClick={onViewProfile}>
             View profile

@@ -219,13 +219,15 @@ export type RoomMessage = {
   failed?: boolean;
 };
 
+/** `channel` = multi-member group room; `dm` = private 1:1 with one AI employee (not assignable as a project room). */
 export type RoomKind = "channel" | "dm";
 
 export type ProjectRoom = {
   id: string;
   name: string;
   kind: RoomKind;
-  dmEmployeeId?: string; // set when kind === "dm"
+  /** Required when kind === "dm" — the AI employee this DM belongs to. */
+  dmEmployeeId?: string;
   description: string;
   brief: string;
   humans: string[];

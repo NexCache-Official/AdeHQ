@@ -34,6 +34,7 @@ import {
 } from "./types";
 import { getEmailRedirectUrl, setAuthNextPath } from "@/lib/auth/callback-session";
 import { isEmailConfirmed } from "@/lib/auth/session";
+import { isGroupChannel } from "@/lib/rooms";
 import { nowISO, uid } from "./utils";
 import { SUPABASE_WORKSPACE_TABLES } from "./supabase/config";
 import { supabase } from "./supabase/client";
@@ -611,32 +612,42 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 
       hireEmployee: (employee) => {
         const current = stateRef.current;
-        const updatedRooms = employee.defaultRoomId
+        const defaultRoom = employee.defaultRoomId
+          ? current.rooms.find((room) => room.id === employee.defaultRoomId)
+          : undefined;
+        const validDefaultRoomId =
+          defaultRoom && isGroupChannel(defaultRoom) ? defaultRoom.id : undefined;
+        const safeEmployee =
+          validDefaultRoomId === employee.defaultRoomId
+            ? employee
+            : { ...employee, defaultRoomId: validDefaultRoomId };
+
+        const updatedRooms = validDefaultRoomId
           ? current.rooms.map((room) =>
-              room.id === employee.defaultRoomId && !room.aiEmployees.includes(employee.id)
-                ? { ...room, aiEmployees: [...room.aiEmployees, employee.id], updatedAt: nowISO() }
+              room.id === validDefaultRoomId && !room.aiEmployees.includes(safeEmployee.id)
+                ? { ...room, aiEmployees: [...room.aiEmployees, safeEmployee.id], updatedAt: nowISO() }
                 : room,
             )
           : current.rooms;
-        const assignedRoom = employee.defaultRoomId
-          ? updatedRooms.find((room) => room.id === employee.defaultRoomId)
+        const assignedRoom = validDefaultRoomId
+          ? updatedRooms.find((room) => room.id === validDefaultRoomId)
           : undefined;
 
         set((s) => ({
           ...s,
-          employees: [...s.employees, employee],
+          employees: [...s.employees, safeEmployee],
           rooms: updatedRooms,
         }));
 
         runRemote(async (workspaceId) => {
           if (assignedRoom) await persistRoom(workspaceId, assignedRoom);
-          await persistEmployee(workspaceId, employee);
-          if (employee.defaultRoomId) {
-            await persistRoomMember(workspaceId, employee.defaultRoomId, "ai", employee.id);
+          await persistEmployee(workspaceId, safeEmployee);
+          if (validDefaultRoomId) {
+            await persistRoomMember(workspaceId, validDefaultRoomId, "ai", safeEmployee.id);
           }
         });
 
-        return employee;
+        return safeEmployee;
       },
 
       updateEmployee: (id, patch) => {
@@ -677,8 +688,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         const created: ProjectRoom = {
           id,
           name: room.name,
-          kind: room.kind ?? "channel",
-          dmEmployeeId: room.dmEmployeeId,
+          kind: "channel",
           description: room.description ?? "",
           brief: room.brief ?? "",
           humans: room.humans ?? (stateRef.current.user?.id ? [stateRef.current.user.id] : []),
@@ -780,7 +790,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 
       addEmployeeToRoom: (roomId, employeeId) => {
         const current = stateRef.current.rooms.find((room) => room.id === roomId);
-        if (!current || current.aiEmployees.includes(employeeId)) return;
+        if (!current || !isGroupChannel(current) || current.aiEmployees.includes(employeeId)) return;
         const updated = {
           ...current,
           aiEmployees: [...current.aiEmployees, employeeId],

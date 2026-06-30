@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useStore } from "@/lib/demo-store";
+import { getGroupChannels } from "@/lib/rooms";
 import { useShellUI } from "@/components/AppShell";
 import { PageContainer, PageHeader } from "@/components/Page";
 import { EmployeeCard } from "@/components/EmployeeCard";
@@ -18,7 +19,7 @@ import { Bot, LayoutGrid, List, Search, UserPlus } from "lucide-react";
 const STATUS_FILTERS: (EmployeeStatus | "all")[] = ["all", "working", "idle", "waiting_approval", "on_call", "blocked"];
 
 export default function WorkforcePage() {
-  const { state } = useStore();
+  const { state, actions } = useStore();
   const ui = useShellUI();
   const router = useRouter();
   const [view, setView] = useState<"grid" | "list">("grid");
@@ -30,6 +31,13 @@ export default function WorkforcePage() {
     () => ["all", ...Array.from(new Set(state.employees.map((e) => e.provider)))],
     [state.employees],
   );
+
+  const groupChannels = getGroupChannels(state.rooms);
+
+  const openEmployeeDm = (employeeId: string) => {
+    const dm = actions.openOrCreateDM(employeeId);
+    router.push(`/rooms/${dm.id}`);
+  };
 
   const filtered = state.employees.filter((e) => {
     if (status !== "all" && e.status !== status) return false;
@@ -108,13 +116,13 @@ export default function WorkforcePage() {
       ) : view === "grid" ? (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {filtered.map((e) => (
-            <EmployeeCard key={e.id} employee={e} onMessage={(emp) => router.push(emp.defaultRoomId ? `/rooms/${emp.defaultRoomId}` : "/rooms")} />
+            <EmployeeCard key={e.id} employee={e} onMessage={(emp) => openEmployeeDm(emp.id)} />
           ))}
         </div>
       ) : (
         <div className="overflow-hidden rounded-2xl border border-slate-200">
           {filtered.map((e, i) => {
-            const room = state.rooms.find((r) => r.id === e.defaultRoomId);
+            const room = groupChannels.find((r) => r.id === e.defaultRoomId);
             return (
               <button
                 key={e.id}

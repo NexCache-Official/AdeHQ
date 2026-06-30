@@ -1,6 +1,7 @@
 "use client";
 
 import { useStore } from "@/lib/demo-store";
+import { getGroupChannels } from "@/lib/rooms";
 import { useShellUI } from "@/components/AppShell";
 import { PageContainer, PageHeader } from "@/components/Page";
 import { ProjectRoomCard } from "@/components/ProjectRoomCard";
@@ -11,7 +12,7 @@ import { Hash, Plus } from "lucide-react";
 export default function RoomsPage() {
   const { state } = useStore();
   const ui = useShellUI();
-  const channels = state.rooms.filter((r) => r.kind !== "dm");
+  const channels = getGroupChannels(state.rooms);
 
   return (
     <PageContainer wide>
