@@ -36,6 +36,7 @@ type TopicSummaryPanelProps = {
   employees: AIEmployee[];
   loading?: boolean;
   refreshing?: boolean;
+  error?: string | null;
   onRefresh: () => void;
   onCreateTask?: (title: string, ownerEmployeeId?: string) => void;
   onMemorySaved?: () => void;
@@ -67,6 +68,7 @@ export function TopicSummaryPanel({
   employees,
   loading,
   refreshing,
+  error,
   onRefresh,
   onCreateTask,
   onMemorySaved,
@@ -140,6 +142,12 @@ export function TopicSummaryPanel({
           </Button>
         )}
       </div>
+
+      {error && (
+        <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-800">
+          {error}
+        </p>
+      )}
 
       {loading && !summary && (
         <p className="text-xs text-ink-3">Loading workstream summary…</p>

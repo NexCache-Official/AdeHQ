@@ -15,6 +15,7 @@ import { generalTopicForRoom, isGeneralTopic, topicsForRoom } from "@/lib/topics
 import { MayaDmHiringLayout } from "@/components/maya/MayaDmHiringWorkspace";
 import { OrchestrationUiProvider } from "@/components/orchestration/OrchestrationUiContext";
 import { channelAssignableEmployees, isMayaEmployee } from "@/lib/maya-employee";
+import { notifyTopicSummaryUpdated } from "@/lib/topic-summary/client";
 import type { AiParticipationMode, TopicPriority } from "@/lib/types";
 import type { SlashCommandResult } from "@/components/ChatComposer";
 import {
@@ -201,6 +202,7 @@ export default function RoomDetailPage() {
         if (!response.ok) throw new Error("Summarize failed");
         const payload = await response.json();
         if (payload.topic) actions.upsertTopic(payload.topic);
+        notifyTopicSummaryUpdated(topicId);
         void actions.refreshWorkLogForTopic(topicId);
         return;
       }
@@ -575,6 +577,7 @@ export default function RoomDetailPage() {
               onUnarchive={unarchiveTopic}
               onDeletePermanently={deleteTopicPermanently}
               onSaveSummaryToMemory={saveSummaryToMemory}
+              onWorkLogRefresh={saveSummaryToMemory}
               onCreateTaskFromSummary={createTaskFromSummary}
               onParticipationChange={setParticipationMode}
               onAiControl={handleAiControl}

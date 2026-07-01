@@ -463,52 +463,24 @@ export async function processQueuedAgentRun(
     const collaborationPlan = planFromMetadata(runMetadata, rootTriggerMessageId);
 
     if (!isGreetingRun && !failed && aiMode !== "error") {
-      const hasMeaningfulEffects =
-        effect.tasks.length > 0 ||
-        effect.memory.length > 0 ||
-        effect.approvals.length > 0 ||
-        response.reply.trim().length > 80;
-      if (hasMeaningfulEffects) {
+      const refreshTrigger =
+        effect.tasks.length > 0
+          ? ("task_created" as const)
+          : effect.approvals.length > 0
+            ? ("approval_requested" as const)
+            : effect.memory.length > 0
+              ? ("memory_suggested" as const)
+              : response.reply.trim().length > 80
+                ? ("meaningful_ai_reply" as const)
+                : null;
+      if (refreshTrigger) {
         scheduleTopicSummaryRefresh(client, {
           workspaceId,
           roomId,
           topicId,
           topicTitle: ctx.topic.title,
           topicDescription: ctx.topic.description,
-          trigger: "meaningful_ai_reply",
-          employeeId,
-        });
-      }
-      if (effect.tasks.length > 0) {
-        scheduleTopicSummaryRefresh(client, {
-          workspaceId,
-          roomId,
-          topicId,
-          topicTitle: ctx.topic.title,
-          topicDescription: ctx.topic.description,
-          trigger: "task_created",
-          employeeId,
-        });
-      }
-      if (effect.memory.length > 0) {
-        scheduleTopicSummaryRefresh(client, {
-          workspaceId,
-          roomId,
-          topicId,
-          topicTitle: ctx.topic.title,
-          topicDescription: ctx.topic.description,
-          trigger: "memory_suggested",
-          employeeId,
-        });
-      }
-      if (effect.approvals.length > 0) {
-        scheduleTopicSummaryRefresh(client, {
-          workspaceId,
-          roomId,
-          topicId,
-          topicTitle: ctx.topic.title,
-          topicDescription: ctx.topic.description,
-          trigger: "approval_requested",
+          trigger: refreshTrigger,
           employeeId,
         });
       }

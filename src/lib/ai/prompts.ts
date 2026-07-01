@@ -18,21 +18,33 @@ type PromptContext = {
 };
 
 function formatTopicSummaryForPrompt(summary: TopicSummary): string {
+  const clamp = (text: string, max: number) =>
+    text.length <= max ? text : `${text.slice(0, max - 1)}…`;
+
+  const listItems = (items: { text?: string; title?: string }[], maxItems: number, maxLen: number) =>
+    items
+      .slice(0, maxItems)
+      .map((item) => `- ${clamp((item.text ?? item.title ?? "").trim(), maxLen)}`)
+      .join("\n");
+
   const parts = [
-    `Summary: ${summary.summary}`,
-    summary.whatHappened ? `What happened: ${summary.whatHappened}` : "",
-    summary.currentDecision ? `Current decision: ${summary.currentDecision}` : "",
+    `Summary: ${clamp(summary.summary, 600)}`,
+    summary.whatHappened ? `What happened: ${clamp(summary.whatHappened, 400)}` : "",
+    summary.currentDecision
+      ? `Current decision: ${clamp(summary.currentDecision, 200)}`
+      : "",
     summary.openQuestions.length
-      ? `Open questions:\n${summary.openQuestions.map((q) => `- ${q.text}`).join("\n")}`
+      ? `Open questions:\n${listItems(summary.openQuestions, 5, 120)}`
       : "",
     summary.keyFacts.length
-      ? `Key facts:\n${summary.keyFacts.map((f) => `- ${f.text}`).join("\n")}`
+      ? `Key facts:\n${listItems(summary.keyFacts, 8, 120)}`
       : "",
     summary.nextActions.length
-      ? `Next actions:\n${summary.nextActions.map((a) => `- ${a.title}`).join("\n")}`
+      ? `Next actions:\n${listItems(summary.nextActions, 5, 120)}`
       : "",
   ].filter(Boolean);
-  return parts.join("\n");
+  const block = parts.join("\n");
+  return block.length <= 2200 ? block : `${block.slice(0, 2199)}…`;
 }
 
 function roleWorkflowRules(roleKey: EmployeeRoleKey): string {

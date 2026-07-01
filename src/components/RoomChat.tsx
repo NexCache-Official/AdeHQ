@@ -10,6 +10,7 @@ import { enrichHumanSeenBy } from "@/lib/message-read-receipts";
 import { notifyTopicSummaryUpdated } from "@/lib/topic-summary/client";
 import {
   TopicSuggestionCard,
+  acceptTopicSuggestionApi,
   dismissTopicSuggestionApi,
   type TopicSuggestionPayload,
 } from "./orchestration/TopicSuggestionCard";
@@ -710,6 +711,11 @@ export function RoomChat({
     if (payload.topic) actions.upsertTopic(payload.topic);
   };
 
+  const handleAcceptTopicSuggestion = async (suggestionId: string) => {
+    await acceptTopicSuggestionApi(suggestionId, state.workspace.id);
+    setTopicSuggestions((prev) => prev.filter((s) => s.id !== suggestionId));
+  };
+
   const handleDismissTopicSuggestion = async (suggestionId: string) => {
     await dismissTopicSuggestionApi(suggestionId, state.workspace.id);
     setTopicSuggestions((prev) => prev.filter((s) => s.id !== suggestionId));
@@ -932,6 +938,7 @@ export function RoomChat({
               key={suggestion.id}
               suggestion={suggestion}
               onCreateTopic={handleCreateTopicFromSuggestion}
+              onAccept={handleAcceptTopicSuggestion}
               onDismiss={handleDismissTopicSuggestion}
             />
           ))}

@@ -18,10 +18,12 @@ export type TopicSuggestionPayload = {
 export function TopicSuggestionCard({
   suggestion,
   onCreateTopic,
+  onAccept,
   onDismiss,
 }: {
   suggestion: TopicSuggestionPayload;
   onCreateTopic: (title: string) => void | Promise<void>;
+  onAccept: (suggestionId: string) => void | Promise<void>;
   onDismiss: (suggestionId: string) => void | Promise<void>;
 }) {
   const [busy, setBusy] = useState(false);
@@ -40,7 +42,7 @@ export function TopicSuggestionCard({
     setBusy(true);
     try {
       await onCreateTopic(suggestion.title);
-      await onDismiss(suggestion.id);
+      await onAccept(suggestion.id);
     } finally {
       setBusy(false);
     }
@@ -106,5 +108,14 @@ export async function dismissTopicSuggestionApi(suggestionId: string, workspaceI
     method: "PATCH",
     headers: { ...headers, "Content-Type": "application/json" },
     body: JSON.stringify({ status: "dismissed", workspaceId }),
+  });
+}
+
+export async function acceptTopicSuggestionApi(suggestionId: string, workspaceId: string) {
+  const headers = await authHeaders();
+  await fetch(`/api/topic-suggestions/${suggestionId}`, {
+    method: "PATCH",
+    headers: { ...headers, "Content-Type": "application/json" },
+    body: JSON.stringify({ status: "accepted", workspaceId }),
   });
 }

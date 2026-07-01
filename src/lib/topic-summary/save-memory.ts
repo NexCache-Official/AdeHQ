@@ -31,6 +31,7 @@ export async function saveTopicSummaryToMemory(
     summary.keyFacts.length
       ? `\n\nKey facts:\n${summary.keyFacts.map((f) => `- ${f.text}`).join("\n")}`
       : "",
+    `\n\nSource topic summary id: ${summary.topicId}:${summary.lastRefreshedAt}`,
   ]
     .filter(Boolean)
     .join("");
@@ -78,6 +79,11 @@ export async function saveSuggestedMemoryToMemory(
   const memoryId = uid("mem");
   const topicScoped = params.suggestion.scope === "topic";
 
+  const summary = await fetchTopicSummary(client, params.workspaceId, params.topicId);
+  const sourceSummaryId = summary?.lastRefreshedAt
+    ? `${params.topicId}:${summary.lastRefreshedAt}`
+    : null;
+
   const { error } = await client.from("memory_entries").insert({
     workspace_id: params.workspaceId,
     id: memoryId,
@@ -85,7 +91,11 @@ export async function saveSuggestedMemoryToMemory(
     topic_id: topicScoped ? params.topicId : null,
     type: "general",
     title: params.suggestion.text.slice(0, 120),
-    content: `${params.suggestion.text}\n\nReason: ${params.suggestion.reason}`,
+    content: [
+      params.suggestion.text,
+      `\n\nReason: ${params.suggestion.reason}`,
+      sourceSummaryId ? `\n\nSource topic summary id: ${sourceSummaryId}` : "",
+    ].join(""),
     status: "approved",
     created_by_type: "human",
     created_by_id: params.userId,

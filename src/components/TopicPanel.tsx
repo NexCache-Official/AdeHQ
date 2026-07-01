@@ -100,6 +100,7 @@ export function TopicPanel({
   onUnarchive,
   onDeletePermanently,
   onSaveSummaryToMemory,
+  onWorkLogRefresh,
   onCreateTaskFromSummary,
   onParticipationChange,
   onAiControl,
@@ -121,6 +122,7 @@ export function TopicPanel({
   onUnarchive?: () => void;
   onDeletePermanently?: () => void;
   onSaveSummaryToMemory: () => void;
+  onWorkLogRefresh?: () => void;
   onCreateTaskFromSummary?: (title: string, ownerEmployeeId?: string) => void;
   onParticipationChange?: (mode: AiParticipationMode) => void;
   onAiControl?: (action: "stop_all" | "resume") => void;
@@ -138,11 +140,20 @@ export function TopicPanel({
     summary: topicSummary,
     loading: summaryLoading,
     refreshing: summaryRefreshing,
+    error: summaryError,
     refresh: refreshTopicSummary,
   } = useTopicSummary(topic.id);
 
   const handleSummarize = () => {
-    void refreshTopicSummary(true).then(() => onSummarize());
+    void refreshTopicSummary(true).then((result) => {
+      if (result?.refreshed) onWorkLogRefresh?.();
+    });
+  };
+
+  const handleRefreshSummary = () => {
+    void refreshTopicSummary(true).then((result) => {
+      if (result?.refreshed) onWorkLogRefresh?.();
+    });
   };
 
   const topicEmployees = topicMembers
@@ -389,7 +400,8 @@ export function TopicPanel({
                 employees={topicEmployees}
                 loading={summaryLoading}
                 refreshing={summaryRefreshing}
-                onRefresh={() => void refreshTopicSummary(true)}
+                error={summaryError}
+                onRefresh={handleRefreshSummary}
                 onCreateTask={onCreateTaskFromSummary}
                 onMemorySaved={onSaveSummaryToMemory}
               />

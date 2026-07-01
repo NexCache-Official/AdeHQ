@@ -91,6 +91,10 @@ export async function refreshTopicSummary(
     params.roomId,
   );
 
+  if (!manual && ctx.messages.length < 3) {
+    return { summary: existing, refreshed: false, skippedReason: "insufficient_messages" };
+  }
+
   const contextBlock = buildTopicSummaryContextBlock({
     topicTitle: params.topicTitle,
     topicDescription: params.topicDescription,
