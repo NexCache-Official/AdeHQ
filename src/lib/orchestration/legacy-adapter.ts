@@ -7,6 +7,17 @@ import type {
 import type { AIEmployee } from "@/lib/types";
 import type { OrchestrationPlan, OrchestrationResponseRole } from "./types";
 
+function mapParticipantRole(
+  role: OrchestrationResponseRole,
+  intent: OrchestrationPlan["intent"],
+): "lead" | "collaborator" | "reviewer" | "observer" {
+  if (intent === "panel_response" && role === "panelist") return "reviewer";
+  if (intent === "handoff" && role === "direct") return "collaborator";
+  if (role === "collaborator") return "collaborator";
+  if (role === "lead") return "lead";
+  return "reviewer";
+}
+
 function mapIntentToMode(intent: OrchestrationPlan["intent"]): ConversationMode {
   switch (intent) {
     case "social_broadcast":
@@ -95,7 +106,7 @@ export function orchestrationPlanToLegacyResult(
     .map((r, index) => ({
       employeeId: r.employeeId,
       employeeName: byId.get(r.employeeId)!.name,
-      role: (r.role === "collaborator" ? "collaborator" : "lead") as "lead" | "collaborator",
+      role: mapParticipantRole(r.role, plan.intent),
       waitingOnEmployeeId: index > 0 ? firstOrder.employeeId : undefined,
       waitingOnEmployeeName: index > 0 ? leadEmployee.name : undefined,
     }));
@@ -106,7 +117,7 @@ export function orchestrationPlanToLegacyResult(
     rootTriggerMessageId,
     status: "active",
     participants,
-    pendingParticipants: participants.filter((p) => p.role === "collaborator"),
+    pendingParticipants: participants.filter((p) => p.waitingOnEmployeeId),
     staggerMs: plan.intent === "panel_response" ? 1500 : undefined,
   };
 
@@ -114,19 +125,27 @@ export function orchestrationPlanToLegacyResult(
     "lead_collaborator",
     "handoff",
     "ambient_smart_assist",
+    "panel_response",
   ];
 
-  if (leadOnlyModes.includes(plan.intent) && pendingCollaboratorIds.length > 0) {
+  if (
+    leadOnlyModes.includes(plan.intent) &&
+    pendingCollaboratorIds.length > 0
+  ) {
     return {
       plan: conversationPlan,
       decisions: [
         {
           employee: leadEmployee,
-          reason: mapRoleToReason("lead", plan.intent),
+          reason: mapRoleToReason(
+            plan.intent === "panel_response" ? "panelist" : "lead",
+            plan.intent,
+          ),
           runMetadata: {
             collaborationId,
             conversationMode: mode,
-            collaborationRole: "lead",
+            collaborationRole:
+              plan.intent === "panel_response" ? "panelist" : "lead",
             collaborationStatus: "active",
             rootTriggerMessageId,
             participants,
@@ -150,7 +169,12 @@ export function orchestrationPlanToLegacyResult(
       runMetadata: {
         collaborationId,
         conversationMode: mode,
-        collaborationRole: r.role === "collaborator" ? "collaborator" : "lead",
+        collaborationRole:
+          r.role === "collaborator"
+            ? "collaborator"
+            : r.role === "panelist"
+              ? "panelist"
+              : "lead",
         collaborationStatus: "active",
         participants,
         staggerMs: r.delayMs ?? index * 1500,

@@ -18,6 +18,7 @@ import { TaskCard } from "./TaskCard";
 import { MemoryCard } from "./MemoryCard";
 import { ApprovalCard } from "./ApprovalCard";
 import { WorkLogTimeline } from "./WorkLogTimeline";
+import { OrchestrationSidebarStatus } from "@/components/orchestration/OrchestrationSidebarStatus";
 import { EmptyState } from "./States";
 import { Button } from "./ui";
 import { cn } from "@/lib/utils";
@@ -369,6 +370,7 @@ export function TopicPanel({
                   </div>
                 </details>
               )}
+              <OrchestrationSidebarStatus />
               {topic.summary && (
                 <section>
                   <div className="section-title mb-1.5">Summary</div>

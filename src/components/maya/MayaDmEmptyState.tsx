@@ -50,7 +50,7 @@ export function MayaDmEmptyState({ firstName = "there", onSendMessage }: MayaDmE
   };
 
   return (
-    <div className="mx-auto flex max-w-[560px] flex-col items-center px-4 py-10 text-center">
+    <div className="mx-auto flex w-full max-w-[520px] flex-col items-center px-2 py-6 text-center sm:py-8">
       <AdeOrb size={56} initials="M" />
       <div className="mt-3 flex items-center gap-2">
         <h2 className="text-lg font-semibold text-ink">{MAYA_EMPLOYEE_NAME}</h2>

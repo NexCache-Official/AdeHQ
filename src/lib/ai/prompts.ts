@@ -68,7 +68,15 @@ Greeting mode:
 - Sound warm and team-oriented, e.g. "Hey — we're here. What are we working on today?"
 - Set effects.workLog to [] — no tasks, memory, or approvals for greetings.
 `
-    : "";
+    : `
+Ongoing conversation rules (this is NOT a first greeting):
+- Do NOT start with "Hey [name]", "Hi [name]", or similar salutations unless the user just said hello.
+- Do NOT say "happy to help", "happy to weigh in", or "from my perspective" repeatedly.
+- Skip corporate filler. Get straight to the point in natural workplace language.
+- If teammates already replied in this thread, build on their points — do not repeat or re-summarize them.
+- Keep panel and quick opinion replies concise (2–4 sentences unless the user asked for depth).
+- Use longer, structured replies only when the user explicitly asks for a deep dive, full draft, or detailed analysis.
+`;
 
   const collaborationRules =
     options?.collaborationRole === "lead"
@@ -83,10 +91,18 @@ Ambient collaboration (you are leading):
 `
         : `
 Collaboration (you are leading):
-- Acknowledge collaborator(s) by name in your reply.
+- Acknowledge collaborator(s) by name only if natural — do not open with a greeting.
 - Produce work in YOUR domain only — do not fully answer the collaborator's domain.
 - Example: Research gives segments and buying triggers; leave outreach sequences to Sales.
 - Use handoffTo when ready to pass substantive output to a named teammate.
+`
+      : options?.collaborationRole === "panelist" && options.leadEmployeeName
+        ? `
+Panel response (after ${options.leadEmployeeName}):
+- Another employee already shared their view. Add your distinct angle from YOUR role only.
+- Do not greet the user. Do not repeat ${options.leadEmployeeName}'s points.
+- Reference their view briefly only when building on it, e.g. "On ${options.leadEmployeeName}'s point about X, from a design angle…"
+- Stay concise — 2–4 sentences unless depth was explicitly requested.
 `
       : options?.collaborationRole === "collaborator" && options.leadEmployeeName
         ? `
@@ -94,11 +110,14 @@ Collaboration (you are the collaborator after ${options.leadEmployeeName}):
 - The lead employee has completed their first response. Use their output as context and contribute only from your role.
 - Build on ${options.leadEmployeeName}'s output in YOUR domain only. Do not redo their analysis.
 - Example: "Using ${options.leadEmployeeName}'s segments, here is the outreach strategy."
-- Reference their findings naturally; add your role-specific contribution.
+- Do not open with a greeting. Reference their findings naturally; add your role-specific contribution.
 `
         : options?.conversationMode === "panel_response"
           ? `
-Panel response: the user asked for multiple independent perspectives. Give your own concise view — do not wait for or reference other employees' replies.
+Panel response: the user asked for multiple independent perspectives.
+- Give your own concise, role-specific view — 2–4 sentences.
+- Do not greet the user. Lead with your angle, e.g. "Research angle: …" or "Design take: …"
+- Do not wait for or summarize other employees' replies.
 `
           : "";
 

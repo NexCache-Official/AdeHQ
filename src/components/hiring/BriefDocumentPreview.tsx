@@ -24,12 +24,15 @@ export function BriefDocumentPreview({
   composing = false,
   composingSection = null,
   updateState,
+  variant = "inline",
 }: {
   brief?: Partial<AiEmployeeJobBrief>;
   live?: boolean;
   composing?: boolean;
   composingSection?: BriefComposeSection | null;
   updateState?: BriefUpdateState;
+  /** `panel` — side column (no sticky). `inline` — Hire flow center column. */
+  variant?: "inline" | "panel";
 }) {
   const b = brief ?? {};
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -78,10 +81,16 @@ export function BriefDocumentPreview({
     sectionRefs.current[key] = node;
   };
 
+  const isPanel = variant === "panel";
+
   return (
     <motion.div
-      layout
-      className="sticky top-[90px] overflow-hidden rounded-[18px] border border-border bg-surface shadow-[inset_0_1px_0_rgba(255,255,255,0.6),0_8px_32px_-20px_rgba(34,31,26,0.18)]"
+      layout={!isPanel}
+      className={
+        isPanel
+          ? "overflow-hidden rounded-xl border border-border bg-canvas"
+          : "sticky top-[90px] overflow-hidden rounded-[18px] border border-border bg-surface shadow-[inset_0_1px_0_rgba(255,255,255,0.6),0_8px_32px_-20px_rgba(34,31,26,0.18)]"
+      }
     >
       <div className="flex items-center justify-between border-b border-border bg-gradient-to-b from-muted/50 to-surface px-5 py-3.5">
         <span className="font-mono text-[10px] uppercase tracking-[0.08em] text-ink-3">
@@ -97,7 +106,11 @@ export function BriefDocumentPreview({
 
       <div
         ref={scrollRef}
-        className="max-h-[min(720px,calc(100vh-11rem))] overflow-y-auto px-5 py-5"
+        className={
+          isPanel
+            ? "max-h-[min(520px,50vh)] overflow-y-auto px-4 py-4 lg:max-h-none"
+            : "max-h-[min(720px,calc(100vh-11rem))] overflow-y-auto px-5 py-5"
+        }
       >
         <div ref={setSectionRef("title")}>
         {hasTitle ? (

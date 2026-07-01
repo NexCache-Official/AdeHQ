@@ -5,6 +5,8 @@ import { RoomMessage } from "@/lib/types";
 import { useStore } from "@/lib/demo-store";
 import { EmployeeAvatar, HumanAvatar } from "./EmployeeAvatar";
 import { cn, formatTime } from "@/lib/utils";
+import { useOrchestrationUi } from "@/components/orchestration/OrchestrationUiContext";
+import { OrchestrationInlineChip } from "@/components/orchestration/OrchestrationInlineChip";
 import {
   BrainCircuit,
   Check,
@@ -87,9 +89,94 @@ function renderContent(content: string) {
   );
 }
 
-export function RoomMessageItem({ message }: { message: RoomMessage }) {
+function ReadReceiptAvatars({
+  seenBy,
+  isDm,
+}: {
+  seenBy: NonNullable<RoomMessage["seenBy"]>;
+  isDm?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  if (!seenBy.length) return null;
+
+  const names = seenBy.map((s) => s.name).join(", ");
+
+  return (
+    <span
+      className="relative inline-flex items-center"
+      onMouseEnter={() => setOpen(true)}
+      onMouseLeave={() => setOpen(false)}
+    >
+      <span className="inline-flex -space-x-1">
+        {seenBy.slice(0, 3).map((reader) => (
+          <span
+            key={reader.id}
+            className="flex h-4 w-4 items-center justify-center rounded-full border border-surface bg-muted text-[8px] font-semibold text-ink-3"
+            title={reader.name}
+          >
+            {reader.name
+              .split(/\s+/)
+              .map((p) => p[0])
+              .join("")
+              .slice(0, 2)
+              .toUpperCase()}
+          </span>
+        ))}
+      </span>
+      {seenBy.length > 3 && (
+        <span className="ml-1 text-[10px] text-ink-3">+{seenBy.length - 3}</span>
+      )}
+      {open && (
+        <span className="absolute bottom-full right-0 z-20 mb-1 w-max max-w-[220px] rounded-lg border border-border bg-surface px-2 py-1.5 text-[10px] text-ink-2 shadow-md">
+          {isDm ? `Seen by ${names}` : `Seen by: ${names}`}
+        </span>
+      )}
+    </span>
+  );
+}
+
+function DeliveryStatus({
+  message,
+  isDm,
+}: {
+  message: RoomMessage;
+  isDm?: boolean;
+}) {
+  const isSending = message.pending || message.deliveryStatus === "sending";
+  const isFailed = message.failed || message.deliveryStatus === "failed";
+  const deliveredAt = message.deliveredAt ?? message.createdAt;
+
+  if (isFailed) {
+    return <span className="text-[10px] font-medium text-rose-600">Failed to send</span>;
+  }
+
+  if (isSending) {
+    return <span className="text-[10px] text-ink-3">Sending…</span>;
+  }
+
+  return (
+    <span className="inline-flex items-center gap-1.5 text-[10px] text-ink-3">
+      <span>
+        Delivered · {formatTime(deliveredAt)}
+      </span>
+      {message.seenBy && message.seenBy.length > 0 && (
+        <ReadReceiptAvatars seenBy={message.seenBy} isDm={isDm} />
+      )}
+    </span>
+  );
+}
+
+export function RoomMessageItem({
+  message,
+  isDm = false,
+}: {
+  message: RoomMessage;
+  isDm?: boolean;
+}) {
   const { state } = useStore();
+  const { getChipForMessage } = useOrchestrationUi();
   const employee = state.employees.find((e) => e.id === message.senderId);
+  const orchestrationChip = getChipForMessage(message.id);
 
   if (message.senderType === "system") {
     return (
@@ -128,13 +215,27 @@ export function RoomMessageItem({ message }: { message: RoomMessage }) {
           {!isHuman && employee && (
             <span className="text-[11px] text-ink-3">{employee.role}</span>
           )}
-          <span className="font-mono text-[10.5px] text-ink-3">{formatTime(message.createdAt)}</span>
-          {message.failed && (
-            <span className="text-[11px] font-medium text-rose-600">Failed to send</span>
+          {!isHuman && (
+            <span className="font-mono text-[10.5px] text-ink-3">{formatTime(message.createdAt)}</span>
           )}
         </div>
 
-        {message.pending ? (
+        {isHuman ? (
+          <>
+            <div
+              className={cn(
+                "whitespace-pre-wrap text-[14px] leading-[1.55]",
+                message.pending ? "text-ink-2" : "text-ink",
+              )}
+            >
+              {renderContent(message.content)}
+            </div>
+            <div className="mt-1 flex flex-wrap items-center justify-end gap-2">
+              <DeliveryStatus message={message} isDm={isDm} />
+            </div>
+            {orchestrationChip && <OrchestrationInlineChip label={orchestrationChip} />}
+          </>
+        ) : message.pending ? (
           <div className="flex w-fit items-center gap-1.5 rounded-[13px] border border-border bg-surface px-3.5 py-2.5">
             <span className="typing-dot" />
             <span className="typing-dot" />

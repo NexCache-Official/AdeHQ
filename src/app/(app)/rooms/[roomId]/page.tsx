@@ -12,7 +12,8 @@ import { Button } from "@/components/ui";
 import { EmptyState } from "@/components/States";
 import { authHeaders } from "@/lib/api/auth-client";
 import { generalTopicForRoom, isGeneralTopic, topicsForRoom } from "@/lib/topics";
-import { MayaDmHiringWorkspace } from "@/components/maya/MayaDmHiringWorkspace";
+import { MayaDmHiringLayout } from "@/components/maya/MayaDmHiringWorkspace";
+import { OrchestrationUiProvider } from "@/components/orchestration/OrchestrationUiContext";
 import { channelAssignableEmployees, isMayaEmployee } from "@/lib/maya-employee";
 import type { AiParticipationMode, TopicPriority } from "@/lib/types";
 import type { SlashCommandResult } from "@/components/ChatComposer";
@@ -498,7 +499,9 @@ export default function RoomDetailPage() {
         </div>
       </div>
 
+      <OrchestrationUiProvider>
       <div className="flex min-h-0 flex-1">
+        {!isMayaDm && (
         <div className="hidden w-[266px] shrink-0 lg:block">
           <TopicList
             topics={roomTopics}
@@ -513,16 +516,17 @@ export default function RoomDetailPage() {
             onNewTopic={() => setNewTopicOpen(true)}
           />
         </div>
+        )}
 
+        {isMayaDm ? (
+          <MayaDmHiringLayout
+            mayaRoomId={roomId}
+            mayaTopicId={selectedTopic?.id}
+            firstName={state.user?.name?.split(" ")[0]}
+          />
+        ) : (
+          <>
         <div className="min-w-0 flex-1 border-r border-border bg-canvas">
-          {isMayaDm ? (
-            <MayaDmHiringWorkspace
-              mayaRoomId={roomId}
-              mayaTopicId={selectedTopic?.id}
-              firstName={state.user?.name?.split(" ")[0]}
-            />
-          ) : (
-            <>
               {slashNotice && (
                 <div className="border-b border-accent-200 bg-accent-50 px-4 py-1.5 text-center text-xs text-accent-800">
                   {slashNotice}
@@ -543,12 +547,10 @@ export default function RoomDetailPage() {
                 onSummarize={summarizeTopic}
                 summarizing={summarizing}
               />
-            </>
-          )}
         </div>
 
         <div className="hidden w-[344px] shrink-0 xl:block">
-          {isMayaDm ? null : selectedTopic ? (
+          {selectedTopic ? (
             <TopicPanel
               topic={selectedTopic}
               room={room}
@@ -576,7 +578,10 @@ export default function RoomDetailPage() {
             </div>
           )}
         </div>
+          </>
+        )}
       </div>
+      </OrchestrationUiProvider>
 
       <NewTopicModal
         open={newTopicOpen}

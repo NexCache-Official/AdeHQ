@@ -4,11 +4,11 @@ import { sanitizeEffects } from "@/lib/ai/sanitize-effects";
 import { routeEmployeeResponse, type LiveCallMetrics } from "@/lib/ai/model-router";
 import { finalizeAiRun } from "@/lib/ai/cost-guard";
 import {
-  defaultModelModeForRole,
   getOutputTokenCap,
   getTimeoutMs,
   type ModelMode,
 } from "@/lib/ai/model-catalog";
+import { resolveRunModelMode } from "@/lib/ai/resolve-run-model-mode";
 import {
   appendRunStep,
   claimAgentRun,
@@ -136,8 +136,14 @@ export async function processQueuedAgentRun(
 
     let content = options.content ?? (triggerMsg?.content ? String(triggerMsg.content) : "");
 
-    if (collaborationRole === "collaborator" && leadReply && leadEmployeeName) {
-      content = `${content}\n\n---\n${leadEmployeeName} (lead) completed:\n${leadReply}`;
+    if (
+      (collaborationRole === "collaborator" || collaborationRole === "panelist") &&
+      leadReply &&
+      leadEmployeeName
+    ) {
+      const label =
+        collaborationRole === "panelist" ? "panel perspective" : "lead";
+      content = `${content}\n\n---\n${leadEmployeeName} (${label}) completed:\n${leadReply}`;
     }
 
     await client
@@ -158,7 +164,19 @@ export async function processQueuedAgentRun(
       status: "running",
     });
 
-    const modelMode: ModelMode = employee.modelMode ?? defaultModelModeForRole(employee.roleKey);
+    const conversationMode =
+      typeof runMetadata.conversationMode === "string"
+        ? runMetadata.conversationMode
+        : undefined;
+
+    const modelMode: ModelMode = resolveRunModelMode({
+      roleKey: employee.roleKey,
+      employeeModelMode: employee.modelMode,
+      isGreetingRun,
+      conversationMode,
+      collaborationRole,
+      userMessage: content,
+    });
     const isLive = options.mode !== "mock" && employee.provider.toLowerCase() !== "mock";
     const outputCap = isGreetingRun
       ? GREETING_MAX_OUTPUT_TOKENS
@@ -324,7 +342,10 @@ export async function processQueuedAgentRun(
         ? (runMetadata.pendingCollaboratorIds as string[])
         : [];
 
-      if (pendingCollaborators.length && collaborationRole !== "collaborator") {
+      const isFollowUpCollaborator =
+        collaborationRole === "collaborator" || collaborationRole === "panelist";
+
+      if (pendingCollaborators.length && !isFollowUpCollaborator) {
         const collab = await queueCollaboratorRuns(client, {
           workspaceId,
           roomId,

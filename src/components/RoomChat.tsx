@@ -3,16 +3,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ProjectRoom, RoomTopic, type ConversationPlan } from "@/lib/types";
-import { CollaborationPlanBanner } from "./CollaborationPlanBanner";
-import {
-  OrchestrationIndicator,
-} from "./orchestration/OrchestrationIndicator";
+import { useOrchestrationUi } from "@/components/orchestration/OrchestrationUiContext";
 import {
   TopicSuggestionCard,
   dismissTopicSuggestionApi,
   type TopicSuggestionPayload,
 } from "./orchestration/TopicSuggestionCard";
-import type { OrchestrationPlan, SuggestedConversationAction } from "@/lib/orchestration/types";
+import type { SuggestedConversationAction } from "@/lib/orchestration/types";
 import { useStore } from "@/lib/demo-store";
 import { ENABLE_DEMO_MODE } from "@/lib/config/features";
 import { useResponder } from "@/lib/ai/use-responder";
@@ -100,18 +97,15 @@ export function RoomChat({
   const { trace } = useDebugTrace();
   const respond = useResponder();
   const router = useRouter();
+  const orchestrationUi = useOrchestrationUi();
+  const triggerMessageIdRef = useRef<string | null>(null);
   const [failedSend, setFailedSend] = useState<PendingSend | null>(null);
   const [sendError, setSendError] = useState<string | null>(null);
   const [activeRuns, setActiveRuns] = useState<ActiveRun[]>([]);
   const [collaborationPlan, setCollaborationPlan] = useState<ConversationPlan | null>(null);
-  const [orchestrationPlan, setOrchestrationPlan] = useState<OrchestrationPlan | null>(null);
   const [orchestratorDebug, setOrchestratorDebug] = useState<Record<string, unknown> | null>(null);
   const [topicSuggestions, setTopicSuggestions] = useState<TopicSuggestionPayload[]>([]);
   const [smartAssistSuggestions, setSmartAssistSuggestions] = useState<SuggestedConversationAction[]>([]);
-  const [collabBanner, setCollabBanner] = useState<{
-    leadFinishedName?: string;
-    activeEmployeeName?: string;
-  }>({});
   const [messageLimit, setMessageLimit] = useState(MESSAGE_PAGE);
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -163,6 +157,18 @@ export function RoomChat({
     return headers;
   };
 
+  const markMessageSeenByEmployee = useCallback(
+    (messageId: string, employeeId: string, employeeName: string) => {
+      const msg = room.messages.find((m) => m.id === messageId);
+      const existing = msg?.seenBy ?? [];
+      if (existing.some((s) => s.id === employeeId)) return;
+      actions.updateMessage(room.id, messageId, {
+        seenBy: [...existing, { id: employeeId, name: employeeName, type: "ai" }],
+      });
+    },
+    [actions, room.id, room.messages],
+  );
+
   const processQueuedRuns = useCallback(
     async (queuedRuns: QueuedRunClient[], waitingRuns: ActiveRun[] = []) => {
       if ((!queuedRuns.length && !waitingRuns.length) || !topic) return;
@@ -174,6 +180,17 @@ export function RoomChat({
         topicId: topic.id,
       });
 
+      for (const waiting of waitingRuns) {
+        orchestrationUi.updateEmployeePhase(waiting.employeeId, "waiting", undefined);
+        if (waiting.waitingOnEmployeeName) {
+          orchestrationUi.updateEmployeePhase(
+            waiting.employeeId,
+            "waiting",
+            `Waiting for ${waiting.waitingOnEmployeeName}`,
+          );
+        }
+      }
+
       setActiveRuns([
         ...queuedRuns.map((r) => ({
           ...r,
@@ -184,21 +201,21 @@ export function RoomChat({
       ]);
 
       const headers = await withDebugHeaders();
-      const panelMode = queuedRuns.some((r) => r.conversationMode === "panel_response");
-      const sequential =
-        !panelMode &&
-        (queuedRuns.some((r) => r.conversationMode === "lead_collaborator") ||
-          queuedRuns.some((r) => r.conversationMode === "ambient_collaboration") ||
-          queuedRuns.length === 1);
+      const triggerId = triggerMessageIdRef.current;
 
       const processOneRun = async (run: QueuedRunClient) => {
           trace("agent-run", "info", `${run.employeeName} → reading context`, { runId: run.runId });
+          if (triggerId) {
+            markMessageSeenByEmployee(triggerId, run.employeeId, run.employeeName);
+          }
+          orchestrationUi.updateEmployeePhase(run.employeeId, "reading");
           setActiveRuns((prev) =>
             prev.map((r) =>
               r.runId === run.runId ? { ...r, phase: "reading" } : r,
             ),
           );
 
+          orchestrationUi.updateEmployeePhase(run.employeeId, "replying");
           setActiveRuns((prev) =>
             prev.map((r) =>
               r.runId === run.runId ? { ...r, phase: "thinking" } : r,
@@ -285,11 +302,16 @@ export function RoomChat({
               });
             }
 
+            orchestrationUi.markEmployeeCompleted(run.employeeId);
+
             if (Array.isArray(data.activatedRuns) && data.activatedRuns.length) {
-              setCollabBanner({
-                leadFinishedName: run.employeeName,
-                activeEmployeeName: data.activatedRuns[0]?.employeeName,
-              });
+              for (const activated of data.activatedRuns as QueuedRunClient[]) {
+                orchestrationUi.updateEmployeePhase(
+                  activated.employeeId,
+                  "waiting",
+                  `Reviewing ${run.employeeName}'s response…`,
+                );
+              }
               setActiveRuns((prev) =>
                 prev
                   .filter((r) => !r.runId.startsWith("waiting_"))
@@ -314,6 +336,7 @@ export function RoomChat({
               runId: run.runId,
               error: message,
             });
+            orchestrationUi.updateEmployeePhase(run.employeeId, "failed", message);
             setActiveRuns((prev) =>
               prev.map((r) =>
                 r.runId === run.runId ? { ...r, phase: "failed", error: message } : r,
@@ -322,34 +345,29 @@ export function RoomChat({
           }
       };
 
-      if (panelMode) {
-        await Promise.allSettled(
-          queuedRuns.map((run, index) =>
-            new Promise<void>((resolve) => {
-              setTimeout(() => {
-                void processOneRun(run).finally(resolve);
-              }, (run.staggerIndex ?? index) * 1500);
-            }),
-          ),
-        );
-      } else if (sequential) {
-        for (const run of queuedRuns) {
-          await processOneRun(run);
-        }
-      } else {
-        await Promise.allSettled(queuedRuns.map((run) => processOneRun(run)));
+      for (const run of queuedRuns) {
+        await processOneRun(run);
       }
 
       setTimeout(() => {
         setActiveRuns((prev) =>
           prev.filter((r) => r.phase !== "done" && r.phase !== "waiting_on"),
         );
-        setCollabBanner({});
+        orchestrationUi.markSessionCompleted();
       }, 4000);
 
       void actions.refreshTopics(room.id);
     },
-    [actions, room.id, room.status, state.workspace.id, topic, trace],
+    [
+      actions,
+      markMessageSeenByEmployee,
+      orchestrationUi,
+      room.id,
+      room.status,
+      state.workspace.id,
+      topic,
+      trace,
+    ],
   );
 
   useEffect(() => {
@@ -435,7 +453,9 @@ export function RoomChat({
       content: text,
       mentions,
       pending: true,
+      deliveryStatus: "sending",
     });
+    triggerMessageIdRef.current = messageId;
 
     try {
       const headers = await withDebugHeaders();
@@ -474,16 +494,32 @@ export function RoomChat({
 
       if (!response.ok && response.status !== 207) {
         if (payload.code === "ai_runtime_failed_but_message_saved" || payload.humanMessage) {
-          actions.updateMessage(room.id, messageId, { pending: false });
+          actions.updateMessage(room.id, messageId, {
+            pending: false,
+            deliveryStatus: "delivered",
+            deliveredAt: payload.humanMessage?.createdAt ?? new Date().toISOString(),
+          });
           if (payload.humanMessage) {
             actions.updateMessage(room.id, messageId, payload.humanMessage);
           }
           return;
         }
+        actions.updateMessage(room.id, messageId, {
+          pending: false,
+          failed: true,
+          deliveryStatus: "failed",
+        });
         throw new Error(payload?.error ?? "Unable to send message.");
       }
 
-      actions.updateMessage(room.id, messageId, { pending: false });
+      const deliveredAt =
+        payload.humanMessage?.createdAt ?? new Date().toISOString();
+
+      actions.updateMessage(room.id, messageId, {
+        pending: false,
+        deliveryStatus: "delivered",
+        deliveredAt,
+      });
 
       if (payload.humanMessage && payload.humanMessage.id !== messageId) {
         actions.removeLocalMessage(room.id, messageId);
@@ -495,14 +531,21 @@ export function RoomChat({
         actions.updateMessage(room.id, messageId, {
           ...payload.humanMessage,
           pending: false,
+          deliveryStatus: "delivered",
+          deliveredAt: payload.humanMessage.createdAt ?? deliveredAt,
         });
       }
 
+      const employeeNames = new Map(roomEmployees.map((e) => [e.id, e.name]));
+      orchestrationUi.setOrchestrationFromSend({
+        triggerMessageId: payload.humanMessage?.id ?? messageId,
+        orchestrationPlan: payload.orchestrationPlan ?? null,
+        collaborationPlan: payload.collaborationPlan ?? null,
+        employeeNames,
+      });
+
       if (payload.collaborationPlan) {
         setCollaborationPlan(payload.collaborationPlan);
-      }
-      if (payload.orchestrationPlan) {
-        setOrchestrationPlan(payload.orchestrationPlan);
       }
       if (payload.orchestratorDebug) {
         setOrchestratorDebug(payload.orchestratorDebug);
@@ -789,72 +832,9 @@ export function RoomChat({
             <div className="mb-[18px] mt-1.5 text-center">
               <span className="rounded-full bg-muted px-3 py-0.5 text-[11px] text-ink-3">Today</span>
             </div>
-            {collaborationPlan && (
-              <CollaborationPlanBanner
-                plan={collaborationPlan}
-                leadFinishedName={collabBanner.leadFinishedName}
-                activeEmployeeName={collabBanner.activeEmployeeName}
-              />
-            )}
-            <OrchestrationIndicator
-              orchestrationPlan={orchestrationPlan}
-              collaborationPlan={collaborationPlan}
-              debug={orchestratorDebug}
-            />
             {topicMessages.map((m) => (
-              <RoomMessageItem key={m.id} message={m} />
+              <RoomMessageItem key={m.id} message={m} isDm={isDm} />
             ))}
-            {activeRuns
-              .filter((r) => r.phase !== "done")
-              .map((run) => {
-                const emp = roomEmployees.find((e) => e.id === run.employeeId);
-                const phaseLabel =
-                  run.phase === "waiting_on"
-                    ? run.waitingOnEmployeeName
-                      ? `is waiting for ${run.waitingOnEmployeeName}…`
-                      : "is waiting…"
-                    : run.phase === "queued"
-                      ? "has seen your message"
-                      : run.phase === "reading"
-                        ? "is reading…"
-                        : run.phase === "thinking"
-                          ? "is thinking…"
-                          : run.phase === "typing"
-                            ? "is typing…"
-                            : run.phase === "failed"
-                              ? "couldn't respond"
-                              : "";
-                return (
-                  <div
-                    key={run.runId}
-                    className="flex items-center gap-2 px-1 py-2 text-xs text-ink-3"
-                  >
-                    {emp && <EmployeeAvatar employee={emp} size="xs" />}
-                    {run.phase === "failed" ? (
-                      <AlertCircle className="h-3 w-3 shrink-0 text-rose-500" />
-                    ) : run.phase === "waiting_on" ? null : (
-                      <Loader2 className="h-3 w-3 animate-spin text-accent-600" />
-                    )}
-                    <span className="min-w-0 flex-1">
-                      <span className="font-medium text-ink-2">{run.employeeName}</span>{" "}
-                      {phaseLabel}
-                      {run.phase === "failed" && run.error && (
-                        <span className="block text-[10px] text-rose-600">{run.error}</span>
-                      )}
-                    </span>
-                    {run.phase === "failed" && (
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="h-7 shrink-0 px-2 text-[10px]"
-                        onClick={() => retryRun(run)}
-                      >
-                        <RotateCcw className="h-3 w-3" /> Retry
-                      </Button>
-                    )}
-                  </div>
-                );
-              })}
             <div ref={bottomRef} />
           </div>
         )}

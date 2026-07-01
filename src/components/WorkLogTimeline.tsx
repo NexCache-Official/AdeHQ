@@ -4,6 +4,7 @@ import { WorkLogEvent } from "@/lib/types";
 import { useStore } from "@/lib/demo-store";
 import { EmployeeAvatar } from "./EmployeeAvatar";
 import { cn, timeAgo } from "@/lib/utils";
+import { formatWorkLogTitle, shouldShowWorkLogInSidebar } from "@/lib/work-log-labels";
 import { toolIcon } from "@/lib/icons";
 import {
   BrainCircuit,
@@ -42,7 +43,9 @@ export function WorkLogTimeline({
     <div className="relative">
       <div className="absolute bottom-2 left-[19px] top-2 w-px bg-slate-100" />
       <div className="space-y-1">
-        {events.map((event) => {
+        {events
+          .filter((event) => shouldShowWorkLogInSidebar(event.action, event.summary))
+          .map((event) => {
           const employee = state.employees.find((e) => e.id === event.employeeId);
           const status = STATUS_META[event.status];
           const StatusIcon = status.icon;
@@ -71,10 +74,13 @@ export function WorkLogTimeline({
 
               <div className="min-w-0 flex-1 pt-0.5">
                 <div className="flex flex-wrap items-baseline gap-x-1.5">
-                  <span className="text-sm font-medium text-slate-700">{employee?.name ?? "AdeHQ"}</span>
-                  <span className="text-sm text-slate-500">{event.action.toLowerCase()}</span>
+                  <span className="text-sm font-medium text-slate-700">
+                    {formatWorkLogTitle(employee?.name, event.action)}
+                  </span>
                 </div>
-                {!compact && <p className="mt-0.5 text-xs text-slate-500">{event.summary}</p>}
+                {!compact && event.summary && (
+                  <p className="mt-0.5 text-xs text-slate-500">{event.summary}</p>
+                )}
                 <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-slate-500">
                   {event.toolUsed && TI && (
                     <span className="flex items-center gap-1 rounded-md bg-slate-50 px-1.5 py-0.5">

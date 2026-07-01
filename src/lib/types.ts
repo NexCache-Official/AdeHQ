@@ -212,7 +212,7 @@ export type ConversationMode =
   | "ambient_collaboration"
   | "silent";
 
-export type CollaborationRole = "lead" | "collaborator" | "reviewer" | "observer";
+export type CollaborationRole = "lead" | "collaborator" | "reviewer" | "observer" | "panelist";
 
 export type CollaborationPlanStatus = "active" | "completed" | "cancelled";
 
@@ -280,6 +280,12 @@ export type TopicMember = {
   createdAt: string;
 };
 
+export type MessageSeenBy = {
+  id: string;
+  name: string;
+  type: "human" | "ai";
+};
+
 export type RoomMessage = {
   id: string;
   roomId: string;
@@ -297,6 +303,9 @@ export type RoomMessage = {
   artifacts?: MessageArtifact[];
   pending?: boolean;
   failed?: boolean;
+  deliveryStatus?: "sending" | "delivered" | "failed";
+  deliveredAt?: string;
+  seenBy?: MessageSeenBy[];
 };
 
 /** `channel` = multi-member group space; `dm` = private 1:1 with one AI employee. */

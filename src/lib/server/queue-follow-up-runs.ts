@@ -251,7 +251,11 @@ async function hasCollaboratorRun(
     .eq("workspace_id", workspaceId)
     .eq("employee_id", employeeId)
     .eq("depends_on_run_id", dependsOnRunId)
-    .in("response_reason", ["collaboration_collaborator", "ambient_collaboration_collaborator"])
+    .in("response_reason", [
+      "collaboration_collaborator",
+      "ambient_collaboration_collaborator",
+      "panel_response",
+    ])
     .in("status", ["queued", "waiting", "running", "completed"])
     .limit(1)
     .maybeSingle();
@@ -308,8 +312,10 @@ export async function queueCollaboratorRuns(
     }
 
     const conversationMode = params.runMetadata.conversationMode ?? "lead_collaborator";
-    const collabReason: ResponseReason =
-      conversationMode === "ambient_collaboration"
+    const isPanel = conversationMode === "panel_response";
+    const collabReason: ResponseReason = isPanel
+      ? "panel_response"
+      : conversationMode === "ambient_collaboration"
         ? "ambient_collaboration_collaborator"
         : "collaboration_collaborator";
 
@@ -319,7 +325,7 @@ export async function queueCollaboratorRuns(
       runMetadata: {
         collaborationId,
         conversationMode,
-        collaborationRole: "collaborator",
+        collaborationRole: isPanel ? "panelist" : "collaborator",
         collaborationStatus: "active",
         participants,
         leadEmployeeId: params.leadEmployee.id,
@@ -336,6 +342,8 @@ export async function queueCollaboratorRuns(
     return { activatedRuns: [], skipped };
   }
 
+  const isPanelFollowUp = params.runMetadata.conversationMode === "panel_response";
+
   const { queued } = await queueAgentRuns(client, {
     workspaceId: params.workspaceId,
     roomId: params.roomId,
@@ -346,7 +354,9 @@ export async function queueCollaboratorRuns(
     dependsOnRunId: params.leadRunId,
     handoffDepth: 1,
     responders,
-    content: `${params.leadReply}\n\n(Collaborating after ${params.leadEmployee.name}'s analysis.)`,
+    content: isPanelFollowUp
+      ? `${params.leadReply}\n\n(Adding your panel perspective after ${params.leadEmployee.name}.)`
+      : `${params.leadReply}\n\n(Collaborating after ${params.leadEmployee.name}'s analysis.)`,
   });
 
   return { activatedRuns: queued, skipped };
