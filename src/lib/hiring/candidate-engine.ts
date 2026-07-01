@@ -121,7 +121,18 @@ function defaultWatchOuts(tier: CandidateTier): string[] {
 export type ApplicantCopy = Partial<
   Pick<
     AiEmployeeApplicant,
-    "name" | "title" | "personalityTags" | "strengths" | "watchOuts" | "bestFor" | "whyThisCandidate"
+    | "name"
+    | "title"
+    | "personalityTags"
+    | "strengths"
+    | "watchOuts"
+    | "bestFor"
+    | "whyThisCandidate"
+    | "candidatePitch"
+    | "howIWork"
+    | "communicationStyle"
+    | "autonomyLevel"
+    | "proactivityLevel"
   >
 >;
 
@@ -188,10 +199,43 @@ export function buildDeterministicApplicant(
     personalityTags:
       copy?.personalityTags ??
       (tier === "high_capacity"
-        ? ["energetic", "practical", "fast"]
+        ? ["energetic", "practical", "fast-moving", "direct"]
         : tier === "premium"
-          ? ["analytical", "senior", "strategic"]
-          : ["polished", "balanced", "reliable"]),
+          ? ["analytical", "senior", "thoughtful", "precise"]
+          : ["pragmatic", "balanced", "collaborative", "reliable"]),
+    candidatePitch:
+      copy?.candidatePitch ??
+      (tier === "high_capacity"
+        ? `I'm best for fast execution on ${brief.roleTitle.toLowerCase()} work. Give me a clear goal and I'll move quickly, keep you updated, and stay practical.`
+        : tier === "premium"
+          ? `I'm strongest when ${brief.domain.toLowerCase()} work needs senior judgment. I'll frame tradeoffs clearly and help you avoid expensive mistakes.`
+          : `I'm a strong fit for day-to-day ${brief.roleTitle.toLowerCase()} work. Give me a clear product goal and I'll break it down, ship reliably, and keep you updated without overcomplicating things.`),
+    howIWork:
+      copy?.howIWork ??
+      (tier === "high_capacity"
+        ? [
+            "Works in short implementation loops",
+            "Prioritizes speed with lightweight updates",
+            "Asks before risky production changes",
+          ]
+        : tier === "premium"
+          ? [
+              "Frames decisions before deep execution",
+              "Summarizes tradeoffs for stakeholders",
+              "Prefers fewer, higher-quality tasks",
+            ]
+          : [
+              "Works in short implementation loops",
+              "Asks before risky production changes",
+              "Summarizes decisions clearly",
+              "Prefers practical delivery over theory",
+            ]),
+    communicationStyle:
+      copy?.communicationStyle ??
+      (tier === "premium" ? "Clear and executive-ready" : "Concise and collaborative"),
+    autonomyLevel:
+      copy?.autonomyLevel ?? (tier === "premium" ? "high" : tier === "high_capacity" ? "balanced" : "balanced"),
+    proactivityLevel: copy?.proactivityLevel ?? (tier === "high_capacity" ? "high" : "balanced"),
     grad: TIER_GRADS[tier],
     badge:
       tier === "recommended" ? "Recommended" : tier === "high_capacity" ? "High capacity" : "Premium quality",

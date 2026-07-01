@@ -117,6 +117,11 @@ export type AiEmployeeApplicant = {
   whyThisCandidate: string;
   recommended: boolean;
   personalityTags: string[];
+  candidatePitch?: string;
+  howIWork?: string[];
+  communicationStyle?: string;
+  autonomyLevel?: string;
+  proactivityLevel?: string;
   grad: string;
   badge: string;
   badgeKind: "rec" | "neutral";
@@ -183,6 +188,19 @@ export type OnboardingRoomDraft = {
   name: string;
   accent: string;
   template: string;
+  roomId?: string;
+};
+
+export type OnboardingContext = {
+  goalText?: string;
+  outcomeId: string;
+  outcomeTitle: string;
+  domainText?: string;
+  roomName: string;
+  roomId?: string;
+  suggestedTopics: string[];
+  suggestedHires: string[];
+  setupComplete?: boolean;
 };
 
 export type RefineMode = "regenerate" | "improve";

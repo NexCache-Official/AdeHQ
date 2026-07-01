@@ -26,7 +26,7 @@ export function buildRecruiterOpeningMessage(opts: {
 
   if (departmentId && departmentId !== "custom") {
     const dept = departmentLabel(departmentId);
-    return `Hi — I'm ${MAYA_EMPLOYEE_NAME}, your ${MAYA_EMPLOYEE_TITLE.toLowerCase()}. For ${dept}, what kind of employee do you want to hire, and what should they own first?`;
+    return `Hi — I'm ${MAYA_EMPLOYEE_NAME}, your AI Workforce Manager. For ${dept}, what kind of employee do you want to hire, and what should they own first?`;
   }
 
   return "What kind of AI employee do you want to hire, and what should they help with first?";

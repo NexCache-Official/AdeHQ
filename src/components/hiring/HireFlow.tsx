@@ -12,7 +12,8 @@ import {
 } from "@/lib/hiring/build-brief";
 import {
   INTERVIEW_ANSWERS,
-  ONBOARDING_ROOM_KEY,
+  clearOnboardingDrafts,
+  readOnboardingContext,
 } from "@/lib/hiring/data";
 import { candidateToEmployee } from "@/lib/hiring/map-candidate";
 import { legacyDepartmentIdForRole, getRoleByKey } from "@/lib/hiring/role-library";
@@ -592,74 +593,35 @@ export function HireFlow({ onboarding = false }: HireFlowProps) {
 
     try {
       if (onboarding) {
-        const draftRaw = sessionStorage.getItem(ONBOARDING_ROOM_KEY);
-        let room: ProjectRoom;
-        if (draftRaw) {
-          const draft = JSON.parse(draftRaw);
-          const timestamp = nowISO();
-          room = {
-            id: uid("room"),
-            name: draft.name,
-            kind: "channel",
-            description: `${draft.name} workspace channel`,
-            brief: session.brief.mission,
-            humans: [appState.user.id],
-            aiEmployees: [],
-            accent: draft.accent,
-            messages: [
-              {
-                id: uid("msg"),
-                roomId: "",
-                senderType: "system",
-                senderId: "system",
-                senderName: "AdeHQ",
-                content: `Welcome to ${draft.name}.`,
-                createdAt: timestamp,
-              },
-            ],
-            tasks: [],
-            memory: [],
-            unread: 0,
-            createdAt: timestamp,
-            updatedAt: timestamp,
-          };
-          room.messages[0].roomId = room.id;
-        } else {
-          room = {
-            id: uid("room"),
-            name: "General",
-            kind: "channel",
-            description: "General workspace channel",
-            brief: session.brief.mission,
-            humans: [appState.user.id],
-            aiEmployees: [],
-            accent: "#e85d2c",
-            messages: [],
-            tasks: [],
-            memory: [],
-            unread: 0,
-            createdAt: nowISO(),
-            updatedAt: nowISO(),
-          };
+        if (!appState.workspace.id) {
+          throw new Error("Workspace not ready. Complete onboarding and open Maya before confirming hire.");
         }
+
+        const context = readOnboardingContext();
+        const defaultRoomId =
+          context?.roomId ?? appState.rooms.find((r) => r.kind === "channel")?.id;
+        if (defaultRoomId) {
+          employee.defaultRoomId = defaultRoomId;
+        }
+
+        actions.hireEmployee(employee);
 
         const workLog: WorkLogEvent = {
           id: uid("wl"),
-          roomId: room.id,
+          roomId: defaultRoomId ?? appState.rooms[0]?.id ?? "",
           employeeId: employee.id,
-          action: "Onboarding hire complete",
-          summary: `${employee.name} joined via ${MAYA_EMPLOYEE_NAME}.`,
+          action: "Employee hired",
+          summary: `Hired ${employee.name} as ${hired.title}.`,
           status: "success",
           createdAt: nowISO(),
         };
 
-        await actions.finishOnboarding({
-          workspaceName: appState.workspace.name,
+        await actions.completeFirstHire({
           employee,
-          room,
           workLog,
+          defaultRoomId,
         });
-        sessionStorage.removeItem(ONBOARDING_ROOM_KEY);
+        clearOnboardingDrafts();
       } else {
         const locked = await tryClaimHireLock();
         if (!locked) return;

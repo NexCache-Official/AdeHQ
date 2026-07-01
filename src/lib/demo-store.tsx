@@ -35,7 +35,7 @@ import {
 import { getEmailRedirectUrl, setAuthNextPath } from "@/lib/auth/callback-session";
 import { isEmailConfirmed } from "@/lib/auth/session";
 import { mayaWelcomeMessage } from "@/lib/hiring/maya";
-import { isMayaEmployee, isSystemEmployee, mergeMayaIntoState, mayaEmployeeStatus, buildMayaDmRoom, ensureMayaDmTopicsInState, dedupeMayaDmRooms, mergeEmployeesById } from "@/lib/maya-employee";
+import { isMayaEmployee, isSystemEmployee, mergeMayaIntoState, mayaEmployeeStatus, buildMayaDmRoom, buildMayaEmployee, ensureMayaDmTopicsInState, dedupeMayaDmRooms, mergeEmployeesById, resolveMayaDmRoomId } from "@/lib/maya-employee";
 import { isGroupChannel } from "@/lib/rooms";
 import { nowISO, uid } from "./utils";
 import { SUPABASE_WORKSPACE_TABLES } from "./supabase/config";
@@ -129,6 +129,15 @@ type StoreActions = {
   ) => Promise<{ needsEmailConfirmation: boolean }>;
   login: (email: string, password: string) => Promise<{ onboardingComplete: boolean }>;
   bootstrapWorkspace: (workspaceName?: string) => Promise<void>;
+  setupOnboardingWorkspace: (payload: {
+    workspaceName: string;
+    room: { name: string; accent: string; description?: string };
+  }) => Promise<{ workspaceId: string; firstRoomId: string; mayaDmRoomId: string }>;
+  completeFirstHire: (payload: {
+    employee: AIEmployee;
+    workLog: WorkLogEvent;
+    defaultRoomId?: string;
+  }) => Promise<{ dmRoomId: string }>;
   finishOnboarding: (payload: {
     workspaceName: string;
     employee: AIEmployee;
@@ -616,6 +625,176 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
               : "My AI Workspace");
           await bootstrapWorkspaceRemote(name);
           await loadRemote(user);
+        } finally {
+          authBusyRef.current = false;
+        }
+      },
+
+      setupOnboardingWorkspace: async ({ workspaceName, room: roomInput }) => {
+        authBusyRef.current = true;
+        try {
+          const user = authUserRef.current;
+          if (!user) throw new Error("Sign in to continue.");
+          if (!isEmailConfirmed(user)) {
+            throw new Error("Confirm your email before creating a workspace.");
+          }
+
+          const name =
+            workspaceName.trim() ||
+            stateRef.current.workspace.name ||
+            (typeof user.user_metadata?.workspace_name === "string"
+              ? user.user_metadata.workspace_name
+              : "My AI Workspace");
+
+          if (backendRef.current !== "supabase") {
+            const workspaceId = uid("ws");
+            const timestamp = nowISO();
+            const roomId = uid("room");
+            const room: ProjectRoom = {
+              id: roomId,
+              name: roomInput.name,
+              kind: "channel",
+              description: roomInput.description ?? `${roomInput.name} workstream`,
+              brief: "",
+              humans: [user.id],
+              aiEmployees: [],
+              accent: roomInput.accent,
+              messages: [
+                {
+                  id: uid("msg"),
+                  roomId,
+                  senderType: "system",
+                  senderId: "system",
+                  senderName: "AdeHQ",
+                  content: `Your ${roomInput.name} workstream is ready.`,
+                  createdAt: timestamp,
+                },
+              ],
+              tasks: [],
+              memory: [],
+              unread: 0,
+              createdAt: timestamp,
+              updatedAt: timestamp,
+            };
+            const welcome = mayaWelcomeMessage(
+              typeof user.user_metadata?.name === "string"
+                ? user.user_metadata.name.split(" ")[0] ?? "there"
+                : "there",
+            );
+            set((s) => {
+              const merged = mergeMayaIntoState(
+                { ...s, workspace: { ...s.workspace, id: workspaceId, name } },
+                user.id,
+                welcome,
+              );
+              return {
+                ...merged,
+                rooms: [room, ...merged.rooms.filter((r) => r.id !== room.id)],
+              };
+            });
+            return {
+              workspaceId,
+              firstRoomId: roomId,
+              mayaDmRoomId: resolveMayaDmRoomId(stateRef.current.rooms),
+            };
+          }
+
+          const bootstrapped = await bootstrapWorkspaceRemote(name);
+          await loadRemote(user, bootstrapped.workspaceId);
+
+          const { authHeaders } = await import("@/lib/api/auth-client");
+          const headers = await authHeaders();
+          await fetch("/api/workspaces/ensure-maya", { method: "POST", headers });
+          await loadRemote(user, bootstrapped.workspaceId);
+
+          const timestamp = nowISO();
+          const roomId = uid("room");
+          const created: ProjectRoom = {
+            id: roomId,
+            name: roomInput.name,
+            kind: "channel",
+            description: roomInput.description ?? `${roomInput.name} workstream`,
+            brief: "",
+            humans: [user.id],
+            aiEmployees: [],
+            accent: roomInput.accent,
+            messages: [
+              {
+                id: uid("msg"),
+                roomId,
+                senderType: "system",
+                senderId: "system",
+                senderName: "AdeHQ",
+                content: `Your ${roomInput.name} workstream is ready.`,
+                createdAt: timestamp,
+              },
+            ],
+            tasks: [],
+            memory: [],
+            unread: 0,
+            createdAt: timestamp,
+            updatedAt: timestamp,
+          };
+
+          set((s) => ({ ...s, rooms: [created, ...s.rooms.filter((r) => r.id !== created.id)] }));
+          await persistRoom(bootstrapped.workspaceId, created);
+          await Promise.all(
+            created.humans.map((id) =>
+              persistRoomMember(bootstrapped.workspaceId, created.id, "human", id),
+            ),
+          );
+          await Promise.all(
+            created.messages.map((message) => persistMessage(bootstrapped.workspaceId, message)),
+          );
+          await loadRemote(user, bootstrapped.workspaceId);
+
+          return {
+            workspaceId: bootstrapped.workspaceId,
+            firstRoomId: roomId,
+            mayaDmRoomId: resolveMayaDmRoomId(stateRef.current.rooms),
+          };
+        } finally {
+          authBusyRef.current = false;
+        }
+      },
+
+      completeFirstHire: async ({ employee, workLog, defaultRoomId }) => {
+        authBusyRef.current = true;
+        try {
+          const user = authUserRef.current;
+          if (!user) throw new Error("Sign in to complete hire.");
+
+          const workspaceId = stateRef.current.workspace.id;
+          if (!workspaceId) {
+            throw new Error("Workspace not ready. Complete onboarding setup before hiring.");
+          }
+
+          if (backendRef.current !== "supabase") {
+            set((s) => ({
+              ...s,
+              onboardingComplete: true,
+              employees: s.employees.some((e) => e.id === employee.id)
+                ? s.employees
+                : [...s.employees, employee],
+              workLog: [workLog, ...s.workLog],
+            }));
+            const dm = stateRef.current.rooms.find(
+              (r) => r.kind === "dm" && r.dmEmployeeId === employee.id,
+            );
+            return { dmRoomId: dm?.id ?? `dm-${employee.id}` };
+          }
+
+          const alreadyHired = stateRef.current.employees.some((e) => e.id === employee.id);
+          if (!alreadyHired) {
+            await persistEmployee(workspaceId, employee);
+          }
+          if (defaultRoomId) {
+            await persistRoomMember(workspaceId, defaultRoomId, "ai", employee.id);
+          }
+          await persistWorkLog(workspaceId, workLog);
+          await persistWorkspace(workspaceId, { onboardingComplete: true });
+          await loadRemote(user, workspaceId);
+          return { dmRoomId: `dm-${employee.id}` };
         } finally {
           authBusyRef.current = false;
         }

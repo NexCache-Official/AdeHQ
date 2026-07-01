@@ -1,9 +1,16 @@
 "use client";
 
+import { useState } from "react";
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 import type { AiEmployeeApplicant, AiEmployeeJobBrief, RecruiterMessage } from "@/lib/hiring/types";
 import { GEN_STEPS, INTERVIEW_QUESTIONS, MATCH_BARS } from "@/lib/hiring/data";
+import {
+  CONTEXT_PROFILE_LABELS,
+  displayEngineModel,
+  intelligenceLabel,
+  RUNTIME_MODE_LABELS,
+} from "@/lib/hiring/intelligence-labels";
 import { AdeOrb, MetricDots } from "./HireChrome";
 
 export function initials(name: string) {
@@ -64,11 +71,32 @@ export function ApplicantCard({
       )}
       <div className="mb-4 flex flex-wrap gap-1.5">
         {a.personalityTags.map((t) => (
-          <span key={t} className="rounded-full bg-muted px-2.5 py-1 text-[11.5px] text-ink-2">
+          <span key={t} className="rounded-full bg-muted px-2.5 py-1 text-[11.5px] capitalize text-ink-2">
             {t}
           </span>
         ))}
       </div>
+      {a.candidatePitch && (
+        <div className="mb-4 rounded-xl border border-border bg-muted/30 p-3.5">
+          <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-ink-3">
+            Why I&apos;d be a good fit
+          </div>
+          <p className="text-[13px] leading-relaxed italic text-ink-2">&ldquo;{a.candidatePitch}&rdquo;</p>
+        </div>
+      )}
+      {a.howIWork && a.howIWork.length > 0 && (
+        <div className="mb-4">
+          <div className="mb-1.5 text-[11.5px] font-semibold text-ink-3">How I work</div>
+          <ul className="space-y-1">
+            {a.howIWork.map((line) => (
+              <li key={line} className="flex gap-2 text-[13px] leading-snug text-ink-2">
+                <span className="text-accent">•</span>
+                {line}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
       <div className="mb-3.5 rounded-xl border border-border bg-muted/40 p-3.5">
         <div className="mb-2 flex items-baseline justify-between">
           <span className="font-mono text-[10px] uppercase tracking-wider text-ink-3">
@@ -143,18 +171,22 @@ export function ApplicantCard({
       {advOpen && (
         <div className="mt-2.5 rounded-[10px] bg-ink p-3.5 font-mono text-xs">
           <div className="flex justify-between py-1 text-white/55">
-            <span>Intelligence mode</span>
-            <span className="text-white">{a.engineLabel}</span>
+            <span>Intelligence</span>
+            <span className="text-white">{intelligenceLabel(a.modelMode)}</span>
           </div>
           <div className="flex justify-between py-1 text-white/55">
-            <span>Model mode</span>
-            <span className="text-accent-soft">{a.modelMode}</span>
+            <span>Runtime mode</span>
+            <span className="text-accent-soft">{RUNTIME_MODE_LABELS[a.modelMode]}</span>
           </div>
           <div className="flex justify-between py-1 text-white/55">
-            <span>Provider model</span>
+            <span>Engine model</span>
             <span className="max-w-[55%] truncate text-right text-white/80">
-              {a.resolvedModelId}
+              {displayEngineModel(a.resolvedModelId)}
             </span>
+          </div>
+          <div className="flex justify-between py-1 text-white/55">
+            <span>Context profile</span>
+            <span className="text-white/80">{CONTEXT_PROFILE_LABELS[a.modelMode]}</span>
           </div>
         </div>
       )}
@@ -338,16 +370,26 @@ export function OfferScreen({
       <div className="rounded-2xl border border-border bg-surface p-6 shadow-md">
         {[
           { label: "Mission", value: brief.mission, serif: true },
-          { label: "Personality", value: brief.personalityTraits.join(", ") },
+          {
+            label: "Personality",
+            value: [
+              a.personalityTags.join(", "),
+              a.communicationStyle ? `Communication: ${a.communicationStyle}` : "",
+              a.autonomyLevel ? `Autonomy: ${a.autonomyLevel}` : "",
+              a.proactivityLevel ? `Proactivity: ${a.proactivityLevel}` : "",
+            ]
+              .filter(Boolean)
+              .join(" · "),
+          },
           {
             label: "Weekly AI Work Capacity",
             value: `${a.weeklyWorkHours} AI Work Hours estimated`,
           },
-          { label: "Approval rules", value: brief.approvalRules.join(" ") },
+          { label: "Approval rules", value: brief.approvalRules.join(" · ") || "Ask before high-risk actions" },
           { label: "Start location", value: "Direct Message (default)" },
           {
-            label: "Engine",
-            value: `${a.engineLabel} · ${a.modelMode} mode`,
+            label: "Intelligence",
+            value: intelligenceLabel(a.modelMode),
             mono: true,
           },
         ].map((r) => (

@@ -1,10 +1,19 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { MAYA_DM_QUICK_ACTIONS, MAYA_EMPLOYEE_NAME, MAYA_EMPLOYEE_SUBTITLE, MAYA_WORKFORCE_BADGE, mayaWelcomeMessage } from "@/lib/hiring/maya";
+import {
+  MAYA_DM_QUICK_ACTIONS,
+  MAYA_EMPLOYEE_NAME,
+  MAYA_EMPLOYEE_SUBTITLE,
+  MAYA_WORKFORCE_BADGE,
+  mayaOnboardingWelcomeMessage,
+  mayaWelcomeMessage,
+} from "@/lib/hiring/maya";
+import { readOnboardingContext } from "@/lib/hiring/data";
 import { AdeOrb } from "@/components/hiring/HireChrome";
 
 const MAYA_CONTEXT_KEY = "maya_employee_context";
+const ONBOARDING_WELCOME_KEY = "adehq:maya-onboarding-welcome";
 
 export function storeMayaEmployeeContext(payload: Record<string, unknown>) {
   if (typeof window === "undefined") return;
@@ -22,16 +31,60 @@ export function readMayaEmployeeContext<T>(): T | null {
   }
 }
 
+export function consumeOnboardingWelcome(): string | null {
+  if (typeof window === "undefined") return null;
+  const stored = sessionStorage.getItem(ONBOARDING_WELCOME_KEY);
+  if (stored) {
+    sessionStorage.removeItem(ONBOARDING_WELCOME_KEY);
+    return stored;
+  }
+  const context = readOnboardingContext();
+  if (context?.setupComplete) {
+    return mayaOnboardingWelcomeMessage(
+      "there",
+      "your workspace",
+      context.roomName,
+      context.suggestedHires[0],
+    );
+  }
+  return null;
+}
+
 type MayaDmEmptyStateProps = {
   firstName?: string;
+  welcomeOverride?: string | null;
   onSendMessage?: (text: string) => void;
 };
 
-export function MayaDmEmptyState({ firstName = "there", onSendMessage }: MayaDmEmptyStateProps) {
+export function MayaDmEmptyState({
+  firstName = "there",
+  welcomeOverride,
+  onSendMessage,
+}: MayaDmEmptyStateProps) {
   const router = useRouter();
-  const welcome = mayaWelcomeMessage(firstName);
+  const context = readOnboardingContext();
+  const welcome =
+    welcomeOverride ??
+    (context?.setupComplete
+      ? mayaOnboardingWelcomeMessage(
+          firstName,
+          "your workspace",
+          context.roomName,
+          context.suggestedHires[0],
+        )
+      : mayaWelcomeMessage(firstName));
 
-  const handleAction = (action: (typeof MAYA_DM_QUICK_ACTIONS)[number]) => {
+  const chips = context?.setupComplete
+    ? [
+        { id: "hire-analyst", label: "Hire a Market Research Analyst", message: "I need to hire a Market Research Analyst." },
+        { id: "hire-sdr", label: "Hire a Sales Development Representative", message: "I need to hire a Sales Development Representative." },
+        { id: "hire-engineer", label: "Hire a Software Engineer", message: "I need to hire a Software Engineer." },
+        { id: "role", label: "Not sure — help me decide", message: "I'm not sure what role I need — can you recommend one based on my goals?" },
+        { id: "browse", label: "Browse popular roles", message: "Show me popular roles I could hire for this workspace." },
+      ]
+    : MAYA_DM_QUICK_ACTIONS;
+
+  const handleAction = (action: { href?: string; message?: string; intent?: string; label: string }) => {
     if ("href" in action && action.href) {
       router.push(action.href);
       return;
@@ -63,7 +116,7 @@ export function MayaDmEmptyState({ firstName = "there", onSendMessage }: MayaDmE
         {welcome}
       </p>
       <div className="mt-6 flex w-full flex-wrap justify-center gap-2">
-        {MAYA_DM_QUICK_ACTIONS.map((action) => (
+        {chips.map((action) => (
           <button
             key={action.id}
             type="button"

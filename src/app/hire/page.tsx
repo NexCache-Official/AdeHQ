@@ -18,12 +18,16 @@ function HirePageInner() {
       router.replace("/login");
       return;
     }
+    if (!state.workspace.id) {
+      router.replace("/onboarding");
+      return;
+    }
     if (!onboarding && !state.onboardingComplete) {
       router.replace("/onboarding");
     }
-  }, [hydrated, state.user, state.onboardingComplete, onboarding, router]);
+  }, [hydrated, state.user, state.workspace.id, state.onboardingComplete, onboarding, router]);
 
-  if (!hydrated || !state.user) {
+  if (!hydrated || !state.user || !state.workspace.id) {
     return <LoadingState full label="Loading…" />;
   }
 

@@ -11,6 +11,7 @@ import {
   mergeBriefPartial,
   synthesizeBriefForHiringContext,
 } from "@/lib/hiring/build-brief";
+import { applyChipMutation, READY_BRIEF_PHRASE, recruiterReadyMessage } from "@/lib/hiring/chip-mutations";
 import { buildRecruiterOpeningMessage } from "@/lib/hiring/recruiter-openings";
 import { getRoleByKey } from "@/lib/hiring/role-library";
 import {
@@ -186,11 +187,16 @@ function buildResponse(input: {
   usedFallback: boolean;
   forceCanReview?: boolean;
 }) {
-  const baseReadiness = assessRecruiterReadiness(input.conversation, input.brief);
+  const lastUser = [...input.conversation].reverse().find((m) => m.role === "user")?.text ?? "";
+  const chipMutation = lastUser ? applyChipMutation(lastUser, input.brief) : null;
+  let brief = chipMutation?.brief ?? input.brief;
+  const changedFields = chipMutation?.changedFields ?? [];
+
+  const baseReadiness = assessRecruiterReadiness(input.conversation, brief);
   const canReviewBrief = input.forceCanReview || baseReadiness.ready;
-  const readiness = finalizeReadinessScore(baseReadiness, input.brief, canReviewBrief);
+  const readiness = finalizeReadinessScore(baseReadiness, brief, canReviewBrief);
   const roleKey = input.body.roleKey ?? null;
-  let suggestionChips = generateSuggestionChips(readiness, input.brief, input.conversation, roleKey);
+  let suggestionChips = generateSuggestionChips(readiness, brief, input.conversation, roleKey);
   if (canReviewBrief && !suggestionChips.some((chip) => chip.intent === "review_brief")) {
     suggestionChips = [
       {
@@ -204,20 +210,31 @@ function buildResponse(input: {
   }
   const userTurns = input.conversation.filter((m) => m.role === "user").length;
   const departmentId = input.body.selectedDepartment ?? input.body.departmentId ?? null;
-  const message =
-    input.message ??
-    (userTurns === 0
-      ? openingMessage(input.body, departmentId, roleKey)
-      : canReviewBrief
-        ? "I have enough to draft a strong job brief. You can review it now, or keep refining the role."
-        : recruiterMessageFor(readiness, input.conversation, input.brief, roleKey));
-  const checklist = checklistFromBrief(input.brief, input.body.roleSeed, input.conversation);
+  const lastAde = [...input.conversation].reverse().find((m) => m.role === "ade")?.text ?? "";
+
+  let message = input.message;
+  if (!message && chipMutation) {
+    message = chipMutation.message;
+  } else if (!message) {
+    if (userTurns === 0) {
+      message = openingMessage(input.body, departmentId, roleKey);
+    } else if (canReviewBrief && lastAde.includes(READY_BRIEF_PHRASE)) {
+      message =
+        "That's already reflected in the brief. Want me to generate candidates or adjust another part?";
+    } else if (canReviewBrief) {
+      message = recruiterReadyMessage(brief);
+    } else {
+      message = recruiterMessageFor(readiness, input.conversation, brief, roleKey);
+    }
+  }
+
+  const checklist = checklistFromBrief(brief, input.body.roleSeed, input.conversation);
 
   return {
     recruiterMessage: message,
     message,
-    brief: input.brief,
-    briefPartial: input.brief,
+    brief,
+    briefPartial: brief,
     readiness,
     suggestionChips,
     canReviewBrief,
@@ -226,6 +243,7 @@ function buildResponse(input: {
     checklist,
     usedFallback: input.usedFallback,
     roleKey,
+    changedFields,
   };
 }
 

@@ -79,7 +79,7 @@ export const DEMO_APPLICANTS: LegacyDemoApplicant[] = [
     badgeKind: "neutral",
     tags: ["energetic", "practical", "quick to draft"],
     engine: "Efficient Intelligence",
-    advModel: "SiliconFlow · Balanced mode",
+    advModel: "Balanced Intelligence",
     hours: 120,
     cap: 0.96,
     quality: 1,
@@ -108,7 +108,7 @@ export const DEMO_APPLICANTS: LegacyDemoApplicant[] = [
     badgeKind: "rec",
     tags: ["polished", "concise", "credible", "strategic"],
     engine: "Balanced Intelligence",
-    advModel: "SiliconFlow · DeepSeek-V4-Flash",
+    advModel: "Balanced Intelligence",
     hours: 80,
     cap: 0.66,
     quality: 2,
@@ -140,7 +140,7 @@ export const DEMO_APPLICANTS: LegacyDemoApplicant[] = [
     badgeKind: "neutral",
     tags: ["analytical", "senior", "careful", "strategic"],
     engine: "Strong Intelligence",
-    advModel: "SiliconFlow · Strong mode",
+    advModel: "Strong Intelligence",
     hours: 30,
     cap: 0.27,
     quality: 3,
@@ -216,3 +216,25 @@ export const SUCCESS_LABELS = [
 ];
 
 export const ONBOARDING_ROOM_KEY = "adehq-onboarding-room";
+export const ONBOARDING_CONTEXT_KEY = "adehq-onboarding-context";
+
+export function readOnboardingContext(): import("./types").OnboardingContext | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = sessionStorage.getItem(ONBOARDING_CONTEXT_KEY);
+    return raw ? (JSON.parse(raw) as import("./types").OnboardingContext) : null;
+  } catch {
+    return null;
+  }
+}
+
+export function storeOnboardingContext(context: import("./types").OnboardingContext) {
+  if (typeof window === "undefined") return;
+  sessionStorage.setItem(ONBOARDING_CONTEXT_KEY, JSON.stringify(context));
+}
+
+export function clearOnboardingDrafts() {
+  if (typeof window === "undefined") return;
+  sessionStorage.removeItem(ONBOARDING_ROOM_KEY);
+  sessionStorage.removeItem(ONBOARDING_CONTEXT_KEY);
+}
