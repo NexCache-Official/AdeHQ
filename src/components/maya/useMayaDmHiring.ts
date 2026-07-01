@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useStore } from "@/lib/demo-store";
 import { synthesizeBriefForHiringContext } from "@/lib/hiring/build-brief";
@@ -28,14 +28,7 @@ import {
 } from "@/lib/hiring/recruiter-brain";
 import { inferRoleFromText, inferenceOpeningMessage } from "@/lib/hiring/role-inference";
 import { getRoleByKey, legacyDepartmentIdForRole } from "@/lib/hiring/role-library";
-import {
-  hiringReducer,
-  initialHiringSession,
-  loadHiringSession,
-  persistHiringSession,
-  clearHiringSession,
-  normalizeRestoredHiringSession,
-} from "@/lib/hiring/session";
+import { useHiringSessionSync } from "@/lib/hiring/use-hiring-session-sync";
 import type {
   AiEmployeeApplicant,
   AiEmployeeJobBrief,
@@ -48,16 +41,17 @@ type UseMayaDmHiringOptions = {
   mayaTopicId?: string;
 };
 
-function mayaDmInitialSession() {
-  const saved = loadHiringSession({ dmFirst: true });
-  if (saved) return normalizeRestoredHiringSession({ ...saved, step: saved.step === "role" ? "recruiter" : saved.step }, { dmFirst: true });
-  return { ...initialHiringSession(), step: "recruiter" as const };
-}
-
 export function useMayaDmHiring({ mayaRoomId, mayaTopicId }: UseMayaDmHiringOptions) {
   const { state: appState, actions } = useStore();
   const router = useRouter();
-  const [session, dispatch] = useReducer(hiringReducer, null, mayaDmInitialSession);
+  const {
+    session,
+    dispatch,
+    tryClaimHireLock,
+    releaseHireLock,
+    completeDurableHire,
+    resetAfterMayaHire,
+  } = useHiringSessionSync({ mayaRoomId, mayaTopicId, dmFirst: true });
 
   const [mayaState, setMayaState] = useState<MayaRecruiterState>("idle");
   const [briefUpdateState, setBriefUpdateState] = useState<BriefUpdateState>(INITIAL_BRIEF_UPDATE_STATE);
@@ -123,10 +117,6 @@ export function useMayaDmHiring({ mayaRoomId, mayaTopicId }: UseMayaDmHiringOpti
     },
     [actions, appState.user, mayaRoomId, mayaTopicId],
   );
-
-  useEffect(() => {
-    persistHiringSession(session);
-  }, [session]);
 
   useEffect(() => {
     return () => {
@@ -313,7 +303,9 @@ export function useMayaDmHiring({ mayaRoomId, mayaTopicId }: UseMayaDmHiringOpti
   const hireCandidate = useCallback(
     async (candidate: AiEmployeeApplicant) => {
       const brief = session.brief;
-      if (!brief) return;
+      if (!brief || session.busy) return;
+      const locked = await tryClaimHireLock();
+      if (!locked) return;
       dispatch({ type: "SET_BUSY", busy: true });
       try {
         const { employeeId, dmRoomId } = completeHireFromCandidate({
@@ -326,10 +318,16 @@ export function useMayaDmHiring({ mayaRoomId, mayaTopicId }: UseMayaDmHiringOpti
           mayaRoomId,
           mayaTopicId,
         });
-        dispatch({ type: "COMPLETE_HIRE", employeeId, dmRoomId });
-        clearHiringSession();
+        await completeDurableHire({
+          state: { ...session, brief },
+          hiredEmployeeId: employeeId,
+          dmRoomId,
+          candidateId: candidate.id,
+        });
+        resetAfterMayaHire();
         router.push(`/rooms/${dmRoomId}`);
       } catch (e) {
+        releaseHireLock();
         dispatch({
           type: "SET_ERROR",
           error: e instanceof Error ? e.message : "Could not complete hire.",
@@ -341,12 +339,18 @@ export function useMayaDmHiring({ mayaRoomId, mayaTopicId }: UseMayaDmHiringOpti
     [
       actions,
       appState.user?.name,
+      completeDurableHire,
       effectiveDepartmentId,
       mayaRoomId,
       mayaTopicId,
+      releaseHireLock,
+      resetAfterMayaHire,
       router,
+      session,
       session.brief,
+      session.busy,
       session.roleKey,
+      tryClaimHireLock,
     ],
   );
 

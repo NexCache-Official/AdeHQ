@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { callCandidates, callRecruiter } from "@/lib/hiring/hiring-api";
@@ -20,14 +20,9 @@ import { buildRecruiterOpeningMessage } from "@/lib/hiring/recruiter-openings";
 import { assessRecruiterReadiness, generateSuggestionChips } from "@/lib/hiring/recruiter-brain";
 import { inferRoleFromText, inferenceOpeningMessage } from "@/lib/hiring/role-inference";
 import {
-  clearHiringSession,
   hiringBackStep,
-  hiringReducer,
-  initialHiringSession,
-  loadHiringSession,
-  normalizeRestoredHiringSession,
-  persistHiringSession,
 } from "@/lib/hiring/session";
+import { useHiringSessionSync } from "@/lib/hiring/use-hiring-session-sync";
 import { detectBriefChange, type BriefComposeSection } from "@/lib/hiring/detect-brief-change";
 import {
   INITIAL_BRIEF_UPDATE_STATE,
@@ -76,10 +71,17 @@ type HireFlowProps = { onboarding?: boolean };
 export function HireFlow({ onboarding = false }: HireFlowProps) {
   const { state: appState, actions } = useStore();
   const router = useRouter();
-  const [session, dispatch] = useReducer(hiringReducer, undefined, () => {
-    const saved = loadHiringSession();
-    return saved ? normalizeRestoredHiringSession(saved) : initialHiringSession();
-  });
+  const mayaRoomId = useMemo(
+    () => resolveMayaDmRoomId(appState.rooms),
+    [appState.rooms],
+  );
+  const {
+    session,
+    dispatch,
+    tryClaimHireLock,
+    releaseHireLock,
+    completeDurableHire,
+  } = useHiringSessionSync({ mayaRoomId, dmFirst: false });
   const sucTimer = useRef<ReturnType<typeof setInterval>>();
   const chatEndRef = useRef<HTMLDivElement>(null);
   const prevBriefRef = useRef<Partial<AiEmployeeJobBrief>>();
@@ -103,11 +105,6 @@ export function HireFlow({ onboarding = false }: HireFlowProps) {
   const effectiveDepartmentId = useMemo(
     () => session.departmentId ?? legacyDepartmentIdForRole(session.roleKey),
     [session.departmentId, session.roleKey],
-  );
-
-  const mayaRoomId = useMemo(
-    () => resolveMayaDmRoomId(appState.rooms),
-    [appState.rooms],
   );
 
   const recruiterPayload = useCallback(
@@ -150,10 +147,6 @@ export function HireFlow({ onboarding = false }: HireFlowProps) {
     () => getGroupChannels(appState.rooms).map((r) => ({ id: r.id, name: r.name })),
     [appState.rooms],
   );
-
-  useEffect(() => {
-    persistHiringSession(session);
-  }, [session]);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -593,7 +586,7 @@ export function HireFlow({ onboarding = false }: HireFlowProps) {
   }, [session.step, session.genStep, session.candidates.length]);
 
   const confirmHire = async () => {
-    if (!hired || !session.brief || !appState.user) return;
+    if (!hired || !session.brief || !appState.user || session.busy) return;
     const employee = candidateToEmployee(hired, session.brief, effectiveDepartmentId, session.roleKey);
     employee.id = uid("emp");
 
@@ -668,6 +661,8 @@ export function HireFlow({ onboarding = false }: HireFlowProps) {
         });
         sessionStorage.removeItem(ONBOARDING_ROOM_KEY);
       } else {
+        const locked = await tryClaimHireLock();
+        if (!locked) return;
         const { employeeId, dmRoomId } = completeHireFromCandidate({
           actions,
           userName: appState.user.name,
@@ -678,7 +673,12 @@ export function HireFlow({ onboarding = false }: HireFlowProps) {
           mayaRoomId,
         });
         dispatch({ type: "COMPLETE_HIRE", employeeId, dmRoomId });
-        clearHiringSession();
+        await completeDurableHire({
+          state: { ...session, brief: session.brief },
+          hiredEmployeeId: employeeId,
+          dmRoomId,
+          candidateId: hired.id,
+        });
         runSuccessAnimation();
         setTimeout(() => dispatch({ type: "SET_STEP", step: "assign_optional" }), 2400);
         return;
@@ -697,6 +697,7 @@ export function HireFlow({ onboarding = false }: HireFlowProps) {
       runSuccessAnimation();
       setTimeout(() => dispatch({ type: "SET_STEP", step: "assign_optional" }), 2400);
     } catch (e) {
+      releaseHireLock();
       dispatch({
         type: "SET_ERROR",
         error: e instanceof Error ? e.message : "Could not complete hire.",
@@ -720,7 +721,6 @@ export function HireFlow({ onboarding = false }: HireFlowProps) {
       actions.updateEmployee(session.hiredEmployeeId, { defaultRoomId: roomId });
       actions.addEmployeeToRoom(roomId, session.hiredEmployeeId);
     }
-    clearHiringSession();
     router.replace(session.dmRoomId ? `/rooms/${session.dmRoomId}` : "/workforce");
   };
 
