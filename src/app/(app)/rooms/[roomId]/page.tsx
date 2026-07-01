@@ -33,6 +33,8 @@ export default function RoomDetailPage() {
   const [topicCreateError, setTopicCreateError] = useState<string | null>(null);
   const [summarizing, setSummarizing] = useState(false);
   const [creatingTopic, setCreatingTopic] = useState(false);
+  const [topicActionBusy, setTopicActionBusy] = useState(false);
+  const [topicActionError, setTopicActionError] = useState<string | null>(null);
   const [composerDraft, setComposerDraft] = useState("");
   const [slashNotice, setSlashNotice] = useState<string | null>(null);
 
@@ -231,32 +233,92 @@ export default function RoomDetailPage() {
   };
 
   const archiveTopic = async () => {
-    if (!selectedTopic || backend !== "supabase") return;
-    const headers = await authHeaders();
-    const response = await fetch(`/api/topics/${selectedTopic.id}`, {
-      method: "PATCH",
-      headers,
-      body: JSON.stringify({ status: "archived" }),
-    });
-    if (response.ok) {
-      const { topic } = await response.json();
-      actions.upsertTopic(topic);
+    if (!selectedTopic || isGeneralTopic(selectedTopic)) return;
+    setTopicActionError(null);
+    setTopicActionBusy(true);
+    try {
+      if (backend === "supabase") {
+        const headers = await authHeaders();
+        const response = await fetch(`/api/topics/${selectedTopic.id}`, {
+          method: "DELETE",
+          headers,
+        });
+        if (!response.ok) {
+          const err = await response.json().catch(() => null);
+          throw new Error(err?.error ?? "Failed to archive topic");
+        }
+        const { topic } = await response.json();
+        actions.upsertTopic(topic);
+      } else {
+        actions.upsertTopic({ ...selectedTopic, status: "archived", updatedAt: new Date().toISOString() });
+      }
       const general = generalTopicForRoom(roomTopics, roomId);
       if (general) selectTopic(general.id);
+      setSlashNotice("Topic archived.");
+      setTimeout(() => setSlashNotice(null), 4000);
+    } catch (e) {
+      setTopicActionError(e instanceof Error ? e.message : "Failed to archive topic");
+    } finally {
+      setTopicActionBusy(false);
     }
   };
 
   const unarchiveTopic = async () => {
-    if (!selectedTopic || backend !== "supabase") return;
-    const headers = await authHeaders();
-    const response = await fetch(`/api/topics/${selectedTopic.id}`, {
-      method: "PATCH",
-      headers,
-      body: JSON.stringify({ status: "active" }),
-    });
-    if (response.ok) {
-      const { topic } = await response.json();
-      actions.upsertTopic(topic);
+    if (!selectedTopic) return;
+    setTopicActionError(null);
+    setTopicActionBusy(true);
+    try {
+      if (backend === "supabase") {
+        const headers = await authHeaders();
+        const response = await fetch(`/api/topics/${selectedTopic.id}`, {
+          method: "PATCH",
+          headers,
+          body: JSON.stringify({ status: "active" }),
+        });
+        if (!response.ok) {
+          const err = await response.json().catch(() => null);
+          throw new Error(err?.error ?? "Failed to restore topic");
+        }
+        const { topic } = await response.json();
+        actions.upsertTopic(topic);
+      } else {
+        actions.upsertTopic({ ...selectedTopic, status: "active", updatedAt: new Date().toISOString() });
+      }
+      setSlashNotice("Topic restored.");
+      setTimeout(() => setSlashNotice(null), 4000);
+    } catch (e) {
+      setTopicActionError(e instanceof Error ? e.message : "Failed to restore topic");
+    } finally {
+      setTopicActionBusy(false);
+    }
+  };
+
+  const deleteTopicPermanently = async () => {
+    if (!selectedTopic || isGeneralTopic(selectedTopic)) return;
+    setTopicActionError(null);
+    setTopicActionBusy(true);
+    try {
+      if (backend === "supabase") {
+        const headers = await authHeaders();
+        const response = await fetch(`/api/topics/${selectedTopic.id}?permanent=true`, {
+          method: "DELETE",
+          headers,
+        });
+        if (!response.ok) {
+          const err = await response.json().catch(() => null);
+          throw new Error(err?.error ?? "Failed to delete topic");
+        }
+      }
+      actions.removeTopicPermanently(roomId, selectedTopic.id);
+      await actions.refreshTopics(roomId);
+      const general = generalTopicForRoom(roomTopics, roomId);
+      if (general) selectTopic(general.id);
+      setSlashNotice("Topic deleted permanently.");
+      setTimeout(() => setSlashNotice(null), 4000);
+    } catch (e) {
+      setTopicActionError(e instanceof Error ? e.message : "Failed to delete topic");
+    } finally {
+      setTopicActionBusy(false);
     }
   };
 
@@ -457,6 +519,11 @@ export default function RoomDetailPage() {
               {slashNotice}
             </div>
           )}
+          {topicActionError && (
+            <div className="border-b border-red-200 bg-red-50 px-4 py-1.5 text-center text-xs text-red-800">
+              {topicActionError}
+            </div>
+          )}
           <RoomChat
             room={room}
             topic={selectedTopic}
@@ -485,10 +552,12 @@ export default function RoomDetailPage() {
               onSummarize={summarizeTopic}
               onArchive={archiveTopic}
               onUnarchive={unarchiveTopic}
+              onDeletePermanently={deleteTopicPermanently}
               onSaveSummaryToMemory={saveSummaryToMemory}
               onParticipationChange={setParticipationMode}
               onAiControl={handleAiControl}
               summarizing={summarizing}
+              topicActionBusy={topicActionBusy}
             />
           ) : (
             <div className="flex h-full items-center justify-center p-6 text-center text-xs text-ink-3">

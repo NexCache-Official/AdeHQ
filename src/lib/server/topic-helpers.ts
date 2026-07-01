@@ -207,3 +207,52 @@ export function slugifyTopicTitle(title: string): string {
     .replace(/^-|-$/g, "")
     .slice(0, 64);
 }
+
+/** Hard-delete a topic and all associated work graph rows. */
+export async function permanentlyDeleteTopic(
+  client: SupabaseClient,
+  workspaceId: string,
+  topicId: string,
+  roomId: string,
+): Promise<void> {
+  const { data: messages, error: messagesLookupError } = await client
+    .from("messages")
+    .select("id")
+    .eq("workspace_id", workspaceId)
+    .eq("topic_id", topicId);
+  if (messagesLookupError) throw messagesLookupError;
+
+  const messageIds = (messages ?? []).map((row) => String(row.id));
+  if (messageIds.length) {
+    const { error: reactionsError } = await client
+      .from("message_reactions")
+      .delete()
+      .eq("workspace_id", workspaceId)
+      .in("message_id", messageIds);
+    if (reactionsError) throw reactionsError;
+  }
+
+  const scopedDeletes = await Promise.all([
+    client.from("messages").delete().eq("workspace_id", workspaceId).eq("topic_id", topicId),
+    client.from("tasks").delete().eq("workspace_id", workspaceId).eq("topic_id", topicId),
+    client.from("memory_entries").delete().eq("workspace_id", workspaceId).eq("topic_id", topicId),
+    client.from("approvals").delete().eq("workspace_id", workspaceId).eq("topic_id", topicId),
+    client.from("work_log_events").delete().eq("workspace_id", workspaceId).eq("topic_id", topicId),
+    client.from("agent_run_steps").delete().eq("workspace_id", workspaceId).eq("topic_id", topicId),
+    client.from("agent_runs").delete().eq("workspace_id", workspaceId).eq("topic_id", topicId),
+    client.from("ai_usage_events").delete().eq("workspace_id", workspaceId).eq("topic_id", topicId),
+    client.from("message_reactions").delete().eq("workspace_id", workspaceId).eq("topic_id", topicId),
+  ]);
+
+  for (const result of scopedDeletes) {
+    if (result.error) throw result.error;
+  }
+
+  const { error: topicDeleteError } = await client
+    .from("room_topics")
+    .delete()
+    .eq("workspace_id", workspaceId)
+    .eq("room_id", roomId)
+    .eq("id", topicId);
+  if (topicDeleteError) throw topicDeleteError;
+}

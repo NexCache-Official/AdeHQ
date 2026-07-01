@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { AuthError, requireAuthUser, requireWorkspaceMembership } from "@/lib/supabase/auth-server";
 import { assertCanAccessRoom } from "@/lib/server/room-access";
-import { topicFromRow } from "@/lib/server/topic-helpers";
+import { permanentlyDeleteTopic, topicFromRow } from "@/lib/server/topic-helpers";
+import { mapTopicCreateError } from "@/lib/server/supabase-errors";
 import { isGeneralTopic } from "@/lib/topics";
 import { nowISO } from "@/lib/utils";
 import type { TopicPriority, TopicStatus } from "@/lib/types";
@@ -56,8 +57,8 @@ export async function PATCH(
     if (body.title !== undefined) patch.title = body.title.trim();
     if (body.description !== undefined) patch.description = body.description?.trim() || null;
     if (body.status !== undefined) {
-      if (!isAdmin && body.status === "archived") {
-        return NextResponse.json({ error: "Only admins can archive topics." }, { status: 403 });
+      if (!isAdmin && !isCreator) {
+        return NextResponse.json({ error: "You cannot change this topic status." }, { status: 403 });
       }
       if (body.status === "archived" && isGeneralTopic(topic)) {
         return NextResponse.json(
@@ -92,7 +93,8 @@ export async function PATCH(
       return NextResponse.json({ error: error.message }, { status: error.status });
     }
     console.error("[AdeHQ topic PATCH]", error);
-    return NextResponse.json({ error: "Unable to update topic." }, { status: 500 });
+    const mapped = mapTopicCreateError(error);
+    return NextResponse.json({ error: mapped.message }, { status: mapped.status });
   }
 }
 
@@ -110,8 +112,24 @@ export async function DELETE(
     const { role } = await requireWorkspaceMembership(client, topic.workspaceId, user.id);
     await assertCanAccessRoom(client, topic.workspaceId, topic.roomId, user.id, role);
 
-    if (role !== "owner" && role !== "admin" && topic.createdById !== user.id) {
-      return NextResponse.json({ error: "You cannot archive this topic." }, { status: 403 });
+    const isAdmin = role === "owner" || role === "admin";
+    const isCreator = topic.createdById === user.id;
+    if (!isAdmin && !isCreator) {
+      return NextResponse.json({ error: "You cannot modify this topic." }, { status: 403 });
+    }
+
+    if (isGeneralTopic(topic)) {
+      return NextResponse.json(
+        { error: "General chat cannot be archived or deleted." },
+        { status: 400 },
+      );
+    }
+
+    const permanent = request.nextUrl.searchParams.get("permanent") === "true";
+
+    if (permanent) {
+      await permanentlyDeleteTopic(client, topic.workspaceId, topic.id, topic.roomId);
+      return NextResponse.json({ deleted: true, topicId: topic.id });
     }
 
     const { data, error } = await client
@@ -128,6 +146,14 @@ export async function DELETE(
       return NextResponse.json({ error: error.message }, { status: error.status });
     }
     console.error("[AdeHQ topic DELETE]", error);
-    return NextResponse.json({ error: "Unable to archive topic." }, { status: 500 });
+    const mapped = mapTopicCreateError(error);
+    return NextResponse.json(
+      {
+        error: mapped.message.includes("Unable to create topic")
+          ? "Unable to delete topic."
+          : mapped.message,
+      },
+      { status: mapped.status },
+    );
   }
 }

@@ -40,6 +40,7 @@ import {
   ScrollText,
   ShieldAlert,
   Sparkles,
+  Trash2,
   Users,
 } from "lucide-react";
 
@@ -101,10 +102,12 @@ export function TopicPanel({
   onSummarize,
   onArchive,
   onUnarchive,
+  onDeletePermanently,
   onSaveSummaryToMemory,
   onParticipationChange,
   onAiControl,
   summarizing,
+  topicActionBusy,
 }: {
   topic: RoomTopic;
   room: ProjectRoom;
@@ -119,12 +122,15 @@ export function TopicPanel({
   onSummarize: () => void;
   onArchive: () => void;
   onUnarchive?: () => void;
+  onDeletePermanently?: () => void;
   onSaveSummaryToMemory: () => void;
   onParticipationChange?: (mode: AiParticipationMode) => void;
   onAiControl?: (action: "stop_all" | "resume") => void;
   summarizing?: boolean;
+  topicActionBusy?: boolean;
 }) {
   const [tab, setTab] = useState<(typeof TABS)[number]["id"]>("overview");
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const isMainChat = isGeneralTopic(topic);
   const displayTitle = isMainChat ? mainChatLabel(isDm) : topic.title;
   const participation = getAiParticipationMode(topic);
@@ -204,8 +210,14 @@ export function TopicPanel({
         <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-6 pt-3.5">
           {tab === "overview" && (
             <div className="space-y-4">
+              {isArchived && (
+                <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                  This topic is archived. Restore it to continue working, or delete it permanently to
+                  free the title and remove all history.
+                </div>
+              )}
               <div className="flex flex-wrap gap-1.5">
-                <Button variant="secondary" size="sm" onClick={onSummarize} disabled={summarizing}>
+                <Button variant="secondary" size="sm" onClick={onSummarize} disabled={summarizing || isArchived}>
                   {summarizing ? (
                     <Loader2 className="h-3.5 w-3.5 animate-spin" />
                   ) : (
@@ -215,17 +227,95 @@ export function TopicPanel({
                 </Button>
                 {!isMainChat &&
                   (isArchived ? (
-                    onUnarchive && (
-                      <Button variant="ghost" size="sm" onClick={onUnarchive}>
-                        <ArchiveRestore className="h-3.5 w-3.5" /> Restore topic
-                      </Button>
-                    )
+                    <>
+                      {onUnarchive && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={onUnarchive}
+                          disabled={topicActionBusy}
+                        >
+                          <ArchiveRestore className="h-3.5 w-3.5" /> Restore topic
+                        </Button>
+                      )}
+                      {onDeletePermanently && !confirmDelete && (
+                        <Button
+                          variant="danger"
+                          size="sm"
+                          onClick={() => setConfirmDelete(true)}
+                          disabled={topicActionBusy}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" /> Delete permanently
+                        </Button>
+                      )}
+                    </>
                   ) : (
-                    <Button variant="ghost" size="sm" onClick={onArchive}>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={onArchive}
+                      disabled={topicActionBusy}
+                    >
                       Archive
                     </Button>
                   ))}
               </div>
+              {!isMainChat && isArchived && confirmDelete && onDeletePermanently && (
+                <div className="rounded-xl border border-red-200 bg-red-50 p-3">
+                  <p className="text-sm text-red-800">
+                    Delete <strong>{topic.title}</strong> permanently? This removes all messages,
+                    tasks, memory, approvals, and work log entries for this topic.
+                  </p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <Button
+                      variant="danger"
+                      size="sm"
+                      onClick={() => {
+                        onDeletePermanently();
+                        setConfirmDelete(false);
+                      }}
+                      disabled={topicActionBusy}
+                    >
+                      Yes, delete forever
+                    </Button>
+                    <Button variant="ghost" size="sm" onClick={() => setConfirmDelete(false)}>
+                      Cancel
+                    </Button>
+                  </div>
+                </div>
+              )}
+              {!isMainChat && !isArchived && onDeletePermanently && !confirmDelete && (
+                <button
+                  type="button"
+                  onClick={() => setConfirmDelete(true)}
+                  className="text-xs text-ink-3 underline-offset-2 hover:text-red-600 hover:underline"
+                >
+                  Delete topic permanently…
+                </button>
+              )}
+              {!isMainChat && !isArchived && confirmDelete && onDeletePermanently && (
+                <div className="rounded-xl border border-red-200 bg-red-50 p-3">
+                  <p className="text-sm text-red-800">
+                    Delete <strong>{topic.title}</strong> permanently? This cannot be undone.
+                  </p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <Button
+                      variant="danger"
+                      size="sm"
+                      onClick={() => {
+                        onDeletePermanently();
+                        setConfirmDelete(false);
+                      }}
+                      disabled={topicActionBusy}
+                    >
+                      Yes, delete forever
+                    </Button>
+                    <Button variant="ghost" size="sm" onClick={() => setConfirmDelete(false)}>
+                      Cancel
+                    </Button>
+                  </div>
+                </div>
+              )}
               {onParticipationChange && (
                 <details className="group">
                   <summary className="flex cursor-pointer list-none items-center gap-1.5 rounded-lg border border-border bg-muted px-2.5 py-1.5 text-xs text-ink-2 hover:bg-surface [&::-webkit-details-marker]:hidden">

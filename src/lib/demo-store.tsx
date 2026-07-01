@@ -163,6 +163,7 @@ type StoreActions = {
   refreshTopics: (roomId: string) => Promise<void>;
   upsertTopic: (topic: import("@/lib/types").RoomTopic) => void;
   setTopicSummary: (topicId: string, summary: string) => void;
+  removeTopicPermanently: (roomId: string, topicId: string) => void;
 
   // tasks
   createTask: (task: Partial<Task> & { title: string; roomId: string }) => Task;
@@ -1061,6 +1062,32 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         set((s) => ({
           ...s,
           topics: s.topics.map((t) => (t.id === topicId ? { ...t, summary } : t)),
+        }));
+      },
+
+      removeTopicPermanently: (roomId, topicId) => {
+        set((s) => ({
+          ...s,
+          topics: s.topics.filter((t) => t.id !== topicId),
+          topicMembers: s.topicMembers.filter((m) => m.topicId !== topicId),
+          tasks: s.tasks.filter((t) => t.topicId !== topicId),
+          memory: s.memory.filter((m) => m.topicId !== topicId),
+          approvals: s.approvals.filter((a) => a.topicId !== topicId),
+          workLog: s.workLog.filter((w) => w.topicId !== topicId),
+          rooms: s.rooms.map((room) =>
+            room.id === roomId
+              ? {
+                  ...room,
+                  messages: room.messages.filter((message) => message.topicId !== topicId),
+                  tasks: room.tasks.filter((taskId) =>
+                    !s.tasks.some((task) => task.id === taskId && task.topicId === topicId),
+                  ),
+                  memory: room.memory.filter((memoryId) =>
+                    !s.memory.some((entry) => entry.id === memoryId && entry.topicId === topicId),
+                  ),
+                }
+              : room,
+          ),
         }));
       },
 

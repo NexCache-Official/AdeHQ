@@ -14,7 +14,7 @@ import { effectiveEmployeeStatus } from "@/lib/maya-employee";
 import { cn } from "@/lib/utils";
 import { ChannelIcon, EmployeeAvatar } from "./EmployeeAvatar";
 import { EmployeeStatusBadge } from "./EmployeeStatusBadge";
-import { Plus } from "lucide-react";
+import { Plus, Archive } from "lucide-react";
 
 function MainChatIcon({ isDm }: { isDm: boolean }) {
   if (isDm) {
@@ -40,6 +40,7 @@ function TopicRow({
   onSelect,
   isMain,
   isDm,
+  archived,
 }: {
   topic: RoomTopic;
   label: string;
@@ -48,6 +49,7 @@ function TopicRow({
   onSelect: () => void;
   isMain?: boolean;
   isDm?: boolean;
+  archived?: boolean;
 }) {
   const running = topic.agentRunCount > 0;
 
@@ -93,9 +95,14 @@ function TopicRow({
       className={cn(
         "topicrow flex w-full cursor-pointer items-center gap-[9px] rounded-[10px] px-[10px] py-2 text-left transition-colors",
         selected ? "bg-accent-soft" : "hover:bg-black/[0.035]",
+        archived && "opacity-70",
       )}
     >
-      <span className="h-[5px] w-[5px] shrink-0 rounded-full bg-ink-3" />
+      {archived ? (
+        <Archive className="h-3 w-3 shrink-0 text-ink-3" strokeWidth={2} />
+      ) : (
+        <span className="h-[5px] w-[5px] shrink-0 rounded-full bg-ink-3" />
+      )}
       <span
         className={cn(
           "min-w-0 flex-1 truncate text-[13px]",
@@ -153,6 +160,12 @@ export function TopicList({
     const roomId = topics[0]?.roomId ?? room?.id ?? "";
     const base = nonGeneralTopics(topics, roomId);
     return sortTopics(base.filter((t) => !isGeneralTopic(t) && t.status !== "archived"));
+  }, [topics, room?.id]);
+
+  const archivedTopics = useMemo(() => {
+    const roomId = topics[0]?.roomId ?? room?.id ?? "";
+    const base = nonGeneralTopics(topics, roomId);
+    return sortTopics(base.filter((t) => !isGeneralTopic(t) && t.status === "archived"));
   }, [topics, room?.id]);
 
   const unreadFor = (topic: RoomTopic) => {
@@ -264,6 +277,30 @@ export function TopicList({
               />
             ))}
           </div>
+        )}
+
+        {archivedTopics.length > 0 && (
+          <>
+            <div className="mb-1.5 flex items-center justify-between px-2 pb-1.5 pt-4">
+              <span className="text-[10.5px] font-bold uppercase tracking-[0.07em] text-ink-3">
+                Archived
+              </span>
+              <span className="font-mono text-[10px] text-ink-3">{archivedTopics.length}</span>
+            </div>
+            <div className="space-y-0.5">
+              {archivedTopics.map((topic) => (
+                <TopicRow
+                  key={topic.id}
+                  topic={topic}
+                  label={topic.title}
+                  selected={topic.id === selectedTopicId}
+                  unread={0}
+                  onSelect={() => onSelect(topic.id)}
+                  archived
+                />
+              ))}
+            </div>
+          </>
         )}
       </div>
     </div>
