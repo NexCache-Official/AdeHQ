@@ -22,7 +22,7 @@ export async function POST(
     const body = (await request.json()) as AiControlBody;
 
     const { data: topicRow, error: topicError } = await client
-      .from("room_topics")
+      .from("channel_topics")
       .select("*")
       .eq("id", params.topicId)
       .maybeSingle();
@@ -83,7 +83,7 @@ export async function POST(
     }
 
     const { data: updated, error: updateError } = await client
-      .from("room_topics")
+      .from("channel_topics")
       .update({ metadata: meta, updated_at: nowISO() })
       .eq("workspace_id", workspaceId)
       .eq("id", params.topicId)
@@ -159,8 +159,8 @@ export async function GET(
     );
     if (!topic) {
       const { data: row } = await client
-        .from("room_topics")
-        .select("workspace_id, room_id, metadata")
+        .from("channel_topics")
+        .select("workspace_id, channel_id, metadata")
         .eq("id", params.topicId)
         .maybeSingle();
       if (!row) {
@@ -171,7 +171,7 @@ export async function GET(
       await assertCanAccessRoom(
         client,
         workspaceId,
-        String(row.room_id),
+        String(row.channel_id),
         user.id,
         role,
       );

@@ -151,6 +151,7 @@ type StoreActions = {
   createRoom: (room: Partial<ProjectRoom> & { name: string }) => ProjectRoom;
   openOrCreateDM: (employeeId: string) => ProjectRoom;
   updateRoom: (id: string, patch: Partial<ProjectRoom>) => void;
+  removeChannelPermanently: (channelId: string) => void;
   addEmployeeToRoom: (roomId: string, employeeId: string) => void;
   removeEmployeeFromRoom: (roomId: string, employeeId: string) => void;
   markRoomRead: (roomId: string) => void;
@@ -778,6 +779,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           memory: room.memory ?? [],
           unread: room.unread ?? 0,
           accent: room.accent ?? "#f97316",
+          status: room.status ?? "active",
           createdAt: timestamp,
           updatedAt: timestamp,
         };
@@ -891,6 +893,25 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           rooms: s.rooms.map((r) => (r.id === id ? updated : r)),
         }));
         runRemote((workspaceId) => persistRoomMetadata(workspaceId, updated));
+      },
+
+      removeChannelPermanently: (channelId) => {
+        set((s) => {
+          const topicIds = new Set(s.topics.filter((t) => t.roomId === channelId).map((t) => t.id));
+          return {
+            ...s,
+            rooms: s.rooms.filter((r) => r.id !== channelId),
+            topics: s.topics.filter((t) => t.roomId !== channelId),
+            topicMembers: s.topicMembers.filter((m) => m.roomId !== channelId),
+            tasks: s.tasks.filter((t) => t.roomId !== channelId),
+            memory: s.memory.filter((m) => m.roomId !== channelId),
+            approvals: s.approvals.filter((a) => a.roomId !== channelId),
+            workLog: s.workLog.filter((w) => w.roomId !== channelId),
+            employees: s.employees.map((e) =>
+              e.defaultRoomId === channelId ? { ...e, defaultRoomId: undefined } : e,
+            ),
+          };
+        });
       },
 
       addEmployeeToRoom: (roomId, employeeId) => {

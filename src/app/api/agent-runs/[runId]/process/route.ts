@@ -21,7 +21,7 @@ export async function POST(
 
     const { data: runRow, error: runError } = await client
       .from("agent_runs")
-      .select("workspace_id, room_id, topic_id, status, response_reason")
+      .select("workspace_id, channel_id, topic_id, status, response_reason")
       .eq("id", params.runId)
       .maybeSingle();
 
@@ -35,7 +35,7 @@ export async function POST(
     await assertCanAccessRoom(
       client,
       workspaceId,
-      String(runRow.room_id),
+      String(runRow.channel_id),
       user.id,
       role,
     );
@@ -78,7 +78,7 @@ export async function POST(
         : undefined,
       aiMessage: {
         id: result.aiMessageId,
-        roomId: String(runRow.room_id),
+        roomId: String(runRow.channel_id),
         topicId: runRow.topic_id ? String(runRow.topic_id) : undefined,
         senderType: "ai" as const,
         senderId: result.employeeId,

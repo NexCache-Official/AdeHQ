@@ -16,6 +16,8 @@ import {
   finalizeUsage,
 } from "@/lib/supabase/ai-runtime";
 import { loadTopicContext, persistEmployeeEffects } from "@/lib/server/room-messages";
+import { assertTopicInRoom } from "@/lib/server/topic-helpers";
+import { assertChannelActive } from "@/lib/server/channel-helpers";
 import {
   queueCollaboratorRuns,
   queueFollowUpRuns,
@@ -85,7 +87,7 @@ export async function processQueuedAgentRun(
 
   const run = claim.run;
   const employeeId = String(run.employee_id);
-  const roomId = String(run.room_id);
+  const roomId = String(run.channel_id);
   const topicId = run.topic_id ? String(run.topic_id) : "";
   const triggerMessageId = String(run.trigger_message_id);
   const rootTriggerMessageId = run.root_trigger_message_id
@@ -102,6 +104,9 @@ export async function processQueuedAgentRun(
     typeof runMetadata.leadEmployeeName === "string" ? runMetadata.leadEmployeeName : undefined;
 
   if (!topicId) throw new Error("Agent run missing topic.");
+
+  await assertTopicInRoom(client, workspaceId, roomId, topicId);
+  await assertChannelActive(client, workspaceId, roomId);
 
   const { data: usageRow } = await client
     .from("ai_usage_events")

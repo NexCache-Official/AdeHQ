@@ -9,7 +9,7 @@ export function topicFromRow(row: DbRow): RoomTopic {
   return {
     id: String(row.id),
     workspaceId: String(row.workspace_id),
-    roomId: String(row.room_id),
+    roomId: String(row.channel_id),
     title: String(row.title),
     slug: row.slug ? String(row.slug) : null,
     description: row.description ? String(row.description) : null,
@@ -37,7 +37,7 @@ export function topicMemberFromRow(row: DbRow): TopicMember {
   return {
     id: String(row.id),
     workspaceId: String(row.workspace_id),
-    roomId: String(row.room_id),
+    roomId: String(row.channel_id),
     topicId: String(row.topic_id),
     memberType: row.member_type as TopicMember["memberType"],
     memberId: String(row.member_id),
@@ -56,10 +56,10 @@ export async function getTopicForRoom(
   topicId: string,
 ): Promise<RoomTopic | null> {
   const { data, error } = await client
-    .from("room_topics")
+    .from("channel_topics")
     .select("*")
     .eq("workspace_id", workspaceId)
-    .eq("room_id", roomId)
+    .eq("channel_id", roomId)
     .eq("id", topicId)
     .maybeSingle();
   if (error) throw error;
@@ -88,10 +88,10 @@ export async function ensureGeneralTopic(
   roomId: string,
 ): Promise<RoomTopic> {
   const { data: existing, error: findError } = await client
-    .from("room_topics")
+    .from("channel_topics")
     .select("*")
     .eq("workspace_id", workspaceId)
-    .eq("room_id", roomId)
+    .eq("channel_id", roomId)
     .ilike("title", "general")
     .maybeSingle();
   if (findError) throw findError;
@@ -102,10 +102,10 @@ export async function ensureGeneralTopic(
   }
 
   const { data: created, error: createError } = await client
-    .from("room_topics")
+    .from("channel_topics")
     .insert({
       workspace_id: workspaceId,
-      room_id: roomId,
+      channel_id: roomId,
       title: "General",
       description: "Default topic for existing room messages.",
       created_by_type: "system",
@@ -129,7 +129,7 @@ export async function backfillOrphanMessagesToGeneralTopic(
     .from("messages")
     .update({ topic_id: topic.id })
     .eq("workspace_id", workspaceId)
-    .eq("room_id", roomId)
+    .eq("channel_id", roomId)
     .is("topic_id", null);
   if (error) throw error;
 }
@@ -142,15 +142,15 @@ async function ensureTopicMembersFromRoom(
 ): Promise<void> {
   const [roomMembersResult, topicMembersResult] = await Promise.all([
     client
-      .from("room_members")
+      .from("channel_members")
       .select("member_type, member_id")
       .eq("workspace_id", workspaceId)
-      .eq("room_id", roomId),
+      .eq("channel_id", roomId),
     client
       .from("topic_members")
       .select("member_type, member_id")
       .eq("workspace_id", workspaceId)
-      .eq("room_id", roomId)
+      .eq("channel_id", roomId)
       .eq("topic_id", topicId),
   ]);
 
@@ -166,7 +166,7 @@ async function ensureTopicMembersFromRoom(
     .filter((m) => !existing.has(`${String(m.member_type)}:${String(m.member_id)}`))
     .map((m) => ({
       workspace_id: workspaceId,
-      room_id: roomId,
+      channel_id: roomId,
       topic_id: topicId,
       member_type: String(m.member_type),
       member_id: String(m.member_id),
@@ -189,12 +189,12 @@ export async function ensureRoomAiMembers(
   if (!employeeIds.length) return;
   const rows = employeeIds.map((memberId) => ({
     workspace_id: workspaceId,
-    room_id: roomId,
+    channel_id: roomId,
     member_type: "ai",
     member_id: memberId,
   }));
-  const { error } = await client.from("room_members").upsert(rows, {
-    onConflict: "workspace_id,room_id,member_type,member_id",
+  const { error } = await client.from("channel_members").upsert(rows, {
+    onConflict: "workspace_id,channel_id,member_type,member_id",
   });
   if (error) throw error;
 }
@@ -249,10 +249,10 @@ export async function permanentlyDeleteTopic(
   }
 
   const { error: topicDeleteError } = await client
-    .from("room_topics")
+    .from("channel_topics")
     .delete()
     .eq("workspace_id", workspaceId)
-    .eq("room_id", roomId)
+    .eq("channel_id", roomId)
     .eq("id", topicId);
   if (topicDeleteError) throw topicDeleteError;
 }

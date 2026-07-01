@@ -298,9 +298,15 @@ export type RoomMessage = {
   failed?: boolean;
 };
 
-/** `channel` = multi-member group room; `dm` = private 1:1 with one AI employee (not assignable as a project room). */
+/** `channel` = multi-member group space; `dm` = private 1:1 with one AI employee. */
 export type RoomKind = "channel" | "dm";
 
+export type ChannelStatus = "active" | "archived";
+
+/**
+ * A channel (group collaboration space) or DM. Stored in Supabase `channels` table.
+ * `roomId` on topics/messages is the parent channel id (group channel or DM).
+ */
 export type ProjectRoom = {
   id: string;
   name: string;
@@ -316,6 +322,8 @@ export type ProjectRoom = {
   memory: string[];
   unread: number;
   accent: string;
+  /** Group channels can be archived; DMs stay active. */
+  status?: ChannelStatus;
   createdAt: string;
   updatedAt: string;
 };

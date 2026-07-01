@@ -68,6 +68,10 @@ export async function POST(
       if (err instanceof AuthError) {
         return messageError("not_room_member", err.message, err.status);
       }
+      const msg = err instanceof Error ? err.message : "Unable to send message.";
+      if (msg.includes("archived")) {
+        return messageError("channel_archived", msg, 400);
+      }
       throw err;
     }
 
@@ -84,6 +88,9 @@ export async function POST(
       const msg = err instanceof Error ? err.message : "Topic not found.";
       if (msg.includes("archived")) {
         return messageError("topic_archived", msg, 400, { topicId });
+      }
+      if (msg.includes("channel is archived")) {
+        return messageError("channel_archived", msg, 400, { topicId });
       }
       return messageError("topic_not_in_room", msg, 404, { topicId });
     }

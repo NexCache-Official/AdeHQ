@@ -19,7 +19,7 @@ export async function POST(
     const body = (await request.json()) as ReadBody;
 
     const { data: topicRow, error: topicError } = await client
-      .from("room_topics")
+      .from("channel_topics")
       .select("*")
       .eq("id", params.topicId)
       .maybeSingle();
@@ -54,7 +54,7 @@ export async function POST(
     } else {
       const { error: insertError } = await client.from("topic_members").insert({
         workspace_id: topic.workspaceId,
-        room_id: topic.roomId,
+        channel_id: topic.roomId,
         topic_id: params.topicId,
         member_type: "human",
         member_id: user.id,

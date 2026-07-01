@@ -18,8 +18,8 @@ export async function POST(
     }
 
     const { data: topicRow, error: topicError } = await client
-      .from("room_topics")
-      .select("workspace_id, room_id")
+      .from("channel_topics")
+      .select("workspace_id, channel_id")
       .eq("id", params.topicId)
       .maybeSingle();
     if (topicError) throw topicError;
@@ -28,7 +28,7 @@ export async function POST(
     }
 
     const workspaceId = String(topicRow.workspace_id);
-    const roomId = String(topicRow.room_id);
+    const roomId = String(topicRow.channel_id);
     const { role } = await requireWorkspaceMembership(client, workspaceId, user.id);
     await assertCanAccessRoom(client, workspaceId, roomId, user.id, role);
 
@@ -48,7 +48,7 @@ export async function POST(
       .from("topic_members")
       .insert({
         workspace_id: workspaceId,
-        room_id: roomId,
+        channel_id: roomId,
         topic_id: params.topicId,
         member_type: "ai",
         member_id: body.employeeId,

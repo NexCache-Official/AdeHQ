@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { AuthError } from "@/lib/supabase/auth-server";
+import { assertChannelActive } from "@/lib/server/channel-helpers";
 
 export async function getWorkspaceMemberRole(
   client: SupabaseClient,
@@ -35,10 +36,10 @@ export async function isRoomMember(
   userId: string,
 ): Promise<boolean> {
   const { data, error } = await client
-    .from("room_members")
+    .from("channel_members")
     .select("member_id")
     .eq("workspace_id", workspaceId)
-    .eq("room_id", roomId)
+    .eq("channel_id", roomId)
     .eq("member_type", "human")
     .eq("member_id", userId)
     .maybeSingle();
@@ -70,4 +71,5 @@ export async function assertCanSendRoomMessage(
   role: string,
 ): Promise<void> {
   await assertCanAccessRoom(client, workspaceId, roomId, userId, role);
+  await assertChannelActive(client, workspaceId, roomId);
 }

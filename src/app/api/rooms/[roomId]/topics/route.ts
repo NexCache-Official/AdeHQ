@@ -44,16 +44,16 @@ export async function GET(
 
     const [topicsResult, membersResult] = await Promise.all([
       client
-        .from("room_topics")
+        .from("channel_topics")
         .select("*")
         .eq("workspace_id", workspaceId)
-        .eq("room_id", params.roomId)
+        .eq("channel_id", params.roomId)
         .order("last_activity_at", { ascending: false }),
       client
         .from("topic_members")
         .select("*")
         .eq("workspace_id", workspaceId)
-        .eq("room_id", params.roomId),
+        .eq("channel_id", params.roomId),
     ]);
 
     if (topicsResult.error) throw topicsResult.error;
@@ -100,10 +100,10 @@ export async function POST(
     const slug = slugifyTopicTitle(title);
 
     const { data: topicRow, error: topicError } = await client
-      .from("room_topics")
+      .from("channel_topics")
       .insert({
         workspace_id: workspaceId,
-        room_id: params.roomId,
+        channel_id: params.roomId,
         title,
         slug,
         description: body.description?.trim() || null,
@@ -122,7 +122,7 @@ export async function POST(
     const memberRows = [
       {
         workspace_id: workspaceId,
-        room_id: params.roomId,
+        channel_id: params.roomId,
         topic_id: topic.id,
         member_type: "human",
         member_id: user.id,
@@ -130,7 +130,7 @@ export async function POST(
       },
       ...aiEmployeeIds.map((employeeId) => ({
         workspace_id: workspaceId,
-        room_id: params.roomId,
+        channel_id: params.roomId,
         topic_id: topic.id,
         member_type: "ai",
         member_id: employeeId,
@@ -152,7 +152,7 @@ export async function POST(
     const { error: messageError } = await client.from("messages").insert({
       workspace_id: workspaceId,
       id: systemMessageId,
-      room_id: params.roomId,
+      channel_id: params.roomId,
       topic_id: topic.id,
       sender_type: "system",
       sender_id: "system",
@@ -170,7 +170,7 @@ export async function POST(
       const { error: starterError } = await client.from("messages").insert({
         workspace_id: workspaceId,
         id: starterId,
-        room_id: params.roomId,
+        channel_id: params.roomId,
         topic_id: topic.id,
         sender_type: "human",
         sender_id: user.id,
@@ -191,7 +191,7 @@ export async function POST(
     }
 
     const { data: refreshed } = await client
-      .from("room_topics")
+      .from("channel_topics")
       .select("*")
       .eq("id", topic.id)
       .single();

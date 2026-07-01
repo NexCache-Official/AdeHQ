@@ -11,7 +11,11 @@ export function isDirectMessage(room: ProjectRoom): boolean {
 }
 
 export function getGroupChannels(rooms: ProjectRoom[]): ProjectRoom[] {
-  return rooms.filter(isGroupChannel);
+  return rooms.filter((r) => isGroupChannel(r) && (r.status ?? "active") !== "archived");
+}
+
+export function getArchivedGroupChannels(rooms: ProjectRoom[]): ProjectRoom[] {
+  return rooms.filter((r) => isGroupChannel(r) && r.status === "archived");
 }
 
 export function getDirectMessages(rooms: ProjectRoom[]): ProjectRoom[] {

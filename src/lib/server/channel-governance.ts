@@ -103,7 +103,7 @@ export async function loadChannelGovernanceContext(
       .from("agent_runs")
       .select("started_at")
       .eq("workspace_id", workspaceId)
-      .eq("room_id", roomId)
+      .eq("channel_id", roomId)
       .in("response_reason", AMBIENT_RESPONSE_REASONS)
       .gte("started_at", since)
       .order("started_at", { ascending: false })

@@ -4,6 +4,7 @@ export type MessageErrorCode =
   | "missing_topic_id"
   | "topic_not_in_room"
   | "topic_archived"
+  | "channel_archived"
   | "not_room_member"
   | "room_not_found"
   | "message_required"

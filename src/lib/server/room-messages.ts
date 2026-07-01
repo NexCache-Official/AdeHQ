@@ -57,7 +57,7 @@ function employeeFromRow(row: DbRow, tools: ToolAccess[]): AIEmployee {
     avgResponseTime: String(row.avg_response_time ?? "-"),
     trustScore: Number(row.trust_score ?? 75),
     accent: String(row.accent ?? "#f97316"),
-    defaultRoomId: row.default_room_id ? String(row.default_room_id) : undefined,
+    defaultRoomId: row.default_channel_id ? String(row.default_channel_id) : undefined,
     participationStyle: row.participation_style
       ? (String(row.participation_style) as AIEmployee["participationStyle"])
       : "balanced_teammate",
@@ -69,7 +69,7 @@ function employeeFromRow(row: DbRow, tools: ToolAccess[]): AIEmployee {
 function messageFromRow(row: DbRow): RoomMessage {
   return {
     id: String(row.id),
-    roomId: String(row.room_id),
+    roomId: String(row.channel_id),
     topicId: row.topic_id ? String(row.topic_id) : undefined,
     senderType: row.sender_type as RoomMessage["senderType"],
     senderId: String(row.sender_id),
@@ -90,7 +90,7 @@ function messageFromRow(row: DbRow): RoomMessage {
 function memoryFromRow(row: DbRow): MemoryEntry {
   return {
     id: String(row.id),
-    roomId: String(row.room_id),
+    roomId: String(row.channel_id),
     topicId: row.topic_id ? String(row.topic_id) : undefined,
     type: row.type as MemoryEntry["type"],
     title: String(row.title),
@@ -171,16 +171,16 @@ export async function loadRespondersContext(
 ): Promise<RespondersContext> {
   const [roomResult, membersResult, employeesResult, toolsResult] = await Promise.all([
     client
-      .from("project_rooms")
+      .from("channels")
       .select("id, kind, dm_employee_id")
       .eq("workspace_id", workspaceId)
       .eq("id", roomId)
       .single(),
     client
-      .from("room_members")
+      .from("channel_members")
       .select("member_type, member_id")
       .eq("workspace_id", workspaceId)
-      .eq("room_id", roomId),
+      .eq("channel_id", roomId),
     client.from("ai_employees").select("*").eq("workspace_id", workspaceId),
     client.from("employee_tools").select("*").eq("workspace_id", workspaceId),
   ]);
@@ -219,33 +219,39 @@ export async function loadTopicContext(
   options: LoadTopicContextOptions = {},
 ): Promise<RoomContext> {
   const topicResult = await client
-    .from("room_topics")
+    .from("channel_topics")
     .select("*")
     .eq("workspace_id", workspaceId)
-    .eq("room_id", roomId)
+    .eq("channel_id", roomId)
     .eq("id", topicId)
     .single();
   if (topicResult.error) throw topicResult.error;
   const topic = topicFromRow(topicResult.data as DbRow);
+  if (topic.status === "archived") {
+    throw new Error("This topic is archived.");
+  }
 
   const roomResult = await client
-    .from("project_rooms")
+    .from("channels")
     .select("*")
     .eq("workspace_id", workspaceId)
     .eq("id", roomId)
     .single();
   if (roomResult.error) throw roomResult.error;
   const roomRow = roomResult.data as DbRow;
+  if (String(roomRow.status ?? "active") === "archived") {
+    throw new Error("This channel is archived.");
+  }
   const lean = options.lean ?? roomRow.kind === "dm";
   const messageLimit = lean ? 12 : 50;
   const memoryLimit = lean ? 6 : 12;
   const pinnedLimit = lean ? 3 : 6;
 
   const membersResult = await client
-    .from("room_members")
+    .from("channel_members")
     .select("*")
     .eq("workspace_id", workspaceId)
-    .eq("room_id", roomId);
+    .eq("channel_id", roomId);
 
   const members = (membersResult.data as DbRow[] | null) ?? [];
   const humanIds = members.filter((m) => m.member_type === "human").map((m) => String(m.member_id));
@@ -268,7 +274,7 @@ export async function loadTopicContext(
       .from("messages")
       .select("*")
       .eq("workspace_id", workspaceId)
-      .eq("room_id", roomId)
+      .eq("channel_id", roomId)
       .eq("topic_id", topicId)
       .order("created_at", { ascending: true })
       .limit(messageLimit),
@@ -285,7 +291,7 @@ export async function loadTopicContext(
       .from("memory_entries")
       .select("*")
       .eq("workspace_id", workspaceId)
-      .eq("room_id", roomId)
+      .eq("channel_id", roomId)
       .in("status", ["pinned", "approved"])
       .is("topic_id", null)
       .order("created_at", { ascending: false })
@@ -342,7 +348,7 @@ export async function loadTopicContext(
 
   const openTasks = ((tasksResult.data as DbRow[] | null) ?? []).map((row) => ({
     id: String(row.id),
-    roomId: String(row.room_id),
+    roomId: String(row.channel_id),
     topicId: row.topic_id ? String(row.topic_id) : undefined,
     title: String(row.title),
     description: row.description ? String(row.description) : undefined,
@@ -358,7 +364,7 @@ export async function loadTopicContext(
 
   const topicApprovals = ((approvalsResult.data as DbRow[] | null) ?? []).map((row) => ({
     id: String(row.id),
-    roomId: String(row.room_id),
+    roomId: String(row.channel_id),
     topicId: row.topic_id ? String(row.topic_id) : undefined,
     requestedBy: String(row.requested_by),
     title: String(row.title),
@@ -371,7 +377,7 @@ export async function loadTopicContext(
 
   const topicWorkLogs = ((workLogsResult.data as DbRow[] | null) ?? []).map((row) => ({
     id: String(row.id),
-    roomId: String(row.room_id),
+    roomId: String(row.channel_id),
     topicId: row.topic_id ? String(row.topic_id) : undefined,
     employeeId: String(row.employee_id),
     action: String(row.action),
@@ -477,7 +483,7 @@ export async function insertHumanMessage(
   const { error } = await client.from("messages").insert({
     workspace_id: workspaceId,
     id: message.id,
-    room_id: roomId,
+    channel_id: roomId,
     topic_id: topicId,
     sender_type: message.senderType,
     sender_id: message.senderId,
@@ -542,7 +548,7 @@ export async function persistEmployeeEffects(
     const { error } = await client.from("memory_entries").insert({
       workspace_id: workspaceId,
       id: entry.id,
-      room_id: roomId,
+      channel_id: roomId,
       topic_id: topicId,
       type: entry.type,
       title: entry.title,
@@ -576,7 +582,7 @@ export async function persistEmployeeEffects(
     const { error } = await client.from("tasks").insert({
       workspace_id: workspaceId,
       id: task.id,
-      room_id: roomId,
+      channel_id: roomId,
       topic_id: topicId,
       title: task.title,
       description: task.description ?? null,
@@ -643,7 +649,7 @@ export async function persistEmployeeEffects(
     const { error } = await client.from("approvals").insert({
       workspace_id: workspaceId,
       id: approval.id,
-      room_id: roomId,
+      channel_id: roomId,
       topic_id: topicId,
       requested_by: approval.requestedBy,
       title: approval.title,
@@ -691,7 +697,7 @@ export async function persistEmployeeEffects(
     const { error } = await client.from("work_log_events").insert({
       workspace_id: workspaceId,
       id: event.id,
-      room_id: roomId,
+      channel_id: roomId,
       topic_id: topicId,
       employee_id: event.employeeId,
       action: event.action,
@@ -729,7 +735,7 @@ export async function persistEmployeeEffects(
   const { error: messageError } = await client.from("messages").insert({
     workspace_id: workspaceId,
     id: aiMessage.id,
-    room_id: roomId,
+    channel_id: roomId,
     topic_id: topicId,
     sender_type: aiMessage.senderType,
     sender_id: aiMessage.senderId,
@@ -771,7 +777,7 @@ export async function getWorkspaceIdForRoom(
   roomId: string,
 ): Promise<string | null> {
   const { data, error } = await client
-    .from("project_rooms")
+    .from("channels")
     .select("workspace_id")
     .eq("id", roomId)
     .limit(1);

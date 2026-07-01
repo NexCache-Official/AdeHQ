@@ -25,7 +25,7 @@ export async function POST(
     const { user, client } = await requireAuthUser(request);
 
     const { data: topicRow, error: topicError } = await client
-      .from("room_topics")
+      .from("channel_topics")
       .select("*")
       .eq("id", params.topicId)
       .maybeSingle();
@@ -112,7 +112,7 @@ Stay focused only on this topic. Do not invent facts.`,
 
     const summary = cleanSummary(text);
     const { data: updated, error: updateError } = await client
-      .from("room_topics")
+      .from("channel_topics")
       .update({ summary, updated_at: nowISO() })
       .eq("id", params.topicId)
       .select("*")
@@ -123,7 +123,7 @@ Stay focused only on this topic. Do not invent facts.`,
     await client.from("memory_entries").insert({
       workspace_id: topic.workspaceId,
       id: memoryId,
-      room_id: topic.roomId,
+      channel_id: topic.roomId,
       topic_id: params.topicId,
       type: "general",
       title: `Topic summary: ${topic.title}`,

@@ -153,6 +153,7 @@ export function RoomChat({
   const processQueuedRuns = useCallback(
     async (queuedRuns: QueuedRunClient[], waitingRuns: ActiveRun[] = []) => {
       if ((!queuedRuns.length && !waitingRuns.length) || !topic) return;
+      if (topic.status === "archived" || room.status === "archived") return;
 
       trace("agent-run", "info", `Processing ${queuedRuns.length} queued run(s)`, {
         runs: queuedRuns,
@@ -335,11 +336,12 @@ export function RoomChat({
 
       void actions.refreshTopics(room.id);
     },
-    [actions, room.id, state.workspace.id, topic, trace],
+    [actions, room.id, room.status, state.workspace.id, topic, trace],
   );
 
   useEffect(() => {
     if (!topic || backend !== "supabase") return;
+    if (topic.status === "archived" || room.status === "archived") return;
     let cancelled = false;
 
     const recoverRuns = async () => {
@@ -388,7 +390,7 @@ export function RoomChat({
     return () => {
       cancelled = true;
     };
-  }, [topic?.id, room.id, backend, processQueuedRuns, trace]);
+  }, [topic?.id, topic?.status, room.id, room.status, backend, processQueuedRuns, trace]);
 
   const retryRun = (run: ActiveRun) => {
     trace("agent-run", "info", `Retrying ${run.employeeName}`, { runId: run.runId });
@@ -402,7 +404,7 @@ export function RoomChat({
     clientMessageId?: string,
     mentionsJson?: import("@/lib/types").MentionRef[],
   ) => {
-    if (!topic) return;
+    if (!topic || topic.status === "archived" || room.status === "archived") return;
     setFailedSend(null);
     setSendError(null);
     const messageId = clientMessageId ?? uid("msg");
@@ -529,7 +531,7 @@ export function RoomChat({
   };
 
   const sendViaDemo = async (text: string) => {
-    if (!topic) return;
+    if (!topic || topic.status === "archived" || room.status === "archived") return;
     const candidates = roomEmployees.map((e) => ({ id: e.id, name: e.name }));
     const mentions = extractMentions(text, candidates);
 
@@ -551,7 +553,7 @@ export function RoomChat({
   };
 
   const handleSend = async (text: string, mentionsJson?: import("@/lib/types").MentionRef[]) => {
-    if (!topic) return;
+    if (!topic || topic.status === "archived" || room.status === "archived") return;
     if (useServerApi) {
       await sendViaServer(text, undefined, mentionsJson);
       return;
@@ -587,7 +589,15 @@ export function RoomChat({
     (t) => t.topicId === topic.id && t.status !== "done",
   ).length;
 
-  const placeholder = isDm && dmEmployee
+  const isTopicArchived = topic.status === "archived";
+  const isChannelArchived = room.status === "archived";
+  const chatDisabled = isTopicArchived || isChannelArchived;
+
+  const placeholder = chatDisabled
+    ? isChannelArchived
+      ? "This channel is archived — restore it from the Channels page to send messages"
+      : "This topic is archived — restore it to send messages"
+    : isDm && dmEmployee
     ? `Message ${dmEmployee.name} directly… use @ to mention, / for commands`
     : isMainChat
       ? `Message ${mainChatLabel(isDm)}…`
@@ -644,7 +654,7 @@ export function RoomChat({
             <button
               type="button"
               onClick={onSummarize}
-              disabled={summarizing}
+              disabled={summarizing || chatDisabled}
               className="hidden items-center gap-1.5 rounded-[10px] border border-border bg-surface px-[11px] py-[7px] text-xs font-medium text-ink-2 transition-colors hover:bg-muted disabled:opacity-50 sm:inline-flex"
             >
               {summarizing ? (
@@ -698,7 +708,7 @@ export function RoomChat({
           </div>
         )}
         {topicMessages.length === 0 ? (
-          isDm && dmEmployee && isMayaEmployee(dmEmployee) ? (
+          isDm && dmEmployee && isMayaEmployee(dmEmployee) && !chatDisabled ? (
             <MayaDmEmptyState
               firstName={state.user?.name?.split(" ")[0] ?? "there"}
               onSendMessage={(text) => {
@@ -812,15 +822,23 @@ export function RoomChat({
 
       <div className="shrink-0 px-[26px] pb-[18px] pt-1.5">
         <div className="mx-auto max-w-[760px]">
+          {chatDisabled && (
+            <div className="mb-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+              {isChannelArchived
+                ? "This channel is archived. Messaging and AI responses are paused until you restore it."
+                : "This topic is archived. Messaging and AI responses are paused until you restore it."}
+            </div>
+          )}
           <ChatComposer
             employees={roomEmployees}
             onSend={handleSend}
-            disabled={!topic}
+            disabled={!topic || chatDisabled}
             placeholder={placeholder}
             draftText={draftText}
             onDraftConsumed={onDraftConsumed}
             onSlashCommand={onSlashCommand}
           />
+          {!chatDisabled && (
           <p className="px-1.5 pt-[7px] text-[11px] text-ink-3">
             <span>
               <b className="font-mono text-ink-2">@</b> mention an employee
@@ -830,6 +848,7 @@ export function RoomChat({
             </span>
             <span className="float-right hidden sm:inline">Enter to send · Shift+Enter for newline</span>
           </p>
+          )}
         </div>
       </div>
     </div>

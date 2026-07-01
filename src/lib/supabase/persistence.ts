@@ -397,8 +397,8 @@ export async function loadWorkspaceState(
     supabase.from("workspace_tools").select("*").eq("workspace_id", workspaceId),
     supabase.from("ai_employees").select("*").eq("workspace_id", workspaceId),
     supabase.from("employee_tools").select("*").eq("workspace_id", workspaceId),
-    supabase.from("project_rooms").select("*").eq("workspace_id", workspaceId),
-    supabase.from("room_members").select("*").eq("workspace_id", workspaceId),
+    supabase.from("channels").select("*").eq("workspace_id", workspaceId),
+    supabase.from("channel_members").select("*").eq("workspace_id", workspaceId),
     supabase.from("messages").select("*").eq("workspace_id", workspaceId),
     supabase.from("tasks").select("*").eq("workspace_id", workspaceId),
     supabase.from("memory_entries").select("*").eq("workspace_id", workspaceId),
@@ -412,7 +412,7 @@ export async function loadWorkspaceState(
       .select("*")
       .eq("status", "pending")
       .ilike("invited_email", user.email ?? ""),
-    supabase.from("room_topics").select("*").eq("workspace_id", workspaceId),
+    supabase.from("channel_topics").select("*").eq("workspace_id", workspaceId),
     supabase.from("topic_members").select("*").eq("workspace_id", workspaceId),
   ]);
 
@@ -497,9 +497,9 @@ export async function loadWorkspaceState(
 
   const roomMembersByRoom = new Map<string, DbRow[]>();
   for (const member of (roomMembersResult.data as DbRow[] | null) ?? []) {
-    const existing = roomMembersByRoom.get(member.room_id) ?? [];
+    const existing = roomMembersByRoom.get(member.channel_id) ?? [];
     existing.push(member);
-    roomMembersByRoom.set(member.room_id, existing);
+    roomMembersByRoom.set(member.channel_id, existing);
   }
 
   const messagesByRoom = groupBy(messages, (message) => message.roomId);
@@ -551,10 +551,10 @@ export async function loadWorkspaceState(
         const [empRefresh, roomRefresh, memberRefresh, msgRefresh, topicsRefresh, topicMembersRefresh] =
           await Promise.all([
           supabase.from("ai_employees").select("*").eq("workspace_id", workspaceId),
-          supabase.from("project_rooms").select("*").eq("workspace_id", workspaceId).eq("kind", "dm"),
-          supabase.from("room_members").select("*").eq("workspace_id", workspaceId),
+          supabase.from("channels").select("*").eq("workspace_id", workspaceId).eq("kind", "dm"),
+          supabase.from("channel_members").select("*").eq("workspace_id", workspaceId),
           supabase.from("messages").select("*").eq("workspace_id", workspaceId),
-          supabase.from("room_topics").select("*").eq("workspace_id", workspaceId),
+          supabase.from("channel_topics").select("*").eq("workspace_id", workspaceId),
           supabase.from("topic_members").select("*").eq("workspace_id", workspaceId),
         ]);
         if (!empRefresh.error && empRefresh.data) {
@@ -571,7 +571,7 @@ export async function loadWorkspaceState(
           const dmRooms = (roomRefresh.data as DbRow[]).map((row) =>
             roomFromRow(
               row,
-              refreshedMembers.filter((m) => m.room_id === row.id),
+              refreshedMembers.filter((m) => m.channel_id === row.id),
               refreshedMessagesByRoom.get(row.id) ?? [],
               tasksByRoom.get(row.id)?.map((task) => task.id) ?? [],
               memoryByRoom.get(row.id)?.map((entry) => entry.id) ?? [],
@@ -782,7 +782,7 @@ function employeeFromRow(row: DbRow, tools: ToolAccess[]): AIEmployee {
     avgResponseTime: row.avg_response_time ?? "-",
     trustScore: row.trust_score ?? 75,
     accent: row.accent ?? "#f97316",
-    defaultRoomId: row.default_room_id ?? undefined,
+    defaultRoomId: row.default_channel_id ?? undefined,
     participationStyle: row.participation_style ?? "balanced_teammate",
     isSystemEmployee: Boolean(row.is_system_employee),
     systemEmployeeKey: row.system_employee_key ?? undefined,
@@ -813,6 +813,7 @@ function roomFromRow(
     memory: memoryIds,
     unread: row.unread ?? 0,
     accent: row.accent ?? "#f97316",
+    status: (row.status as import("@/lib/types").ChannelStatus) ?? "active",
     createdAt: row.created_at ?? nowISO(),
     updatedAt: row.updated_at ?? row.created_at ?? nowISO(),
   };
@@ -821,7 +822,7 @@ function roomFromRow(
 function messageFromRow(row: DbRow): RoomMessage {
   return {
     id: row.id,
-    roomId: row.room_id,
+    roomId: row.channel_id,
     topicId: row.topic_id ?? undefined,
     senderType: row.sender_type,
     senderId: row.sender_id,
@@ -840,7 +841,7 @@ function messageFromRow(row: DbRow): RoomMessage {
 function taskFromRow(row: DbRow): Task {
   return {
     id: row.id,
-    roomId: row.room_id,
+    roomId: row.channel_id,
     topicId: row.topic_id ?? undefined,
     title: row.title,
     description: row.description ?? undefined,
@@ -858,7 +859,7 @@ function taskFromRow(row: DbRow): Task {
 function memoryFromRow(row: DbRow): MemoryEntry {
   return {
     id: row.id,
-    roomId: row.room_id,
+    roomId: row.channel_id,
     topicId: row.topic_id ?? undefined,
     type: row.type,
     title: row.title,
@@ -873,7 +874,7 @@ function memoryFromRow(row: DbRow): MemoryEntry {
 function approvalFromRow(row: DbRow): Approval {
   return {
     id: row.id,
-    roomId: row.room_id,
+    roomId: row.channel_id,
     topicId: row.topic_id ?? undefined,
     requestedBy: row.requested_by,
     title: row.title,
@@ -889,7 +890,7 @@ function approvalFromRow(row: DbRow): Approval {
 function workLogFromRow(row: DbRow): WorkLogEvent {
   return {
     id: row.id,
-    roomId: row.room_id,
+    roomId: row.channel_id,
     topicId: row.topic_id ?? undefined,
     employeeId: row.employee_id,
     action: row.action,
@@ -905,7 +906,7 @@ function workLogFromRow(row: DbRow): WorkLogEvent {
 function callFromRow(row: DbRow): Call {
   return {
     id: row.id,
-    roomId: row.room_id,
+    roomId: row.channel_id,
     title: row.title,
     status: row.status,
     participants: jsonArray(row.participants),
@@ -940,7 +941,7 @@ function employeeRow(workspaceId: string, employee: AIEmployee): DbRow {
     avg_response_time: employee.avgResponseTime,
     trust_score: employee.trustScore,
     accent: employee.accent,
-    default_room_id: employee.defaultRoomId ?? null,
+    default_channel_id: employee.defaultRoomId ?? null,
     participation_style: employee.participationStyle ?? "balanced_teammate",
     is_system_employee: employee.isSystemEmployee ?? false,
     system_employee_key: employee.systemEmployeeKey ?? null,
@@ -972,6 +973,7 @@ function roomRow(workspaceId: string, room: ProjectRoom): DbRow {
     brief: room.brief,
     unread: room.unread,
     accent: room.accent,
+    status: room.status ?? "active",
     created_at: room.createdAt,
     updated_at: room.updatedAt,
   };
@@ -981,13 +983,13 @@ function roomMemberRows(workspaceId: string, room: ProjectRoom): DbRow[] {
   return [
     ...room.humans.map((memberId) => ({
       workspace_id: workspaceId,
-      room_id: room.id,
+      channel_id: room.id,
       member_type: "human",
       member_id: memberId,
     })),
     ...room.aiEmployees.map((memberId) => ({
       workspace_id: workspaceId,
-      room_id: room.id,
+      channel_id: room.id,
       member_type: "ai",
       member_id: memberId,
     })),
@@ -998,7 +1000,7 @@ function messageRow(workspaceId: string, message: RoomMessage): DbRow {
   return {
     workspace_id: workspaceId,
     id: message.id,
-    room_id: message.roomId,
+    channel_id: message.roomId,
     topic_id: message.topicId ?? null,
     sender_type: message.senderType,
     sender_id: message.senderId,
@@ -1018,7 +1020,7 @@ function taskRow(workspaceId: string, task: Task): DbRow {
   return {
     workspace_id: workspaceId,
     id: task.id,
-    room_id: task.roomId,
+    channel_id: task.roomId,
     topic_id: task.topicId ?? null,
     title: task.title,
     description: task.description ?? null,
@@ -1037,7 +1039,7 @@ function memoryRow(workspaceId: string, entry: MemoryEntry): DbRow {
   return {
     workspace_id: workspaceId,
     id: entry.id,
-    room_id: entry.roomId,
+    channel_id: entry.roomId,
     topic_id: entry.topicId ?? null,
     type: entry.type,
     title: entry.title,
@@ -1053,7 +1055,7 @@ function approvalRow(workspaceId: string, approval: Approval): DbRow {
   return {
     workspace_id: workspaceId,
     id: approval.id,
-    room_id: approval.roomId,
+    channel_id: approval.roomId,
     topic_id: approval.topicId ?? null,
     requested_by: approval.requestedBy,
     title: approval.title,
@@ -1070,7 +1072,7 @@ function workLogRow(workspaceId: string, event: WorkLogEvent): DbRow {
   return {
     workspace_id: workspaceId,
     id: event.id,
-    room_id: event.roomId,
+    channel_id: event.roomId,
     topic_id: event.topicId ?? null,
     employee_id: event.employeeId,
     action: event.action,
@@ -1087,7 +1089,7 @@ function callRow(workspaceId: string, call: Call): DbRow {
   return {
     workspace_id: workspaceId,
     id: call.id,
-    room_id: call.roomId,
+    channel_id: call.roomId,
     title: call.title,
     status: call.status,
     participants: call.participants,
@@ -1160,14 +1162,14 @@ export async function seedWorkspaceState(state: DemoState) {
     "workspace_id,employee_id,tool_id",
   );
   await upsertRows(
-    "project_rooms",
+    "channels",
     state.rooms.map((room) => roomRow(workspaceId, room)),
     "workspace_id,id",
   );
   await upsertRows(
-    "room_members",
+    "channel_members",
     state.rooms.flatMap((room) => roomMemberRows(workspaceId, room)),
-    "workspace_id,room_id,member_type,member_id",
+    "workspace_id,channel_id,member_type,member_id",
   );
   await upsertRows(
     "messages",
@@ -1216,8 +1218,8 @@ export async function resetWorkspaceToState(state: DemoState) {
     "memory_entries",
     "tasks",
     "messages",
-    "room_members",
-    "project_rooms",
+    "channel_members",
+    "channels",
     "employee_tools",
     "ai_employees",
     "workspace_tools",
@@ -1293,7 +1295,7 @@ export async function deleteEmployee(workspaceId: string, employeeId: string) {
 }
 
 export async function persistRoomMetadata(workspaceId: string, room: ProjectRoom) {
-  await upsertRows("project_rooms", [roomRow(workspaceId, room)], "workspace_id,id");
+  await upsertRows("channels", [roomRow(workspaceId, room)], "workspace_id,id");
 }
 
 export async function persistRoom(workspaceId: string, room: ProjectRoom) {
@@ -1303,12 +1305,12 @@ export async function persistRoom(workspaceId: string, room: ProjectRoom) {
 
 export async function replaceRoomMembers(workspaceId: string, room: ProjectRoom) {
   const { error: deleteError } = await supabase
-    .from("room_members")
+    .from("channel_members")
     .delete()
     .eq("workspace_id", workspaceId)
-    .eq("room_id", room.id);
+    .eq("channel_id", room.id);
   if (deleteError) throw deleteError;
-  await upsertRows("room_members", roomMemberRows(workspaceId, room), "workspace_id,room_id,member_type,member_id");
+  await upsertRows("channel_members", roomMemberRows(workspaceId, room), "workspace_id,channel_id,member_type,member_id");
 }
 
 export async function persistRoomMember(
@@ -1318,16 +1320,16 @@ export async function persistRoomMember(
   memberId: string,
 ) {
   await upsertRows(
-    "room_members",
+    "channel_members",
     [
       {
         workspace_id: workspaceId,
-        room_id: roomId,
+        channel_id: roomId,
         member_type: memberType,
         member_id: memberId,
       },
     ],
-    "workspace_id,room_id,member_type,member_id",
+    "workspace_id,channel_id,member_type,member_id",
   );
 }
 
@@ -1338,10 +1340,10 @@ export async function deleteRoomMember(
   memberId: string,
 ) {
   const { error } = await supabase
-    .from("room_members")
+    .from("channel_members")
     .delete()
     .eq("workspace_id", workspaceId)
-    .eq("room_id", roomId)
+    .eq("channel_id", roomId)
     .eq("member_type", memberType)
     .eq("member_id", memberId);
   if (error) throw error;

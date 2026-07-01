@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { nowISO } from "@/lib/utils";
 
-/** Recompute denormalized counters on room_topics after writes. */
+/** Recompute denormalized counters on channel_topics after writes. */
 export async function refreshTopicStats(
   client: SupabaseClient,
   topicId: string,
@@ -69,7 +69,7 @@ export async function refreshTopicStats(
     : null;
 
   const { error } = await client
-    .from("room_topics")
+    .from("channel_topics")
     .update({
       message_count: messagesResult.count ?? 0,
       task_count: tasksResult.count ?? 0,

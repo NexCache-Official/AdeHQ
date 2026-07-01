@@ -73,7 +73,7 @@ export async function GET(
         "id, employee_id, status, started_at, response_reason, depends_on_run_id, root_trigger_message_id, run_metadata",
       )
       .eq("workspace_id", workspaceId)
-      .eq("room_id", params.roomId)
+      .eq("channel_id", params.roomId)
       .eq("topic_id", params.topicId)
       .in("status", statuses)
       .gte("started_at", since)
