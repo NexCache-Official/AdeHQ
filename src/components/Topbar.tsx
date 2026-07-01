@@ -10,11 +10,11 @@ import { cn } from "@/lib/utils";
 
 function useBreadcrumb(pathname: string, roomName?: string, isDm?: boolean): string {
   if (pathname === "/") return "Home";
-  if (pathname === "/rooms") return "Channels";
+  if (pathname === "/rooms") return "Rooms";
   if (pathname === "/dm") return "Direct messages";
   if (pathname.startsWith("/rooms/")) {
     if (isDm) return roomName ? roomName : "Direct message";
-    return roomName ? roomName : "Channel";
+    return roomName ? roomName : "Room";
   }
   if (pathname.startsWith("/workforce/")) return "Employee profile";
   if (pathname === "/workforce") return "AI Workforce";
@@ -85,7 +85,7 @@ export function Topbar() {
           className="hidden sm:inline-flex"
         >
           <Plus className="h-4 w-4" />
-          Create channel
+          Create room
         </Button>
         <Button size="sm" onClick={ui.openHire} className="shadow-glow">
           <UserPlus className="h-4 w-4" />

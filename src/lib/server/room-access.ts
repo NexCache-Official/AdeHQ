@@ -36,10 +36,10 @@ export async function isRoomMember(
   userId: string,
 ): Promise<boolean> {
   const { data, error } = await client
-    .from("channel_members")
+    .from("room_members")
     .select("member_id")
     .eq("workspace_id", workspaceId)
-    .eq("channel_id", roomId)
+    .eq("room_id", roomId)
     .eq("member_type", "human")
     .eq("member_id", userId)
     .maybeSingle();

@@ -15,7 +15,7 @@ export async function POST(
     const { user, client } = await requireAuthUser(request);
 
     const { data: topicRow, error: topicError } = await client
-      .from("channel_topics")
+      .from("topics")
       .select("*")
       .eq("id", params.topicId)
       .maybeSingle();
@@ -40,7 +40,7 @@ export async function POST(
     });
 
     const { data: updated } = await client
-      .from("channel_topics")
+      .from("topics")
       .select("*")
       .eq("id", params.topicId)
       .maybeSingle();

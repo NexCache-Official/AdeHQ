@@ -70,10 +70,10 @@ export function isSupabaseApiKeyError(error: unknown): boolean {
 export const SUPABASE_WORKSPACE_TABLES = [
   "ai_employees",
   "employee_tools",
-  "channels",
-  "channel_topics",
+  "rooms",
+  "topics",
   "topic_members",
-  "channel_members",
+  "room_members",
   "messages",
   "tasks",
   "memory_entries",

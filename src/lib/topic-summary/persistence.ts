@@ -84,7 +84,7 @@ export async function upsertTopicSummary(
   if (error) throw error;
 
   await client
-    .from("channel_topics")
+    .from("topics")
     .update({
       summary: summary.summary,
       updated_at: timestamp,

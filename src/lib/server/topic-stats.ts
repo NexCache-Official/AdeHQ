@@ -69,7 +69,7 @@ export async function refreshTopicStats(
     : null;
 
   const { error } = await client
-    .from("channel_topics")
+    .from("topics")
     .update({
       message_count: messagesResult.count ?? 0,
       task_count: tasksResult.count ?? 0,

@@ -39,7 +39,7 @@ export async function saveTopicSummaryToMemory(
   const { error } = await client.from("memory_entries").insert({
     workspace_id: params.workspaceId,
     id: memoryId,
-    channel_id: params.roomId,
+    room_id: params.roomId,
     topic_id: params.topicId,
     type: "general",
     title: `Topic summary — ${params.topicTitle}`,
@@ -87,7 +87,7 @@ export async function saveSuggestedMemoryToMemory(
   const { error } = await client.from("memory_entries").insert({
     workspace_id: params.workspaceId,
     id: memoryId,
-    channel_id: params.roomId,
+    room_id: params.roomId,
     topic_id: topicScoped ? params.topicId : null,
     type: "general",
     title: params.suggestion.text.slice(0, 120),

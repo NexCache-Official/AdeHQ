@@ -22,7 +22,7 @@ export async function POST(
     };
 
     const { data: topicRow, error: topicError } = await client
-      .from("channel_topics")
+      .from("topics")
       .select("*")
       .eq("id", params.topicId)
       .maybeSingle();

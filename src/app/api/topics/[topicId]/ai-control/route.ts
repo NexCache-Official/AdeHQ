@@ -22,7 +22,7 @@ export async function POST(
     const body = (await request.json()) as AiControlBody;
 
     const { data: topicRow, error: topicError } = await client
-      .from("channel_topics")
+      .from("topics")
       .select("*")
       .eq("id", params.topicId)
       .maybeSingle();
@@ -83,7 +83,7 @@ export async function POST(
     }
 
     const { data: updated, error: updateError } = await client
-      .from("channel_topics")
+      .from("topics")
       .update({ metadata: meta, updated_at: nowISO() })
       .eq("workspace_id", workspaceId)
       .eq("id", params.topicId)
@@ -159,7 +159,7 @@ export async function GET(
     );
     if (!topic) {
       const { data: row } = await client
-        .from("channel_topics")
+        .from("topics")
         .select("workspace_id, channel_id, metadata")
         .eq("id", params.topicId)
         .maybeSingle();

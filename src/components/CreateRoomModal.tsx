@@ -59,14 +59,14 @@ export function CreateRoomModal({
   return (
     <Modal open={open} onClose={close} size="lg">
       <ModalHeader
-        title="Create a channel"
+        title="Create a room"
         subtitle="A group space where you and your AI employees work together."
         onClose={close}
         icon={<Hash className="h-5 w-5" />}
       />
       <div className="max-h-[min(62vh,560px)] space-y-4 overflow-y-auto px-6 py-5">
         <label className="block space-y-1.5">
-          <span className="text-xs font-medium text-slate-500">Channel name</span>
+          <span className="text-xs font-medium text-slate-500">Room name</span>
           <input
             className="input-field"
             value={name}

@@ -14,6 +14,7 @@ import { nowISO, uid } from "@/lib/utils";
 export type SystemEmployeeMetadata = {
   dmOnly?: boolean;
   canBeArchived?: boolean;
+  canBeAssignedToRooms?: boolean;
   canBeAssignedToChannels?: boolean;
   isDefaultWorkspaceEmployee?: boolean;
   purpose?: string;
@@ -57,15 +58,25 @@ export function effectiveEmployeeStatus(
   return isMayaEmployee(employee) ? mayaEmployeeStatus() : employee.status;
 }
 
-export function channelAssignableEmployees(employees: AIEmployee[]): AIEmployee[] {
+function cannotAssignToRooms(metadata?: SystemEmployeeMetadata): boolean {
+  if (!metadata) return false;
+  if (metadata.canBeAssignedToRooms === false) return true;
+  if (metadata.canBeAssignedToChannels === false) return true;
+  return false;
+}
+
+export function roomAssignableEmployees(employees: AIEmployee[]): AIEmployee[] {
   return employees.filter((employee) => {
     if (isMayaEmployee(employee)) return false;
     if (isSystemEmployee(employee)) return false;
-    if (employee.metadata?.canBeAssignedToChannels === false) return false;
+    if (cannotAssignToRooms(employee.metadata)) return false;
     if (employee.metadata?.dmOnly) return false;
     return true;
   });
 }
+
+/** @deprecated Use roomAssignableEmployees */
+export const channelAssignableEmployees = roomAssignableEmployees;
 
 export function mergeEmployeesById(local: AIEmployee[], remote: AIEmployee[]): AIEmployee[] {
   const merged = new Map(remote.map((employee) => [employee.id, employee]));
@@ -193,7 +204,7 @@ export function buildMayaEmployee(timestamp = nowISO()): AIEmployee {
     metadata: {
       dmOnly: true,
       canBeArchived: false,
-      canBeAssignedToChannels: false,
+      canBeAssignedToRooms: false,
       isDefaultWorkspaceEmployee: true,
       purpose: "hire_and_manage_ai_employees,workspace_guide",
     },

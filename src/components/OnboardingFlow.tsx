@@ -9,7 +9,6 @@ import {
   ONBOARDING_ROOM_KEY,
   storeOnboardingContext,
 } from "@/lib/hiring/data";
-import { mayaOnboardingWelcomeMessage } from "@/lib/hiring/maya";
 import type { OnboardingContext } from "@/lib/hiring/types";
 import {
   defaultWorkstreamForOutcome,
@@ -80,13 +79,24 @@ export function OnboardingFlow() {
     setupComplete: Boolean(roomId),
   });
 
-  const persistDrafts = (roomId?: string) => {
-    const context = buildContext(roomId);
+  const persistDrafts = (roomId?: string, resolvedRoomName?: string) => {
+    const effectiveRoomName = resolvedRoomName ?? roomName;
+    const context: OnboardingContext = {
+      goalText: goalText.trim() || undefined,
+      outcomeId,
+      outcomeTitle,
+      domainText: domainText.trim() || undefined,
+      roomName: effectiveRoomName,
+      roomId,
+      suggestedTopics: activePreset.topics,
+      suggestedHires: activePreset.suggestedHires,
+      setupComplete: Boolean(roomId),
+    };
     storeOnboardingContext(context);
     sessionStorage.setItem(
       ONBOARDING_ROOM_KEY,
       JSON.stringify({
-        name: roomName,
+        name: effectiveRoomName,
         accent: activePreset.accent,
         template: activePreset.id,
         roomId,
@@ -107,7 +117,7 @@ export function OnboardingFlow() {
           description: `${roomName} — your first AI workstream`,
         },
       });
-      persistDrafts(result.firstRoomId);
+      persistDrafts(result.firstRoomId, result.roomName);
 
       if (!openMaya) {
         actions.completeOnboarding();
@@ -115,15 +125,7 @@ export function OnboardingFlow() {
         return;
       }
 
-      const firstName = state.user?.name?.split(" ")[0] ?? "there";
-      const welcome = mayaOnboardingWelcomeMessage(
-        firstName,
-        state.workspace.name,
-        roomName,
-        activePreset.suggestedHires[0],
-      );
-      sessionStorage.setItem("adehq:maya-onboarding-welcome", welcome);
-      router.push(`/rooms/${result.mayaDmRoomId}?onboarding=1`);
+      router.push("/hire?onboarding=1");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not finish setup.");
     } finally {

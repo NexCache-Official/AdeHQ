@@ -132,7 +132,7 @@ create table if not exists public.project_rooms (
   workspace_id uuid not null references public.workspaces(id) on delete cascade,
   id text not null,
   name text not null,
-  kind text not null default 'channel',
+  kind text not null default 'room',
   dm_employee_id text,
   description text not null default '',
   brief text not null default '',

@@ -151,10 +151,10 @@ export async function POST(
         .order("created_at", { ascending: false })
         .limit(20),
       client
-        .from("channel_topics")
+        .from("topics")
         .select("id, title, summary")
         .eq("workspace_id", workspaceId)
-        .eq("channel_id", params.roomId)
+        .eq("room_id", params.roomId)
         .neq("status", "archived"),
     ]);
 

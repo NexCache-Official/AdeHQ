@@ -93,6 +93,8 @@ export type EmployeePermissions = {
 export type SystemEmployeeMetadata = {
   dmOnly?: boolean;
   canBeArchived?: boolean;
+  canBeAssignedToRooms?: boolean;
+  /** @deprecated Use canBeAssignedToRooms */
   canBeAssignedToChannels?: boolean;
   isDefaultWorkspaceEmployee?: boolean;
   purpose?: string;
@@ -309,12 +311,12 @@ export type RoomMessage = {
 };
 
 /** `channel` = multi-member group space; `dm` = private 1:1 with one AI employee. */
-export type RoomKind = "channel" | "dm";
+export type RoomKind = "room" | "dm";
 
 export type ChannelStatus = "active" | "archived";
 
 /**
- * A channel (group collaboration space) or DM. Stored in Supabase `channels` table.
+ * A group room or DM. Stored in Supabase `rooms` table.
  * `roomId` on topics/messages is the parent channel id (group channel or DM).
  */
 export type ProjectRoom = {
@@ -332,7 +334,7 @@ export type ProjectRoom = {
   memory: string[];
   unread: number;
   accent: string;
-  /** Group channels can be archived; DMs stay active. */
+  /** Group rooms can be archived; DMs stay active. */
   status?: ChannelStatus;
   createdAt: string;
   updatedAt: string;

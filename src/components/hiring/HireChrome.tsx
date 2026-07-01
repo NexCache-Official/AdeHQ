@@ -10,9 +10,11 @@ import { ArrowLeft } from "lucide-react";
 export function HireHeader({
   onBack,
   backLabel,
+  onGoToWorkspace,
 }: {
   onBack?: () => void;
   backLabel?: string;
+  onGoToWorkspace?: () => void;
 }) {
   return (
     <header className="sticky top-0 z-40 flex items-center justify-between border-b border-border bg-canvas/90 px-6 py-3.5 backdrop-blur-xl">
@@ -36,11 +38,22 @@ export function HireHeader({
           <span className="truncate text-sm text-ink-2">Hire an AI employee</span>
         </div>
       </div>
-      <div className="flex items-center gap-2.5 rounded-full border border-border bg-surface py-1.5 pl-1.5 pr-3 shadow-sm">
-        <div className="relative h-6 w-6 rounded-full bg-gradient-to-br from-emerald-400 to-sky-500">
-          <span className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-green ring-2 ring-surface" />
+      <div className="flex items-center gap-2.5">
+        {onGoToWorkspace && (
+          <button
+            type="button"
+            onClick={onGoToWorkspace}
+            className="rounded-lg border border-border bg-surface px-3 py-1.5 text-[13px] font-medium text-ink-2 transition hover:border-ink/30 hover:text-ink"
+          >
+            Go to workspace
+          </button>
+        )}
+        <div className="flex items-center gap-2.5 rounded-full border border-border bg-surface py-1.5 pl-1.5 pr-3 shadow-sm">
+          <div className="relative h-6 w-6 rounded-full bg-gradient-to-br from-emerald-400 to-sky-500">
+            <span className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-green ring-2 ring-surface" />
+          </div>
+          <span className="text-[13px] font-medium text-ink-2">{MAYA_EMPLOYEE_NAME}</span>
         </div>
-        <span className="text-[13px] font-medium text-ink-2">{MAYA_EMPLOYEE_NAME}</span>
       </div>
     </header>
   );

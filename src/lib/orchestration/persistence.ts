@@ -399,7 +399,7 @@ export async function fetchTopicSuggestionGovernance(
   const topicTitleById = new Map<string, string>();
   if (topicIds.size) {
     const { data: topics } = await client
-      .from("channel_topics")
+      .from("topics")
       .select("id, title")
       .eq("workspace_id", workspaceId)
       .in("id", Array.from(topicIds));
@@ -596,7 +596,7 @@ export async function finalizeOrchestrationIfComplete(
           : null;
     if (trigger) {
       const { data: topicRow } = await client
-        .from("channel_topics")
+        .from("topics")
         .select("title, description")
         .eq("workspace_id", workspaceId)
         .eq("id", record.topicId)

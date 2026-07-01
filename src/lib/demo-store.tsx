@@ -35,6 +35,7 @@ import {
 import { getEmailRedirectUrl, setAuthNextPath } from "@/lib/auth/callback-session";
 import { isEmailConfirmed } from "@/lib/auth/session";
 import { mayaWelcomeMessage } from "@/lib/hiring/maya";
+import { resolveUniqueRoomName } from "@/lib/room-naming";
 import { isMayaEmployee, isSystemEmployee, mergeMayaIntoState, mayaEmployeeStatus, buildMayaDmRoom, buildMayaEmployee, ensureMayaDmTopicsInState, dedupeMayaDmRooms, mergeEmployeesById, resolveMayaDmRoomId } from "@/lib/maya-employee";
 import { isGroupChannel } from "@/lib/rooms";
 import { nowISO, uid } from "./utils";
@@ -132,7 +133,7 @@ type StoreActions = {
   setupOnboardingWorkspace: (payload: {
     workspaceName: string;
     room: { name: string; accent: string; description?: string };
-  }) => Promise<{ workspaceId: string; firstRoomId: string; mayaDmRoomId: string }>;
+  }) => Promise<{ workspaceId: string; firstRoomId: string; roomName: string; mayaDmRoomId: string }>;
   completeFirstHire: (payload: {
     employee: AIEmployee;
     workLog: WorkLogEvent;
@@ -650,11 +651,12 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
             const workspaceId = uid("ws");
             const timestamp = nowISO();
             const roomId = uid("room");
+            const uniqueName = resolveUniqueRoomName(stateRef.current.rooms, roomInput.name);
             const room: ProjectRoom = {
               id: roomId,
-              name: roomInput.name,
-              kind: "channel",
-              description: roomInput.description ?? `${roomInput.name} workstream`,
+              name: uniqueName,
+              kind: "room",
+              description: roomInput.description ?? `${uniqueName} workstream`,
               brief: "",
               humans: [user.id],
               aiEmployees: [],
@@ -666,7 +668,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
                   senderType: "system",
                   senderId: "system",
                   senderName: "AdeHQ",
-                  content: `Your ${roomInput.name} workstream is ready.`,
+                  content: `Your ${uniqueName} workstream is ready.`,
                   createdAt: timestamp,
                 },
               ],
@@ -695,6 +697,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
             return {
               workspaceId,
               firstRoomId: roomId,
+              roomName: uniqueName,
               mayaDmRoomId: resolveMayaDmRoomId(stateRef.current.rooms),
             };
           }
@@ -704,16 +707,29 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 
           const { authHeaders } = await import("@/lib/api/auth-client");
           const headers = await authHeaders();
-          await fetch("/api/workspaces/ensure-maya", { method: "POST", headers });
+          const mayaRes = await fetch("/api/workspaces/ensure-maya", {
+            method: "POST",
+            headers,
+            body: JSON.stringify({ workspaceId: bootstrapped.workspaceId }),
+          });
+          const mayaPayload = await mayaRes.json().catch(() => ({}));
+          if (!mayaRes.ok) {
+            throw new Error(
+              typeof mayaPayload.error === "string"
+                ? mayaPayload.error
+                : "Could not set up Maya.",
+            );
+          }
           await loadRemote(user, bootstrapped.workspaceId);
 
           const timestamp = nowISO();
           const roomId = uid("room");
+          const uniqueName = resolveUniqueRoomName(stateRef.current.rooms, roomInput.name);
           const created: ProjectRoom = {
             id: roomId,
-            name: roomInput.name,
-            kind: "channel",
-            description: roomInput.description ?? `${roomInput.name} workstream`,
+            name: uniqueName,
+            kind: "room",
+            description: roomInput.description ?? `${uniqueName} workstream`,
             brief: "",
             humans: [user.id],
             aiEmployees: [],
@@ -725,7 +741,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
                 senderType: "system",
                 senderId: "system",
                 senderName: "AdeHQ",
-                content: `Your ${roomInput.name} workstream is ready.`,
+                content: `Your ${uniqueName} workstream is ready.`,
                 createdAt: timestamp,
               },
             ],
@@ -751,6 +767,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           return {
             workspaceId: bootstrapped.workspaceId,
             firstRoomId: roomId,
+            roomName: uniqueName,
             mayaDmRoomId: resolveMayaDmRoomId(stateRef.current.rooms),
           };
         } finally {
@@ -995,10 +1012,11 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       createRoom: (room) => {
         const id = room.id ?? uid("room");
         const timestamp = nowISO();
+        const uniqueName = resolveUniqueRoomName(stateRef.current.rooms, room.name);
         const created: ProjectRoom = {
           id,
-          name: room.name,
-          kind: "channel",
+          name: uniqueName,
+          kind: "room",
           description: room.description ?? "",
           brief: room.brief ?? "",
           humans: room.humans ?? (stateRef.current.user?.id ? [stateRef.current.user.id] : []),
@@ -1155,7 +1173,10 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 
       addEmployeeToRoom: (roomId, employeeId) => {
         const employee = stateRef.current.employees.find((e) => e.id === employeeId);
-        if (employee?.metadata?.canBeAssignedToChannels === false) return;
+        if (
+          employee?.metadata?.canBeAssignedToRooms === false ||
+          employee?.metadata?.canBeAssignedToChannels === false
+        ) return;
         const current = stateRef.current.rooms.find((room) => room.id === roomId);
         if (!current || !isGroupChannel(current) || current.aiEmployees.includes(employeeId)) return;
         const updated = {

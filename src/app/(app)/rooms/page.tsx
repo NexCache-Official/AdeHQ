@@ -45,7 +45,7 @@ export default function RoomsPage() {
       if (backend === "supabase") {
         const headers = await authHeaders();
         if (action === "restore") {
-          const res = await fetch(`/api/channels/${channel.id}`, {
+          const res = await fetch(`/api/rooms/${channel.id}`, {
             method: "PATCH",
             headers,
             body: JSON.stringify({ status: "active" }),
@@ -54,18 +54,18 @@ export default function RoomsPage() {
             const err = await res.json().catch(() => null);
             throw new Error(err?.error ?? "Failed to restore channel");
           }
-          const { channel: updated } = await res.json();
+          const { room: updated } = await res.json();
           actions.updateRoom(channel.id, updated);
         } else if (action === "archive") {
-          const res = await fetch(`/api/channels/${channel.id}`, { method: "DELETE", headers });
+          const res = await fetch(`/api/rooms/${channel.id}`, { method: "DELETE", headers });
           if (!res.ok) {
             const err = await res.json().catch(() => null);
             throw new Error(err?.error ?? "Failed to archive channel");
           }
-          const { channel: updated } = await res.json();
+          const { room: updated } = await res.json();
           actions.updateRoom(channel.id, updated);
         } else {
-          const res = await fetch(`/api/channels/${channel.id}?permanent=true`, {
+          const res = await fetch(`/api/rooms/${channel.id}?permanent=true`, {
             method: "DELETE",
             headers,
           });
@@ -119,7 +119,7 @@ export default function RoomsPage() {
 
       {channels.length === 0 && archivedChannels.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-border px-6 py-14 text-center text-sm text-ink-3">
-          No channels yet. Create one to start collaborating with your AI team.
+          No rooms yet. Create one to start collaborating with your AI team.
         </div>
       ) : (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">

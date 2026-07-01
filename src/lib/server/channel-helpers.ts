@@ -4,11 +4,12 @@ import { nowISO } from "@/lib/utils";
 
 type DbRow = Record<string, unknown>;
 
-export function channelFromRow(row: DbRow): ProjectRoom {
+export function roomFromRow(row: DbRow): ProjectRoom {
+  const kind = String(row.kind ?? "room");
   return {
     id: String(row.id),
     name: String(row.name),
-    kind: row.kind as RoomKind,
+    kind: (kind === "channel" ? "room" : kind) as RoomKind,
     dmEmployeeId: row.dm_employee_id ? String(row.dm_employee_id) : undefined,
     description: String(row.description ?? ""),
     brief: String(row.brief ?? ""),
@@ -25,52 +26,64 @@ export function channelFromRow(row: DbRow): ProjectRoom {
   };
 }
 
-export async function loadChannel(
+/** @deprecated Use roomFromRow */
+export const channelFromRow = roomFromRow;
+
+export async function loadRoom(
   client: SupabaseClient,
   workspaceId: string,
-  channelId: string,
+  roomId: string,
 ): Promise<ProjectRoom | null> {
   const { data, error } = await client
-    .from("channels")
+    .from("rooms")
     .select("*")
     .eq("workspace_id", workspaceId)
-    .eq("id", channelId)
+    .eq("id", roomId)
     .maybeSingle();
   if (error) throw error;
-  return data ? channelFromRow(data as DbRow) : null;
+  return data ? roomFromRow(data as DbRow) : null;
 }
 
-export async function assertChannelActive(
+/** @deprecated Use loadRoom */
+export const loadChannel = loadRoom;
+
+export async function assertRoomActive(
   client: SupabaseClient,
   workspaceId: string,
-  channelId: string,
+  roomId: string,
 ): Promise<ProjectRoom> {
-  const channel = await loadChannel(client, workspaceId, channelId);
-  if (!channel) {
-    throw new Error("Channel not found.");
+  const room = await loadRoom(client, workspaceId, roomId);
+  if (!room) {
+    throw new Error("Room not found.");
   }
-  if (channel.status === "archived") {
-    throw new Error("This channel is archived.");
+  if (room.status === "archived") {
+    throw new Error("This room is archived.");
   }
-  return channel;
+  return room;
 }
 
-/** Hard-delete a group channel and all associated data (cascade). DMs cannot be deleted here. */
-export async function permanentlyDeleteChannel(
+/** @deprecated Use assertRoomActive */
+export const assertChannelActive = assertRoomActive;
+
+/** Hard-delete a group room and all associated data (cascade). DMs cannot be deleted here. */
+export async function permanentlyDeleteRoom(
   client: SupabaseClient,
   workspaceId: string,
-  channelId: string,
+  roomId: string,
 ): Promise<void> {
-  const channel = await loadChannel(client, workspaceId, channelId);
-  if (!channel) return;
-  if (channel.kind === "dm") {
-    throw new Error("Direct messages cannot be permanently deleted from the channels page.");
+  const room = await loadRoom(client, workspaceId, roomId);
+  if (!room) return;
+  if (room.kind === "dm") {
+    throw new Error("Direct messages cannot be permanently deleted from the rooms page.");
   }
 
   const { error } = await client
-    .from("channels")
+    .from("rooms")
     .delete()
     .eq("workspace_id", workspaceId)
-    .eq("id", channelId);
+    .eq("id", roomId);
   if (error) throw error;
 }
+
+/** @deprecated Use permanentlyDeleteRoom */
+export const permanentlyDeleteChannel = permanentlyDeleteRoom;

@@ -16,7 +16,7 @@ export async function POST(
     const body = (await request.json().catch(() => ({}))) as { manual?: boolean };
 
     const { data: topicRow, error: topicError } = await client
-      .from("channel_topics")
+      .from("topics")
       .select("*")
       .eq("id", params.topicId)
       .maybeSingle();
@@ -41,7 +41,7 @@ export async function POST(
     });
 
     const { data: updatedTopic } = await client
-      .from("channel_topics")
+      .from("topics")
       .select("*")
       .eq("id", params.topicId)
       .maybeSingle();

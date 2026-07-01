@@ -549,7 +549,7 @@ function buildRooms(): ProjectRoom[] {
     {
       id: "room-forgefield",
       name: "Forgefield Engine Launch",
-      kind: "channel",
+      kind: "room",
       description: "Launch an AI-native game engine for indie developers.",
       brief:
         "Forgefield is an AI-native layer on top of Godot for solo and indie game developers. Goal: ship a launch wedge with a playable Plinko demo, a sharp landing page, and 10 design-partner devs. Avoid becoming a Unity/Unreal clone or a browser-only toy generator.",
@@ -566,7 +566,7 @@ function buildRooms(): ProjectRoom[] {
     {
       id: "room-stripe",
       name: "Stripe Analytics Dashboard",
-      kind: "channel",
+      kind: "room",
       description: "Build a revenue analytics dashboard on top of Stripe.",
       brief:
         "Internal analytics dashboard reading Stripe data via Supabase. Goal: MRR, churn, and cohort views with clean charts. Engineering-led, design-reviewed.",
@@ -603,7 +603,7 @@ function buildRooms(): ProjectRoom[] {
     {
       id: "room-mvp",
       name: "AdeHQ MVP Build",
-      kind: "channel",
+      kind: "room",
       description: "Build the AdeHQ workspace MVP itself.",
       brief:
         "Build the AdeHQ demo MVP: a futuristic workspace where humans and AI employees collaborate. Self-serve onboarding for founders and freelancers. Keep it calm, premium, and magical.",

@@ -43,7 +43,7 @@ function mayaEmployeeRow(workspaceId: string, timestamp: string): DbRow {
     avg_response_time: "-",
     trust_score: maya.trustScore,
     accent: maya.accent,
-    default_channel_id: null,
+    default_room_id: null,
     participation_style: maya.participationStyle ?? "proactive_operator",
     is_system_employee: true,
     system_employee_key: MAYA_SYSTEM_EMPLOYEE_KEY,
@@ -105,7 +105,7 @@ export async function ensureMayaDM(
   await ensureMayaForWorkspace(client, workspaceId);
 
   const { data: existingRoom, error: roomLookupError } = await client
-    .from("channels")
+    .from("rooms")
     .select("*")
     .eq("workspace_id", workspaceId)
     .eq("kind", "dm")
@@ -123,20 +123,20 @@ export async function ensureMayaDM(
     await backfillOrphanMessagesToGeneralTopic(client, workspaceId, roomId);
 
     const { data: members, error: membersError } = await client
-      .from("channel_members")
+      .from("room_members")
       .select("*")
       .eq("workspace_id", workspaceId)
-      .eq("channel_id", roomId);
+      .eq("room_id", roomId);
     if (membersError) throw membersError;
 
     const hasHuman = (members ?? []).some(
       (m: DbRow) => m.member_type === "human" && m.member_id === userId,
     );
     if (!hasHuman) {
-      const { error: memberError } = await client.from("channel_members").upsert(
+      const { error: memberError } = await client.from("room_members").upsert(
         {
           workspace_id: workspaceId,
-          channel_id: roomId,
+          room_id: roomId,
           member_type: "human",
           member_id: userId,
         },
@@ -149,7 +149,7 @@ export async function ensureMayaDM(
       .from("messages")
       .select("id")
       .eq("workspace_id", workspaceId)
-      .eq("channel_id", roomId)
+      .eq("room_id", roomId)
       .limit(1);
     if (messagesError) throw messagesError;
 
@@ -158,7 +158,7 @@ export async function ensureMayaDM(
       const welcomeMessage = {
         workspace_id: workspaceId,
         id: uid("msg"),
-        channel_id: roomId,
+        room_id: roomId,
         topic_id: generalTopic.id,
         sender_type: "ai",
         sender_id: MAYA_EMPLOYEE_ID,
@@ -174,7 +174,7 @@ export async function ensureMayaDM(
   }
 
   const room = buildMayaDmRoom(userId, welcome);
-  const { error: roomError } = await client.from("channels").insert({
+  const { error: roomError } = await client.from("rooms").insert({
     workspace_id: workspaceId,
     id: room.id,
     name: room.name,
@@ -192,19 +192,19 @@ export async function ensureMayaDM(
   const memberRows = [
     {
       workspace_id: workspaceId,
-      channel_id: room.id,
+      room_id: room.id,
       member_type: "human",
       member_id: userId,
     },
     {
       workspace_id: workspaceId,
-      channel_id: room.id,
+      room_id: room.id,
       member_type: "ai",
       member_id: MAYA_EMPLOYEE_ID,
     },
   ];
   const { error: membersError } = await client
-    .from("channel_members")
+    .from("room_members")
     .upsert(memberRows, { onConflict: "workspace_id,channel_id,member_type,member_id" });
   if (membersError) throw membersError;
 
@@ -215,7 +215,7 @@ export async function ensureMayaDM(
     const { error: messageError } = await client.from("messages").insert({
       workspace_id: workspaceId,
       id: msg.id,
-      channel_id: room.id,
+      room_id: room.id,
       topic_id: generalTopic.id,
       sender_type: msg.senderType,
       sender_id: msg.senderId,

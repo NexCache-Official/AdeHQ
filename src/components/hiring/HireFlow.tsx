@@ -50,7 +50,8 @@ import type {
   RefineMode,
 } from "@/lib/hiring/types";
 import type { ProjectRoom, WorkLogEvent } from "@/lib/types";
-import { getGroupChannels } from "@/lib/rooms";
+import { getGroupRooms } from "@/lib/rooms";
+import { resolveUniqueRoomName } from "@/lib/room-naming";
 import { resolveMayaDmRoomId } from "@/lib/maya-employee";
 import { cn, nowISO, uid } from "@/lib/utils";
 import { BriefDocumentPreview } from "./BriefDocumentPreview";
@@ -144,8 +145,8 @@ export function HireFlow({ onboarding = false }: HireFlowProps) {
     ? session.candidates.find((c) => c.id === session.interviewWith)
     : null;
 
-  const channels = useMemo(
-    () => getGroupChannels(appState.rooms).map((r) => ({ id: r.id, name: r.name })),
+  const rooms = useMemo(
+    () => getGroupRooms(appState.rooms).map((r) => ({ id: r.id, name: r.name })),
     [appState.rooms],
   );
 
@@ -599,7 +600,7 @@ export function HireFlow({ onboarding = false }: HireFlowProps) {
 
         const context = readOnboardingContext();
         const defaultRoomId =
-          context?.roomId ?? appState.rooms.find((r) => r.kind === "channel")?.id;
+          context?.roomId ?? appState.rooms.find((r) => r.kind === "room")?.id;
         if (defaultRoomId) {
           employee.defaultRoomId = defaultRoomId;
         }
@@ -697,11 +698,20 @@ export function HireFlow({ onboarding = false }: HireFlowProps) {
             ? "Applicants"
             : undefined;
 
+  const goToWorkspace = () => {
+    if (onboarding) {
+      actions.completeOnboarding();
+      clearOnboardingDrafts();
+    }
+    router.replace("/rooms");
+  };
+
   return (
     <div className="flex min-h-screen flex-col bg-canvas text-ink">
       <HireHeader
         onBack={hiringBackStep(session.step) ? goBack : undefined}
         backLabel={backLabel ? `← ${backLabel}` : undefined}
+        onGoToWorkspace={goToWorkspace}
       />
       <HireStepper step={session.step} recruiterTurns={recruiterTurns} />
 
@@ -906,7 +916,7 @@ export function HireFlow({ onboarding = false }: HireFlowProps) {
 
         {session.step === "assign_optional" && (
           <AssignScreen
-            rooms={channels}
+            rooms={rooms}
             onAssignLater={() => finishAssign()}
             onAssign={(roomId) => finishAssign(roomId)}
           />

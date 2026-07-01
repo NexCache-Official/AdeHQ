@@ -119,8 +119,8 @@ export function Sidebar() {
         </Link>
 
         <SidebarCollapsibleSection
-          storageKey="adehq.sidebar.channels"
-          label="Channels"
+          storageKey="adehq.sidebar.rooms"
+          label="Rooms"
           icon={Hash}
           href="/rooms"
           count={channels.length}
@@ -130,7 +130,7 @@ export function Sidebar() {
             <button
               type="button"
               onClick={ui.openCreateRoom}
-              title="Create channel"
+              title="Create room"
               className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-white/35 transition-colors hover:bg-white/[0.06] hover:text-white/80"
             >
               <Plus className="h-3.5 w-3.5" strokeWidth={2.2} />
@@ -138,7 +138,7 @@ export function Sidebar() {
           }
         >
           {channels.length === 0 ? (
-            <p className="px-2 py-1.5 text-[11px] leading-relaxed text-white/35">No channels yet</p>
+            <p className="px-2 py-1.5 text-[11px] leading-relaxed text-white/35">No rooms yet</p>
           ) : (
             channels.slice(0, MAX_SIDEBAR_ITEMS).map((room) => (
               <SidebarNestedLink

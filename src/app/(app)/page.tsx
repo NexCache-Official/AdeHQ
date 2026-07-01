@@ -57,7 +57,7 @@ export default function HomePage() {
 
   const stats = [
     { label: "AI employees", value: hired.length, sub: maya.length ? `${MAYA_EMPLOYEE_NAME} included · ${workingCount} working` : `${workingCount} working now`, href: "/workforce" },
-    { label: "Channels", value: channels.length, sub: "Active project rooms", href: "/rooms" },
+    { label: "Rooms", value: channels.length, sub: "Active workstreams", href: "/rooms" },
     { label: "Open tasks", value: activeTasks.length, sub: "Across all rooms", href: "/tasks" },
     { label: "Approvals", value: pendingApprovals.length, sub: pendingApprovals.length ? "Needs review" : "All clear", href: "/approvals", alert: pendingApprovals.length > 0 },
     { label: "Memory", value: state.memory.length, sub: "Facts & decisions", href: "/memory" },
@@ -66,8 +66,8 @@ export default function HomePage() {
 
   const heroSub =
     pendingApprovals.length > 0
-      ? `${pendingApprovals.length} approval${pendingApprovals.length === 1 ? "" : "s"} waiting — your team is active across ${channels.length} channel${channels.length === 1 ? "" : "s"}.`
-      : `Your AI employees are working across ${channels.length} channel${channels.length === 1 ? "" : "s"}. Give them a task, review their work, or jump on a call.`;
+      ? `${pendingApprovals.length} approval${pendingApprovals.length === 1 ? "" : "s"} waiting — your team is active across ${channels.length} room${channels.length === 1 ? "" : "s"}.`
+      : `Your AI employees are working across ${channels.length} room${channels.length === 1 ? "" : "s"}. Give them a task, review their work, or jump on a call.`;
 
   return (
     <PageContainer wide className="pb-16">
@@ -147,7 +147,7 @@ export default function HomePage() {
           </section>
 
           <section>
-            <SectionHeader title="Active channels" href="/rooms" linkLabel="All channels" />
+            <SectionHeader title="Active rooms" href="/rooms" linkLabel="All rooms" />
             <div className="grid gap-3 sm:grid-cols-2">
               {channels.map((r) => (
                 <ProjectRoomCard key={r.id} room={r} />

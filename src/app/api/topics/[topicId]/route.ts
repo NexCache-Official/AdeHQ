@@ -11,7 +11,7 @@ export const runtime = "nodejs";
 
 async function loadTopic(client: import("@supabase/supabase-js").SupabaseClient, topicId: string) {
   const { data, error } = await client
-    .from("channel_topics")
+    .from("topics")
     .select("*")
     .eq("id", topicId)
     .maybeSingle();
@@ -80,7 +80,7 @@ export async function PATCH(
     }
 
     const { data, error } = await client
-      .from("channel_topics")
+      .from("topics")
       .update(patch)
       .eq("id", params.topicId)
       .select("*")
@@ -133,7 +133,7 @@ export async function DELETE(
     }
 
     const { data, error } = await client
-      .from("channel_topics")
+      .from("topics")
       .update({ status: "archived", updated_at: nowISO() })
       .eq("id", params.topicId)
       .select("*")

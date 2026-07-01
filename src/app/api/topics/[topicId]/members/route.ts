@@ -18,7 +18,7 @@ export async function POST(
     }
 
     const { data: topicRow, error: topicError } = await client
-      .from("channel_topics")
+      .from("topics")
       .select("workspace_id, channel_id")
       .eq("id", params.topicId)
       .maybeSingle();
@@ -48,7 +48,7 @@ export async function POST(
       .from("topic_members")
       .insert({
         workspace_id: workspaceId,
-        channel_id: roomId,
+        room_id: roomId,
         topic_id: params.topicId,
         member_type: "ai",
         member_id: body.employeeId,
