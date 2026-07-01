@@ -370,7 +370,7 @@ export function TopicPanel({
                   </div>
                 </details>
               )}
-              <OrchestrationSidebarStatus />
+              <OrchestrationSidebarStatus topicId={topic.id} />
               {topic.summary && (
                 <section>
                   <div className="section-title mb-1.5">Summary</div>

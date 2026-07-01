@@ -68,14 +68,14 @@ export function BriefDocumentPreview({
           : "live";
 
   useEffect(() => {
-    if (!composingSection) return;
+    if (!composingSection || !scrollRef.current) return;
     const node = sectionRefs.current[composingSection];
-    if (!node || !scrollRef.current) return;
+    if (!node) return;
     const frame = requestAnimationFrame(() => {
-      node.scrollIntoView({ behavior: "smooth", block: "center" });
+      node.scrollIntoView({ behavior: "smooth", block: "nearest" });
     });
     return () => cancelAnimationFrame(frame);
-  }, [composingSection, b.roleTitle, b.mission, b.coreResponsibilities?.length]);
+  }, [composingSection, b.roleTitle, b.mission, b.coreResponsibilities?.length, variant]);
 
   const setSectionRef = (key: BriefComposeSection) => (node: HTMLDivElement | null) => {
     sectionRefs.current[key] = node;
@@ -108,7 +108,7 @@ export function BriefDocumentPreview({
         ref={scrollRef}
         className={
           isPanel
-            ? "max-h-[min(520px,50vh)] overflow-y-auto px-4 py-4 lg:max-h-none"
+            ? "px-4 py-4"
             : "max-h-[min(720px,calc(100vh-11rem))] overflow-y-auto px-5 py-5"
         }
       >

@@ -9,16 +9,20 @@ import {
 } from "@/lib/server/room-messages";
 import { assertTopicInRoom, ensureGeneralTopic } from "@/lib/server/topic-helpers";
 import { filterOrchestrationEmployees } from "@/lib/orchestration/collaboration-permissions";
+import { applyChannelGovernanceToPlan } from "@/lib/orchestration/ambient-governance";
 import { orchestrateConversation } from "@/lib/orchestration/conversation-orchestrator";
 import { orchestrationPlanToLegacyResult } from "@/lib/orchestration/legacy-adapter";
 import {
   attachRunIdsToOrchestration,
+  fetchTopicSuggestionGovernance,
   logOrchestrationWorkLog,
   persistOrchestrationPlan,
   persistTopicSuggestions,
 } from "@/lib/orchestration/persistence";
+import { filterTopicSuggestionsByGovernance } from "@/lib/orchestration/topic-governance";
 import { suggestTopics } from "@/lib/orchestration/topic-steward";
 import type { OrchestratorInput } from "@/lib/orchestration/types";
+import { loadChannelGovernanceContext } from "@/lib/server/channel-governance";
 import { queueAgentRuns } from "@/lib/server/queue-agent-runs";
 import { isAiQueueingBlocked } from "@/lib/topic-ai-control";
 import { getAiParticipationMode, isSmartAssistMode } from "@/lib/topics";
@@ -194,6 +198,20 @@ export async function POST(
     };
 
     let orchestrationPlan = await orchestrateConversation(orchestratorInput);
+
+    const governance = await loadChannelGovernanceContext(
+      client,
+      workspaceId,
+      params.roomId,
+      topicId,
+      humanMessage.id,
+    );
+    orchestrationPlan = applyChannelGovernanceToPlan(
+      orchestrationPlan,
+      orchestratorInput,
+      governance,
+    );
+
     let orchestrationId: string | null = null;
     let topicSuggestions: Record<string, unknown>[] = [];
 
@@ -208,7 +226,16 @@ export async function POST(
           plan: orchestrationPlan,
         });
 
-        const stewardSuggestions = suggestTopics(orchestratorInput, orchestrationPlan.intent, topic);
+        const suggestionGovernance = await fetchTopicSuggestionGovernance(
+          client,
+          workspaceId,
+          params.roomId,
+        );
+        const stewardSuggestions = filterTopicSuggestionsByGovernance(
+          suggestTopics(orchestratorInput, orchestrationPlan.intent, topic),
+          suggestionGovernance,
+          orchestratorInput,
+        );
         if (stewardSuggestions.length) {
           topicSuggestions = await persistTopicSuggestions(client, {
             workspaceId,
@@ -225,6 +252,7 @@ export async function POST(
             await logOrchestrationWorkLog(client, {
               workspaceId,
               roomId: params.roomId,
+              topicId,
               employeeId: orchestrationEmployees[0]?.id ?? mentions[0] ?? "system",
               action: "topic_suggested",
               summary: `Suggested topic: ${first.type === "move_to_existing_topic" ? first.topicTitle : first.title}`,

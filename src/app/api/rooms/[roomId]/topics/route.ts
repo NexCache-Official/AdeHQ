@@ -12,6 +12,7 @@ import {
   backfillOrphanMessagesToGeneralTopic,
 } from "@/lib/server/topic-helpers";
 import { refreshTopicStats } from "@/lib/server/topic-stats";
+import { logOrchestrationWorkLog } from "@/lib/orchestration/persistence";
 import { nowISO, uid } from "@/lib/utils";
 import type { TopicPriority } from "@/lib/types";
 
@@ -188,6 +189,21 @@ export async function POST(
       await refreshTopicStats(client, topic.id);
     } catch (statsError) {
       console.error("[AdeHQ topics POST] refreshTopicStats", statsError);
+    }
+
+    try {
+      await logOrchestrationWorkLog(client, {
+        workspaceId,
+        roomId: params.roomId,
+        topicId: topic.id,
+        employeeId: aiEmployeeIds[0] ?? "system",
+        action: "topic_created",
+        summary: `Created topic: ${title}`,
+        relatedEntityType: "topic",
+        relatedEntityId: topic.id,
+      });
+    } catch (workLogError) {
+      console.warn("[AdeHQ topics POST] work log failed", workLogError);
     }
 
     const { data: refreshed } = await client

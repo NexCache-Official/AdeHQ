@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { type TopicSuggestionGovernanceContext } from "./topic-governance";
 import type {
   OrchestrationIntent,
   OrchestrationPlan,
@@ -7,6 +8,13 @@ import type {
   StoredOrchestrationRecord,
   TopicStewardSuggestion,
 } from "./types";
+
+export type TopicOrchestrationHydration = {
+  active: StoredOrchestrationRecord | null;
+  history: StoredOrchestrationRecord[];
+};
+
+const HYDRATION_PERF_MAX_AGE_DAYS = 90;
 
 type DbRow = Record<string, unknown>;
 
@@ -279,29 +287,155 @@ export async function maybeLogOrchestrationCompletion(
   return true;
 }
 
+function isHydratableOrchestration(record: StoredOrchestrationRecord): boolean {
+  return record.selectedEmployeeIds.length > 0;
+}
+
+function isHistoryOrchestration(record: StoredOrchestrationRecord): boolean {
+  if (record.intent === "social_broadcast") return false;
+  return isHydratableOrchestration(record);
+}
+
+export async function fetchOrchestrationsForTopicHydration(
+  client: SupabaseClient,
+  workspaceId: string,
+  topicId: string,
+  opts?: { maxAgeDays?: number; excludeIds?: string[] },
+): Promise<TopicOrchestrationHydration> {
+  const maxAgeDays = opts?.maxAgeDays ?? HYDRATION_PERF_MAX_AGE_DAYS;
+  const since = new Date(Date.now() - maxAgeDays * 24 * 60 * 60 * 1000).toISOString();
+  const exclude = new Set(opts?.excludeIds ?? []);
+
+  const [activeResult, historyResult] = await Promise.all([
+    client
+      .from("conversation_orchestrations")
+      .select("*")
+      .eq("workspace_id", workspaceId)
+      .eq("topic_id", topicId)
+      .in("status", ["planned", "running"])
+      .neq("intent", "silent_note")
+      .gte("created_at", since)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    client
+      .from("conversation_orchestrations")
+      .select("*")
+      .eq("workspace_id", workspaceId)
+      .eq("topic_id", topicId)
+      .in("status", ["completed", "failed"])
+      .neq("intent", "silent_note")
+      .gte("created_at", since)
+      .order("created_at", { ascending: false })
+      .limit(8),
+  ]);
+
+  let active: StoredOrchestrationRecord | null = null;
+  if (activeResult.data && !activeResult.error) {
+    const record = rowToRecord(activeResult.data as DbRow);
+    if (isHydratableOrchestration(record) && !exclude.has(record.id)) {
+      active = record;
+    }
+  }
+
+  const history = ((historyResult.data ?? []) as DbRow[])
+    .map((row) => rowToRecord(row))
+    .filter(
+      (record) =>
+        isHistoryOrchestration(record) &&
+        !exclude.has(record.id) &&
+        (!active || record.id !== active.id),
+    )
+    .slice(0, 5);
+
+  return { active, history };
+}
+
+/** @deprecated Use fetchOrchestrationsForTopicHydration */
 export async function fetchLatestOrchestrationForTopic(
   client: SupabaseClient,
   workspaceId: string,
   topicId: string,
-  maxAgeHours = 48,
 ): Promise<StoredOrchestrationRecord | null> {
-  const since = new Date(Date.now() - maxAgeHours * 60 * 60 * 1000).toISOString();
+  const { active, history } = await fetchOrchestrationsForTopicHydration(
+    client,
+    workspaceId,
+    topicId,
+  );
+  return active ?? history[0] ?? null;
+}
 
-  const { data, error } = await client
-    .from("conversation_orchestrations")
-    .select("*")
-    .eq("workspace_id", workspaceId)
-    .eq("topic_id", topicId)
-    .gte("created_at", since)
-    .neq("intent", "silent_note")
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+export async function fetchTopicSuggestionGovernance(
+  client: SupabaseClient,
+  workspaceId: string,
+  roomId: string,
+): Promise<TopicSuggestionGovernanceContext> {
+  const since24h = new Date(
+    Date.now() - 24 * 60 * 60 * 1000,
+  ).toISOString();
 
-  if (error || !data) return null;
-  const record = rowToRecord(data as DbRow);
-  if (!record.selectedEmployeeIds.length) return null;
-  return record;
+  const [dismissedResult, recentResult] = await Promise.all([
+    client
+      .from("topic_suggestions")
+      .select("title, target_topic_id, trigger_message_id, resolved_at, type")
+      .eq("workspace_id", workspaceId)
+      .eq("room_id", roomId)
+      .eq("status", "dismissed"),
+    client
+      .from("topic_suggestions")
+      .select("title, target_topic_id, type, created_at")
+      .eq("workspace_id", workspaceId)
+      .eq("room_id", roomId)
+      .gte("created_at", since24h),
+  ]);
+
+  const topicIds = new Set<string>();
+  for (const row of [...(dismissedResult.data ?? []), ...(recentResult.data ?? [])]) {
+    const targetId = row.target_topic_id ? String(row.target_topic_id) : null;
+    if (targetId) topicIds.add(targetId);
+  }
+
+  const topicTitleById = new Map<string, string>();
+  if (topicIds.size) {
+    const { data: topics } = await client
+      .from("channel_topics")
+      .select("id, title")
+      .eq("workspace_id", workspaceId)
+      .in("id", Array.from(topicIds));
+    for (const topic of topics ?? []) {
+      topicTitleById.set(String(topic.id), String(topic.title));
+    }
+  }
+
+  const resolveTitle = (row: Record<string, unknown>) => {
+    if (row.title) return String(row.title);
+    const targetId = row.target_topic_id ? String(row.target_topic_id) : "";
+    return topicTitleById.get(targetId) ?? "";
+  };
+
+  const dismissedTitles = ((dismissedResult.data ?? []) as Record<string, unknown>[])
+    .map((row) => ({
+      title: resolveTitle(row),
+      dismissedAt: String(row.resolved_at ?? new Date().toISOString()),
+    }))
+    .filter((entry) => entry.title.trim());
+
+  const recentSuggestedTitles = ((recentResult.data ?? []) as Record<string, unknown>[])
+    .map((row) => ({
+      title: resolveTitle(row),
+      suggestedAt: String(row.created_at),
+    }))
+    .filter((entry) => entry.title.trim());
+
+  const dismissedTriggerMessageIds = Array.from(
+    new Set(
+      ((dismissedResult.data ?? []) as Record<string, unknown>[])
+        .map((row) => (row.trigger_message_id ? String(row.trigger_message_id) : ""))
+        .filter(Boolean),
+    ),
+  );
+
+  return { dismissedTitles, recentSuggestedTitles, dismissedTriggerMessageIds };
 }
 
 export async function persistTopicSuggestions(

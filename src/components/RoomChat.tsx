@@ -1,10 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ProjectRoom, RoomTopic, type ConversationPlan } from "@/lib/types";
 import { useOrchestrationUi } from "@/components/orchestration/OrchestrationUiContext";
-import { fetchTopicOrchestration } from "@/lib/orchestration/orchestration-client";
+import { fetchTopicOrchestrations } from "@/lib/orchestration/orchestration-client";
+import { readDismissedOrchestrationIds } from "@/lib/orchestration/dismissed-orchestrations";
+import { enrichHumanSeenBy } from "@/lib/message-read-receipts";
 import {
   TopicSuggestionCard,
   dismissTopicSuggestionApi,
@@ -116,6 +118,25 @@ export function RoomChat({
   const topicMessages = allTopicMessages.slice(-messageLimit);
   const hasOlder = allTopicMessages.length > messageLimit;
 
+  const topicMembersForTopic = useMemo(
+    () => (topic ? state.topicMembers.filter((m) => m.topicId === topic.id) : []),
+    [state.topicMembers, topic],
+  );
+
+  const displayMessages = useMemo(
+    () =>
+      topicMessages.map((message) => ({
+        ...message,
+        seenBy: enrichHumanSeenBy(
+          message,
+          topicMessages,
+          topicMembersForTopic,
+          state.workspaceMembers,
+        ),
+      })),
+    [topicMessages, topicMembersForTopic, state.workspaceMembers],
+  );
+
   const roomEmployees = room.aiEmployees
     .map((id) => state.employees.find((e) => e.id === id))
     .filter((e): e is NonNullable<typeof e> => !!e);
@@ -126,15 +147,19 @@ export function RoomChat({
 
   useEffect(() => {
     if (!topic || backend !== "supabase") return;
+    orchestrationUi.clearSession();
     let cancelled = false;
 
     const hydrate = async () => {
       try {
-        const record = await fetchTopicOrchestration(topic.id);
-        if (cancelled || !record) return;
+        const dismissed = readDismissedOrchestrationIds(topic.id);
+        const { active, history } = await fetchTopicOrchestrations(topic.id, dismissed);
+        if (cancelled) return;
         const employeeNames = new Map(roomEmployees.map((e) => [e.id, e.name]));
-        orchestrationUi.hydrateFromRecord(record, employeeNames);
-        triggerMessageIdRef.current = record.triggerMessageId;
+        orchestrationUi.hydrateFromRecords(active, history, employeeNames, topic.id);
+        const triggerId = active?.triggerMessageId ?? history[0]?.triggerMessageId ?? null;
+        if (triggerId) triggerMessageIdRef.current = triggerId;
+        void actions.refreshWorkLogForTopic(topic.id);
       } catch {
         // non-blocking
       }
@@ -150,13 +175,19 @@ export function RoomChat({
   useEffect(() => {
     if (!topic) return;
     const last = topicMessages[topicMessages.length - 1];
-    if (last && backend === "supabase") {
-      void markTopicRead(topic.id, last.id);
+    const userId = state.user?.id;
+    if (last && backend === "supabase" && userId) {
+      void markTopicRead(topic.id, last.id, userId);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [topic?.id, topicMessages.length]);
 
-  const markTopicRead = async (topicId: string, lastReadMessageId: string) => {
+  const markTopicRead = async (
+    topicId: string,
+    lastReadMessageId: string,
+    userId: string,
+  ) => {
+    actions.setTopicMemberRead(topicId, userId, lastReadMessageId);
     try {
       const headers = await authHeaders();
       await fetch(`/api/topics/${topicId}/read`, {
@@ -327,7 +358,8 @@ export function RoomChat({
             }
 
             orchestrationUi.markEmployeeCompleted(run.employeeId);
-        void actions.refreshTopics(room.id);
+            void actions.refreshTopics(room.id);
+            void actions.refreshWorkLogForTopic(topic.id);
 
             if (Array.isArray(data.activatedRuns) && data.activatedRuns.length) {
               for (const activated of data.activatedRuns as QueuedRunClient[]) {
@@ -381,6 +413,7 @@ export function RoomChat({
           prev.filter((r) => r.phase !== "done" && r.phase !== "waiting_on"),
         );
         orchestrationUi.markSessionCompleted();
+        void actions.refreshWorkLogForTopic(topic.id);
       }, 4000);
 
       void actions.refreshTopics(room.id);
@@ -627,6 +660,7 @@ export function RoomChat({
       if (payload.queuedRuns?.length) {
         setTimeout(() => void actions.refreshTopics(room.id), 4000);
       }
+      void actions.refreshWorkLogForTopic(topic.id);
 
       void actions.refreshTopics(room.id);
     } catch (error) {
@@ -866,7 +900,7 @@ export function RoomChat({
             <div className="mb-[18px] mt-1.5 text-center">
               <span className="rounded-full bg-muted px-3 py-0.5 text-[11px] text-ink-3">Today</span>
             </div>
-            {topicMessages.map((m) => (
+            {displayMessages.map((m) => (
               <RoomMessageItem key={m.id} message={m} isDm={isDm} />
             ))}
             <div ref={bottomRef} />

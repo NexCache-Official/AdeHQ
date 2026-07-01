@@ -14,14 +14,42 @@ const UI_TO_PERSISTED_PHASE: Record<
   failed: "failed",
 };
 
+export type TopicOrchestrationPayload = {
+  active: StoredOrchestrationRecord | null;
+  history: StoredOrchestrationRecord[];
+};
+
+export async function fetchTopicOrchestrations(
+  topicId: string,
+  excludeIds?: string[],
+): Promise<TopicOrchestrationPayload> {
+  const headers = await authHeaders();
+  const query = excludeIds?.length
+    ? `?excludeIds=${encodeURIComponent(excludeIds.join(","))}`
+    : "";
+  const res = await fetch(`/api/topics/${topicId}/orchestration${query}`, { headers });
+  if (!res.ok) return { active: null, history: [] };
+  const payload = await res.json();
+  return {
+    active: (payload.active as StoredOrchestrationRecord | null) ?? null,
+    history: (payload.history as StoredOrchestrationRecord[]) ?? [],
+  };
+}
+
+/** @deprecated Use fetchTopicOrchestrations */
 export async function fetchTopicOrchestration(
   topicId: string,
 ): Promise<StoredOrchestrationRecord | null> {
+  const { active, history } = await fetchTopicOrchestrations(topicId);
+  return active ?? history[0] ?? null;
+}
+
+export async function refreshTopicWorkLog(topicId: string) {
   const headers = await authHeaders();
-  const res = await fetch(`/api/topics/${topicId}/orchestration`, { headers });
+  const res = await fetch(`/api/topics/${topicId}/work-log`, { headers });
   if (!res.ok) return null;
   const payload = await res.json();
-  return (payload.orchestration as StoredOrchestrationRecord | null) ?? null;
+  return (payload.events ?? []) as import("@/lib/types").WorkLogEvent[];
 }
 
 export async function patchOrchestrationEmployeeStatus(

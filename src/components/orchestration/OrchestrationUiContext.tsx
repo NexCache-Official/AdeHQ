@@ -16,6 +16,7 @@ import {
   type OrchestrationPhase,
 } from "@/lib/orchestration/orchestration-labels";
 import { patchOrchestrationEmployeeStatus } from "@/lib/orchestration/orchestration-client";
+import { dismissOrchestrationId } from "@/lib/orchestration/dismissed-orchestrations";
 import type { ConversationPlan } from "@/lib/types";
 
 export type OrchestrationEmployeeStatus = {
@@ -35,10 +36,12 @@ export type OrchestrationUiSession = {
   collaborationPlan: ConversationPlan | null;
   employees: OrchestrationEmployeeStatus[];
   completed: boolean;
+  createdAt?: string;
 };
 
 type OrchestrationUiContextValue = {
   session: OrchestrationUiSession;
+  historySessions: OrchestrationUiSession[];
   setOrchestrationFromSend: (params: {
     orchestrationId?: string | null;
     triggerMessageId: string;
@@ -50,6 +53,12 @@ type OrchestrationUiContextValue = {
     record: StoredOrchestrationRecord,
     employeeNames: Map<string, string>,
   ) => void;
+  hydrateFromRecords: (
+    active: StoredOrchestrationRecord | null,
+    history: StoredOrchestrationRecord[],
+    employeeNames: Map<string, string>,
+    topicId?: string,
+  ) => void;
   updateEmployeePhase: (
     employeeId: string,
     phase: OrchestrationPhase,
@@ -60,6 +69,7 @@ type OrchestrationUiContextValue = {
   markEmployeeCompleted: (employeeId: string) => void;
   markSessionCompleted: () => void;
   clearSession: () => void;
+  dismissHistorySession: (orchestrationId: string, topicId: string) => void;
   getChipForMessage: (messageId: string) => string | null;
   retryFailedRun: (employeeId: string) => Promise<void>;
   registerRetryHandler: (handler: (runId: string, employeeId: string, employeeName: string) => void) => void;
@@ -125,9 +135,35 @@ function buildEmployeeStatuses(
   });
 }
 
+function recordToSession(
+  record: StoredOrchestrationRecord,
+  employeeNames: Map<string, string>,
+): OrchestrationUiSession | null {
+  const plan = recordToOrchestrationPlan(record);
+  if (!plan.shouldRespond) return null;
+
+  const completed =
+    record.status === "completed" ||
+    record.status === "failed" ||
+    record.employeeStatuses.every(
+      (s) => s.phase === "completed" || s.phase === "failed",
+    );
+
+  return {
+    orchestrationId: record.id,
+    triggerMessageId: record.triggerMessageId,
+    orchestrationPlan: plan,
+    collaborationPlan: null,
+    employees: buildEmployeeStatuses(plan, employeeNames, record.employeeStatuses),
+    completed,
+    createdAt: record.createdAt,
+  };
+}
+
 export function OrchestrationUiProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<OrchestrationUiSession>(EMPTY_SESSION);
-  const [chipLabel, setChipLabel] = useState<string | null>(null);
+  const [historySessions, setHistorySessions] = useState<OrchestrationUiSession[]>([]);
+  const [chipLabelsByMessageId, setChipLabelsByMessageId] = useState<Record<string, string>>({});
   const retryHandlerRef = useRef<
     ((runId: string, employeeId: string, employeeName: string) => void) | null
   >(null);
@@ -162,7 +198,7 @@ export function OrchestrationUiProvider({ children }: { children: ReactNode }) {
       const plan = params.orchestrationPlan ?? null;
       if (!plan?.shouldRespond) {
         setSession(EMPTY_SESSION);
-        setChipLabel(null);
+        setChipLabelsByMessageId({});
         return;
       }
 
@@ -174,34 +210,58 @@ export function OrchestrationUiProvider({ children }: { children: ReactNode }) {
         employees: buildEmployeeStatuses(plan, params.employeeNames),
         completed: false,
       });
-      setChipLabel(formatOrchestrationChipLabel(plan, params.employeeNames));
+      setChipLabelsByMessageId({
+        [params.triggerMessageId]: formatOrchestrationChipLabel(plan, params.employeeNames),
+      });
+    },
+    [],
+  );
+
+  const hydrateFromRecords = useCallback(
+    (
+      active: StoredOrchestrationRecord | null,
+      history: StoredOrchestrationRecord[],
+      employeeNames: Map<string, string>,
+    ) => {
+      const chipLabels: Record<string, string> = {};
+      const historyUi: OrchestrationUiSession[] = [];
+
+      if (active) {
+        const activeSession = recordToSession(active, employeeNames);
+        if (activeSession) {
+          setSession(activeSession);
+          chipLabels[active.triggerMessageId] = formatOrchestrationChipLabel(
+            activeSession.orchestrationPlan!,
+            employeeNames,
+          );
+        } else {
+          setSession(EMPTY_SESSION);
+        }
+      } else {
+        setSession(EMPTY_SESSION);
+      }
+
+      for (const record of history) {
+        const uiSession = recordToSession(record, employeeNames);
+        if (!uiSession) continue;
+        historyUi.push(uiSession);
+        chipLabels[record.triggerMessageId] = formatOrchestrationChipLabel(
+          uiSession.orchestrationPlan!,
+          employeeNames,
+        );
+      }
+
+      setHistorySessions(historyUi);
+      setChipLabelsByMessageId(chipLabels);
     },
     [],
   );
 
   const hydrateFromRecord = useCallback(
     (record: StoredOrchestrationRecord, employeeNames: Map<string, string>) => {
-      const plan = recordToOrchestrationPlan(record);
-      if (!plan.shouldRespond) return;
-
-      const completed =
-        record.status === "completed" ||
-        record.status === "failed" ||
-        record.employeeStatuses.every(
-          (s) => s.phase === "completed" || s.phase === "failed",
-        );
-
-      setSession({
-        orchestrationId: record.id,
-        triggerMessageId: record.triggerMessageId,
-        orchestrationPlan: plan,
-        collaborationPlan: null,
-        employees: buildEmployeeStatuses(plan, employeeNames, record.employeeStatuses),
-        completed,
-      });
-      setChipLabel(formatOrchestrationChipLabel(plan, employeeNames));
+      hydrateFromRecords(record, [], employeeNames);
     },
-    [],
+    [hydrateFromRecords],
   );
 
   const updateEmployeePhase = useCallback(
@@ -253,15 +313,29 @@ export function OrchestrationUiProvider({ children }: { children: ReactNode }) {
 
   const clearSession = useCallback(() => {
     setSession(EMPTY_SESSION);
-    setChipLabel(null);
+    setHistorySessions([]);
+    setChipLabelsByMessageId({});
+  }, []);
+
+  const dismissHistorySession = useCallback((orchestrationId: string, topicId: string) => {
+    dismissOrchestrationId(topicId, orchestrationId);
+    setHistorySessions((prev) => {
+      const removed = prev.find((s) => s.orchestrationId === orchestrationId);
+      if (removed?.triggerMessageId) {
+        setChipLabelsByMessageId((labels) => {
+          const next = { ...labels };
+          delete next[removed.triggerMessageId!];
+          return next;
+        });
+      }
+      return prev.filter((s) => s.orchestrationId !== orchestrationId);
+    });
+    setSession((prev) => (prev.orchestrationId === orchestrationId ? EMPTY_SESSION : prev));
   }, []);
 
   const getChipForMessage = useCallback(
-    (messageId: string) => {
-      if (session.triggerMessageId !== messageId) return null;
-      return chipLabel;
-    },
-    [chipLabel, session.triggerMessageId],
+    (messageId: string) => chipLabelsByMessageId[messageId] ?? null,
+    [chipLabelsByMessageId],
   );
 
   const registerRetryHandler = useCallback(
@@ -284,24 +358,30 @@ export function OrchestrationUiProvider({ children }: { children: ReactNode }) {
   const value = useMemo(
     () => ({
       session,
+      historySessions,
       setOrchestrationFromSend,
       hydrateFromRecord,
+      hydrateFromRecords,
       updateEmployeePhase,
       markEmployeeCompleted,
       markSessionCompleted,
       clearSession,
+      dismissHistorySession,
       getChipForMessage,
       retryFailedRun,
       registerRetryHandler,
     }),
     [
       session,
+      historySessions,
       setOrchestrationFromSend,
       hydrateFromRecord,
+      hydrateFromRecords,
       updateEmployeePhase,
       markEmployeeCompleted,
       markSessionCompleted,
       clearSession,
+      dismissHistorySession,
       getChipForMessage,
       retryFailedRun,
       registerRetryHandler,
@@ -318,12 +398,15 @@ export function useOrchestrationUi() {
   if (!ctx) {
     return {
       session: EMPTY_SESSION,
+      historySessions: [] as OrchestrationUiSession[],
       setOrchestrationFromSend: () => {},
       hydrateFromRecord: () => {},
+      hydrateFromRecords: () => {},
       updateEmployeePhase: () => {},
       markEmployeeCompleted: () => {},
       markSessionCompleted: () => {},
       clearSession: () => {},
+      dismissHistorySession: () => {},
       getChipForMessage: () => null,
       retryFailedRun: async () => {},
       registerRetryHandler: () => {},

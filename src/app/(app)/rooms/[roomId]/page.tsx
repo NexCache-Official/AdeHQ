@@ -500,7 +500,7 @@ export default function RoomDetailPage() {
       </div>
 
       <OrchestrationUiProvider>
-      <div className="flex min-h-0 flex-1">
+      <div className="flex min-h-0 flex-1 overflow-hidden">
         {!isMayaDm && (
         <div className="hidden w-[266px] shrink-0 lg:block">
           <TopicList
@@ -519,11 +519,13 @@ export default function RoomDetailPage() {
         )}
 
         {isMayaDm ? (
-          <MayaDmHiringLayout
-            mayaRoomId={roomId}
-            mayaTopicId={selectedTopic?.id}
-            firstName={state.user?.name?.split(" ")[0]}
-          />
+          <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden">
+            <MayaDmHiringLayout
+              mayaRoomId={roomId}
+              mayaTopicId={selectedTopic?.id}
+              firstName={state.user?.name?.split(" ")[0]}
+            />
+          </div>
         ) : (
           <>
         <div className="min-w-0 flex-1 border-r border-border bg-canvas">

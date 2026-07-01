@@ -162,6 +162,9 @@ type StoreActions = {
   removeLocalMessage: (roomId: string, messageId: string) => void;
   updateMessage: (roomId: string, messageId: string, patch: Partial<RoomMessage>) => void;
   refreshTopics: (roomId: string) => Promise<void>;
+  refreshWorkLogForTopic: (topicId: string) => Promise<void>;
+  mergeWorkLogEvents: (events: import("@/lib/types").WorkLogEvent[]) => void;
+  setTopicMemberRead: (topicId: string, memberId: string, lastReadMessageId: string) => void;
   upsertTopic: (topic: import("@/lib/types").RoomTopic) => void;
   setTopicSummary: (topicId: string, summary: string) => void;
   removeTopicPermanently: (roomId: string, topicId: string) => void;
@@ -473,6 +476,63 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       if (isMayaDm) {
         set((current) => ensureMayaDmTopicsInState(current, current.user?.id));
       }
+    };
+
+    const refreshWorkLogForTopic = async (topicId: string) => {
+      if (backendRef.current !== "supabase") return;
+      try {
+        const { refreshTopicWorkLog } = await import("@/lib/orchestration/orchestration-client");
+        const events = await refreshTopicWorkLog(topicId);
+        if (!events?.length) return;
+        set((current) => {
+          const byId = new Map(current.workLog.map((entry) => [entry.id, entry]));
+          for (const event of events) {
+            byId.set(event.id, event);
+          }
+          return {
+            ...current,
+            workLog: Array.from(byId.values()).sort(
+              (a, b) => +new Date(b.createdAt) - +new Date(a.createdAt),
+            ),
+          };
+        });
+      } catch {
+        // non-blocking
+      }
+    };
+
+    const mergeWorkLogEvents = (events: WorkLogEvent[]) => {
+      if (!events.length) return;
+      set((current) => {
+        const byId = new Map(current.workLog.map((entry) => [entry.id, entry]));
+        for (const event of events) {
+          byId.set(event.id, event);
+        }
+        return {
+          ...current,
+          workLog: Array.from(byId.values()).sort(
+            (a, b) => +new Date(b.createdAt) - +new Date(a.createdAt),
+          ),
+        };
+      });
+    };
+
+    const setTopicMemberRead = (
+      topicId: string,
+      memberId: string,
+      lastReadMessageId: string,
+    ) => {
+      const timestamp = nowISO();
+      set((current) => ({
+        ...current,
+        topicMembers: current.topicMembers.map((member) =>
+          member.topicId === topicId &&
+          member.memberId === memberId &&
+          member.memberType === "human"
+            ? { ...member, lastReadMessageId, lastReadAt: timestamp }
+            : member,
+        ),
+      }));
     };
 
     const ensureMayaDmRemote = async (roomId: string) => {
@@ -1069,6 +1129,9 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       },
 
       refreshTopics: refreshTopicsForRoom,
+      refreshWorkLogForTopic,
+      mergeWorkLogEvents,
+      setTopicMemberRead,
 
       upsertTopic: (topic) => {
         set((s) => ({
@@ -1284,6 +1347,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         const created: WorkLogEvent = {
           id: e.id ?? uid("wl"),
           roomId: e.roomId,
+          topicId: e.topicId,
           employeeId: e.employeeId,
           action: e.action,
           summary: e.summary ?? "",
