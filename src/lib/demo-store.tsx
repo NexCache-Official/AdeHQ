@@ -59,6 +59,7 @@ import {
   persistMessage,
   persistProfile,
   persistRoom,
+  persistRoomMetadata,
   persistRoomMember,
   persistTask,
   persistWorkLog,
@@ -446,22 +447,20 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           const response = await fetch(`/api/rooms/${roomId}/topics`, { headers });
           if (response.ok) {
             const payload = await response.json();
-            set((current) =>
-              ensureMayaDmTopicsInState(
-                {
-                  ...current,
-                  topics: [
-                    ...current.topics.filter((topic) => topic.roomId !== roomId),
-                    ...(payload.topics ?? []),
-                  ],
-                  topicMembers: [
-                    ...current.topicMembers.filter((member) => member.roomId !== roomId),
-                    ...(payload.members ?? []),
-                  ],
-                },
-                current.user?.id,
-              ),
-            );
+            set((current) => {
+              const merged = {
+                ...current,
+                topics: [
+                  ...current.topics.filter((topic) => topic.roomId !== roomId),
+                  ...(payload.topics ?? []),
+                ],
+                topicMembers: [
+                  ...current.topicMembers.filter((member) => member.roomId !== roomId),
+                  ...(payload.members ?? []),
+                ],
+              };
+              return isMayaDm ? ensureMayaDmTopicsInState(merged, current.user?.id) : merged;
+            });
             return;
           }
         } catch {
@@ -890,7 +889,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           ...s,
           rooms: s.rooms.map((r) => (r.id === id ? updated : r)),
         }));
-        runRemote((workspaceId) => persistRoom(workspaceId, updated));
+        runRemote((workspaceId) => persistRoomMetadata(workspaceId, updated));
       },
 
       addEmployeeToRoom: (roomId, employeeId) => {
@@ -909,7 +908,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         }));
         runRemote(async (workspaceId) => {
           await persistRoomMember(workspaceId, roomId, "ai", employeeId);
-          await persistRoom(workspaceId, updated);
+          await persistRoomMetadata(workspaceId, updated);
         });
       },
 
@@ -927,7 +926,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         }));
         runRemote(async (workspaceId) => {
           await deleteRoomMember(workspaceId, roomId, "ai", employeeId);
-          await persistRoom(workspaceId, updated);
+          await persistRoomMetadata(workspaceId, updated);
         });
       },
 
@@ -939,7 +938,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           ...s,
           rooms: s.rooms.map((r) => (r.id === roomId ? updated : r)),
         }));
-        runRemote((workspaceId) => persistRoom(workspaceId, updated));
+        runRemote((workspaceId) => persistRoomMetadata(workspaceId, updated));
       },
 
       addMessage: (roomId, msg) => {
@@ -975,7 +974,6 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 
         runRemote(async (workspaceId) => {
           await persistMessage(workspaceId, created);
-          if (updatedRoom) await persistRoom(workspaceId, updatedRoom);
         });
 
         return created;
@@ -1045,7 +1043,6 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 
         runRemote(async (workspaceId) => {
           await persistMessage(workspaceId, updatedMessage);
-          await persistRoom(workspaceId, updatedRoom);
         });
       },
 

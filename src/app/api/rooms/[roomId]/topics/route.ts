@@ -2,8 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { AuthError, requireAuthUser, requireWorkspaceMembership } from "@/lib/supabase/auth-server";
 import { assertCanAccessRoom } from "@/lib/server/room-access";
 import { getWorkspaceIdForRoom } from "@/lib/server/room-messages";
+import { mapTopicCreateError } from "@/lib/server/supabase-errors";
 import {
   ensureGeneralTopic,
+  ensureRoomAiMembers,
   topicFromRow,
   topicMemberFromRow,
   slugifyTopicTitle,
@@ -74,6 +76,7 @@ export async function POST(
   request: NextRequest,
   { params }: { params: { roomId: string } },
 ) {
+  let createdTopicId: string | null = null;
   try {
     const { user, client } = await requireAuthUser(request);
     const body = (await request.json()) as CreateTopicBody;
@@ -89,6 +92,9 @@ export async function POST(
 
     const { role } = await requireWorkspaceMembership(client, workspaceId, user.id);
     await assertCanAccessRoom(client, workspaceId, params.roomId, user.id, role);
+
+    const aiEmployeeIds = [...new Set((body.aiEmployeeIds ?? []).filter(Boolean))];
+    await ensureRoomAiMembers(client, workspaceId, params.roomId, aiEmployeeIds);
 
     const title = body.title.trim();
     const slug = slugifyTopicTitle(title);
@@ -111,6 +117,7 @@ export async function POST(
     if (topicError) throw topicError;
 
     const topic = topicFromRow(topicRow);
+    createdTopicId = topic.id;
 
     const memberRows = [
       {
@@ -121,7 +128,7 @@ export async function POST(
         member_id: user.id,
         role: "owner",
       },
-      ...(body.aiEmployeeIds ?? []).map((employeeId) => ({
+      ...aiEmployeeIds.map((employeeId) => ({
         workspace_id: workspaceId,
         room_id: params.roomId,
         topic_id: topic.id,
@@ -160,7 +167,7 @@ export async function POST(
 
     if (body.starterMessage?.trim()) {
       const starterId = uid("msg");
-      await client.from("messages").insert({
+      const { error: starterError } = await client.from("messages").insert({
         workspace_id: workspaceId,
         id: starterId,
         room_id: params.roomId,
@@ -174,9 +181,14 @@ export async function POST(
         pending: false,
         created_at: nowISO(),
       });
+      if (starterError) throw starterError;
     }
 
-    await refreshTopicStats(client, topic.id);
+    try {
+      await refreshTopicStats(client, topic.id);
+    } catch (statsError) {
+      console.error("[AdeHQ topics POST] refreshTopicStats", statsError);
+    }
 
     const { data: refreshed } = await client
       .from("room_topics")
@@ -189,14 +201,14 @@ export async function POST(
       systemMessageId,
     });
   } catch (error) {
+    if (createdTopicId) {
+      console.error("[AdeHQ topics POST] partial create; topic may need cleanup:", createdTopicId);
+    }
     if (error instanceof AuthError) {
       return NextResponse.json({ error: error.message }, { status: error.status });
     }
     console.error("[AdeHQ topics POST]", error);
-    const message = error instanceof Error ? error.message : "Unable to create topic.";
-    if (message.includes("room_topics_room_title_unique")) {
-      return NextResponse.json({ error: "A topic with this title already exists in the room." }, { status: 409 });
-    }
-    return NextResponse.json({ error: "Unable to create topic." }, { status: 500 });
+    const mapped = mapTopicCreateError(error);
+    return NextResponse.json({ error: mapped.message }, { status: mapped.status });
   }
 }

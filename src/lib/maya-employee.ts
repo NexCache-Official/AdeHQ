@@ -236,9 +236,10 @@ export function ensureMayaDmTopicsInState<
   const dmRoom = state.rooms.find((room) => room.kind === "dm" && room.dmEmployeeId === MAYA_EMPLOYEE_ID);
   if (!dmRoom || !userId) return state;
 
-  const generalTopic = (state.topics ?? []).find(
-    (topic) => topic.roomId === dmRoom.id && isGeneralTopic(topic),
-  );
+  const roomTopics = (state.topics ?? []).filter((topic) => topic.roomId === dmRoom.id);
+  const generalTopic =
+    roomTopics.find((topic) => isGeneralTopic(topic)) ??
+    roomTopics.find((topic) => topic.title.toLowerCase() === "general");
 
   if (generalTopic) {
     const needsMessageSync = dmRoom.messages.some((message) => message.topicId !== generalTopic.id);
@@ -259,6 +260,9 @@ export function ensureMayaDmTopicsInState<
       ),
     };
   }
+
+  // Supabase already returned topics for this room but none marked General — don't inject fake IDs.
+  if (roomTopics.length > 0) return state;
 
   const workspaceId = state.workspace?.id ?? "local";
   const topic = buildMayaDmGeneralTopic(

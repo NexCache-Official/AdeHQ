@@ -180,6 +180,25 @@ async function ensureTopicMembersFromRoom(
   if (error) throw error;
 }
 
+export async function ensureRoomAiMembers(
+  client: SupabaseClient,
+  workspaceId: string,
+  roomId: string,
+  employeeIds: string[],
+): Promise<void> {
+  if (!employeeIds.length) return;
+  const rows = employeeIds.map((memberId) => ({
+    workspace_id: workspaceId,
+    room_id: roomId,
+    member_type: "ai",
+    member_id: memberId,
+  }));
+  const { error } = await client.from("room_members").upsert(rows, {
+    onConflict: "workspace_id,room_id,member_type,member_id",
+  });
+  if (error) throw error;
+}
+
 export function slugifyTopicTitle(title: string): string {
   return title
     .toLowerCase()

@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { AuthError, requireAuthUser, requireWorkspaceMembership } from "@/lib/supabase/auth-server";
 import { assertCanAccessRoom } from "@/lib/server/room-access";
 import { topicMemberFromRow } from "@/lib/server/topic-helpers";
-import { nowISO } from "@/lib/utils";
 
 export const runtime = "nodejs";
 
@@ -54,7 +53,6 @@ export async function POST(
         member_type: "ai",
         member_id: body.employeeId,
         role: "participant",
-        joined_at: nowISO(),
       })
       .select("*")
       .single();

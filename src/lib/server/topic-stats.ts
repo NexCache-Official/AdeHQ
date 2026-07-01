@@ -59,7 +59,10 @@ export async function refreshTopicStats(
     runsResult.error,
     lastMessageResult.error,
   ].filter(Boolean);
-  if (errors.length) throw errors[0];
+  if (errors.length) {
+    console.error("[AdeHQ refreshTopicStats]", errors[0]);
+    return;
+  }
 
   const lastMessageAt = lastMessageResult.data?.created_at
     ? String(lastMessageResult.data.created_at)

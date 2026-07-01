@@ -774,7 +774,7 @@ export async function getWorkspaceIdForRoom(
     .from("project_rooms")
     .select("workspace_id")
     .eq("id", roomId)
-    .maybeSingle();
+    .limit(1);
   if (error) throw error;
-  return data?.workspace_id ? String(data.workspace_id) : null;
+  return data?.[0]?.workspace_id ? String(data[0].workspace_id) : null;
 }

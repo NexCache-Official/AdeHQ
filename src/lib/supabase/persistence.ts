@@ -1292,8 +1292,12 @@ export async function deleteEmployee(workspaceId: string, employeeId: string) {
   if (error) throw error;
 }
 
-export async function persistRoom(workspaceId: string, room: ProjectRoom) {
+export async function persistRoomMetadata(workspaceId: string, room: ProjectRoom) {
   await upsertRows("project_rooms", [roomRow(workspaceId, room)], "workspace_id,id");
+}
+
+export async function persistRoom(workspaceId: string, room: ProjectRoom) {
+  await persistRoomMetadata(workspaceId, room);
   await replaceRoomMembers(workspaceId, room);
 }
 
