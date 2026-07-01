@@ -13,6 +13,7 @@ import {
 } from "@/lib/server/topic-helpers";
 import { refreshTopicStats } from "@/lib/server/topic-stats";
 import { logOrchestrationWorkLog } from "@/lib/orchestration/persistence";
+import { scheduleTopicSummaryRefresh } from "@/lib/topic-summary/refresh";
 import { nowISO, uid } from "@/lib/utils";
 import type { TopicPriority } from "@/lib/types";
 
@@ -205,6 +206,16 @@ export async function POST(
     } catch (workLogError) {
       console.warn("[AdeHQ topics POST] work log failed", workLogError);
     }
+
+    scheduleTopicSummaryRefresh(client, {
+      workspaceId,
+      roomId: params.roomId,
+      topicId: topic.id,
+      topicTitle: title,
+      topicDescription: body.description?.trim() || null,
+      trigger: "topic_created",
+      employeeId: user.id,
+    });
 
     const { data: refreshed } = await client
       .from("channel_topics")

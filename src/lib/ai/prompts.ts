@@ -1,12 +1,14 @@
 import type { AIEmployee, MemoryEntry, ProjectRoom, RoomMessage, RoomTopic, Workspace } from "@/lib/types";
 import type { EmployeeRoleKey } from "@/lib/types";
 import { isMayaEmployee } from "@/lib/maya-employee";
+import type { TopicSummary } from "@/lib/topic-summary/types";
 
 type PromptContext = {
   employee: AIEmployee;
   workspace: Workspace;
   room: ProjectRoom;
   topic?: RoomTopic;
+  topicSummary?: TopicSummary | null;
   recentMessages: RoomMessage[];
   recentMemory: MemoryEntry[];
   openTasks: { id: string; title: string; status: string; priority: string }[];
@@ -14,6 +16,24 @@ type PromptContext = {
   humanParticipants: { id: string; name: string }[];
   userMessage: string;
 };
+
+function formatTopicSummaryForPrompt(summary: TopicSummary): string {
+  const parts = [
+    `Summary: ${summary.summary}`,
+    summary.whatHappened ? `What happened: ${summary.whatHappened}` : "",
+    summary.currentDecision ? `Current decision: ${summary.currentDecision}` : "",
+    summary.openQuestions.length
+      ? `Open questions:\n${summary.openQuestions.map((q) => `- ${q.text}`).join("\n")}`
+      : "",
+    summary.keyFacts.length
+      ? `Key facts:\n${summary.keyFacts.map((f) => `- ${f.text}`).join("\n")}`
+      : "",
+    summary.nextActions.length
+      ? `Next actions:\n${summary.nextActions.map((a) => `- ${a.title}`).join("\n")}`
+      : "",
+  ].filter(Boolean);
+  return parts.join("\n");
+}
 
 function roleWorkflowRules(roleKey: EmployeeRoleKey): string {
   switch (roleKey) {
@@ -151,7 +171,13 @@ ${ctx.room.brief || ctx.room.description}
 ${ctx.topic ? `You are responding inside the topic: ${ctx.topic.title}.
 Topic status: ${ctx.topic.status} · priority: ${ctx.topic.priority}
 Topic description: ${ctx.topic.description || "(none)"}
-${ctx.topic.summary ? `Topic summary: ${ctx.topic.summary}` : ""}
+${
+  ctx.topicSummary?.summary
+    ? `Topic workstream context (authoritative — stay consistent with this):\n${formatTopicSummaryForPrompt(ctx.topicSummary)}`
+    : ctx.topic.summary
+      ? `Topic summary: ${ctx.topic.summary}`
+      : ""
+}
 Stay focused on this topic unless the user explicitly asks for broader room/workspace context.
 If you create tasks, memory, approvals, or logs, attach them to this topic.` : ""}
 

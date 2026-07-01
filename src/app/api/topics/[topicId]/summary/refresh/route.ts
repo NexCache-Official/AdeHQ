@@ -5,14 +5,15 @@ import { topicFromRow } from "@/lib/server/topic-helpers";
 import { refreshTopicSummary } from "@/lib/topic-summary/refresh";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
-/** @deprecated Use POST /api/topics/[topicId]/summary/refresh */
 export async function POST(
   request: NextRequest,
   { params }: { params: { topicId: string } },
 ) {
   try {
     const { user, client } = await requireAuthUser(request);
+    const body = (await request.json().catch(() => ({}))) as { manual?: boolean };
 
     const { data: topicRow, error: topicError } = await client
       .from("channel_topics")
@@ -34,28 +35,26 @@ export async function POST(
       topicId: params.topicId,
       topicTitle: topic.title,
       topicDescription: topic.description,
-      manual: true,
+      manual: body.manual !== false,
       trigger: "manual",
       employeeId: user.id,
     });
 
-    const { data: updated } = await client
+    const { data: updatedTopic } = await client
       .from("channel_topics")
       .select("*")
       .eq("id", params.topicId)
       .maybeSingle();
 
     return NextResponse.json({
-      topic: updated ? topicFromRow(updated) : topic,
-      summary: result.summary?.summary ?? "",
-      topicSummary: result.summary,
-      refreshed: result.refreshed,
+      ...result,
+      topic: updatedTopic ? topicFromRow(updatedTopic) : topic,
     });
   } catch (error) {
     if (error instanceof AuthError) {
       return NextResponse.json({ error: error.message }, { status: error.status });
     }
-    console.error("[AdeHQ topic summarize]", error);
-    return NextResponse.json({ error: "Unable to summarize topic." }, { status: 500 });
+    console.error("[AdeHQ topic summary refresh]", error);
+    return NextResponse.json({ error: "Unable to refresh topic summary." }, { status: 500 });
   }
 }

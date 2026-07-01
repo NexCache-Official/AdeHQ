@@ -195,6 +195,7 @@ export async function routeEmployeeResponse(
     workspace: { id: "", name: input.workspaceName, plan: "founder", workspaceMode: "real" as const },
     room: input.room,
     topic: input.topic,
+    topicSummary: input.topicSummary,
     recentMessages: input.room.messages,
     recentMemory: input.recentMemory,
     openTasks: input.openTasks,

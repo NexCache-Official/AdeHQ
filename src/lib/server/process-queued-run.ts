@@ -29,6 +29,7 @@ import {
   finalizeOrchestrationIfComplete,
   updateOrchestrationEmployeeStatus,
 } from "@/lib/orchestration/persistence";
+import { scheduleTopicSummaryRefresh } from "@/lib/topic-summary/refresh";
 import type { PersistedOrchestrationEmployeeStatus } from "@/lib/orchestration/types";
 import { serializeUnknownError } from "@/lib/server/message-errors";
 import { nowISO } from "@/lib/utils";
@@ -311,6 +312,7 @@ export async function processQueuedAgentRun(
         employee,
         room: roomWithMessages,
         topic: ctx.topic,
+        topicSummary: ctx.topicSummary,
         message: content,
         allEmployees: ctx.employees,
         recentMemory: ctx.recentMemory,
@@ -459,6 +461,58 @@ export async function processQueuedAgentRun(
     }
 
     const collaborationPlan = planFromMetadata(runMetadata, rootTriggerMessageId);
+
+    if (!isGreetingRun && !failed && aiMode !== "error") {
+      const hasMeaningfulEffects =
+        effect.tasks.length > 0 ||
+        effect.memory.length > 0 ||
+        effect.approvals.length > 0 ||
+        response.reply.trim().length > 80;
+      if (hasMeaningfulEffects) {
+        scheduleTopicSummaryRefresh(client, {
+          workspaceId,
+          roomId,
+          topicId,
+          topicTitle: ctx.topic.title,
+          topicDescription: ctx.topic.description,
+          trigger: "meaningful_ai_reply",
+          employeeId,
+        });
+      }
+      if (effect.tasks.length > 0) {
+        scheduleTopicSummaryRefresh(client, {
+          workspaceId,
+          roomId,
+          topicId,
+          topicTitle: ctx.topic.title,
+          topicDescription: ctx.topic.description,
+          trigger: "task_created",
+          employeeId,
+        });
+      }
+      if (effect.memory.length > 0) {
+        scheduleTopicSummaryRefresh(client, {
+          workspaceId,
+          roomId,
+          topicId,
+          topicTitle: ctx.topic.title,
+          topicDescription: ctx.topic.description,
+          trigger: "memory_suggested",
+          employeeId,
+        });
+      }
+      if (effect.approvals.length > 0) {
+        scheduleTopicSummaryRefresh(client, {
+          workspaceId,
+          roomId,
+          topicId,
+          topicTitle: ctx.topic.title,
+          topicDescription: ctx.topic.description,
+          trigger: "approval_requested",
+          employeeId,
+        });
+      }
+    }
 
     return {
       reply: response.reply,

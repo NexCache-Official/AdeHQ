@@ -2,12 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { AuthError, requireAuthUser, requireWorkspaceMembership } from "@/lib/supabase/auth-server";
 import { assertCanAccessRoom } from "@/lib/server/room-access";
 import { topicFromRow } from "@/lib/server/topic-helpers";
-import { refreshTopicSummary } from "@/lib/topic-summary/refresh";
+import { fetchTopicSummary } from "@/lib/topic-summary/persistence";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
-/** @deprecated Use POST /api/topics/[topicId]/summary/refresh */
-export async function POST(
+export async function GET(
   request: NextRequest,
   { params }: { params: { topicId: string } },
 ) {
@@ -28,34 +28,14 @@ export async function POST(
     const { role } = await requireWorkspaceMembership(client, topic.workspaceId, user.id);
     await assertCanAccessRoom(client, topic.workspaceId, topic.roomId, user.id, role);
 
-    const result = await refreshTopicSummary(client, {
-      workspaceId: topic.workspaceId,
-      roomId: topic.roomId,
-      topicId: params.topicId,
-      topicTitle: topic.title,
-      topicDescription: topic.description,
-      manual: true,
-      trigger: "manual",
-      employeeId: user.id,
-    });
+    const summary = await fetchTopicSummary(client, topic.workspaceId, params.topicId);
 
-    const { data: updated } = await client
-      .from("channel_topics")
-      .select("*")
-      .eq("id", params.topicId)
-      .maybeSingle();
-
-    return NextResponse.json({
-      topic: updated ? topicFromRow(updated) : topic,
-      summary: result.summary?.summary ?? "",
-      topicSummary: result.summary,
-      refreshed: result.refreshed,
-    });
+    return NextResponse.json({ summary, topic });
   } catch (error) {
     if (error instanceof AuthError) {
       return NextResponse.json({ error: error.message }, { status: error.status });
     }
-    console.error("[AdeHQ topic summarize]", error);
-    return NextResponse.json({ error: "Unable to summarize topic." }, { status: 500 });
+    console.error("[AdeHQ topic summary GET]", error);
+    return NextResponse.json({ error: "Could not load topic summary." }, { status: 500 });
   }
 }

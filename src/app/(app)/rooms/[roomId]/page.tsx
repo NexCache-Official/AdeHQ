@@ -193,14 +193,15 @@ export default function RoomDetailPage() {
         if (!topicId) return;
 
         const headers = await authHeaders();
-        const response = await fetch(`/api/topics/${topicId}/summarize`, {
+        const response = await fetch(`/api/topics/${topicId}/summary/refresh`, {
           method: "POST",
           headers,
+          body: JSON.stringify({ manual: true }),
         });
         if (!response.ok) throw new Error("Summarize failed");
-        const { topic, summary } = await response.json();
-        actions.upsertTopic(topic);
-        actions.setTopicSummary(topic.id, summary);
+        const payload = await response.json();
+        if (payload.topic) actions.upsertTopic(payload.topic);
+        void actions.refreshWorkLogForTopic(topicId);
         return;
       }
 
@@ -424,17 +425,22 @@ export default function RoomDetailPage() {
   };
 
   const saveSummaryToMemory = () => {
-    if (!selectedTopic?.summary || !room) return;
-    actions.createMemory({
+    if (!selectedTopic) return;
+    void actions.refreshWorkLogForTopic(selectedTopic.id);
+  };
+
+  const createTaskFromSummary = (title: string, ownerEmployeeId?: string) => {
+    if (!room || !selectedTopic) return;
+    actions.createTask({
       roomId,
       topicId: selectedTopic.id,
-      title: `Topic summary — ${selectedTopic.title}`,
-      content: selectedTopic.summary,
-      type: "general",
-      status: "approved",
-      createdByType: "human",
-      createdById: state.user?.id ?? "user",
+      title,
+      status: "open",
+      assigneeType: ownerEmployeeId ? "ai" : "human",
+      assigneeId: ownerEmployeeId ?? state.user?.id ?? "user",
+      priority: "medium",
     });
+    void actions.refreshWorkLogForTopic(selectedTopic.id);
   };
 
   if (!room) {
@@ -569,6 +575,7 @@ export default function RoomDetailPage() {
               onUnarchive={unarchiveTopic}
               onDeletePermanently={deleteTopicPermanently}
               onSaveSummaryToMemory={saveSummaryToMemory}
+              onCreateTaskFromSummary={createTaskFromSummary}
               onParticipationChange={setParticipationMode}
               onAiControl={handleAiControl}
               summarizing={summarizing}

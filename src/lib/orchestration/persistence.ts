@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { type TopicSuggestionGovernanceContext } from "./topic-governance";
+import { scheduleTopicSummaryRefresh } from "@/lib/topic-summary/refresh";
 import type {
   OrchestrationIntent,
   OrchestrationPlan,
@@ -585,4 +586,32 @@ export async function finalizeOrchestrationIfComplete(
     selectedEmployeeIds: record.selectedEmployeeIds,
     employeeStatuses: record.employeeStatuses,
   });
+
+  if (record.topicId) {
+    const trigger =
+      record.intent === "handoff"
+        ? "handoff_completed"
+        : record.intent === "panel_response" || record.intent === "lead_collaborator"
+          ? "panel_collaboration_completed"
+          : null;
+    if (trigger) {
+      const { data: topicRow } = await client
+        .from("channel_topics")
+        .select("title, description")
+        .eq("workspace_id", workspaceId)
+        .eq("id", record.topicId)
+        .maybeSingle();
+      if (topicRow) {
+        scheduleTopicSummaryRefresh(client, {
+          workspaceId,
+          roomId: record.roomId,
+          topicId: record.topicId,
+          topicTitle: String(topicRow.title),
+          topicDescription: topicRow.description ? String(topicRow.description) : null,
+          trigger,
+          employeeId: record.leadEmployeeId ?? record.selectedEmployeeIds[0],
+        });
+      }
+    }
+  }
 }

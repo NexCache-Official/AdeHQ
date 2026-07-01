@@ -19,6 +19,8 @@ import { MemoryCard } from "./MemoryCard";
 import { ApprovalCard } from "./ApprovalCard";
 import { WorkLogTimeline } from "./WorkLogTimeline";
 import { OrchestrationSidebarStatus } from "@/components/orchestration/OrchestrationSidebarStatus";
+import { TopicSummaryPanel } from "@/components/topic-summary/TopicSummaryPanel";
+import { useTopicSummary } from "@/components/topic-summary/useTopicSummary";
 import { EmptyState } from "./States";
 import { Button } from "./ui";
 import { cn } from "@/lib/utils";
@@ -82,13 +84,6 @@ function modeIsSelected(current: AiParticipationMode, option: AiParticipationMod
   return current === option;
 }
 
-function displaySummary(summary: string) {
-  return summary
-    .replace(/^#{1,6}\s*/gm, "")
-    .replace(/\*\*(.*?)\*\*/g, "$1")
-    .trim();
-}
-
 export function TopicPanel({
   topic,
   room,
@@ -105,6 +100,7 @@ export function TopicPanel({
   onUnarchive,
   onDeletePermanently,
   onSaveSummaryToMemory,
+  onCreateTaskFromSummary,
   onParticipationChange,
   onAiControl,
   summarizing,
@@ -125,6 +121,7 @@ export function TopicPanel({
   onUnarchive?: () => void;
   onDeletePermanently?: () => void;
   onSaveSummaryToMemory: () => void;
+  onCreateTaskFromSummary?: (title: string, ownerEmployeeId?: string) => void;
   onParticipationChange?: (mode: AiParticipationMode) => void;
   onAiControl?: (action: "stop_all" | "resume") => void;
   summarizing?: boolean;
@@ -137,6 +134,16 @@ export function TopicPanel({
   const participation = getAiParticipationMode(topic);
   const aiControl = getTopicAiControlState(topic);
   const isArchived = topic.status === "archived";
+  const {
+    summary: topicSummary,
+    loading: summaryLoading,
+    refreshing: summaryRefreshing,
+    refresh: refreshTopicSummary,
+  } = useTopicSummary(topic.id);
+
+  const handleSummarize = () => {
+    void refreshTopicSummary(true).then(() => onSummarize());
+  };
 
   const topicEmployees = topicMembers
     .filter((m) => m.memberType === "ai")
@@ -218,8 +225,13 @@ export function TopicPanel({
                 </div>
               )}
               <div className="flex flex-wrap gap-1.5">
-                <Button variant="secondary" size="sm" onClick={onSummarize} disabled={summarizing || isArchived}>
-                  {summarizing ? (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={handleSummarize}
+                  disabled={summarizing || summaryRefreshing || summaryLoading || isArchived}
+                >
+                  {summarizing || summaryRefreshing ? (
                     <Loader2 className="h-3.5 w-3.5 animate-spin" />
                   ) : (
                     <Sparkles className="h-3.5 w-3.5" />
@@ -371,14 +383,16 @@ export function TopicPanel({
                 </details>
               )}
               <OrchestrationSidebarStatus topicId={topic.id} />
-              {topic.summary && (
-                <section>
-                  <div className="section-title mb-1.5">Summary</div>
-                  <div className="max-h-48 overflow-y-auto rounded-xl border border-border bg-muted p-3 text-xs leading-relaxed text-ink-2 whitespace-pre-wrap">
-                    {displaySummary(topic.summary)}
-                  </div>
-                </section>
-              )}
+              <TopicSummaryPanel
+                topicId={topic.id}
+                summary={topicSummary}
+                employees={topicEmployees}
+                loading={summaryLoading}
+                refreshing={summaryRefreshing}
+                onRefresh={() => void refreshTopicSummary(true)}
+                onCreateTask={onCreateTaskFromSummary}
+                onMemorySaved={onSaveSummaryToMemory}
+              />
               <section>
                 <div className="section-title mb-1.5">Open tasks</div>
                 {topicTasks.filter((t) => t.status !== "done").length === 0 ? (
@@ -408,11 +422,6 @@ export function TopicPanel({
                   </div>
                 )}
               </section>
-              {topic.summary && (
-                <Button variant="secondary" size="sm" className="w-full" onClick={onSaveSummaryToMemory}>
-                  Save summary to memory
-                </Button>
-              )}
             </div>
           )}
 

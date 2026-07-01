@@ -7,6 +7,7 @@ import { useOrchestrationUi } from "@/components/orchestration/OrchestrationUiCo
 import { fetchTopicOrchestrations } from "@/lib/orchestration/orchestration-client";
 import { readDismissedOrchestrationIds } from "@/lib/orchestration/dismissed-orchestrations";
 import { enrichHumanSeenBy } from "@/lib/message-read-receipts";
+import { notifyTopicSummaryUpdated } from "@/lib/topic-summary/client";
 import {
   TopicSuggestionCard,
   dismissTopicSuggestionApi,
@@ -360,6 +361,7 @@ export function RoomChat({
             orchestrationUi.markEmployeeCompleted(run.employeeId);
             void actions.refreshTopics(room.id);
             void actions.refreshWorkLogForTopic(topic.id);
+            notifyTopicSummaryUpdated(topic.id);
 
             if (Array.isArray(data.activatedRuns) && data.activatedRuns.length) {
               for (const activated of data.activatedRuns as QueuedRunClient[]) {
@@ -414,6 +416,7 @@ export function RoomChat({
         );
         orchestrationUi.markSessionCompleted();
         void actions.refreshWorkLogForTopic(topic.id);
+        notifyTopicSummaryUpdated(topic.id);
       }, 4000);
 
       void actions.refreshTopics(room.id);

@@ -625,6 +625,7 @@ export type SendMessageInput = {
   employee: AIEmployee;
   room: ProjectRoom;
   topic?: RoomTopic;
+  topicSummary?: import("@/lib/topic-summary/types").TopicSummary | null;
   message: string;
   allEmployees: AIEmployee[];
   recentMemory: MemoryEntry[];

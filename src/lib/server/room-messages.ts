@@ -15,6 +15,7 @@ import type {
 } from "@/lib/types";
 import { refreshTopicStats } from "@/lib/server/topic-stats";
 import { ensureGeneralTopic, topicFromRow } from "@/lib/server/topic-helpers";
+import { fetchTopicSummary } from "@/lib/topic-summary/persistence";
 import { defaultModelModeForRole, normalizeModelMode } from "@/lib/ai/model-catalog";
 import { sanitizeReplyForChat } from "@/lib/ai/normalize-model-response";
 import { extractMentions, nowISO, uid } from "@/lib/utils";
@@ -107,6 +108,7 @@ export type RoomContext = {
   workspaceName: string;
   room: ProjectRoom;
   topic: RoomTopic;
+  topicSummary: import("@/lib/topic-summary/types").TopicSummary | null;
   employees: AIEmployee[];
   recentMemory: MemoryEntry[];
   openTasks: Task[];
@@ -230,6 +232,8 @@ export async function loadTopicContext(
   if (topic.status === "archived") {
     throw new Error("This topic is archived.");
   }
+
+  const topicSummary = await fetchTopicSummary(client, workspaceId, topicId);
 
   const roomResult = await client
     .from("channels")
@@ -413,6 +417,7 @@ export async function loadTopicContext(
     workspaceName: String((workspaceResult.data as DbRow).name),
     room,
     topic,
+    topicSummary,
     employees,
     recentMemory: memory,
     openTasks,
