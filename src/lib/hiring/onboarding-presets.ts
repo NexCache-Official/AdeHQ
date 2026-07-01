@@ -21,6 +21,24 @@ export const WORKFORCE_OUTCOMES: WorkforceOutcome[] = [
   { id: "run_operations", title: "Run operations", description: "Processes, coordination, and execution" },
 ];
 
+export const OUTCOME_CODES: Record<WorkforceOutcomeId, string> = {
+  launch_product: "Pr",
+  research_market: "Mk",
+  grow_sales: "Sa",
+  build_software: "En",
+  manage_clients: "Cl",
+  run_operations: "Op",
+};
+
+export const MAYA_CAPABILITIES = [
+  "Decide what role you need",
+  "Hire your first AI employee",
+  "Improve existing employees",
+  "Suggest rooms and topics",
+  "Keep your workforce organized",
+  "Recommend when to adjust hires",
+] as const;
+
 export type WorkstreamPreset = {
   id: string;
   name: string;

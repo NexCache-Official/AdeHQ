@@ -213,3 +213,126 @@ body {
     opacity: 0;
   }
 }
+
+/* Onboarding (AdeHQ_Onboarding.dc.html) */
+@keyframes obdFadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes obdFadeUp {
+  from {
+    transform: translateY(16px);
+    opacity: 0;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+@keyframes obdPop {
+  0% {
+    transform: translate(-50%, -50%) scale(0.8);
+    opacity: 0;
+  }
+  62% {
+    transform: translate(-50%, -50%) scale(1.07);
+  }
+  100% {
+    transform: translate(-50%, -50%) scale(1);
+    opacity: 1;
+  }
+}
+@keyframes obdPopCenter {
+  0% {
+    transform: scale(0.74);
+    opacity: 0;
+  }
+  62% {
+    transform: scale(1.09);
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+@keyframes obdRing {
+  0% {
+    transform: translate(-50%, -50%) scale(1);
+    opacity: 0.7;
+  }
+  100% {
+    transform: translate(-50%, -50%) scale(2);
+    opacity: 0;
+  }
+}
+@keyframes obdFloat {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-9px);
+  }
+}
+@keyframes obdGlow {
+  0%,
+  100% {
+    opacity: 0.42;
+    transform: translateX(-50%) scale(1);
+  }
+  50% {
+    opacity: 0.7;
+    transform: translateX(-50%) scale(1.06);
+  }
+}
+@keyframes obdConfetti {
+  0% {
+    opacity: 0;
+    transform: translateY(-24px) rotate(0deg);
+  }
+  8% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(78vh) rotate(540deg);
+  }
+}
+
+.obd-fade-up {
+  animation: obdFadeUp 0.45s cubic-bezier(0.2, 0.7, 0.3, 1);
+}
+.obd-pop-node {
+  animation: obdPop 0.5s cubic-bezier(0.34, 1.4, 0.64, 1) forwards;
+}
+.obd-pop-center {
+  animation: obdPopCenter 0.55s cubic-bezier(0.34, 1.4, 0.64, 1) forwards;
+}
+.obd-maya-ring {
+  animation: obdRing 2.4s ease-out infinite;
+}
+.obd-float {
+  animation: obdFloat 6.5s ease-in-out infinite;
+}
+.obd-glow {
+  animation: obdGlow 7s ease-in-out infinite;
+}
+.obd-caret {
+  animation: briefCursorBlink 1s step-end infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .obd-fade-up,
+  .obd-pop-node,
+  .obd-pop-center,
+  .obd-maya-ring,
+  .obd-float,
+  .obd-glow,
+  .obd-caret {
+    animation: none !important;
+  }
+}

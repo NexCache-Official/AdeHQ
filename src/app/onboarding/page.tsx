@@ -19,7 +19,7 @@ export default function OnboardingPage() {
   if (!hydrated || !state.user) return <LoadingState full label="Loading…" />;
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="h-screen overflow-hidden bg-[var(--canvas)]">
       <OnboardingFlow />
     </div>
   );

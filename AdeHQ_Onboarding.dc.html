@@ -1,0 +1,514 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="_ds/adehq-design-system-e7369172-d959-4682-9ed3-9320bc3582a7/tokens/fonts.css">
+  <link rel="stylesheet" href="_ds/adehq-design-system-e7369172-d959-4682-9ed3-9320bc3582a7/tokens/colors.css">
+  <link rel="stylesheet" href="_ds/adehq-design-system-e7369172-d959-4682-9ed3-9320bc3582a7/tokens/typography.css">
+  <link rel="stylesheet" href="_ds/adehq-design-system-e7369172-d959-4682-9ed3-9320bc3582a7/tokens/spacing.css">
+  <link rel="stylesheet" href="_ds/adehq-design-system-e7369172-d959-4682-9ed3-9320bc3582a7/styles.css">
+  <script src="_ds/adehq-design-system-e7369172-d959-4682-9ed3-9320bc3582a7/_ds_bundle.js"></script>
+  <style>
+    *{box-sizing:border-box}
+    html,body{margin:0;height:100%}
+    body{background:var(--ws-cream);font-family:var(--font-sans);color:var(--ws-ink);overflow:hidden;-webkit-font-smoothing:antialiased}
+    ::selection{background:var(--selection-bg)}
+    .obd-scroll::-webkit-scrollbar{width:9px}
+    .obd-scroll::-webkit-scrollbar-thumb{background:rgba(40,30,15,.16);border-radius:9px;border:2px solid transparent;background-clip:padding-box}
+    @keyframes obdFadeUp{from{transform:translateY(16px)}to{transform:none}}
+    @keyframes obdFadeIn{from{opacity:0}to{opacity:1}}
+    @keyframes obdPop{0%{transform:translate(-50%,-50%) scale(.8)}62%{transform:translate(-50%,-50%) scale(1.07)}100%{transform:translate(-50%,-50%) scale(1)}}
+    @keyframes obdPopC{0%{transform:scale(.74)}62%{transform:scale(1.09)}100%{transform:scale(1)}}
+    @keyframes obdDraw{from{stroke-dashoffset:var(--len,200)}to{stroke-dashoffset:0}}
+    @keyframes obdRing{0%{transform:translate(-50%,-50%) scale(1);opacity:.7}100%{transform:translate(-50%,-50%) scale(2);opacity:0}}
+    @keyframes obdFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-9px)}}
+    @keyframes obdSpin{to{transform:rotate(360deg)}}
+    @keyframes obdBlink{0%,100%{opacity:1}50%{opacity:0}}
+    @keyframes obdGlow{0%,100%{opacity:.42;transform:translateX(-50%) scale(1)}50%{opacity:.7;transform:translateX(-50%) scale(1.06)}}
+    @keyframes obdConfetti{0%{opacity:0;transform:translateY(-24px) rotate(0)}8%{opacity:1}100%{opacity:0;transform:translateY(78vh) rotate(540deg)}}
+    @keyframes obdDot{0%,100%{transform:translateY(0);opacity:.45}50%{transform:translateY(-4px);opacity:1}}
+    @keyframes obdSheen{0%{background-position:200% 0}100%{background-position:-200% 0}}
+    @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
+  </style>
+</helmet>
+
+<div class="{{ themeClass }}" style="display:flex;height:100vh;width:100vw;background:var(--ws-cream);position:relative">
+
+  <!-- ===================== LEFT PANE ===================== -->
+  <aside style="width:43%;max-width:560px;min-width:430px;background:linear-gradient(158deg,#191512 0%,#221C16 55%,#2B2119 100%);color:#fff;position:relative;display:flex;flex-direction:column;padding:24px 34px 20px;overflow:hidden">
+    <div style="position:absolute;top:-8%;left:50%;width:560px;height:520px;background:radial-gradient(circle at 50% 40%,color-mix(in srgb,var(--accent) 55%,transparent),transparent 62%);filter:blur(14px);pointer-events:none;animation:obdGlow 7s ease-in-out infinite"></div>
+    <div style="position:absolute;inset:0;background-image:radial-gradient(rgba(255,255,255,.05) 1px,transparent 1px);background-size:22px 22px;opacity:.5;pointer-events:none"></div>
+
+    <!-- brand -->
+    <header style="position:relative;display:flex;align-items:center;gap:12px;z-index:3">
+      <div style="width:40px;height:40px;border-radius:12px;background:linear-gradient(140deg,var(--accent),#F2974E);display:flex;align-items:center;justify-content:center;box-shadow:var(--shadow-accent)">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l2.4 5.6L20 11l-5.6 2.4L12 19l-2.4-5.6L4 11l5.6-2.4z"/></svg>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:2px">
+        <span style="font-family:var(--font-mono);font-size:10px;letter-spacing:.09em;text-transform:uppercase;color:rgba(255,255,255,.45)">AdeHQ workspace setup</span>
+        <span style="font-size:15px;font-weight:700;letter-spacing:-.01em">{{ companyName }}</span>
+      </div>
+    </header>
+
+    <!-- living org graph -->
+    <div style="position:relative;flex:1;display:flex;align-items:center;justify-content:center;z-index:2;min-height:0">
+      <div style="position:relative;width:300px;height:210px;animation:obdFloat 6.5s ease-in-out infinite">
+        <svg viewBox="0 0 300 210" style="position:absolute;inset:0;width:300px;height:210px;pointer-events:none;overflow:visible">
+          <sc-if value="{{ eYouRoom }}" hint-placeholder-val="{{ false }}"><line x1="150" y1="40" x2="78" y2="120" stroke="rgba(255,255,255,.32)" stroke-width="1.6"></line></sc-if>
+          <sc-if value="{{ eYouMaya }}" hint-placeholder-val="{{ false }}"><line x1="150" y1="40" x2="222" y2="116" stroke="rgba(34,211,238,.45)" stroke-width="1.6"></line></sc-if>
+          <sc-if value="{{ eRoomHire }}" hint-placeholder-val="{{ false }}"><line x1="78" y1="120" x2="150" y2="180" stroke="rgba(255,255,255,.24)" stroke-width="1.4" stroke-dasharray="5 6"></line></sc-if>
+          <sc-if value="{{ eMayaRoom }}" hint-placeholder-val="{{ false }}"><line x1="222" y1="116" x2="78" y2="120" stroke="rgba(255,255,255,.14)" stroke-width="1.2" stroke-dasharray="3 6"></line></sc-if>
+        </svg>
+
+        <!-- You / owner -->
+        <div style="position:absolute;left:150px;top:40px;transform:translate(-50%,-50%);display:flex;flex-direction:column;align-items:center;gap:7px;text-align:center">
+          <div style="width:52px;height:52px;border-radius:15px;background:var(--grad-slate);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:17px;border:1.5px solid rgba(255,255,255,.18);box-shadow:0 10px 26px -8px rgba(0,0,0,.6)">{{ ownerInitial }}</div>
+          <div style="display:flex;flex-direction:column;gap:1px"><span style="font-size:12px;font-weight:700">You</span><span style="font-size:10px;color:rgba(255,255,255,.5)">Owner</span></div>
+        </div>
+
+        <!-- Room -->
+        <sc-if value="{{ showRoom }}" hint-placeholder-val="{{ false }}">
+          <div style="position:absolute;left:78px;top:120px;transform:translate(-50%,-50%);display:flex;flex-direction:column;align-items:center;gap:6px;text-align:center;animation:obdPop .5s var(--ease-pop)">
+            <div style="width:46px;height:46px;border-radius:14px;background:color-mix(in srgb,var(--accent) 22%,#1A1714);border:1.5px solid color-mix(in srgb,var(--accent) 70%,transparent);display:flex;align-items:center;justify-content:center;box-shadow:0 8px 22px -8px color-mix(in srgb,var(--accent) 60%,transparent)">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M8 4v16"/></svg>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:1px"><span style="font-size:11.5px;font-weight:700;max-width:120px">{{ roomNodeName }}</span><span style="font-size:9.5px;color:rgba(255,255,255,.5)">Room</span></div>
+          </div>
+        </sc-if>
+
+        <!-- Maya -->
+        <sc-if value="{{ showMaya }}" hint-placeholder-val="{{ false }}">
+          <div style="position:absolute;left:222px;top:116px;transform:translate(-50%,-50%);display:flex;flex-direction:column;align-items:center;gap:6px;text-align:center;animation:obdPop .55s var(--ease-pop)">
+            <div style="position:relative;width:48px;height:48px">
+              <div style="position:absolute;left:50%;top:50%;width:48px;height:48px;border-radius:50%;border:2px solid rgba(34,211,238,.6);transform:translate(-50%,-50%);animation:obdRing 2.4s ease-out infinite"></div>
+              <div style="position:absolute;inset:0;border-radius:50%;background:linear-gradient(145deg,#22D3EE,#1BA672);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:17px;border:1.5px solid rgba(255,255,255,.25);box-shadow:0 8px 24px -6px rgba(34,211,238,.55)">M</div>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:1px"><span style="font-size:11.5px;font-weight:700">Maya</span><span style="font-size:9.5px;color:rgba(255,255,255,.5)">Workforce Manager</span></div>
+          </div>
+        </sc-if>
+
+        <!-- First hire (ghost) -->
+        <sc-if value="{{ showHire }}" hint-placeholder-val="{{ false }}">
+          <div style="position:absolute;left:150px;top:180px;transform:translate(-50%,-50%);display:flex;flex-direction:column;align-items:center;gap:5px;text-align:center;animation:obdPop .5s var(--ease-pop)">
+            <div style="width:42px;height:42px;border-radius:12px;border:1.5px dashed rgba(255,255,255,.4);background:rgba(255,255,255,.04);display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.6);font-size:22px;font-weight:300">+</div>
+            <div style="display:flex;flex-direction:column;gap:1px"><span style="font-size:11px;font-weight:600;color:rgba(255,255,255,.82);max-width:150px">{{ hireNodeName }}</span><span style="font-size:9.5px;color:rgba(255,255,255,.42)">Suggested first hire</span></div>
+          </div>
+        </sc-if>
+      </div>
+    </div>
+
+    <!-- journey path = live summary + nav -->
+    <nav style="position:relative;z-index:2;padding:2px 0 0">
+      <div style="font-family:var(--font-mono);font-size:9.5px;letter-spacing:.09em;text-transform:uppercase;color:rgba(255,255,255,.4);margin:0 0 9px 39px">Your setup</div>
+      <div style="position:relative">
+        <div style="position:absolute;left:13px;top:11px;bottom:11px;width:2px;background:rgba(255,255,255,.12);border-radius:2px"></div>
+        <div style="position:absolute;left:13px;top:11px;width:2px;height:{{ progressLineH }};background:linear-gradient(var(--accent),#F2974E);border-radius:2px;transition:height .5s var(--ease-out)"></div>
+        <div style="display:flex;flex-direction:column;gap:1px">
+          <sc-for list="{{ journey }}" as="j" hint-placeholder-count="5">
+            <button onClick="{{ j.onGo }}" disabled="{{ j.disabled }}" style="{{ j.rowStyle }}" style-hover="{{ j.rowHover }}">
+              <div style="{{ j.dotStyle }}">{{ j.mark }}</div>
+              <div style="display:flex;flex-direction:column;gap:0;align-items:flex-start;min-width:0">
+                <span style="{{ j.labelStyle }}">{{ j.label }}</span>
+                <span style="{{ j.valueStyle }}">{{ j.value }}</span>
+              </div>
+            </button>
+          </sc-for>
+        </div>
+      </div>
+    </nav>
+  </aside>
+
+  <!-- ===================== RIGHT PANE ===================== -->
+  <main style="flex:1;display:flex;flex-direction:column;background:var(--ws-canvas);position:relative;min-width:0">
+    <!-- top progress -->
+    <div style="padding:22px 48px 0;flex:none">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+        <span style="font-family:var(--font-mono);font-size:10px;letter-spacing:.09em;text-transform:uppercase;color:var(--ws-ink-3)">Guided setup</span>
+        <span style="font-size:12.5px;color:var(--ws-ink-2);font-weight:500">{{ stepLabel }}</span>
+      </div>
+      <div style="height:4px;border-radius:4px;background:var(--ws-muted);overflow:hidden">
+        <div style="height:100%;width:{{ progressPct }};background:linear-gradient(90deg,var(--accent),#F2974E);border-radius:4px;transition:width .5s var(--ease-out)"></div>
+      </div>
+    </div>
+
+    <!-- body -->
+    <div class="obd-scroll" style="flex:1;overflow-y:auto;display:flex;justify-content:center;position:relative">
+      <div key="stage-{{ stage }}" style="width:100%;max-width:760px;padding:40px 48px 48px;animation:obdFadeUp .45s var(--ease-out);position:relative">
+
+        <!-- STAGE 0 : WELCOME -->
+        <sc-if value="{{ isStage0 }}" hint-placeholder-val="{{ true }}">
+          <div style="display:flex;flex-direction:column;gap:0;padding:14px 0 8px">
+            <span style="font-family:var(--font-mono);font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:var(--accent);font-weight:600;margin-bottom:16px">Welcome to AdeHQ</span>
+            <h1 style="font-size:40px;line-height:1.05;letter-spacing:-.035em;font-weight:700;margin:0 0 16px;max-width:15ch">Let's build {{ companyName }}'s AI workforce.</h1>
+            <p style="font-size:16px;line-height:1.55;color:var(--ws-ink-2);margin:0 0 24px;max-width:52ch">In three quick steps, Maya helps you define the work, open your first room, and get ready to hire. Nothing is created yet — you stay fully in control.</p>
+            <div style="display:flex;gap:26px;margin-bottom:30px">
+              <div style="display:flex;flex-direction:column;gap:2px"><span style="font-size:19px;font-weight:700;white-space:nowrap">3 steps</span><span style="font-size:12px;color:var(--ws-ink-3)">guided setup</span></div>
+              <div style="width:1px;background:var(--ws-border)"></div>
+              <div style="display:flex;flex-direction:column;gap:2px"><span style="font-size:19px;font-weight:700;white-space:nowrap">~2 min</span><span style="font-size:12px;color:var(--ws-ink-3)">to finish</span></div>
+              <div style="width:1px;background:var(--ws-border)"></div>
+              <div style="display:flex;flex-direction:column;gap:2px"><span style="font-size:19px;font-weight:700;white-space:nowrap">Reversible</span><span style="font-size:12px;color:var(--ws-ink-3)">change anytime</span></div>
+            </div>
+            <button onClick="{{ primaryAction }}" style="align-self:flex-start;display:inline-flex;align-items:center;gap:9px;background:var(--accent);color:#fff;border:none;border-radius:12px;padding:14px 26px;font-family:var(--font-sans);font-size:15.5px;font-weight:600;cursor:pointer;box-shadow:var(--shadow-accent);transition:filter .14s,transform .14s" style-hover="filter:brightness(1.06);transform:translateY(-1px)">Begin setup
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+            </button>
+          </div>
+        </sc-if>
+
+        <!-- STAGE 1 : DEFINE THE WORK -->
+        <sc-if value="{{ isStage1 }}" hint-placeholder-val="{{ false }}">
+          <div style="display:flex;flex-direction:column;gap:26px">
+            <div>
+              <h1 style="font-size:32px;line-height:1.1;letter-spacing:-.025em;font-weight:700;margin:0 0 10px">What should your AI workforce move forward?</h1>
+              <p style="font-size:15px;line-height:1.55;color:var(--ws-ink-2);margin:0;max-width:58ch">Pick the outcome you care about most. Maya uses this to recommend your first room and first hire.</p>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+              <sc-for list="{{ outcomes }}" as="o" hint-placeholder-count="6">
+                <button onClick="{{ o.onSelect }}" style="{{ o.cardStyle }}" style-hover="{{ o.cardHover }}">
+                  <div style="display:flex;align-items:center;justify-content:space-between;width:100%">
+                    <div style="{{ o.codeStyle }}">{{ o.code }}</div>
+                    <div style="{{ o.checkStyle }}">
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+                    </div>
+                  </div>
+                  <span style="font-size:15px;font-weight:600;color:var(--ws-ink);letter-spacing:-.01em">{{ o.title }}</span>
+                  <span style="font-size:12.5px;line-height:1.4;color:var(--ws-ink-2)">{{ o.desc }}</span>
+                </button>
+              </sc-for>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:8px">
+              <label style="font-size:13px;font-weight:500;color:var(--ws-ink-2)">What are you trying to move forward?</label>
+              <textarea value="{{ goal }}" onInput="{{ setGoal }}" placeholder="e.g. Launch our B2B SaaS product and understand where we can win" rows="3" style="font-family:var(--font-sans);font-size:14px;line-height:1.5;color:var(--ws-ink);background:var(--ws-surface);border:1px solid var(--ws-border);border-radius:12px;padding:13px 15px;resize:none;outline:none;transition:border-color .14s,box-shadow .14s" style-focus="border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)"></textarea>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:8px">
+              <label style="font-size:13px;font-weight:500;color:var(--ws-ink-2)">Business or domain context <span style="color:var(--ws-ink-3)">(optional)</span></label>
+              <input value="{{ domain }}" onInput="{{ setDomain }}" placeholder="e.g. NexCache Limited — developer tools for caching" style="font-family:var(--font-sans);font-size:14px;color:var(--ws-ink);background:var(--ws-surface);border:1px solid var(--ws-border);border-radius:12px;padding:13px 15px;outline:none;transition:border-color .14s,box-shadow .14s" style-focus="border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)"/>
+            </div>
+          </div>
+        </sc-if>
+
+        <!-- STAGE 2 : FIRST WORKSTREAM -->
+        <sc-if value="{{ isStage2 }}" hint-placeholder-val="{{ false }}">
+          <div style="display:flex;flex-direction:column;gap:26px">
+            <div>
+              <h1 style="font-size:32px;line-height:1.1;letter-spacing:-.025em;font-weight:700;margin:0 0 10px">Create your first room</h1>
+              <p style="font-size:15px;line-height:1.55;color:var(--ws-ink-2);margin:0;max-width:58ch">Rooms are where your humans and AI employees collaborate. Start with one focused work area — you can add more later.</p>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:14px">
+              <div style="display:flex;flex-wrap:wrap;gap:10px">
+                <sc-for list="{{ roomOptions }}" as="r" hint-placeholder-count="3">
+                  <button onClick="{{ r.onSelect }}" style="{{ r.pillStyle }}" style-hover="{{ r.pillHover }}">{{ r.label }}</button>
+                </sc-for>
+              </div>
+              <input value="{{ customName }}" onInput="{{ setCustomName }}" placeholder="Custom room name (optional)" style="font-family:var(--font-sans);font-size:14px;color:var(--ws-ink);background:var(--ws-surface);border:1px solid var(--ws-border);border-radius:12px;padding:13px 15px;outline:none;transition:border-color .14s,box-shadow .14s" style-focus="border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)"/>
+            </div>
+            <!-- room preview -->
+            <div style="border:1px solid var(--ws-border);border-radius:18px;background:var(--ws-surface);padding:22px;box-shadow:var(--shadow-card)">
+              <div style="display:flex;align-items:center;gap:11px;margin-bottom:18px">
+                <div style="width:38px;height:38px;border-radius:11px;background:var(--accent-soft);display:flex;align-items:center;justify-content:center">
+                  <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M8 4v16"/></svg>
+                </div>
+                <div style="display:flex;flex-direction:column;gap:1px"><span style="font-size:10px;font-family:var(--font-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--ws-ink-3)">Room</span><span style="font-size:17px;font-weight:700;letter-spacing:-.01em">{{ workstreamName }}</span></div>
+              </div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:22px">
+                <div>
+                  <div style="font-family:var(--font-mono);font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--ws-ink-3);margin-bottom:10px">Starting topics</div>
+                  <div style="display:flex;flex-direction:column;gap:8px">
+                    <sc-for list="{{ topics }}" as="t" hint-placeholder-count="3">
+                      <div style="display:flex;align-items:center;gap:9px;font-size:13.5px;color:var(--ws-ink)"><span style="width:5px;height:5px;border-radius:50%;background:var(--accent);flex:none"></span>{{ t }}</div>
+                    </sc-for>
+                  </div>
+                </div>
+                <div>
+                  <div style="font-family:var(--font-mono);font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--ws-ink-3);margin-bottom:10px">Suggested first hires</div>
+                  <div style="display:flex;flex-direction:column;gap:8px">
+                    <sc-for list="{{ hiresList }}" as="h" hint-placeholder-count="2">
+                      <div style="display:flex;align-items:center;gap:9px;font-size:13.5px;color:var(--ws-ink)"><span style="width:20px;height:20px;border-radius:6px;background:var(--ws-muted);display:flex;align-items:center;justify-content:center;flex:none"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--ws-ink-2)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></span>{{ h }}</div>
+                    </sc-for>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </sc-if>
+
+        <!-- STAGE 3 : MEET MAYA -->
+        <sc-if value="{{ isStage3 }}" hint-placeholder-val="{{ false }}">
+          <div style="display:flex;flex-direction:column;gap:24px">
+            <div>
+              <h1 style="font-size:32px;line-height:1.1;letter-spacing:-.025em;font-weight:700;margin:0 0 10px">Meet Maya</h1>
+              <p style="font-size:15px;line-height:1.55;color:var(--ws-ink-2);margin:0;max-width:58ch">Maya is your AI Workforce Manager. She helps you hire, organize, improve, and govern your AI employees.</p>
+            </div>
+            <div style="border:1px solid var(--ws-border);border-radius:20px;background:var(--ws-surface);padding:26px;box-shadow:var(--shadow-lift);position:relative;overflow:hidden">
+              <div style="position:absolute;top:-40px;right:-30px;width:180px;height:180px;background:radial-gradient(circle,rgba(34,211,238,.16),transparent 65%);pointer-events:none"></div>
+              <div style="display:flex;align-items:center;gap:14px;margin-bottom:18px;position:relative">
+                <div style="position:relative;width:52px;height:52px;flex:none">
+                  <div style="position:absolute;left:50%;top:50%;width:52px;height:52px;border-radius:50%;border:2px solid rgba(34,211,238,.5);transform:translate(-50%,-50%);animation:obdRing 2.4s ease-out infinite"></div>
+                  <div style="position:absolute;inset:0;border-radius:50%;background:linear-gradient(145deg,#22D3EE,#1BA672);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:17px;box-shadow:0 8px 22px -6px rgba(34,211,238,.5)">M</div>
+                </div>
+                <div style="display:flex;flex-direction:column;gap:2px"><span style="font-size:18px;font-weight:700">Maya</span><span style="font-size:13px;color:var(--ws-ink-2)">AI Workforce Manager</span></div>
+              </div>
+              <p style="font-size:15px;line-height:1.6;color:var(--ws-ink);margin:0 0 20px;min-height:76px;position:relative">{{ mayaText }}<sc-if value="{{ showCaret }}" hint-placeholder-val="{{ false }}"><span style="display:inline-block;width:2px;height:1em;background:var(--accent);margin-left:2px;vertical-align:-2px;animation:obdBlink 1s step-end infinite"></span></sc-if></p>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:11px 22px;position:relative">
+                <sc-for list="{{ capabilities }}" as="c" hint-placeholder-count="6">
+                  <div style="display:flex;align-items:center;gap:9px;font-size:13.5px;color:var(--ws-ink)"><span style="width:19px;height:19px;border-radius:6px;background:var(--accent-soft);display:flex;align-items:center;justify-content:center;flex:none"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></span>{{ c }}</div>
+                </sc-for>
+              </div>
+            </div>
+            <div style="display:flex;align-items:flex-start;gap:11px;background:var(--accent-soft);border:1px solid color-mix(in srgb,var(--accent) 30%,transparent);border-radius:14px;padding:15px 17px">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent-strong)" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" style="flex:none;margin-top:1px"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+              <p style="margin:0;font-size:13.5px;line-height:1.5;color:var(--ws-ink)">Maya will set up <strong style="font-weight:700">{{ workstreamName }}</strong> and open a DM, so you can hire from one durable recruiting session — always with your sign-off.</p>
+            </div>
+          </div>
+        </sc-if>
+
+        <!-- STAGE 4 : FINALE -->
+        <sc-if value="{{ isStage4 }}" hint-placeholder-val="{{ false }}">
+          {{ confetti }}
+          <div style="display:flex;flex-direction:column;align-items:center;text-align:center;padding:18px 0 8px;gap:0;position:relative">
+            <div style="width:60px;height:60px;border-radius:50%;background:linear-gradient(140deg,#1BA672,#54C79A);display:flex;align-items:center;justify-content:center;margin-bottom:18px;box-shadow:0 14px 34px -10px rgba(27,166,114,.6);animation:obdPopC .55s var(--ease-pop)">
+              <svg width="29" height="29" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+            </div>
+            <span style="font-family:var(--font-mono);font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:var(--accent);font-weight:600;margin-bottom:12px;animation:obdFadeUp .5s var(--ease-out)">Setup complete</span>
+            <h1 style="font-size:36px;line-height:1.06;letter-spacing:-.03em;font-weight:700;margin:0 0 12px;animation:obdFadeUp .5s var(--ease-out)">Your workspace is ready.</h1>
+            <p style="font-size:15.5px;line-height:1.55;color:var(--ws-ink-2);margin:0 0 22px;max-width:50ch;animation:obdFadeUp .5s var(--ease-out)">{{ companyName }} is set up around <strong style="color:var(--ws-ink);font-weight:600">{{ outcomeTitle }}</strong>. Maya is ready in <strong style="color:var(--ws-ink);font-weight:600">{{ workstreamName }}</strong> to help you hire your {{ hireNodeName }}.</p>
+
+            <!-- workspace glimpse -->
+            <div style="width:100%;max-width:520px;border:1px solid var(--ws-border);border-radius:16px;background:var(--ws-surface);box-shadow:var(--shadow-lift);overflow:hidden;display:flex;text-align:left;animation:obdFadeUp .55s var(--ease-out)">
+              <div style="width:52px;background:var(--ws-rail);display:flex;flex-direction:column;align-items:center;gap:14px;padding:14px 0;flex:none">
+                <div style="width:26px;height:26px;border-radius:8px;background:linear-gradient(140deg,var(--accent),#F2974E)"></div>
+                <div style="width:22px;height:22px;border-radius:7px;background:rgba(255,255,255,.14)"></div>
+                <div style="width:22px;height:22px;border-radius:7px;background:rgba(255,255,255,.08)"></div>
+              </div>
+              <div style="flex:1;padding:16px 18px;min-width:0">
+                <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--ws-ink-2)" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M8 4v16"/></svg>
+                  <span style="font-size:13.5px;font-weight:700">{{ workstreamName }}</span>
+                </div>
+                <div style="display:flex;gap:10px;align-items:flex-start;background:var(--ws-muted);border-radius:12px;padding:11px 13px">
+                  <div style="width:30px;height:30px;border-radius:50%;background:linear-gradient(145deg,#22D3EE,#1BA672);flex:none;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:12px">M</div>
+                  <div style="display:flex;flex-direction:column;gap:3px">
+                    <span style="font-size:11px;color:var(--ws-ink-3);font-weight:600">Maya · now</span>
+                    <span style="font-size:13px;line-height:1.45;color:var(--ws-ink)">Welcome in! Ready to hire your {{ hireNodeName }} whenever you are.</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </sc-if>
+
+      </div>
+    </div>
+
+    <!-- footer nav -->
+    <sc-if value="{{ showFooter }}" hint-placeholder-val="{{ false }}">
+      <footer style="flex:none;border-top:1px solid var(--ws-border);background:color-mix(in srgb,var(--ws-canvas) 85%,transparent);backdrop-filter:blur(8px);padding:16px 48px;display:flex;align-items:center;justify-content:space-between">
+        <button onClick="{{ back }}" style="display:inline-flex;align-items:center;gap:8px;background:transparent;border:none;color:var(--ws-ink-2);font-family:var(--font-sans);font-size:14px;font-weight:500;cursor:pointer;padding:9px 4px;border-radius:10px;transition:color .14s" style-hover="color:var(--ws-ink)">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M11 18l-6-6 6-6"/></svg>Back
+        </button>
+        <div style="display:flex;align-items:center;gap:14px">
+          <sc-if value="{{ showSkip }}" hint-placeholder-val="{{ false }}">
+            <button onClick="{{ openMaya }}" style="background:transparent;border:none;color:var(--ws-ink-2);font-family:var(--font-sans);font-size:14px;font-weight:500;cursor:pointer;padding:9px 8px;border-radius:10px;transition:color .14s" style-hover="color:var(--ws-ink)">Skip to workspace</button>
+          </sc-if>
+          <button onClick="{{ primaryAction }}" disabled="{{ continueDisabled }}" style="{{ continueStyle }}" style-hover="{{ continueHover }}">
+            {{ continueLabel }}
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+          </button>
+        </div>
+      </footer>
+    </sc-if>
+
+    <!-- stage 4 CTA bar -->
+    <sc-if value="{{ isStage4 }}" hint-placeholder-val="{{ false }}">
+      <footer style="flex:none;border-top:1px solid var(--ws-border);background:color-mix(in srgb,var(--ws-canvas) 85%,transparent);backdrop-filter:blur(8px);padding:16px 48px;display:flex;align-items:center;justify-content:space-between">
+        <button onClick="{{ restart }}" style="display:inline-flex;align-items:center;gap:8px;background:transparent;border:none;color:var(--ws-ink-2);font-family:var(--font-sans);font-size:14px;font-weight:500;cursor:pointer;padding:9px 4px;border-radius:10px;transition:color .14s" style-hover="color:var(--ws-ink)">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>Start over
+        </button>
+        <button onClick="{{ openMaya }}" style="display:inline-flex;align-items:center;gap:9px;background:var(--accent);color:#fff;border:none;border-radius:12px;padding:14px 26px;font-family:var(--font-sans);font-size:15px;font-weight:600;cursor:pointer;box-shadow:var(--shadow-accent);transition:filter .14s,transform .14s" style-hover="filter:brightness(1.06);transform:translateY(-1px)">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91 0z"/><path d="M12 15l-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z"/><path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0"/></svg>Open Maya
+        </button>
+      </footer>
+    </sc-if>
+  </main>
+
+  <!-- opening overlay -->
+  <sc-if value="{{ opening }}" hint-placeholder-val="{{ false }}">
+    <div style="position:absolute;inset:0;z-index:50;background:linear-gradient(158deg,#191512,#2B2119);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:22px;animation:obdFadeIn .3s ease;color:#fff">
+      <div style="width:46px;height:46px;border-radius:50%;border:3px solid rgba(255,255,255,.15);border-top-color:var(--accent);animation:obdSpin .8s linear infinite"></div>
+      <span style="font-size:15px;font-weight:600">Opening your workspace…</span>
+    </div>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1280,&quot;height&quot;:800},&quot;companyName&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;NexCache Limited&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;accent&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;coral&quot;,&quot;blue&quot;,&quot;violet&quot;,&quot;emerald&quot;],&quot;default&quot;:&quot;coral&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Brand&quot;},&quot;showConfetti&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Finale&quot;}}">
+class Component extends DCLogic {
+  state = { stage: 0, outcome: null, goal: '', domain: '', room: null, customName: '', mayaText: '', mayaDone: false, opening: false };
+
+  OUTCOMES = [
+    { key:'launch',  title:'Launch a product', desc:'Ship something new with PM, research, and GTM support', code:'Pr' },
+    { key:'research', title:'Research a market', desc:'Understand competitors, customers, and opportunities', code:'Mk' },
+    { key:'sales',   title:'Grow sales', desc:'Pipeline, outreach, and revenue motion', code:'Sa' },
+    { key:'build',   title:'Build software', desc:'Engineering, QA, and product delivery', code:'En' },
+    { key:'clients', title:'Manage clients', desc:'Account work, delivery, and client communication', code:'Cl' },
+    { key:'ops',     title:'Run operations', desc:'Processes, coordination, and execution', code:'Op' },
+  ];
+
+  PLANS = {
+    launch:  { outcome:'Launch a product', workstream:'Product Launch', hire:'Product Manager', rooms:['Product Launch','Go-To-Market','Roadmap'], topics:['Launch plan','Feature specs','GTM checklist'], hires:['Product Manager','GTM Strategist'] },
+    research:{ outcome:'Research a market', workstream:'Market Research', hire:'Market Research Analyst', rooms:['Market Research','Competitor Intelligence','Product Strategy'], topics:['Landscape scans','Trend reports','Customer segments'], hires:['Market Research Analyst','Competitive Intelligence Analyst'] },
+    sales:   { outcome:'Grow sales', workstream:'Sales Pipeline', hire:'Sales Development Rep', rooms:['Sales Pipeline','Outbound','Deal Desk'], topics:['Lead lists','Outreach sequences','Pipeline reviews'], hires:['Sales Development Rep','Revenue Analyst'] },
+    build:   { outcome:'Build software', workstream:'Engineering', hire:'Software Engineer', rooms:['Engineering','QA & Testing','Delivery'], topics:['Backlog grooming','Code reviews','Release notes'], hires:['Software Engineer','QA Analyst'] },
+    clients: { outcome:'Manage clients', workstream:'Client Delivery', hire:'Account Manager', rooms:['Client Delivery','Account Management','Support'], topics:['Account plans','Status updates','Deliverables'], hires:['Account Manager','Delivery Coordinator'] },
+    ops:     { outcome:'Run operations', workstream:'Operations', hire:'Operations Analyst', rooms:['Operations','Coordination','Process'], topics:['SOP drafts','Coordination logs','Process audits'], hires:['Operations Analyst','Program Coordinator'] },
+  };
+
+  CAPS = ['Decide what role you need','Hire your first AI employee','Improve existing employees','Suggest rooms and topics','Keep your workforce organized','Recommend when to adjust hires'];
+
+  componentWillUnmount() { clearInterval(this._iv); clearTimeout(this._to); clearTimeout(this._typeTo); }
+
+  setStage(n) {
+    this.setState({ stage: n });
+    if (n === 3 && !this._typed) { this._typed = true; clearTimeout(this._typeTo); this._typeTo = setTimeout(() => this.startTyping(), 80); }
+  }
+
+  plan() { return this.state.outcome ? this.PLANS[this.state.outcome] : null; }
+  effRoom() { const p = this.plan(); if (!p) return ''; return (this.state.customName || '').trim() || this.state.room || p.rooms[0]; }
+
+  startTyping() {
+    const p = this.plan(); const ws = p ? p.workstream : 'your first room';
+    const full = "Hi — I'm Maya, your AI Workforce Manager. I'll spin up " + ws + " and open a DM so you can hire, organize, and improve your AI employees from one place — always with your sign-off. Ready when you are?";
+    let i = 0; clearInterval(this._iv); this.setState({ mayaText: '', mayaDone: false });
+    this._iv = setInterval(() => {
+      i += 2; this.setState({ mayaText: full.slice(0, i) });
+      if (i >= full.length) { clearInterval(this._iv); this.setState({ mayaText: full, mayaDone: true }); }
+    }, 16);
+  }
+
+  selectOutcome(k){ this.setState({ outcome:k, room:null }); }
+  selectRoom(v){ this.setState({ room:v }); }
+  setGoal(e){ this.setState({ goal:e.target.value }); }
+  setDomain(e){ this.setState({ domain:e.target.value }); }
+  setCustomName(e){ this.setState({ customName:e.target.value }); }
+  next(){ this.setStage(Math.min(4, this.state.stage + 1)); }
+  back(){ this.setStage(Math.max(0, this.state.stage - 1)); }
+  goStage(n){ this.setStage(n); }
+  primaryAction(){ if (this.state.stage >= 4) this.openMaya(); else this.next(); }
+  openMaya(){ this.setState({ opening:true }); clearTimeout(this._to); this._to = setTimeout(() => this.restart(), 1500); }
+  restart(){ clearInterval(this._iv); this._typed = false; this.setState({ stage:0, outcome:null, goal:'', domain:'', room:null, customName:'', mayaText:'', mayaDone:false, opening:false }); }
+
+  renderVals() {
+    const s = this.state;
+    const company = this.props.companyName || 'NexCache Limited';
+    const accent = this.props.accent || 'coral';
+    const showConfetti = this.props.showConfetti ?? true;
+    const p = this.plan();
+    const workstreamName = this.effRoom() || '—';
+    const hireNodeName = p ? p.hire : 'First hire';
+    const outcomeTitle = p ? p.outcome : 'Not set';
+
+    // outcome cards
+    const baseCard = 'display:flex;flex-direction:column;gap:6px;align-items:flex-start;text-align:left;background:var(--ws-surface);border:1px solid var(--ws-border);border-radius:16px;padding:16px 17px 15px;cursor:pointer;transition:transform .16s var(--ease-out),box-shadow .16s var(--ease-out),border-color .16s,background .16s;position:relative;';
+    const selCard = 'background:var(--accent-soft);border-color:var(--accent);box-shadow:0 12px 30px -18px color-mix(in srgb,var(--accent) 80%,transparent);';
+    const outcomes = this.OUTCOMES.map(o => {
+      const on = s.outcome === o.key;
+      return {
+        ...o,
+        onSelect: () => this.selectOutcome(o.key),
+        cardStyle: baseCard + (on ? selCard : ''),
+        cardHover: on ? 'transform:translateY(-2px)' : 'transform:translateY(-2px);border-color:var(--ws-ink-3);box-shadow:var(--shadow-lift)',
+        codeStyle: 'width:30px;height:30px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-family:var(--font-mono);font-size:12.5px;font-weight:600;' + (on ? 'background:var(--accent);color:#fff;' : 'background:var(--ws-muted);color:var(--ws-ink-2);'),
+        checkStyle: 'width:20px;height:20px;border-radius:50%;background:var(--accent);display:' + (on ? 'flex' : 'none') + ';align-items:center;justify-content:center',
+      };
+    });
+
+    // room pills
+    const rooms = p ? p.rooms : [];
+    const effRoom = this.effRoom();
+    const basePill = 'font-family:var(--font-sans);font-size:13.5px;font-weight:600;padding:9px 16px;border-radius:999px;cursor:pointer;transition:all .14s var(--ease-out);';
+    const roomOptions = rooms.map(r => {
+      const on = (r === (s.room || rooms[0])) && !(s.customName || '').trim();
+      return {
+        label: r,
+        onSelect: () => this.selectRoom(r),
+        pillStyle: basePill + (on ? 'background:var(--accent-soft);border:1px solid var(--accent);color:var(--accent-strong);' : 'background:var(--ws-surface);border:1px solid var(--ws-border);color:var(--ws-ink-2);'),
+        pillHover: on ? '' : 'border-color:var(--ws-ink-3);color:var(--ws-ink)',
+      };
+    });
+
+    // journey / live summary
+    const labels = ['Welcome','Define the work','First room','Meet Maya','Launch'];
+    const values = [company, outcomeTitle, p ? workstreamName : '—', p ? 'AI Workforce Manager' : '—', p ? hireNodeName : '—'];
+    const journey = labels.map((label, i) => {
+      const st = i < s.stage ? 'done' : (i === s.stage ? 'current' : 'todo');
+      const clickable = i < s.stage;
+      let dot = 'width:26px;height:26px;border-radius:50%;flex:none;display:flex;align-items:center;justify-content:center;font-family:var(--font-mono);font-size:11px;font-weight:600;transition:all .3s var(--ease-out);z-index:1;';
+      if (st === 'done') dot += 'background:var(--accent);color:#fff;box-shadow:0 4px 12px -4px color-mix(in srgb,var(--accent) 80%,transparent);';
+      else if (st === 'current') dot += 'background:#fff;color:var(--accent-strong);box-shadow:0 0 0 4px color-mix(in srgb,var(--accent) 35%,transparent);';
+      else dot += 'background:rgba(255,255,255,.09);color:rgba(255,255,255,.4);';
+      const active = st !== 'todo';
+      return {
+        label, value: values[i] || '—', mark: st === 'done' ? '✓' : String(i + 1),
+        onGo: clickable ? () => this.goStage(i) : undefined,
+        disabled: !clickable,
+        rowStyle: 'display:flex;align-items:center;gap:12px;width:100%;text-align:left;background:transparent;border:none;padding:5px 6px;border-radius:10px;transition:background .14s;' + (clickable ? 'cursor:pointer;' : 'cursor:default;'),
+        rowHover: clickable ? 'background:rgba(255,255,255,.06)' : '',
+        dotStyle: dot,
+        labelStyle: 'font-size:11px;font-family:var(--font-mono);letter-spacing:.05em;text-transform:uppercase;color:' + (active ? 'rgba(255,255,255,.5)' : 'rgba(255,255,255,.3)') + ';white-space:nowrap',
+        valueStyle: 'font-size:13.5px;font-weight:600;line-height:1.3;color:' + (active ? '#fff' : 'rgba(255,255,255,.4)') + ';overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:230px',
+      };
+    });
+
+    // continue button
+    const canContinue = s.stage === 1 ? s.outcome !== null : true;
+    const contBase = 'display:inline-flex;align-items:center;gap:9px;background:var(--accent);color:#fff;border:none;border-radius:12px;padding:13px 24px;font-family:var(--font-sans);font-size:14.5px;font-weight:600;box-shadow:var(--shadow-accent);transition:filter .14s,transform .14s;';
+    const contDisabled = 'display:inline-flex;align-items:center;gap:9px;background:var(--ws-muted);color:var(--ws-ink-3);border:none;border-radius:12px;padding:13px 24px;font-family:var(--font-sans);font-size:14.5px;font-weight:600;cursor:not-allowed;box-shadow:none;';
+
+    // confetti
+    const palette = ['var(--accent)','#F2974E','#22D3EE','#1BA672','#ffffff','#9A6BCB'];
+    const confetti = (s.stage === 4 && showConfetti) ? React.createElement('div', { style:{ position:'absolute', inset:0, pointerEvents:'none', overflow:'hidden', zIndex:0 } },
+      Array.from({ length: 30 }).map((_, i) => {
+        const left = (i * 37 % 100); const delay = (i % 7) * 0.12; const dur = 1.7 + (i % 5) * 0.32;
+        const w = 5 + (i % 4) * 2; const rot = (i * 47) % 360; const c = palette[i % palette.length];
+        return React.createElement('div', { key:i, style:{ position:'absolute', top:'-24px', left: left + '%', width: w + 'px', height: (w * 0.55) + 'px', background:c, borderRadius:'2px', opacity:0, transform:'rotate(' + rot + 'deg)', animation:'obdConfetti ' + dur + 's ' + delay + 's ease-in forwards' } });
+      })) : null;
+
+    return {
+      themeClass: 'theme-' + accent,
+      companyName: company,
+      ownerInitial: (company.trim()[0] || 'N').toUpperCase(),
+      stage: s.stage,
+      isStage0: s.stage === 0, isStage1: s.stage === 1, isStage2: s.stage === 2, isStage3: s.stage === 3, isStage4: s.stage === 4,
+      stepLabel: ['Welcome','Step 1 of 3','Step 2 of 3','Step 3 of 3','Complete'][s.stage],
+      progressPct: (s.stage / 4 * 100) + '%',
+      progressLineH: (s.stage / 4 * 100) + '%',
+      outcomes, roomOptions,
+      topics: p ? p.topics : [], hiresList: p ? p.hires : [], capabilities: this.CAPS,
+      outcomeTitle, workstreamName, hireNodeName, roomNodeName: workstreamName,
+      goal: s.goal, domain: s.domain, customName: s.customName,
+      // graph
+      showRoom: s.stage >= 1 && !!p, showHire: s.stage >= 2 && !!p, showMaya: s.stage >= 3,
+      eYouRoom: s.stage >= 1 && !!p, eRoomHire: s.stage >= 2 && !!p, eYouMaya: s.stage >= 3, eMayaRoom: s.stage >= 3 && !!p,
+      journey,
+      // maya
+      mayaText: s.mayaText, showCaret: s.stage === 3 && !s.mayaDone,
+      // footer
+      showFooter: s.stage >= 1 && s.stage <= 3, showSkip: s.stage === 3,
+      continueLabel: s.stage === 3 ? 'Enter workspace' : 'Continue',
+      continueDisabled: !canContinue,
+      continueStyle: canContinue ? contBase + 'cursor:pointer;' : contDisabled,
+      continueHover: canContinue ? 'filter:brightness(1.06);transform:translateY(-1px)' : '',
+      opening: s.opening,
+      // handlers
+      primaryAction: () => this.primaryAction(), back: () => this.back(), openMaya: () => this.openMaya(), restart: () => this.restart(),
+      setGoal: (e) => this.setGoal(e), setDomain: (e) => this.setDomain(e), setCustomName: (e) => this.setCustomName(e),
+    };
+  }
+}
+</script>
+</body>
+</html>
