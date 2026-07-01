@@ -4,6 +4,15 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ProjectRoom, RoomTopic, type ConversationPlan } from "@/lib/types";
 import { CollaborationPlanBanner } from "./CollaborationPlanBanner";
+import {
+  OrchestrationIndicator,
+} from "./orchestration/OrchestrationIndicator";
+import {
+  TopicSuggestionCard,
+  dismissTopicSuggestionApi,
+  type TopicSuggestionPayload,
+} from "./orchestration/TopicSuggestionCard";
+import type { OrchestrationPlan, SuggestedConversationAction } from "@/lib/orchestration/types";
 import { useStore } from "@/lib/demo-store";
 import { ENABLE_DEMO_MODE } from "@/lib/config/features";
 import { useResponder } from "@/lib/ai/use-responder";
@@ -95,6 +104,10 @@ export function RoomChat({
   const [sendError, setSendError] = useState<string | null>(null);
   const [activeRuns, setActiveRuns] = useState<ActiveRun[]>([]);
   const [collaborationPlan, setCollaborationPlan] = useState<ConversationPlan | null>(null);
+  const [orchestrationPlan, setOrchestrationPlan] = useState<OrchestrationPlan | null>(null);
+  const [orchestratorDebug, setOrchestratorDebug] = useState<Record<string, unknown> | null>(null);
+  const [topicSuggestions, setTopicSuggestions] = useState<TopicSuggestionPayload[]>([]);
+  const [smartAssistSuggestions, setSmartAssistSuggestions] = useState<SuggestedConversationAction[]>([]);
   const [collabBanner, setCollabBanner] = useState<{
     leadFinishedName?: string;
     activeEmployeeName?: string;
@@ -488,6 +501,24 @@ export function RoomChat({
       if (payload.collaborationPlan) {
         setCollaborationPlan(payload.collaborationPlan);
       }
+      if (payload.orchestrationPlan) {
+        setOrchestrationPlan(payload.orchestrationPlan);
+      }
+      if (payload.orchestratorDebug) {
+        setOrchestratorDebug(payload.orchestratorDebug);
+      }
+      if (payload.topicSuggestions?.length) {
+        setTopicSuggestions((prev) => {
+          const incoming = payload.topicSuggestions as TopicSuggestionPayload[];
+          const ids = new Set(prev.map((s) => s.id));
+          return [...prev, ...incoming.filter((s) => !ids.has(s.id))];
+        });
+      }
+      if (payload.smartAssistSuggestions?.length) {
+        setSmartAssistSuggestions(payload.smartAssistSuggestions);
+      } else if (payload.hint) {
+        setSendError(null);
+      }
 
       const waitingRuns: ActiveRun[] = (payload.collaborationPlan?.pendingParticipants ?? []).map(
         (p: {
@@ -550,6 +581,24 @@ export function RoomChat({
     for (const employeeId of responders) {
       await respond(room.id, employeeId, text);
     }
+  };
+
+  const handleCreateTopicFromSuggestion = async (title: string) => {
+    if (!topic) return;
+    const headers = await authHeaders();
+    const res = await fetch(`/api/rooms/${room.id}/topics`, {
+      method: "POST",
+      headers: { ...headers, "Content-Type": "application/json" },
+      body: JSON.stringify({ title, description: "", priority: "normal" }),
+    });
+    const payload = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(payload.error ?? "Could not create topic.");
+    if (payload.topic) actions.upsertTopic(payload.topic);
+  };
+
+  const handleDismissTopicSuggestion = async (suggestionId: string) => {
+    await dismissTopicSuggestionApi(suggestionId, state.workspace.id);
+    setTopicSuggestions((prev) => prev.filter((s) => s.id !== suggestionId));
   };
 
   const handleSend = async (text: string, mentionsJson?: import("@/lib/types").MentionRef[]) => {
@@ -747,6 +796,11 @@ export function RoomChat({
                 activeEmployeeName={collabBanner.activeEmployeeName}
               />
             )}
+            <OrchestrationIndicator
+              orchestrationPlan={orchestrationPlan}
+              collaborationPlan={collaborationPlan}
+              debug={orchestratorDebug}
+            />
             {topicMessages.map((m) => (
               <RoomMessageItem key={m.id} message={m} />
             ))}
@@ -822,6 +876,33 @@ export function RoomChat({
 
       <div className="shrink-0 px-[26px] pb-[18px] pt-1.5">
         <div className="mx-auto max-w-[760px]">
+          {topicSuggestions.map((suggestion) => (
+            <TopicSuggestionCard
+              key={suggestion.id}
+              suggestion={suggestion}
+              onCreateTopic={handleCreateTopicFromSuggestion}
+              onDismiss={handleDismissTopicSuggestion}
+            />
+          ))}
+          {smartAssistSuggestions.length > 0 && (
+            <div className="mb-2 flex flex-wrap gap-2">
+              {smartAssistSuggestions.map((action) =>
+                action.type === "invite_employee" ? (
+                  <button
+                    key={action.employeeId}
+                    type="button"
+                    className="rounded-full border border-accent-200 bg-accent-50 px-3 py-1 text-xs font-medium text-accent-800 hover:bg-accent-100"
+                    onClick={() => {
+                      const name = action.employeeName ?? "employee";
+                      void handleSend(`@${name} ${action.reason}`);
+                    }}
+                  >
+                    Ask {action.employeeName ?? "employee"} to help
+                  </button>
+                ) : null,
+              )}
+            </div>
+          )}
           {chatDisabled && (
             <div className="mb-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
               {isChannelArchived

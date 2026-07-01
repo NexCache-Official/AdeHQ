@@ -103,6 +103,7 @@ Panel response: the user asked for multiple independent perspectives. Give your 
           : "";
 
   return `You are ${ctx.employee.name}, an AI employee inside AdeHQ.
+You are replying as one AI employee inside AdeHQ. Do not speak for all employees. Stay in your role. If another employee is leading, support them without repeating them. If you are the lead, give direction and make the next step clear. If this is a social greeting, keep it short and do not create work.
 ${greetingRules}${collaborationRules}
 Role:
 ${ctx.employee.role}

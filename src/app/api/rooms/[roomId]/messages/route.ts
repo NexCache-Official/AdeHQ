@@ -8,14 +8,21 @@ import {
   parseEmployeeMentions,
 } from "@/lib/server/room-messages";
 import { assertTopicInRoom, ensureGeneralTopic } from "@/lib/server/topic-helpers";
-import { planConversation } from "@/lib/server/conversation-orchestrator";
+import { filterOrchestrationEmployees } from "@/lib/orchestration/collaboration-permissions";
+import { orchestrateConversation } from "@/lib/orchestration/conversation-orchestrator";
+import { orchestrationPlanToLegacyResult } from "@/lib/orchestration/legacy-adapter";
+import {
+  logOrchestrationWorkLog,
+  persistOrchestrationPlan,
+  persistTopicSuggestions,
+} from "@/lib/orchestration/persistence";
+import { suggestTopics } from "@/lib/orchestration/topic-steward";
+import type { OrchestratorInput } from "@/lib/orchestration/types";
 import { queueAgentRuns } from "@/lib/server/queue-agent-runs";
-import { loadChannelGovernanceContext } from "@/lib/server/channel-governance";
 import { isAiQueueingBlocked } from "@/lib/topic-ai-control";
 import { getAiParticipationMode, isSmartAssistMode } from "@/lib/topics";
-import { loadMaxParallelRuns } from "@/lib/ai/cost-guard";
 import { messageError } from "@/lib/server/message-errors";
-import type { MentionRef, ProjectRoom } from "@/lib/types";
+import type { MentionRef } from "@/lib/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -115,12 +122,6 @@ export async function POST(
     humanMessageSaved = true;
     humanMessageId = humanMessage.id;
 
-    const roomForDecisions = {
-      id: respondersCtx.room.id,
-      kind: respondersCtx.room.kind,
-      dmEmployeeId: respondersCtx.room.dmEmployeeId,
-    } as ProjectRoom;
-
     const mentioned = parseEmployeeMentions(trimmed, respondersCtx.employees, mentionsJson);
     const mentions = mentioned.map((e) => e.id);
 
@@ -134,16 +135,117 @@ export async function POST(
     humanMessage.mentions = mentions;
     if (mentionsJson) humanMessage.mentionsJson = mentionsJson;
 
-    const maxParallel = await loadMaxParallelRuns(client, workspaceId);
-    const governance = await loadChannelGovernanceContext(
-      client,
-      workspaceId,
-      params.roomId,
-      topicId,
-      humanMessage.id,
-    );
+    const orchestrationEmployees = filterOrchestrationEmployees(respondersCtx.employees);
 
-    const planResult = isAiQueueingBlocked(topic)
+    const [recentMessagesResult, topicsResult] = await Promise.all([
+      client
+        .from("messages")
+        .select("id, sender_type, sender_id, content, created_at, topic_id")
+        .eq("workspace_id", workspaceId)
+        .eq("room_id", params.roomId)
+        .order("created_at", { ascending: false })
+        .limit(20),
+      client
+        .from("channel_topics")
+        .select("id, title, summary")
+        .eq("workspace_id", workspaceId)
+        .eq("channel_id", params.roomId)
+        .neq("status", "archived"),
+    ]);
+
+    const recentMessages = ((recentMessagesResult.data ?? []) as Record<string, unknown>[])
+      .reverse()
+      .map((row) => ({
+        id: String(row.id),
+        senderType: row.sender_type as "human" | "ai" | "system",
+        senderId: row.sender_id ? String(row.sender_id) : null,
+        text: String(row.content ?? ""),
+        createdAt: String(row.created_at),
+        topicId: row.topic_id ? String(row.topic_id) : null,
+      }));
+
+    const existingTopics = ((topicsResult.data ?? []) as Record<string, unknown>[]).map((row) => ({
+      id: String(row.id),
+      title: String(row.title),
+      summary: row.summary ? String(row.summary) : null,
+    }));
+
+    const participation = getAiParticipationMode(topic);
+    const smartAssistEnabled =
+      !isAiQueueingBlocked(topic) &&
+      (isSmartAssistMode(participation) || participation === "active_team");
+
+    const orchestratorInput: OrchestratorInput = {
+      workspaceId,
+      roomId: params.roomId,
+      topicId,
+      userId: user.id,
+      messageId: humanMessage.id,
+      messageText: trimmed,
+      mentionedEmployeeIds: mentions,
+      roomEmployees: orchestrationEmployees,
+      topicEmployees: orchestrationEmployees,
+      recentMessages,
+      existingTopics,
+      smartAssistEnabled,
+      isDm: respondersCtx.room.kind === "dm",
+      isMayaHiringSession: false,
+    };
+
+    let orchestrationPlan = await orchestrateConversation(orchestratorInput);
+    let orchestrationId: string | null = null;
+    let topicSuggestions: Record<string, unknown>[] = [];
+
+    if (!isAiQueueingBlocked(topic)) {
+      try {
+        orchestrationId = await persistOrchestrationPlan(client, {
+          workspaceId,
+          roomId: params.roomId,
+          topicId,
+          triggerMessageId: humanMessage.id,
+          createdBy: user.id,
+          plan: orchestrationPlan,
+        });
+
+        const stewardSuggestions = suggestTopics(orchestratorInput, orchestrationPlan.intent, topic);
+        if (stewardSuggestions.length) {
+          topicSuggestions = await persistTopicSuggestions(client, {
+            workspaceId,
+            roomId: params.roomId,
+            topicId,
+            orchestrationId,
+            triggerMessageId: humanMessage.id,
+            createdBy: user.id,
+            suggestions: stewardSuggestions,
+          });
+
+          const first = stewardSuggestions[0];
+          if (first.confidence >= 0.78) {
+            await logOrchestrationWorkLog(client, {
+              workspaceId,
+              roomId: params.roomId,
+              employeeId: orchestrationEmployees[0]?.id ?? mentions[0] ?? "system",
+              action: "topic_suggested",
+              summary: `Suggested topic: ${first.type === "move_to_existing_topic" ? first.topicTitle : first.title}`,
+              relatedEntityType: "topic_suggestion",
+              relatedEntityId: String(topicSuggestions[0]?.id ?? ""),
+            });
+          }
+        }
+      } catch (persistError) {
+        console.warn("[AdeHQ messages] orchestration persist failed", persistError);
+      }
+    } else {
+      orchestrationPlan = {
+        ...orchestrationPlan,
+        shouldRespond: false,
+        selectedEmployeeIds: [],
+        responseOrder: [],
+        reason: "AI stopped for this topic.",
+      };
+    }
+
+    const legacyResult = isAiQueueingBlocked(topic)
       ? {
           plan: {
             mode: "silent" as const,
@@ -155,16 +257,24 @@ export async function POST(
           },
           decisions: [],
         }
-      : planConversation(
-          trimmed,
-          topic,
-          roomForDecisions,
-          respondersCtx.employees,
-          mentionsJson,
-          { maxParallel, governance, rootTriggerMessageId: humanMessage.id },
+      : orchestrationPlanToLegacyResult(
+          orchestrationPlan,
+          orchestrationEmployees,
+          humanMessage.id,
         );
 
-    const { plan: conversationPlan, decisions, debug: orchestratorDebug } = planResult;
+    const { plan: conversationPlan, decisions } = legacyResult;
+    const orchestratorDebug =
+      process.env.NEXT_PUBLIC_ORCHESTRATION_DEBUG === "true" ||
+      request.headers.get("X-AdeHQ-Debug") === "true"
+        ? {
+            intent: orchestrationPlan.intent,
+            confidence: orchestrationPlan.confidence,
+            reason: orchestrationPlan.reason,
+            selectedEmployeeIds: orchestrationPlan.selectedEmployeeIds,
+            orchestrationId,
+          }
+        : undefined;
 
     const { queued, blocked } = await queueAgentRuns(client, {
       workspaceId,
@@ -188,12 +298,17 @@ export async function POST(
       });
     }
 
-    const participation = getAiParticipationMode(topic);
+    const participationMode = getAiParticipationMode(topic);
     let hint: string | undefined;
     if (queued.length === 0 && decisions.length === 0) {
-      if (participation === "manual_only" || participation === "silent_observation") {
+      if (orchestrationPlan.suggestedActions.length > 0) {
+        const invites = orchestrationPlan.suggestedActions.filter((a) => a.type === "invite_employee");
+        if (invites.length) {
+          hint = `Ask ${invites.map((a) => (a.type === "invite_employee" ? a.employeeName ?? "an employee" : "")).filter(Boolean).join(" and ")} to help.`;
+        }
+      } else if (participationMode === "manual_only" || participationMode === "silent_observation") {
         hint = "Mention an employee with @ to get a response";
-      } else if (isSmartAssistMode(participation) || participation === "active_team") {
+      } else if (isSmartAssistMode(participationMode) || participationMode === "active_team") {
         hint =
           "No employee joined automatically. Mention someone with @ or switch this topic to Active Team.";
       }
@@ -204,7 +319,12 @@ export async function POST(
       queuedRuns: queued,
       blockedRuns: blocked,
       collaborationPlan: conversationPlan,
+      orchestrationPlan,
       orchestratorDebug,
+      topicSuggestions,
+      smartAssistSuggestions: orchestrationPlan.suggestedActions.filter(
+        (a) => a.type === "invite_employee",
+      ),
       aiResponses: [],
       aiMessages: [],
       hint,

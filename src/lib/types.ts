@@ -96,6 +96,7 @@ export type SystemEmployeeMetadata = {
   canBeAssignedToChannels?: boolean;
   isDefaultWorkspaceEmployee?: boolean;
   purpose?: string;
+  collaborationPermissions?: import("@/lib/orchestration/types").EmployeeCollaborationPermissions;
 };
 
 export type AIEmployee = {

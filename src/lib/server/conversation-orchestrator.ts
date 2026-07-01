@@ -24,6 +24,7 @@ import {
   type AmbientOrchestratorDebug,
 } from "@/lib/server/ambient-collaboration";
 import { extractMentionsInOrder, uid } from "@/lib/utils";
+import { filterOrchestrationEmployees } from "@/lib/orchestration/collaboration-permissions";
 import type { ResponderDecision } from "@/lib/server/decide-responders";
 
 const LEAD_COLLAB_PATTERNS = [
@@ -63,6 +64,15 @@ const SILENT_PATTERNS = [
   /\bfor the record\b/i,
 ];
 
+const HANDOFF_PATTERNS = [
+  /\bpass this to\b/i,
+  /\bhand (this |it )?off\b/i,
+  /\bask .+ to continue\b/i,
+  /\btransfer to\b/i,
+  /\bget .+ to look\b/i,
+  /\bcan you pass\b/i,
+];
+
 export function classifyConversationMode(
   content: string,
   mentionedInOrder: AIEmployee[],
@@ -70,6 +80,10 @@ export function classifyConversationMode(
   const text = content.trim();
   if (!mentionedInOrder.length) return "ambient_smart";
   if (mentionedInOrder.length === 1) return "direct_reply";
+
+  if (HANDOFF_PATTERNS.some((p) => p.test(text)) && mentionedInOrder.length >= 2) {
+    return "handoff";
+  }
 
   if (SEQUENTIAL_PATTERNS.some((p) => p.test(text))) {
     return "lead_collaborator";
@@ -179,7 +193,7 @@ export function planConversation(
   const max = options?.maxParallel ?? 3;
   const participation = getEffectiveParticipationMode(topic);
   const isDM = room.kind === "dm";
-  const allowed = filterAllowedEmployees(topic, employees);
+  const allowed = filterOrchestrationEmployees(filterAllowedEmployees(topic, employees));
   const governance = options?.governance;
   const collaborationId = `collab_${options?.rootTriggerMessageId ?? uid("collab")}`;
 
@@ -219,11 +233,12 @@ export function planConversation(
   if (mentionedInOrder.length > 0) {
     const mode = classifyConversationMode(content, mentionedInOrder);
 
-    if (mode === "lead_collaborator") {
+    if (mode === "lead_collaborator" || mode === "handoff") {
       const plan = buildLeadCollaboratorPlan(
         mentionedInOrder,
         collaborationId,
         options?.rootTriggerMessageId,
+        mode,
       );
       const lead = mentionedInOrder[0];
       const orchestratedCollaboratorIds = mentionedInOrder.slice(1).map((e) => e.id);
