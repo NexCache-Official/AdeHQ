@@ -69,6 +69,9 @@ export function OnboardingFlow() {
   const [customRoomName, setCustomRoomName] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [setupResult, setSetupResult] = useState<{ firstRoomId: string; roomName: string } | null>(
+    null,
+  );
   const [mayaText, setMayaText] = useState("");
   const [mayaDone, setMayaDone] = useState(false);
   const typedRef = useRef(false);
@@ -157,30 +160,60 @@ export function OnboardingFlow() {
     sessionStorage.setItem(ONBOARDING_CONTEXT_KEY, JSON.stringify(context));
   };
 
-  const finishSetup = async (openMaya: boolean) => {
-    if (!activePreset || !outcomeId) return;
+  const ensureWorkspaceSetup = async () => {
+    if (setupResult) return setupResult;
+    if (!activePreset || !outcomeId) {
+      throw new Error("Complete the earlier steps before continuing.");
+    }
+
+    const result = await actions.setupOnboardingWorkspace({
+      workspaceName: companyName,
+      room: {
+        name: roomName,
+        accent: activePreset.accent,
+        description: `${roomName} — your first AI workstream`,
+      },
+    });
+    const resolved = { firstRoomId: result.firstRoomId, roomName: result.roomName };
+    persistDrafts(result.firstRoomId, result.roomName);
+    setSetupResult(resolved);
+    return resolved;
+  };
+
+  const skipToWorkspace = async () => {
     setBusy(true);
     setError(null);
     try {
-      const result = await actions.setupOnboardingWorkspace({
-        workspaceName: companyName,
-        room: {
-          name: roomName,
-          accent: activePreset.accent,
-          description: `${roomName} — your first AI workstream`,
-        },
-      });
-      persistDrafts(result.firstRoomId, result.roomName);
-
-      if (!openMaya) {
-        actions.completeOnboarding();
-        router.push("/rooms");
-        return;
-      }
-
-      router.push("/hire?onboarding=1");
+      const result = await ensureWorkspaceSetup();
+      actions.completeOnboarding();
+      router.push(`/rooms/${result.firstRoomId}`);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not finish setup.");
+      setBusy(false);
+    }
+  };
+
+  const continueFromMaya = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await ensureWorkspaceSetup();
+      setBusy(false);
+      next();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not finish setup.");
+      setBusy(false);
+    }
+  };
+
+  const openMayaHiringJourney = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await ensureWorkspaceSetup();
+      router.push("/hire?onboarding=1");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not open Maya.");
       setBusy(false);
     }
   };
@@ -198,6 +231,7 @@ export function OnboardingFlow() {
     setMayaDone(false);
     setError(null);
     setBusy(false);
+    setSetupResult(null);
   };
 
   const goStage = (n: number) => setStage(n);
@@ -629,7 +663,7 @@ export function OnboardingFlow() {
                 <button
                   type="button"
                   disabled={busy}
-                  onClick={() => void finishSetup(false)}
+                  onClick={() => void skipToWorkspace()}
                   className="rounded-[10px] border-0 bg-transparent px-2 py-2.5 text-sm font-medium text-ink-2 transition hover:text-ink disabled:opacity-50"
                 >
                   Skip to workspace
@@ -638,7 +672,7 @@ export function OnboardingFlow() {
               <button
                 type="button"
                 disabled={!canContinue || busy}
-                onClick={() => (stage === 3 ? next() : next())}
+                onClick={() => (stage === 3 ? void continueFromMaya() : next())}
                 className={cn(
                   "inline-flex items-center gap-2 rounded-xl border-0 px-6 py-3.5 text-[14.5px] font-semibold transition",
                   canContinue && !busy
@@ -650,7 +684,7 @@ export function OnboardingFlow() {
                   <Loader2 className="h-4 w-4 animate-spin" />
                 ) : (
                   <>
-                    {stage === 3 ? "Enter workspace" : "Continue"}
+                    Continue
                     <ArrowRight className="h-[17px] w-[17px]" />
                   </>
                 )}
@@ -674,7 +708,7 @@ export function OnboardingFlow() {
             <button
               type="button"
               disabled={busy}
-              onClick={() => void finishSetup(true)}
+              onClick={() => void openMayaHiringJourney()}
               className="inline-flex items-center gap-2.5 rounded-xl border-0 bg-[var(--accent)] px-[26px] py-3.5 text-[15px] font-semibold text-white shadow-[0_8px_24px_-8px_rgba(232,93,44,.55)] transition hover:brightness-105 active:translate-y-px disabled:opacity-70"
             >
               {busy ? (

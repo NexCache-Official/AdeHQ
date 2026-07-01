@@ -1,6 +1,7 @@
 import { supabase } from "@/lib/supabase/client";
 import { getSiteUrl } from "@/lib/site-url";
 import { isConfirmationLinkError } from "@/lib/auth/confirmation";
+import { isEmailConfirmed } from "@/lib/auth/session";
 
 export const AUTH_NEXT_KEY = "adehq_auth_next";
 
@@ -167,8 +168,13 @@ export async function completeAuthRedirect(nextPath?: string): Promise<{
         throw new Error("Session could not be loaded after confirmation.");
       }
       throw new Error(
-        "No login session was created. Add your site URL under Supabase → Authentication → Redirect URLs, then request a new confirmation email.",
+        "No login session was created. Add your site URL under Supabase → Authentication → URL Configuration, set Site URL to your app origin, and add Redirect URL patterns for /auth/callback. Then request a new confirmation email.",
       );
+    }
+
+    if (!isEmailConfirmed(session.user)) {
+      await supabase.auth.signOut();
+      throw new Error("Email not confirmed");
     }
 
     const next =

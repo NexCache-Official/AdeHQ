@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase/client";
 import { completeAuthRedirect, hasAuthParamsInUrl } from "@/lib/auth/callback-session";
+import { parseAuthError } from "@/lib/auth/confirmation";
 import { loadWorkspaceState } from "@/lib/supabase/persistence";
 
 /**
@@ -36,7 +37,12 @@ export function AuthConfirmHandler() {
 
         const result = await completeAuthRedirect();
         if (!result.ok) {
-          if (result.linkError) {
+          const parsed = parseAuthError(result.error);
+          if (parsed.needsEmailConfirmation) {
+            router.replace("/confirm-email");
+            return;
+          }
+          if (result.linkError || parsed.alreadyConfirmedHint) {
             router.replace("/login?confirmed=1");
             return;
           }

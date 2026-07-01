@@ -140,7 +140,7 @@ export async function ensureMayaDM(
           member_type: "human",
           member_id: userId,
         },
-        { onConflict: "workspace_id,channel_id,member_type,member_id" },
+        { onConflict: "workspace_id,room_id,member_type,member_id" },
       );
       if (memberError) throw memberError;
     }
@@ -205,7 +205,7 @@ export async function ensureMayaDM(
   ];
   const { error: membersError } = await client
     .from("room_members")
-    .upsert(memberRows, { onConflict: "workspace_id,channel_id,member_type,member_id" });
+    .upsert(memberRows, { onConflict: "workspace_id,room_id,member_type,member_id" });
   if (membersError) throw membersError;
 
   const generalTopic = await ensureGeneralTopic(client, workspaceId, room.id);

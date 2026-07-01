@@ -21,6 +21,7 @@ export default function SignupPage() {
   const [error, setError] = useState<string | null>(null);
   const [confirmationSent, setConfirmationSent] = useState(false);
   const [confirmationEmail, setConfirmationEmail] = useState("");
+  const [repeatedSignup, setRepeatedSignup] = useState(false);
 
   useEffect(() => {
     actions.clearError();
@@ -47,6 +48,7 @@ export default function SignupPage() {
       );
       if (result.needsEmailConfirmation) {
         setConfirmationEmail(email.trim());
+        setRepeatedSignup(Boolean(result.repeatedSignup));
         setConfirmationSent(true);
         return;
       }
@@ -81,14 +83,27 @@ export default function SignupPage() {
         <div className="mt-7 rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-4 text-left">
           <h2 className="text-sm font-semibold text-emerald-900">Check your email</h2>
           <p className="mt-2 text-sm text-emerald-800">
-            We sent a confirmation link to{" "}
-            <span className="font-medium">{confirmationEmail}</span>. Click it to activate your
-            account and continue to onboarding.
+            {repeatedSignup ? (
+              <>
+                An account for <span className="font-medium">{confirmationEmail}</span> already exists.
+                We sent a fresh confirmation link if your email was still unverified.
+              </>
+            ) : (
+              <>
+                We sent a confirmation link to{" "}
+                <span className="font-medium">{confirmationEmail}</span>. Click it to activate your
+                account and continue to onboarding.
+              </>
+            )}
           </p>
           <p className="mt-3 text-xs text-emerald-700">
+            The email comes from Supabase (<span className="font-mono">noreply@mail.app.supabase.io</span>
+            ). Check spam or promotions if you do not see it within a minute.
+          </p>
+          <p className="mt-2 text-xs text-emerald-700">
             The link returns you to{" "}
-            <span className="font-medium">ade-hq-eight.vercel.app</span>. If it expires, log in and
-            request a new confirmation email from Supabase or sign up again.
+            <span className="font-medium">ade-hq-eight.vercel.app</span> at{" "}
+            <span className="font-mono">/auth/callback</span>.
           </p>
           <Link
             href="/login"

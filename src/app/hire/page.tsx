@@ -3,6 +3,7 @@
 import { Suspense, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { HireFlow } from "@/components/hiring/HireFlow";
+import { useConfirmedEmailGate } from "@/components/auth/useConfirmedEmailGate";
 import { LoadingState } from "@/components/States";
 import { useStore } from "@/lib/demo-store";
 
@@ -11,9 +12,10 @@ function HirePageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const onboarding = searchParams.get("onboarding") === "1";
+  const emailGate = useConfirmedEmailGate();
 
   useEffect(() => {
-    if (!hydrated) return;
+    if (!hydrated || emailGate !== "allowed") return;
     if (!state.user) {
       router.replace("/login");
       return;
@@ -25,9 +27,9 @@ function HirePageInner() {
     if (!onboarding && !state.onboardingComplete) {
       router.replace("/onboarding");
     }
-  }, [hydrated, state.user, state.workspace.id, state.onboardingComplete, onboarding, router]);
+  }, [hydrated, state.user, state.workspace.id, state.onboardingComplete, onboarding, emailGate, router]);
 
-  if (!hydrated || !state.user || !state.workspace.id) {
+  if (emailGate !== "allowed" || !hydrated || !state.user || !state.workspace.id) {
     return <LoadingState full label="Loading…" />;
   }
 

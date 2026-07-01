@@ -34,6 +34,8 @@ import {
 } from "./types";
 import { getEmailRedirectUrl, setAuthNextPath } from "@/lib/auth/callback-session";
 import { isEmailConfirmed } from "@/lib/auth/session";
+import { isRepeatedSignup } from "@/lib/auth/guards";
+import { resendSignupConfirmation } from "@/lib/auth/confirmation";
 import { mayaWelcomeMessage } from "@/lib/hiring/maya";
 import { resolveUniqueRoomName } from "@/lib/room-naming";
 import { isMayaEmployee, isSystemEmployee, mergeMayaIntoState, mayaEmployeeStatus, buildMayaDmRoom, buildMayaEmployee, ensureMayaDmTopicsInState, dedupeMayaDmRooms, mergeEmployeesById, resolveMayaDmRoomId } from "@/lib/maya-employee";
@@ -127,7 +129,7 @@ type StoreActions = {
     user: { name: string; email: string },
     workspaceName: string,
     password: string,
-  ) => Promise<{ needsEmailConfirmation: boolean }>;
+  ) => Promise<{ needsEmailConfirmation: boolean; repeatedSignup?: boolean }>;
   login: (email: string, password: string) => Promise<{ onboardingComplete: boolean }>;
   bootstrapWorkspace: (workspaceName?: string) => Promise<void>;
   setupOnboardingWorkspace: (payload: {
@@ -371,6 +373,10 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       }
 
       if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED") {
+        if (!isEmailConfirmed(session.user)) {
+          void supabase.auth.signOut();
+          return;
+        }
         void loadRemote(session.user);
       }
     });
@@ -577,9 +583,19 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           if (signupError) throw signupError;
           if (!data.user) throw new Error("Unable to create account.");
 
-          if (!data.session || !isEmailConfirmed(data.user)) {
+          const repeatedSignup = isRepeatedSignup(data.user);
+          const needsConfirm = !data.session || !isEmailConfirmed(data.user) || repeatedSignup;
+
+          if (needsConfirm) {
             if (data.session) await supabase.auth.signOut();
-            return { needsEmailConfirmation: true };
+            if (repeatedSignup) {
+              try {
+                await resendSignupConfirmation(user.email);
+              } catch {
+                // Resend may rate-limit; signup UI still offers manual resend.
+              }
+            }
+            return { needsEmailConfirmation: true, repeatedSignup };
           }
 
           authUserRef.current = data.user;

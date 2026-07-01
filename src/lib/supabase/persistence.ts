@@ -37,6 +37,10 @@ import { supabase } from "./client";
 
 type DbRow = Record<string, any>;
 
+function roomIdFromRow(row: DbRow): string {
+  return String(row.room_id ?? row.channel_id ?? "");
+}
+
 const DEMO_HUMAN_ID = "user-shubham";
 
 function jsonArray<T>(value: unknown): T[] {
@@ -497,9 +501,10 @@ export async function loadWorkspaceState(
 
   const roomMembersByRoom = new Map<string, DbRow[]>();
   for (const member of (roomMembersResult.data as DbRow[] | null) ?? []) {
-    const existing = roomMembersByRoom.get(member.channel_id) ?? [];
+    const roomKey = roomIdFromRow(member);
+    const existing = roomMembersByRoom.get(roomKey) ?? [];
     existing.push(member);
-    roomMembersByRoom.set(member.channel_id, existing);
+    roomMembersByRoom.set(roomKey, existing);
   }
 
   const messagesByRoom = groupBy(messages, (message) => message.roomId);
@@ -571,7 +576,7 @@ export async function loadWorkspaceState(
           const dmRooms = (roomRefresh.data as DbRow[]).map((row) =>
             roomFromRow(
               row,
-              refreshedMembers.filter((m) => m.channel_id === row.id),
+              refreshedMembers.filter((m) => roomIdFromRow(m) === row.id),
               refreshedMessagesByRoom.get(row.id) ?? [],
               tasksByRoom.get(row.id)?.map((task) => task.id) ?? [],
               memoryByRoom.get(row.id)?.map((entry) => entry.id) ?? [],
@@ -822,7 +827,7 @@ function roomFromRow(
 function messageFromRow(row: DbRow): RoomMessage {
   return {
     id: row.id,
-    roomId: row.channel_id,
+    roomId: roomIdFromRow(row),
     topicId: row.topic_id ?? undefined,
     senderType: row.sender_type,
     senderId: row.sender_id,
@@ -841,7 +846,7 @@ function messageFromRow(row: DbRow): RoomMessage {
 function taskFromRow(row: DbRow): Task {
   return {
     id: row.id,
-    roomId: row.channel_id,
+    roomId: roomIdFromRow(row),
     topicId: row.topic_id ?? undefined,
     title: row.title,
     description: row.description ?? undefined,
@@ -859,7 +864,7 @@ function taskFromRow(row: DbRow): Task {
 function memoryFromRow(row: DbRow): MemoryEntry {
   return {
     id: row.id,
-    roomId: row.channel_id,
+    roomId: roomIdFromRow(row),
     topicId: row.topic_id ?? undefined,
     type: row.type,
     title: row.title,
@@ -874,7 +879,7 @@ function memoryFromRow(row: DbRow): MemoryEntry {
 function approvalFromRow(row: DbRow): Approval {
   return {
     id: row.id,
-    roomId: row.channel_id,
+    roomId: roomIdFromRow(row),
     topicId: row.topic_id ?? undefined,
     requestedBy: row.requested_by,
     title: row.title,
@@ -890,7 +895,7 @@ function approvalFromRow(row: DbRow): Approval {
 function workLogFromRow(row: DbRow): WorkLogEvent {
   return {
     id: row.id,
-    roomId: row.channel_id,
+    roomId: roomIdFromRow(row),
     topicId: row.topic_id ?? undefined,
     employeeId: row.employee_id,
     action: row.action,
@@ -906,7 +911,7 @@ function workLogFromRow(row: DbRow): WorkLogEvent {
 function callFromRow(row: DbRow): Call {
   return {
     id: row.id,
-    roomId: row.channel_id,
+    roomId: roomIdFromRow(row),
     title: row.title,
     status: row.status,
     participants: jsonArray(row.participants),
@@ -1169,7 +1174,7 @@ export async function seedWorkspaceState(state: DemoState) {
   await upsertRows(
     "room_members",
     state.rooms.flatMap((room) => roomMemberRows(workspaceId, room)),
-    "workspace_id,channel_id,member_type,member_id",
+    "workspace_id,room_id,member_type,member_id",
   );
   await upsertRows(
     "messages",
@@ -1310,7 +1315,7 @@ export async function replaceRoomMembers(workspaceId: string, room: ProjectRoom)
     .eq("workspace_id", workspaceId)
     .eq("room_id", room.id);
   if (deleteError) throw deleteError;
-  await upsertRows("room_members", roomMemberRows(workspaceId, room), "workspace_id,channel_id,member_type,member_id");
+  await upsertRows("room_members", roomMemberRows(workspaceId, room), "workspace_id,room_id,member_type,member_id");
 }
 
 export async function persistRoomMember(
@@ -1329,7 +1334,7 @@ export async function persistRoomMember(
         member_id: memberId,
       },
     ],
-    "workspace_id,channel_id,member_type,member_id",
+    "workspace_id,room_id,member_type,member_id",
   );
 }
 

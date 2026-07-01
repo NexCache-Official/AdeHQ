@@ -49,6 +49,10 @@ function AuthCallbackInner() {
         if (!result.ok) {
           const parsed = parseAuthError(result.error);
           if (!active) return;
+          if (parsed.needsEmailConfirmation) {
+            router.replace("/confirm-email");
+            return;
+          }
           setFailed(true);
           setNeedsResend(parsed.needsEmailConfirmation);
           setAlreadyConfirmed(parsed.alreadyConfirmedHint || result.linkError);
