@@ -155,17 +155,67 @@ export default function RoomDetailPage() {
   };
 
   const summarizeTopic = async () => {
-    if (!selectedTopic || backend !== "supabase") return;
+    if (!room) return;
+
     setSummarizing(true);
     try {
-      const headers = await authHeaders();
-      const response = await fetch(`/api/topics/${selectedTopic.id}/summarize`, {
-        method: "POST",
-        headers,
-      });
-      if (!response.ok) throw new Error("Summarize failed");
-      const { topic, summary } = await response.json();
-      actions.upsertTopic(topic);
+      let topicId = selectedTopic?.id;
+
+      if (backend === "supabase") {
+        if (isMayaDm) {
+          const headers = await authHeaders();
+          await fetch("/api/workspaces/ensure-maya", { method: "POST", headers });
+          await actions.refreshTopics(roomId);
+          const topicsResponse = await fetch(`/api/rooms/${roomId}/topics`, { headers });
+          if (topicsResponse.ok) {
+            const payload = await topicsResponse.json();
+            const topics = (payload.topics ?? []) as typeof roomTopics;
+            const general = generalTopicForRoom(topics, roomId);
+            if (general) {
+              topicId = general.id;
+              if (selectedTopicId !== general.id) {
+                selectTopic(general.id);
+              }
+            }
+          }
+        }
+
+        if (!topicId) return;
+
+        const headers = await authHeaders();
+        const response = await fetch(`/api/topics/${topicId}/summarize`, {
+          method: "POST",
+          headers,
+        });
+        if (!response.ok) throw new Error("Summarize failed");
+        const { topic, summary } = await response.json();
+        actions.upsertTopic(topic);
+        actions.setTopicSummary(topic.id, summary);
+        return;
+      }
+
+      if (!selectedTopic) return;
+      const recent = room.messages
+        .filter((message) => message.topicId === selectedTopic.id)
+        .slice(-12)
+        .map((message) => `[${message.senderName}] ${message.content}`)
+        .join("\n");
+      const summary = [
+        "What happened:",
+        recent || "No messages yet in this conversation.",
+        "",
+        "Current decision:",
+        "(Add manually after reviewing the thread.)",
+        "",
+        "Open questions:",
+        "-",
+        "",
+        "Next tasks:",
+        "-",
+        "",
+        "Risks:",
+        "-",
+      ].join("\n");
       actions.setTopicSummary(selectedTopic.id, summary);
     } catch (e) {
       console.error(e);

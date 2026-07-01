@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { MAYA_DM_QUICK_ACTIONS, MAYA_EMPLOYEE_NAME, MAYA_EMPLOYEE_TITLE, MAYA_WORKFORCE_BADGE, mayaWelcomeMessage } from "@/lib/hiring/maya";
+import { MAYA_DM_QUICK_ACTIONS, MAYA_EMPLOYEE_NAME, MAYA_EMPLOYEE_SUBTITLE, MAYA_WORKFORCE_BADGE, mayaWelcomeMessage } from "@/lib/hiring/maya";
 import { AdeOrb } from "@/components/hiring/HireChrome";
 
 const MAYA_CONTEXT_KEY = "maya_employee_context";
@@ -58,7 +58,7 @@ export function MayaDmEmptyState({ firstName = "there", onSendMessage }: MayaDmE
           {MAYA_WORKFORCE_BADGE}
         </span>
       </div>
-      <p className="text-sm text-ink-2">{MAYA_EMPLOYEE_TITLE}</p>
+      <p className="text-sm text-ink-2">{MAYA_EMPLOYEE_SUBTITLE}</p>
       <p className="mt-5 whitespace-pre-line text-left text-[14px] leading-relaxed text-ink-2">
         {welcome}
       </p>

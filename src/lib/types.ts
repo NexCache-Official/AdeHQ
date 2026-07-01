@@ -94,6 +94,7 @@ export type SystemEmployeeMetadata = {
   dmOnly?: boolean;
   canBeArchived?: boolean;
   canBeAssignedToChannels?: boolean;
+  isDefaultWorkspaceEmployee?: boolean;
   purpose?: string;
 };
 

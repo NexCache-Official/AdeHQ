@@ -67,12 +67,21 @@ export async function ensureMayaForWorkspace(
 
   if (lookupError) throw lookupError;
   if (existing) {
+    const maya = buildMayaEmployee(String(existing.updated_at ?? existing.created_at ?? nowISO()));
     await client
       .from("ai_employees")
-      .update({ status: "online", updated_at: nowISO() })
+      .update({
+        status: "online",
+        role: maya.role,
+        instructions: maya.instructions,
+        communication_style: maya.communicationStyle,
+        success_criteria: maya.successCriteria,
+        metadata: maya.metadata ?? {},
+        updated_at: nowISO(),
+      })
       .eq("workspace_id", workspaceId)
       .eq("system_employee_key", MAYA_SYSTEM_EMPLOYEE_KEY);
-    return buildMayaEmployee(String(existing.updated_at ?? existing.created_at ?? nowISO()));
+    return maya;
   }
 
   const timestamp = nowISO();

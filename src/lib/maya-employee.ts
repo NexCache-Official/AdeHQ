@@ -15,6 +15,7 @@ export type SystemEmployeeMetadata = {
   dmOnly?: boolean;
   canBeArchived?: boolean;
   canBeAssignedToChannels?: boolean;
+  isDefaultWorkspaceEmployee?: boolean;
   purpose?: string;
 };
 
@@ -163,7 +164,8 @@ export function buildMayaEmployee(timestamp = nowISO()): AIEmployee {
     status: mayaEmployeeStatus(),
     instructions: MAYA_EMPLOYEE_SYSTEM_PROMPT.trim(),
     communicationStyle: "Warm, sharp, practical, and efficient",
-    successCriteria: "Help users hire and improve AI employees quickly",
+    successCriteria:
+      "Help users hire and improve AI employees quickly, and guide them through how AdeHQ works",
     tools: [],
     permissions: MAYA_PERMISSIONS,
     memoryCount: 0,
@@ -182,7 +184,8 @@ export function buildMayaEmployee(timestamp = nowISO()): AIEmployee {
       dmOnly: true,
       canBeArchived: false,
       canBeAssignedToChannels: false,
-      purpose: "hire_and_manage_ai_employees",
+      isDefaultWorkspaceEmployee: true,
+      purpose: "hire_and_manage_ai_employees,workspace_guide",
     },
   };
 }
@@ -325,6 +328,22 @@ export function mergeMayaIntoState<
     next = {
       ...next,
       employees: [maya, ...state.employees],
+    };
+  } else {
+    next = {
+      ...next,
+      employees: state.employees.map((employee) =>
+        isMayaEmployee(employee)
+          ? {
+              ...buildMayaEmployee(employee.createdAt),
+              lastActiveAt: employee.lastActiveAt,
+              memoryCount: employee.memoryCount,
+              tasksCompleted: employee.tasksCompleted,
+              messagesSent: employee.messagesSent,
+              approvalsRequested: employee.approvalsRequested,
+            }
+          : employee,
+      ),
     };
   }
 

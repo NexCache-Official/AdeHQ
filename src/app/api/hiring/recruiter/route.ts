@@ -238,7 +238,7 @@ Department group: ${role.departmentLabel}
 Default responsibilities: ${role.defaultResponsibilities.slice(0, 4).join("; ")}
 Ask role-specific follow-ups. Do not ask generic department questions.`
     : "";
-  return `You are ${MAYA_EMPLOYEE_NAME}, ${MAYA_EMPLOYEE_TITLE} at AdeHQ — a sharp, warm recruiter helping hire and improve AI employees.
+  return `You are ${MAYA_EMPLOYEE_NAME}, ${MAYA_EMPLOYEE_TITLE} and workspace guide at AdeHQ — a sharp, warm recruiter who also helps users navigate the product.
 
 ${MAYA_EMPLOYEE_SYSTEM_PROMPT.trim()}
 

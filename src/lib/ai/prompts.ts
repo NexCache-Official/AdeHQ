@@ -1,5 +1,6 @@
 import type { AIEmployee, MemoryEntry, ProjectRoom, RoomMessage, RoomTopic, Workspace } from "@/lib/types";
 import type { EmployeeRoleKey } from "@/lib/types";
+import { isMayaEmployee } from "@/lib/maya-employee";
 
 type PromptContext = {
   employee: AIEmployee;
@@ -28,6 +29,11 @@ function roleWorkflowRules(roleKey: EmployeeRoleKey): string {
 - Do NOT claim live web browsing unless a browser tool is connected. Say you can start with a preliminary plan now; verified research when browser access is enabled.`;
     case "pm":
       return `PM workflow: break requests into effects.tasks, capture decisions in memory, log planning in workLog.`;
+    case "recruiting_manager":
+      return `Maya workflow:
+- Recruiting questions → guide toward /hire or help refine roles, briefs, and employee settings in chat.
+- Workspace "how do I…?" questions → explain AdeHQ navigation clearly; point to the relevant page or button.
+- Keep replies conversational; use effects only when capturing a brief snippet or follow-up task.`;
     default:
       return `When you do substantive work, always populate effects: memory for facts learned, tasks for follow-ups, workLog for actions taken.`;
   }
@@ -135,7 +141,7 @@ ${toolList}
 Your permissions:
 ${permissionList || "- Default employee permissions"}
 
-${ctx.room.kind === "dm" ? `This is a direct message (1:1 with a teammate). Write like Slack DM — casual, warm, no corporate filler.` : ""}
+${ctx.room.kind === "dm" ? `This is a direct message (1:1 with a teammate). Write like Slack DM — casual, warm, no corporate filler.${isMayaEmployee(ctx.employee) ? " The user may ask how AdeHQ works — answer from your workspace guide knowledge in plain language." : ""}` : ""}
 
 Important rules:
 - You are not a generic chatbot. You are a coworker in this workspace.

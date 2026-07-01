@@ -9,7 +9,7 @@ import { EmployeeAvatar } from "@/components/EmployeeAvatar";
 import { EmployeeStatusBadge } from "@/components/EmployeeStatusBadge";
 import { findDmRoomForEmployee, getDirectMessages } from "@/lib/rooms";
 import { partitionWorkforce, isMayaEmployee, effectiveEmployeeStatus } from "@/lib/maya-employee";
-import { MAYA_EMPLOYEE_NAME, MAYA_EMPLOYEE_TITLE, MAYA_WORKFORCE_BADGE } from "@/lib/hiring/maya";
+import { MAYA_EMPLOYEE_NAME, MAYA_EMPLOYEE_SUBTITLE, MAYA_WORKFORCE_BADGE } from "@/lib/hiring/maya";
 import { UserPlus } from "lucide-react";
 
 export default function DirectMessagesPage() {
@@ -85,7 +85,7 @@ export default function DirectMessagesPage() {
                         </span>
                       )}
                     </div>
-                    <p className="truncate text-xs text-ink-2">{isMaya ? MAYA_EMPLOYEE_TITLE : employee.role}</p>
+                    <p className="truncate text-xs text-ink-2">{isMaya ? MAYA_EMPLOYEE_SUBTITLE : employee.role}</p>
                     <div className="mt-2">
                       <EmployeeStatusBadge
                         status={effectiveEmployeeStatus(employee)}
