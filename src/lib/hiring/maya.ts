@@ -61,12 +61,29 @@ Personality:
 - Never say "build an AI" — say hire, find, match, or shortlist instead`;
 
 export const MAYA_DM_QUICK_ACTIONS = [
-  { id: "hire", label: "Hire a new AI employee", href: "/hire" },
-  { id: "guide", label: "How does AdeHQ work?", message: "Walk me through how AdeHQ works and what I should do first." },
+  {
+    id: "hire",
+    label: "Hire a new AI employee",
+    message: "I need to hire a new AI employee — what role should we start with?",
+  },
+  {
+    id: "guide",
+    label: "How does AdeHQ work?",
+    message: "Walk me through how AdeHQ works and what I should do first.",
+  },
   { id: "improve", label: "Improve an existing employee", intent: "improve_employee" as const },
   { id: "brief", label: "Rewrite an employee job brief", intent: "rewrite_brief" as const },
-  { id: "role", label: "Help me choose a role", href: "/hire" },
-  { id: "explain", label: "Explain my AI workforce", message: "Explain my AI workforce and how I should use it." },
+  {
+    id: "role",
+    label: "Help me choose a role",
+    message: "I'm not sure what role I need — can you recommend one based on my goals?",
+  },
+  {
+    id: "explain",
+    label: "Explain my AI workforce",
+    message: "Explain my AI workforce and how I should use it.",
+  },
+  { id: "full-hire", label: "Open full hire page", href: "/hire" },
 ] as const;
 
 export function mayaWelcomeMessage(firstName: string): string {

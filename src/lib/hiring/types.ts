@@ -61,7 +61,9 @@ export type RecruiterSuggestionChip = {
     | "add_personality"
     | "add_tools"
     | "add_approval_rules"
-    | "review_brief";
+    | "review_brief"
+    | "generate_candidates"
+    | "hire_recommended";
 };
 
 export type AiEmployeeJobBrief = {

@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
-import { authHeaders } from "@/lib/api/auth-client";
+import { callCandidates, callRecruiter } from "@/lib/hiring/hiring-api";
+import { completeHireFromCandidate, logCandidatesGenerated, maybeLogBriefUpdated } from "@/lib/hiring/hire-completion";
 import { useStore } from "@/lib/demo-store";
 import {
   synthesizeBriefForHiringContext,
@@ -23,6 +24,8 @@ import {
   hiringBackStep,
   hiringReducer,
   initialHiringSession,
+  loadHiringSession,
+  normalizeRestoredHiringSession,
   persistHiringSession,
 } from "@/lib/hiring/session";
 import { detectBriefChange, type BriefComposeSection } from "@/lib/hiring/detect-brief-change";
@@ -30,6 +33,7 @@ import {
   INITIAL_BRIEF_UPDATE_STATE,
   briefSectionToComposeKey,
   inferSectionsUpdating,
+  isHiringSmallTalk,
   pickOptimisticAck,
   type BriefUpdateState,
   type MayaRecruiterState,
@@ -51,6 +55,7 @@ import type {
 } from "@/lib/hiring/types";
 import type { ProjectRoom, WorkLogEvent } from "@/lib/types";
 import { getGroupChannels } from "@/lib/rooms";
+import { resolveMayaDmRoomId } from "@/lib/maya-employee";
 import { cn, nowISO, uid } from "@/lib/utils";
 import { BriefDocumentPreview } from "./BriefDocumentPreview";
 import { BriefEditor } from "./BriefEditor";
@@ -68,42 +73,17 @@ import {
 
 type HireFlowProps = { onboarding?: boolean };
 
-async function callRecruiter(payload: Record<string, unknown>): Promise<RecruiterApiResponse> {
-  const headers = await authHeaders();
-  const res = await fetch("/api/hiring/recruiter", {
-    method: "POST",
-    headers,
-    body: JSON.stringify(payload),
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.error ?? "Recruiter unavailable");
-  }
-  return res.json();
-}
-
-async function callCandidates(
-  brief: AiEmployeeJobBrief,
-  departmentId: string | null,
-  roleKey?: string | null,
-) {
-  const headers = await authHeaders();
-  const res = await fetch("/api/hiring/candidates", {
-    method: "POST",
-    headers,
-    body: JSON.stringify({ brief, departmentId, roleKey }),
-  });
-  if (!res.ok) throw new Error("Could not generate candidates");
-  return res.json() as Promise<CandidatesApiResponse>;
-}
-
 export function HireFlow({ onboarding = false }: HireFlowProps) {
   const { state: appState, actions } = useStore();
   const router = useRouter();
-  const [session, dispatch] = useReducer(hiringReducer, undefined, initialHiringSession);
+  const [session, dispatch] = useReducer(hiringReducer, undefined, () => {
+    const saved = loadHiringSession();
+    return saved ? normalizeRestoredHiringSession(saved) : initialHiringSession();
+  });
   const sucTimer = useRef<ReturnType<typeof setInterval>>();
   const chatEndRef = useRef<HTMLDivElement>(null);
   const prevBriefRef = useRef<Partial<AiEmployeeJobBrief>>();
+  const lastBriefLogRef = useRef<string | null>(null);
   const composeTimerRef = useRef<ReturnType<typeof setTimeout>>();
   const [briefCompose, setBriefCompose] = useState<{
     active: boolean;
@@ -123,6 +103,11 @@ export function HireFlow({ onboarding = false }: HireFlowProps) {
   const effectiveDepartmentId = useMemo(
     () => session.departmentId ?? legacyDepartmentIdForRole(session.roleKey),
     [session.departmentId, session.roleKey],
+  );
+
+  const mayaRoomId = useMemo(
+    () => resolveMayaDmRoomId(appState.rooms),
+    [appState.rooms],
   );
 
   const recruiterPayload = useCallback(
@@ -400,6 +385,18 @@ export function HireFlow({ onboarding = false }: HireFlowProps) {
       return;
     }
 
+    if (isHiringSmallTalk(trimmed) && session.recruiterMessages.length > 0) {
+      dispatch({ type: "ADD_MESSAGE", message: { role: "user", text: trimmed } });
+      dispatch({
+        type: "ADD_MESSAGE",
+        message: {
+          role: "ade",
+          text: "You're welcome — keep shaping the brief and say when you're ready to generate candidates.",
+        },
+      });
+      return;
+    }
+
     const nextMessages = [...session.recruiterMessages, { role: "user" as const, text: trimmed }];
     const optimisticAck = pickOptimisticAck(trimmed);
     const sectionsUpdating = inferSectionsUpdating(trimmed);
@@ -446,7 +443,17 @@ export function HireFlow({ onboarding = false }: HireFlowProps) {
         }),
       );
       setMayaState("updating_brief");
+      const nextBrief = res.brief ?? res.briefPartial ?? localBrief;
+      const briefSection = detectBriefChange(prevBriefRef.current, nextBrief);
       applyRecruiterResponse(res, nextMessages);
+      maybeLogBriefUpdated(
+        actions,
+        mayaRoomId,
+        trimmed,
+        briefSection,
+        res.brief?.roleTitle ?? localBrief.roleTitle,
+        lastBriefLogRef,
+      );
       if (res.brief) {
         dispatch({ type: "SET_BRIEF", brief: res.brief });
       }
@@ -548,15 +555,16 @@ export function HireFlow({ onboarding = false }: HireFlowProps) {
     dispatch({ type: "SET_GEN_STEP", genStep: 0 });
 
     void (async () => {
+      const roleTitle = brief.roleTitle ?? roleSeed;
       try {
         const { candidates } = await callCandidates(brief, effectiveDepartmentId, session.roleKey);
         dispatch({ type: "SET_CANDIDATES", candidates });
+        logCandidatesGenerated(actions, mayaRoomId, roleTitle);
       } catch {
         const { generateDeterministicCandidates } = await import("@/lib/hiring/candidate-engine");
-        dispatch({
-          type: "SET_CANDIDATES",
-          candidates: generateDeterministicCandidates(brief, effectiveDepartmentId, session.roleKey),
-        });
+        const candidates = generateDeterministicCandidates(brief, effectiveDepartmentId, session.roleKey);
+        dispatch({ type: "SET_CANDIDATES", candidates });
+        logCandidatesGenerated(actions, mayaRoomId, roleTitle);
       }
     })();
   };
@@ -660,7 +668,20 @@ export function HireFlow({ onboarding = false }: HireFlowProps) {
         });
         sessionStorage.removeItem(ONBOARDING_ROOM_KEY);
       } else {
-        actions.hireEmployee(employee);
+        const { employeeId, dmRoomId } = completeHireFromCandidate({
+          actions,
+          userName: appState.user.name,
+          candidate: hired,
+          brief: session.brief,
+          departmentId: effectiveDepartmentId,
+          roleKey: session.roleKey,
+          mayaRoomId,
+        });
+        dispatch({ type: "COMPLETE_HIRE", employeeId, dmRoomId });
+        clearHiringSession();
+        runSuccessAnimation();
+        setTimeout(() => dispatch({ type: "SET_STEP", step: "assign_optional" }), 2400);
+        return;
       }
 
       const dm = actions.openOrCreateDM(employee.id);

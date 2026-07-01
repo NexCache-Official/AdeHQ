@@ -12,6 +12,7 @@ import { Button } from "@/components/ui";
 import { EmptyState } from "@/components/States";
 import { authHeaders } from "@/lib/api/auth-client";
 import { generalTopicForRoom, isGeneralTopic, topicsForRoom } from "@/lib/topics";
+import { MayaDmHiringWorkspace } from "@/components/maya/MayaDmHiringWorkspace";
 import { channelAssignableEmployees, isMayaEmployee } from "@/lib/maya-employee";
 import type { AiParticipationMode, TopicPriority } from "@/lib/types";
 import type { SlashCommandResult } from "@/components/ChatComposer";
@@ -514,30 +515,40 @@ export default function RoomDetailPage() {
         </div>
 
         <div className="min-w-0 flex-1 border-r border-border bg-canvas">
-          {slashNotice && (
-            <div className="border-b border-accent-200 bg-accent-50 px-4 py-1.5 text-center text-xs text-accent-800">
-              {slashNotice}
-            </div>
+          {isMayaDm ? (
+            <MayaDmHiringWorkspace
+              mayaRoomId={roomId}
+              mayaTopicId={selectedTopic?.id}
+              firstName={state.user?.name?.split(" ")[0]}
+            />
+          ) : (
+            <>
+              {slashNotice && (
+                <div className="border-b border-accent-200 bg-accent-50 px-4 py-1.5 text-center text-xs text-accent-800">
+                  {slashNotice}
+                </div>
+              )}
+              {topicActionError && (
+                <div className="border-b border-red-200 bg-red-50 px-4 py-1.5 text-center text-xs text-red-800">
+                  {topicActionError}
+                </div>
+              )}
+              <RoomChat
+                room={room}
+                topic={selectedTopic}
+                isDm={isDm}
+                draftText={composerDraft}
+                onDraftConsumed={() => setComposerDraft("")}
+                onSlashCommand={handleSlashCommand}
+                onSummarize={summarizeTopic}
+                summarizing={summarizing}
+              />
+            </>
           )}
-          {topicActionError && (
-            <div className="border-b border-red-200 bg-red-50 px-4 py-1.5 text-center text-xs text-red-800">
-              {topicActionError}
-            </div>
-          )}
-          <RoomChat
-            room={room}
-            topic={selectedTopic}
-            isDm={isDm}
-            draftText={composerDraft}
-            onDraftConsumed={() => setComposerDraft("")}
-            onSlashCommand={handleSlashCommand}
-            onSummarize={summarizeTopic}
-            summarizing={summarizing}
-          />
         </div>
 
         <div className="hidden w-[344px] shrink-0 xl:block">
-          {selectedTopic ? (
+          {isMayaDm ? null : selectedTopic ? (
             <TopicPanel
               topic={selectedTopic}
               room={room}

@@ -91,6 +91,12 @@ export default function EmployeeProfilePage() {
         <ArrowLeft className="h-4 w-4" /> Back
       </button>
 
+      {isMayaEmployee(employee) && (
+        <div className="mb-4 rounded-xl border border-accent-200 bg-accent-50 px-4 py-3 text-sm text-accent-900">
+          {MAYA_EMPLOYEE_NAME} is your permanent workspace guide — DM-only, always available, and not counted toward hire limits.
+        </div>
+      )}
+
       {/* Header */}
       <Card className="relative mb-6 overflow-hidden p-6">
         <div className="absolute -right-10 -top-10 h-40 w-40 rounded-full blur-3xl" style={{ background: `${employee.accent}22` }} />
@@ -142,9 +148,11 @@ export default function EmployeeProfilePage() {
             <Button size="sm" variant="secondary" onClick={() => setTaskOpen(true)}>
               <Plus className="h-4 w-4" /> Assign task
             </Button>
-            <Button size="sm" variant="ghost" onClick={() => setEditOpen(true)}>
-              <Pencil className="h-4 w-4" /> Edit
-            </Button>
+            {!isMayaEmployee(employee) && (
+              <Button size="sm" variant="ghost" onClick={() => setEditOpen(true)}>
+                <Pencil className="h-4 w-4" /> Edit
+              </Button>
+            )}
           </div>
         </div>
       </Card>

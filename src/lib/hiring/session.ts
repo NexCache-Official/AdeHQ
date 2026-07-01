@@ -213,7 +213,25 @@ export function persistHiringSession(state: HiringSessionState) {
   }
 }
 
-export function loadHiringSession(): HiringSessionState | null {
+export function normalizeRestoredHiringSession(
+  state: HiringSessionState,
+  opts?: { dmFirst?: boolean },
+): HiringSessionState {
+  let next = state;
+  if (opts?.dmFirst && next.recruiterMessages.length > 0 && next.step === "role") {
+    next = { ...next, step: "recruiter" };
+  }
+  if (next.candidates.length > 0 && ["role", "recruiter", "brief", "generating_applicants"].includes(next.step)) {
+    next = { ...next, step: "shortlist" };
+  } else if (next.recruiterMessages.length > 0 && next.step === "role") {
+    next = { ...next, step: "recruiter" };
+  } else if ((next.brief || next.briefReady) && next.step === "role") {
+    next = { ...next, step: "recruiter" };
+  }
+  return next;
+}
+
+export function loadHiringSession(opts?: { dmFirst?: boolean }): HiringSessionState | null {
   if (typeof window === "undefined") return null;
   try {
     const raw = sessionStorage.getItem(HIRING_SESSION_KEY);
@@ -226,7 +244,7 @@ export function loadHiringSession(): HiringSessionState | null {
         base.roleKey = migrated;
       }
     }
-    return base;
+    return normalizeRestoredHiringSession(base, opts);
   } catch {
     return null;
   }

@@ -29,6 +29,17 @@ export const INITIAL_BRIEF_UPDATE_STATE: BriefUpdateState = {
   sectionsUpdating: [],
 };
 
+const SMALL_TALK_RE =
+  /^(hi|hey|hello|yo|sup|thanks|thank you|thx|ok|okay|cool|great|got it|sounds good|perfect|nice|cheers|bye|goodbye|good morning|good afternoon|good evening)[!.?]*$/i;
+
+export function isHiringSmallTalk(text: string): boolean {
+  const trimmed = text.trim();
+  if (!trimmed) return true;
+  if (SMALL_TALK_RE.test(trimmed)) return true;
+  if (trimmed.length <= 12 && /^(hi|hey|hello)\b/i.test(trimmed)) return true;
+  return false;
+}
+
 const OPTIMISTIC_ACKS = [
   "Got it — I'm updating the role brief with that.",
   "That helps. I'm folding this into the job brief now.",

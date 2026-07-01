@@ -1,4 +1,5 @@
 import { synthesizeRoleTitle } from "./role-title-synthesizer";
+import { isHiringSmallTalk } from "./maya-recruiter-state";
 import {
   getAllRoles,
   getRoleByKey,
@@ -45,7 +46,9 @@ function scoreText(text: string): Array<{ roleKey: string; score: number; title:
       if (lower.includes(alias)) score += 8;
     }
     for (const use of role.commonUseCases) {
-      if (lower.includes(use) || use.includes(lower)) score += 6;
+      if (lower.includes(use)) score += 6;
+      // Avoid substring false positives (e.g. "hi" inside "ship").
+      else if (lower.length >= 4 && use.includes(lower)) score += 6;
     }
     if (score > 0) scores.set(role.roleKey, score);
   }
@@ -79,7 +82,7 @@ function isAmbiguousOutcome(text: string): boolean {
 
 export function inferRoleFromText(text: string): RoleInferenceResult {
   const trimmed = text.trim();
-  if (!trimmed) {
+  if (!trimmed || isHiringSmallTalk(trimmed)) {
     return { confidence: "low", matches: [], matchType: "custom", customSuggestion: "AI Employee" };
   }
 

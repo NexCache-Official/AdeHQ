@@ -85,6 +85,16 @@ export function mayaDmRoomId(): string {
   return `dm-${MAYA_EMPLOYEE_ID}`;
 }
 
+export function findMayaDmRoom(rooms: Pick<ProjectRoom, "id" | "kind" | "dmEmployeeId">[]): ProjectRoom | undefined {
+  return rooms.find((room) => room.kind === "dm" && room.dmEmployeeId === MAYA_EMPLOYEE_ID) as
+    | ProjectRoom
+    | undefined;
+}
+
+export function resolveMayaDmRoomId(rooms: Pick<ProjectRoom, "id" | "kind" | "dmEmployeeId">[]): string {
+  return findMayaDmRoom(rooms)?.id ?? mayaDmRoomId();
+}
+
 export function mayaDmGeneralTopicId(roomId = mayaDmRoomId()): string {
   return `topic-general-${roomId}`;
 }
