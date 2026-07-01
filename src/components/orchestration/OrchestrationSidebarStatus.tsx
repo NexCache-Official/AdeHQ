@@ -8,9 +8,11 @@ import { useOrchestrationUi } from "./OrchestrationUiContext";
 import { EmployeeAvatar } from "@/components/EmployeeAvatar";
 import { useStore } from "@/lib/demo-store";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui";
+import { RotateCcw } from "lucide-react";
 
 export function OrchestrationSidebarStatus() {
-  const { session } = useOrchestrationUi();
+  const { session, retryFailedRun } = useOrchestrationUi();
   const { state } = useStore();
 
   if (!session.orchestrationPlan?.shouldRespond || !session.employees.length) {
@@ -22,10 +24,12 @@ export function OrchestrationSidebarStatus() {
     session.collaborationPlan?.mode ?? null,
   );
 
+  const hasFailed = session.employees.some((e) => e.phase === "failed");
+
   return (
     <div className="mt-2 rounded-lg border border-border bg-muted/40 p-2.5">
       <div className="text-[10px] font-semibold uppercase tracking-wide text-ink-3">
-        Active orchestration
+        {session.completed ? "Recent orchestration" : "Active orchestration"}
       </div>
       {modeLabel && (
         <div className="mt-1 text-xs font-medium text-ink">{modeLabel}</div>
@@ -58,12 +62,23 @@ export function OrchestrationSidebarStatus() {
                 {entry.detail && (
                   <p className="mt-0.5 text-[10px] text-ink-3">{entry.detail}</p>
                 )}
+                {entry.phase === "failed" && entry.runId && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="mt-1 h-6 gap-1 px-1.5 text-[10px] text-rose-700"
+                    onClick={() => void retryFailedRun(entry.employeeId)}
+                  >
+                    <RotateCcw className="h-3 w-3" />
+                    Retry
+                  </Button>
+                )}
               </div>
             </li>
           );
         })}
       </ul>
-      {session.completed && (
+      {session.completed && !hasFailed && (
         <p className="mt-2 text-[10px] font-medium text-emerald-700">Completed</p>
       )}
     </div>

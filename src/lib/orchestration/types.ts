@@ -81,6 +81,37 @@ export type OrchestrationWorkLogAction =
   | "task_suggested"
   | "memory_suggested";
 
+/** Persisted per-employee status in conversation_orchestrations.employee_statuses */
+export type PersistedOrchestrationEmployeeStatus = {
+  employeeId: string;
+  phase: "planned" | "reading" | "replying" | "waiting" | "completed" | "failed";
+  detail?: string | null;
+  waitingOnEmployeeName?: string | null;
+  runId?: string | null;
+  updatedAt?: string;
+};
+
+export type StoredOrchestrationRecord = {
+  id: string;
+  roomId: string;
+  topicId: string | null;
+  triggerMessageId: string;
+  intent: OrchestrationIntent;
+  confidence: number;
+  reason: string;
+  selectedEmployeeIds: string[];
+  leadEmployeeId: string | null;
+  collaboratorEmployeeIds: string[];
+  responseOrder: OrchestrationPlan["responseOrder"];
+  workLogRequired: boolean;
+  workLogReason: string | null;
+  status: "planned" | "running" | "completed" | "failed" | "cancelled";
+  employeeStatuses: PersistedOrchestrationEmployeeStatus[];
+  completionWorkLogAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type AIEmployeeProfile = Pick<
   AIEmployee,
   | "id"

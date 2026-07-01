@@ -25,8 +25,46 @@ import {
 import { GREETING_MAX_OUTPUT_TOKENS } from "@/lib/server/channel-governance";
 import type { QueuedRun } from "@/lib/server/queue-agent-runs";
 import type { CollaborationRole, ConversationPlan } from "@/lib/types";
+import {
+  finalizeOrchestrationIfComplete,
+  updateOrchestrationEmployeeStatus,
+} from "@/lib/orchestration/persistence";
+import type { PersistedOrchestrationEmployeeStatus } from "@/lib/orchestration/types";
 import { serializeUnknownError } from "@/lib/server/message-errors";
 import { nowISO } from "@/lib/utils";
+
+async function persistRunOrchestrationPhase(
+  client: SupabaseClient,
+  workspaceId: string,
+  runMetadata: Record<string, unknown>,
+  employeeId: string,
+  phase: PersistedOrchestrationEmployeeStatus["phase"],
+  extra?: {
+    detail?: string;
+    waitingOnEmployeeName?: string;
+    runId?: string;
+  },
+) {
+  const orchestrationId =
+    typeof runMetadata.orchestrationId === "string"
+      ? runMetadata.orchestrationId
+      : null;
+  if (!orchestrationId) return;
+
+  await updateOrchestrationEmployeeStatus(client, {
+    workspaceId,
+    orchestrationId,
+    employeeId,
+    phase,
+    detail: extra?.detail ?? null,
+    waitingOnEmployeeName: extra?.waitingOnEmployeeName ?? null,
+    runId: extra?.runId ?? null,
+  });
+
+  if (phase === "completed" || phase === "failed") {
+    await finalizeOrchestrationIfComplete(client, workspaceId, orchestrationId);
+  }
+}
 
 type DbRow = Record<string, unknown>;
 
@@ -164,10 +202,28 @@ export async function processQueuedAgentRun(
       status: "running",
     });
 
+    await persistRunOrchestrationPhase(
+      client,
+      workspaceId,
+      runMetadata,
+      employeeId,
+      "reading",
+      { runId },
+    );
+
     const conversationMode =
       typeof runMetadata.conversationMode === "string"
         ? runMetadata.conversationMode
         : undefined;
+
+    await persistRunOrchestrationPhase(
+      client,
+      workspaceId,
+      runMetadata,
+      employeeId,
+      "replying",
+      { runId },
+    );
 
     const modelMode: ModelMode = resolveRunModelMode({
       roleKey: employee.roleKey,
@@ -312,6 +368,15 @@ export async function processQueuedAgentRun(
       runId,
     );
 
+    await persistRunOrchestrationPhase(
+      client,
+      workspaceId,
+      runMetadata,
+      employeeId,
+      "completed",
+      { runId },
+    );
+
     await finalizeAiRun({
       client,
       workspaceId,
@@ -359,6 +424,20 @@ export async function processQueuedAgentRun(
           runMetadata,
         });
         activatedRuns = collab.activatedRuns;
+        for (const activated of activatedRuns) {
+          await persistRunOrchestrationPhase(
+            client,
+            workspaceId,
+            runMetadata,
+            activated.employeeId,
+            "waiting",
+            {
+              runId: activated.runId,
+              detail: `Reviewing ${employee.name}'s response…`,
+              waitingOnEmployeeName: employee.name,
+            },
+          );
+        }
       }
 
       const followUp = await queueFollowUpRuns(client, {
@@ -405,6 +484,14 @@ export async function processQueuedAgentRun(
     };
   } catch (error) {
     const message = serializeUnknownError(error);
+    await persistRunOrchestrationPhase(
+      client,
+      workspaceId,
+      runMetadata,
+      employeeId,
+      "failed",
+      { runId, detail: message },
+    );
     await completeAgentRun(client, workspaceId, runId, {
       status: "failed",
       errorMessage: message,

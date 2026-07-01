@@ -12,6 +12,7 @@ import { filterOrchestrationEmployees } from "@/lib/orchestration/collaboration-
 import { orchestrateConversation } from "@/lib/orchestration/conversation-orchestrator";
 import { orchestrationPlanToLegacyResult } from "@/lib/orchestration/legacy-adapter";
 import {
+  attachRunIdsToOrchestration,
   logOrchestrationWorkLog,
   persistOrchestrationPlan,
   persistTopicSuggestions,
@@ -263,7 +264,13 @@ export async function POST(
           humanMessage.id,
         );
 
-    const { plan: conversationPlan, decisions } = legacyResult;
+    const { plan: conversationPlan, decisions: rawDecisions } = legacyResult;
+    const decisions = orchestrationId
+      ? rawDecisions.map((d) => ({
+          ...d,
+          runMetadata: { ...d.runMetadata, orchestrationId },
+        }))
+      : rawDecisions;
     const orchestratorDebug =
       process.env.NEXT_PUBLIC_ORCHESTRATION_DEBUG === "true" ||
       request.headers.get("X-AdeHQ-Debug") === "true"
@@ -284,6 +291,19 @@ export async function POST(
       responders: decisions,
       content: trimmed,
     });
+
+    if (orchestrationId && queued.length) {
+      try {
+        await attachRunIdsToOrchestration(
+          client,
+          workspaceId,
+          orchestrationId,
+          Object.fromEntries(queued.map((r) => [r.employeeId, r.runId])),
+        );
+      } catch (attachError) {
+        console.warn("[AdeHQ messages] attach run ids failed", attachError);
+      }
+    }
 
     if (process.env.NODE_ENV === "development" || request.headers.get("X-AdeHQ-Debug") === "true") {
       console.info("[AdeHQ messages]", {
@@ -320,6 +340,7 @@ export async function POST(
       blockedRuns: blocked,
       collaborationPlan: conversationPlan,
       orchestrationPlan,
+      orchestrationId,
       orchestratorDebug,
       topicSuggestions,
       smartAssistSuggestions: orchestrationPlan.suggestedActions.filter(

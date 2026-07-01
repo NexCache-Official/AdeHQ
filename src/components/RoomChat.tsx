@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ProjectRoom, RoomTopic, type ConversationPlan } from "@/lib/types";
 import { useOrchestrationUi } from "@/components/orchestration/OrchestrationUiContext";
+import { fetchTopicOrchestration } from "@/lib/orchestration/orchestration-client";
 import {
   TopicSuggestionCard,
   dismissTopicSuggestionApi,
@@ -124,6 +125,29 @@ export function RoomChat({
   }, [topicMessages.length, activeRuns.length]);
 
   useEffect(() => {
+    if (!topic || backend !== "supabase") return;
+    let cancelled = false;
+
+    const hydrate = async () => {
+      try {
+        const record = await fetchTopicOrchestration(topic.id);
+        if (cancelled || !record) return;
+        const employeeNames = new Map(roomEmployees.map((e) => [e.id, e.name]));
+        orchestrationUi.hydrateFromRecord(record, employeeNames);
+        triggerMessageIdRef.current = record.triggerMessageId;
+      } catch {
+        // non-blocking
+      }
+    };
+
+    void hydrate();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [topic?.id, backend, roomEmployees.length]);
+
+  useEffect(() => {
     if (!topic) return;
     const last = topicMessages[topicMessages.length - 1];
     if (last && backend === "supabase") {
@@ -208,14 +232,14 @@ export function RoomChat({
           if (triggerId) {
             markMessageSeenByEmployee(triggerId, run.employeeId, run.employeeName);
           }
-          orchestrationUi.updateEmployeePhase(run.employeeId, "reading");
+          orchestrationUi.updateEmployeePhase(run.employeeId, "reading", undefined, undefined, run.runId);
           setActiveRuns((prev) =>
             prev.map((r) =>
               r.runId === run.runId ? { ...r, phase: "reading" } : r,
             ),
           );
 
-          orchestrationUi.updateEmployeePhase(run.employeeId, "replying");
+          orchestrationUi.updateEmployeePhase(run.employeeId, "replying", undefined, undefined, run.runId);
           setActiveRuns((prev) =>
             prev.map((r) =>
               r.runId === run.runId ? { ...r, phase: "thinking" } : r,
@@ -303,6 +327,7 @@ export function RoomChat({
             }
 
             orchestrationUi.markEmployeeCompleted(run.employeeId);
+        void actions.refreshTopics(room.id);
 
             if (Array.isArray(data.activatedRuns) && data.activatedRuns.length) {
               for (const activated of data.activatedRuns as QueuedRunClient[]) {
@@ -310,6 +335,8 @@ export function RoomChat({
                   activated.employeeId,
                   "waiting",
                   `Reviewing ${run.employeeName}'s response…`,
+                  run.employeeName,
+                  activated.runId,
                 );
               }
               setActiveRuns((prev) =>
@@ -336,7 +363,7 @@ export function RoomChat({
               runId: run.runId,
               error: message,
             });
-            orchestrationUi.updateEmployeePhase(run.employeeId, "failed", message);
+            orchestrationUi.updateEmployeePhase(run.employeeId, "failed", message, undefined, run.runId);
             setActiveRuns((prev) =>
               prev.map((r) =>
                 r.runId === run.runId ? { ...r, phase: "failed", error: message } : r,
@@ -429,6 +456,12 @@ export function RoomChat({
       { runId: run.runId, employeeId: run.employeeId, employeeName: run.employeeName },
     ]);
   };
+
+  useEffect(() => {
+    orchestrationUi.registerRetryHandler((runId, employeeId, employeeName) => {
+      retryRun({ runId, employeeId, employeeName, phase: "failed" });
+    });
+  }, [orchestrationUi, processQueuedRuns]);
 
   const sendViaServer = async (
     text: string,
@@ -538,6 +571,7 @@ export function RoomChat({
 
       const employeeNames = new Map(roomEmployees.map((e) => [e.id, e.name]));
       orchestrationUi.setOrchestrationFromSend({
+        orchestrationId: payload.orchestrationId ?? null,
         triggerMessageId: payload.humanMessage?.id ?? messageId,
         orchestrationPlan: payload.orchestrationPlan ?? null,
         collaborationPlan: payload.collaborationPlan ?? null,
