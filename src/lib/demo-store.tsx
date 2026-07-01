@@ -35,7 +35,7 @@ import {
 import { getEmailRedirectUrl, setAuthNextPath } from "@/lib/auth/callback-session";
 import { isEmailConfirmed } from "@/lib/auth/session";
 import { mayaWelcomeMessage } from "@/lib/hiring/maya";
-import { isMayaEmployee, isSystemEmployee, mergeMayaIntoState, mayaEmployeeStatus, buildMayaDmRoom, ensureMayaDmTopicsInState, dedupeMayaDmRooms } from "@/lib/maya-employee";
+import { isMayaEmployee, isSystemEmployee, mergeMayaIntoState, mayaEmployeeStatus, buildMayaDmRoom, ensureMayaDmTopicsInState, dedupeMayaDmRooms, mergeEmployeesById } from "@/lib/maya-employee";
 import { isGroupChannel } from "@/lib/rooms";
 import { nowISO, uid } from "./utils";
 import { SUPABASE_WORKSPACE_TABLES } from "./supabase/config";
@@ -233,6 +233,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       const merged = mergeMayaIntoState(
         {
           ...loaded,
+          employees: mergeEmployeesById(previous.employees, loaded.employees),
           settings: previous.settings ?? loaded.settings,
         },
         loaded.user?.id,

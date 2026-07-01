@@ -56,6 +56,24 @@ export function effectiveEmployeeStatus(
   return isMayaEmployee(employee) ? mayaEmployeeStatus() : employee.status;
 }
 
+export function channelAssignableEmployees(employees: AIEmployee[]): AIEmployee[] {
+  return employees.filter((employee) => {
+    if (isMayaEmployee(employee)) return false;
+    if (isSystemEmployee(employee)) return false;
+    if (employee.metadata?.canBeAssignedToChannels === false) return false;
+    if (employee.metadata?.dmOnly) return false;
+    return true;
+  });
+}
+
+export function mergeEmployeesById(local: AIEmployee[], remote: AIEmployee[]): AIEmployee[] {
+  const merged = new Map(remote.map((employee) => [employee.id, employee]));
+  for (const employee of local) {
+    if (!merged.has(employee.id)) merged.set(employee.id, employee);
+  }
+  return Array.from(merged.values()).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+}
+
 export function partitionWorkforce(employees: AIEmployee[]) {
   const maya = employees.filter(isMayaEmployee);
   const hired = employees.filter((e) => !isSystemEmployee(e));

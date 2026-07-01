@@ -10,13 +10,15 @@ import { Hash, Plus } from "lucide-react";
 export function NewTopicModal({
   open,
   onClose,
-  roomEmployees,
+  assignableEmployees,
+  roomMemberIds,
   onCreate,
   busy,
 }: {
   open: boolean;
   onClose: () => void;
-  roomEmployees: AIEmployee[];
+  assignableEmployees: AIEmployee[];
+  roomMemberIds: string[];
   onCreate: (payload: {
     title: string;
     description: string;
@@ -35,11 +37,13 @@ export function NewTopicModal({
 
   const template = TOPIC_TEMPLATES.find((t) => t.id === templateId);
 
+  const roomMemberIdSet = useMemo(() => new Set(roomMemberIds), [roomMemberIds]);
+
   const suggestedEmployees = useMemo(() => {
     if (!template?.suggestedRoles.length) return [];
     const roles = template.suggestedRoles as readonly string[];
-    return roomEmployees.filter((e) => roles.includes(e.roleKey));
-  }, [template, roomEmployees]);
+    return assignableEmployees.filter((e) => roles.includes(e.roleKey));
+  }, [template, assignableEmployees]);
 
   const applyTemplate = (id: string) => {
     setTemplateId(id);
@@ -47,7 +51,7 @@ export function NewTopicModal({
     if (!tpl || id === "custom") return;
     setTitle(tpl.label);
     setDescription(tpl.description);
-    const ids = roomEmployees
+    const ids = assignableEmployees
       .filter((e) => (tpl.suggestedRoles as readonly string[]).includes(e.roleKey))
       .map((e) => e.id);
     setSelectedEmployees(ids);
@@ -130,7 +134,7 @@ export function NewTopicModal({
           </select>
         </label>
 
-        {roomEmployees.length > 0 && (
+        {assignableEmployees.length > 0 && (
           <div className="space-y-1.5">
             <span className="text-xs font-medium text-slate-500">Assign AI employees</span>
             {suggestedEmployees.length > 0 && selectedEmployees.length === 0 && (
@@ -139,21 +143,29 @@ export function NewTopicModal({
               </p>
             )}
             <div className="space-y-1">
-              {roomEmployees.map((e) => (
-                <button
-                  key={e.id}
-                  type="button"
-                  onClick={() => toggleEmployee(e.id)}
-                  className={`flex w-full items-center gap-2.5 rounded-xl border p-2 text-left transition-colors ${
-                    selectedEmployees.includes(e.id)
-                      ? "border-accent-500/40 bg-accent-500/10"
-                      : "border-slate-200 bg-slate-50 hover:bg-slate-100"
-                  }`}
-                >
-                  <EmployeeAvatar employee={e} size="xs" showStatus={false} />
-                  <span className="text-sm text-slate-800">{e.name}</span>
-                </button>
-              ))}
+              {assignableEmployees.map((e) => {
+                const inChannel = roomMemberIdSet.has(e.id);
+                return (
+                  <button
+                    key={e.id}
+                    type="button"
+                    onClick={() => toggleEmployee(e.id)}
+                    className={`flex w-full items-center gap-2.5 rounded-xl border p-2 text-left transition-colors ${
+                      selectedEmployees.includes(e.id)
+                        ? "border-accent-500/40 bg-accent-500/10"
+                        : "border-slate-200 bg-slate-50 hover:bg-slate-100"
+                    }`}
+                  >
+                    <EmployeeAvatar employee={e} size="xs" showStatus={false} />
+                    <div className="min-w-0 flex-1">
+                      <span className="text-sm text-slate-800">{e.name}</span>
+                      {!inChannel && (
+                        <span className="ml-2 text-[10px] text-slate-500">Will join channel</span>
+                      )}
+                    </div>
+                  </button>
+                );
+              })}
             </div>
           </div>
         )}

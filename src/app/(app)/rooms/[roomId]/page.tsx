@@ -12,7 +12,7 @@ import { Button } from "@/components/ui";
 import { EmptyState } from "@/components/States";
 import { authHeaders } from "@/lib/api/auth-client";
 import { generalTopicForRoom, isGeneralTopic, topicsForRoom } from "@/lib/topics";
-import { isMayaEmployee } from "@/lib/maya-employee";
+import { channelAssignableEmployees, isMayaEmployee } from "@/lib/maya-employee";
 import type { AiParticipationMode, TopicPriority } from "@/lib/types";
 import type { SlashCommandResult } from "@/components/ChatComposer";
 import {
@@ -55,6 +55,10 @@ export default function RoomDetailPage() {
     () => (room ? room.aiEmployees.map((id) => state.employees.find((e) => e.id === id)).filter(Boolean) : []),
     [room, state.employees],
   );
+  const assignableEmployees = useMemo(
+    () => channelAssignableEmployees(state.employees),
+    [state.employees],
+  );
   const isMayaDm = Boolean(
     isDm && roomEmployees[0] && isMayaEmployee(roomEmployees[0]),
   );
@@ -93,6 +97,15 @@ export default function RoomDetailPage() {
     aiEmployeeIds: string[];
     starterMessage?: string;
   }) => {
+    for (const employeeId of payload.aiEmployeeIds) {
+      if (!room?.aiEmployees.includes(employeeId)) {
+        actions.addEmployeeToRoom(roomId, employeeId);
+      }
+    }
+    if (backend === "supabase") {
+      await actions.flushRemote();
+    }
+
     if (backend === "supabase") {
       setCreatingTopic(true);
       try {
@@ -432,7 +445,8 @@ export default function RoomDetailPage() {
       <NewTopicModal
         open={newTopicOpen}
         onClose={() => setNewTopicOpen(false)}
-        roomEmployees={roomEmployees.filter((e): e is NonNullable<typeof e> => !!e)}
+        assignableEmployees={assignableEmployees}
+        roomMemberIds={room?.aiEmployees ?? []}
         onCreate={createTopic}
         busy={creatingTopic}
       />

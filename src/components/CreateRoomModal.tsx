@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button, Modal, ModalHeader } from "./ui";
 import { useStore } from "@/lib/demo-store";
+import { channelAssignableEmployees } from "@/lib/maya-employee";
 import { EmployeeAvatar } from "./EmployeeAvatar";
 import { cn } from "@/lib/utils";
 import { Check, Hash } from "lucide-react";
@@ -24,6 +25,7 @@ export function CreateRoomModal({
   const [brief, setBrief] = useState("");
   const [accent, setAccent] = useState(ACCENTS[0]);
   const [selected, setSelected] = useState<string[]>([]);
+  const assignableEmployees = channelAssignableEmployees(state.employees);
 
   const reset = () => {
     setName("");
@@ -114,7 +116,12 @@ export function CreateRoomModal({
             Add AI employees ({selected.length})
           </span>
           <div className="grid gap-2 sm:grid-cols-2">
-            {state.employees.map((e) => {
+            {assignableEmployees.length === 0 ? (
+              <p className="sm:col-span-2 rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
+                Hire an AI employee first, then add them to this channel.
+              </p>
+            ) : (
+              assignableEmployees.map((e) => {
               const on = selected.includes(e.id);
               return (
                 <button
@@ -137,7 +144,8 @@ export function CreateRoomModal({
                   )}
                 </button>
               );
-            })}
+            })
+            )}
           </div>
         </div>
       </div>
