@@ -11,14 +11,12 @@ export function NewTopicModal({
   open,
   onClose,
   assignableEmployees,
-  roomMemberIds,
   onCreate,
   busy,
 }: {
   open: boolean;
   onClose: () => void;
   assignableEmployees: AIEmployee[];
-  roomMemberIds: string[];
   onCreate: (payload: {
     title: string;
     description: string;
@@ -36,8 +34,6 @@ export function NewTopicModal({
   const [selectedEmployees, setSelectedEmployees] = useState<string[]>([]);
 
   const template = TOPIC_TEMPLATES.find((t) => t.id === templateId);
-
-  const roomMemberIdSet = useMemo(() => new Set(roomMemberIds), [roomMemberIds]);
 
   const suggestedEmployees = useMemo(() => {
     if (!template?.suggestedRoles.length) return [];
@@ -143,29 +139,21 @@ export function NewTopicModal({
               </p>
             )}
             <div className="space-y-1">
-              {assignableEmployees.map((e) => {
-                const inChannel = roomMemberIdSet.has(e.id);
-                return (
-                  <button
-                    key={e.id}
-                    type="button"
-                    onClick={() => toggleEmployee(e.id)}
-                    className={`flex w-full items-center gap-2.5 rounded-xl border p-2 text-left transition-colors ${
-                      selectedEmployees.includes(e.id)
-                        ? "border-accent-500/40 bg-accent-500/10"
-                        : "border-slate-200 bg-slate-50 hover:bg-slate-100"
-                    }`}
-                  >
-                    <EmployeeAvatar employee={e} size="xs" showStatus={false} />
-                    <div className="min-w-0 flex-1">
-                      <span className="text-sm text-slate-800">{e.name}</span>
-                      {!inChannel && (
-                        <span className="ml-2 text-[10px] text-slate-500">Will join channel</span>
-                      )}
-                    </div>
-                  </button>
-                );
-              })}
+              {assignableEmployees.map((e) => (
+                <button
+                  key={e.id}
+                  type="button"
+                  onClick={() => toggleEmployee(e.id)}
+                  className={`flex w-full items-center gap-2.5 rounded-xl border p-2 text-left transition-colors ${
+                    selectedEmployees.includes(e.id)
+                      ? "border-accent-500/40 bg-accent-500/10"
+                      : "border-slate-200 bg-slate-50 hover:bg-slate-100"
+                  }`}
+                >
+                  <EmployeeAvatar employee={e} size="xs" showStatus={false} />
+                  <span className="text-sm text-slate-800">{e.name}</span>
+                </button>
+              ))}
             </div>
           </div>
         )}

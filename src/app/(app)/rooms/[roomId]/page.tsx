@@ -496,7 +496,6 @@ export default function RoomDetailPage() {
         open={newTopicOpen}
         onClose={() => setNewTopicOpen(false)}
         assignableEmployees={assignableEmployees}
-        roomMemberIds={room?.aiEmployees ?? []}
         onCreate={createTopic}
         busy={creatingTopic}
       />
