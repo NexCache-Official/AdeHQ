@@ -30,6 +30,7 @@ export default function RoomDetailPage() {
   const roomId = params.roomId as string;
   const { state, actions, backend } = useStore();
   const [newTopicOpen, setNewTopicOpen] = useState(false);
+  const [topicCreateError, setTopicCreateError] = useState<string | null>(null);
   const [summarizing, setSummarizing] = useState(false);
   const [creatingTopic, setCreatingTopic] = useState(false);
   const [composerDraft, setComposerDraft] = useState("");
@@ -97,18 +98,16 @@ export default function RoomDetailPage() {
     aiEmployeeIds: string[];
     starterMessage?: string;
   }) => {
-    for (const employeeId of payload.aiEmployeeIds) {
-      if (!room?.aiEmployees.includes(employeeId)) {
-        actions.addEmployeeToRoom(roomId, employeeId);
+    setTopicCreateError(null);
+    setCreatingTopic(true);
+    try {
+      for (const employeeId of payload.aiEmployeeIds) {
+        if (!room?.aiEmployees.includes(employeeId)) {
+          actions.addEmployeeToRoom(roomId, employeeId);
+        }
       }
-    }
-    if (backend === "supabase") {
-      await actions.flushRemote();
-    }
 
-    if (backend === "supabase") {
-      setCreatingTopic(true);
-      try {
+      if (backend === "supabase") {
         const headers = await authHeaders();
         const response = await fetch(`/api/rooms/${roomId}/topics`, {
           method: "POST",
@@ -123,35 +122,42 @@ export default function RoomDetailPage() {
         actions.upsertTopic(topic);
         selectTopic(topic.id);
         await actions.refreshTopics(roomId);
-      } finally {
-        setCreatingTopic(false);
+        void actions.flushRemote();
+        setNewTopicOpen(false);
+        return;
       }
-      return;
-    }
 
-    const topicId = `topic-${Date.now()}`;
-    const now = new Date().toISOString();
-    actions.upsertTopic({
-      id: topicId,
-      workspaceId: state.workspace.id,
-      roomId,
-      title: payload.title,
-      description: payload.description,
-      status: "active",
-      priority: payload.priority,
-      createdByType: "human",
-      createdById: state.user?.id,
-      lastActivityAt: now,
-      messageCount: 0,
-      taskCount: 0,
-      openTaskCount: 0,
-      memoryCount: 0,
-      approvalCount: 0,
-      agentRunCount: 0,
-      createdAt: now,
-      updatedAt: now,
-    });
-    selectTopic(topicId);
+      const topicId = `topic-${Date.now()}`;
+      const now = new Date().toISOString();
+      actions.upsertTopic({
+        id: topicId,
+        workspaceId: state.workspace.id,
+        roomId,
+        title: payload.title,
+        description: payload.description,
+        status: "active",
+        priority: payload.priority,
+        createdByType: "human",
+        createdById: state.user?.id,
+        lastActivityAt: now,
+        messageCount: 0,
+        taskCount: 0,
+        openTaskCount: 0,
+        memoryCount: 0,
+        approvalCount: 0,
+        agentRunCount: 0,
+        createdAt: now,
+        updatedAt: now,
+      });
+      selectTopic(topicId);
+      setNewTopicOpen(false);
+    } catch (e) {
+      const message = e instanceof Error ? e.message : "Failed to create topic";
+      setTopicCreateError(message);
+      throw e;
+    } finally {
+      setCreatingTopic(false);
+    }
   };
 
   const summarizeTopic = async () => {
@@ -494,10 +500,14 @@ export default function RoomDetailPage() {
 
       <NewTopicModal
         open={newTopicOpen}
-        onClose={() => setNewTopicOpen(false)}
+        onClose={() => {
+          setNewTopicOpen(false);
+          setTopicCreateError(null);
+        }}
         assignableEmployees={assignableEmployees}
         onCreate={createTopic}
         busy={creatingTopic}
+        error={topicCreateError}
       />
     </div>
   );

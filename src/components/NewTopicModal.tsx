@@ -13,6 +13,7 @@ export function NewTopicModal({
   assignableEmployees,
   onCreate,
   busy,
+  error,
 }: {
   open: boolean;
   onClose: () => void;
@@ -25,6 +26,7 @@ export function NewTopicModal({
     starterMessage?: string;
   }) => Promise<void>;
   busy?: boolean;
+  error?: string | null;
 }) {
   const [templateId, setTemplateId] = useState("custom");
   const [title, setTitle] = useState("");
@@ -60,26 +62,35 @@ export function NewTopicModal({
   };
 
   const submit = async () => {
-    if (!title.trim()) return;
-    await onCreate({
-      title: title.trim(),
-      description: description.trim(),
-      priority,
-      aiEmployeeIds: selectedEmployees,
-      starterMessage: starterMessage.trim() || undefined,
-    });
-    setTitle("");
-    setDescription("");
-    setStarterMessage("");
-    setSelectedEmployees([]);
-    setTemplateId("custom");
-    onClose();
+    if (!title.trim() || busy) return;
+    try {
+      await onCreate({
+        title: title.trim(),
+        description: description.trim(),
+        priority,
+        aiEmployeeIds: selectedEmployees,
+        starterMessage: starterMessage.trim() || undefined,
+      });
+      setTitle("");
+      setDescription("");
+      setStarterMessage("");
+      setSelectedEmployees([]);
+      setTemplateId("custom");
+      onClose();
+    } catch {
+      // Parent surfaces the error message; keep the modal open for edits.
+    }
   };
 
   return (
     <Modal open={open} onClose={onClose} size="md">
       <ModalHeader title="New topic" onClose={onClose} icon={<Hash className="h-5 w-5" />} />
       <div className="max-h-[70vh] space-y-4 overflow-y-auto p-5">
+        {error && (
+          <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+            {error}
+          </p>
+        )}
         <label className="block space-y-1.5">
           <span className="text-xs font-medium text-slate-500">Template</span>
           <select
@@ -169,11 +180,11 @@ export function NewTopicModal({
         </label>
       </div>
       <div className="flex justify-end gap-2 border-t border-slate-200 px-5 py-4">
-        <Button variant="ghost" onClick={onClose}>
+        <Button type="button" variant="ghost" onClick={onClose} disabled={busy}>
           Cancel
         </Button>
-        <Button onClick={submit} disabled={!title.trim() || busy}>
-          <Plus className="h-4 w-4" /> Create topic
+        <Button type="button" onClick={submit} disabled={!title.trim() || busy}>
+          <Plus className="h-4 w-4" /> {busy ? "Creating…" : "Create topic"}
         </Button>
       </div>
     </Modal>
