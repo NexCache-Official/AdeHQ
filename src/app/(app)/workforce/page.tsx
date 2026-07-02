@@ -11,15 +11,15 @@ import { avatarGradient, initials } from "@/lib/utils";
 import { Bot, Plus, Sparkles, UserPlus } from "lucide-react";
 
 const DEPARTMENTS = [
-  { name: "Sales", color: "#E85D2C" },
-  { name: "Research", color: "#3B82F6" },
+  { name: "Sales", color: "#2F6FED" },
+  { name: "Research", color: "#0EA5E9" },
   { name: "Ops", color: "#8B5CF6" },
   { name: "Support", color: "#10B981" },
 ];
 
 const PIPELINE = [
-  { role: "Outbound SDR", stage: "Interviewing candidates", pct: 65, accent: "#E85D2C" },
-  { role: "Competitive Intel", stage: "Defining scope", pct: 30, accent: "#3B82F6" },
+  { role: "Outbound SDR", stage: "Interviewing candidates", pct: 65, accent: "#2F6FED" },
+  { role: "Competitive Intel", stage: "Defining scope", pct: 30, accent: "#0EA5E9" },
 ];
 
 const RECOMMENDATIONS = [
@@ -75,7 +75,7 @@ export default function WorkforcePage() {
           <button
             type="button"
             onClick={ui.openHire}
-            className="flex items-center gap-1.5 rounded-xl bg-accent px-4 py-2.5 text-[13px] font-semibold text-white shadow-[0_4px_14px_-6px_rgba(232,93,44,0.5)] transition-all hover:brightness-105"
+            className="flex items-center gap-1.5 rounded-xl bg-accent px-4 py-2.5 text-[13px] font-semibold text-white shadow-[0_4px_14px_-6px_rgba(47,111,237,0.5)] transition-all hover:brightness-105"
           >
             <UserPlus className="h-4 w-4" strokeWidth={2} />
             Hire AI Employee

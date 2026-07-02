@@ -28,7 +28,7 @@ const PROVIDERS: { id: ProviderId; name: string; desc: string; accent: string }[
   { id: "gemini", name: "Google Gemini", desc: "Multimodal models — coming soon.", accent: "#4285f4" },
   { id: "perplexity", name: "Perplexity", desc: "Answer engine — coming soon.", accent: "#22d3ee" },
   ...(ENABLE_DEMO_MODE
-    ? [{ id: "mock" as ProviderId, name: "Local / Mock Mode", desc: "Scripted responses for local demo only.", accent: "#f97316" }]
+    ? [{ id: "mock" as ProviderId, name: "Local / Mock Mode", desc: "Scripted responses for local demo only.", accent: "#2f6fed" }]
     : []),
 ];
 

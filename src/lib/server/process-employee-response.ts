@@ -11,6 +11,12 @@ import {
 import { appendRunStep } from "@/lib/supabase/ai-runtime";
 import type { EmployeeResponse } from "@/lib/types";
 import { persistEmployeeEffects, type RoomContext } from "@/lib/server/room-messages";
+import {
+  buildFileContextPrompt,
+  detectArtifactIntent,
+  loadAttachmentFileIds,
+  retrieveFileContext,
+} from "@/lib/server/file-context";
 
 export type ProcessEmployeeOptions = {
   mode?: "mock" | "live";
@@ -41,6 +47,16 @@ export async function processEmployeeResponse(
     .eq("id", employeeId);
 
   const topicId = ctx.topic.id;
+  const attachmentFileIds = options.triggerMessageId
+    ? await loadAttachmentFileIds(client, ctx.workspaceId, options.triggerMessageId)
+    : [];
+  const artifactIntent = detectArtifactIntent(content);
+  const fileContextBundle = await retrieveFileContext(client, ctx.workspaceId, topicId, {
+    userMessage: content,
+    priorityFileIds: attachmentFileIds,
+  });
+  const fileContextPrompt = buildFileContextPrompt(fileContextBundle);
+  const usedFileContext = fileContextBundle.chunks.length > 0;
 
   const roomWithMessages = {
     ...ctx.room,
@@ -145,6 +161,8 @@ export async function processEmployeeResponse(
         priority: t.priority,
       })),
       humanParticipants: ctx.humanParticipants,
+      fileContextPrompt: fileContextPrompt || undefined,
+      artifactIntent,
     },
     {
       mode: options.mode,
@@ -214,6 +232,10 @@ export async function processEmployeeResponse(
     effect,
     options.triggerMessageId,
     runId,
+    {
+      fileContext: fileContextBundle,
+      usedFileContext,
+    },
   );
 
   if (isLive && runId && usageId && !options.skipCostGuard) {

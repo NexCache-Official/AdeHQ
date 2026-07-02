@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { AIEmployee, MentionRef } from "@/lib/types";
+import { AIEmployee, MentionRef, SavedArtifactType } from "@/lib/types";
 import { STATUS_META } from "@/lib/icons";
 import { cn } from "@/lib/utils";
 import { EmployeeAvatar } from "./EmployeeAvatar";
@@ -71,10 +71,11 @@ const SLASH_COMMANDS: SlashCommand[] = [
   { cmd: "/task", label: "Create task from message", example: "/task ", implemented: true },
   { cmd: "/memory", label: "Save note to memory", example: "/memory ", implemented: true },
   { cmd: "/summarize", label: "Summarize current topic", example: "/summarize", implemented: true },
-  { cmd: "/prd", label: "Generate PRD artifact", example: "/prd ", implemented: false, notice: "PRD artifacts arrive in V19.6.2." },
-  { cmd: "/report", label: "Generate report artifact", example: "/report ", implemented: false, notice: "Report artifacts arrive in V19.6.2." },
-  { cmd: "/brief", label: "Generate brief artifact", example: "/brief ", implemented: false, notice: "Brief artifacts arrive in V19.6.2." },
-  { cmd: "/proposal", label: "Generate proposal artifact", example: "/proposal ", implemented: false, notice: "Proposal artifacts arrive in V19.6.2." },
+  { cmd: "/prd", label: "Generate PRD artifact", example: "/prd ", implemented: true },
+  { cmd: "/report", label: "Generate report artifact", example: "/report ", implemented: true },
+  { cmd: "/brief", label: "Generate brief artifact", example: "/brief ", implemented: true },
+  { cmd: "/proposal", label: "Generate proposal artifact", example: "/proposal ", implemented: true },
+  { cmd: "/checklist", label: "Generate checklist artifact", example: "/checklist ", implemented: true },
   { cmd: "/decision", label: "Capture decision", example: "/memory Decision: ", implemented: true },
   { cmd: "/help", label: "Ask Maya / show help", example: "/help", implemented: true },
   { cmd: "/summary", label: "Summarize current topic", example: "/summary", implemented: true },
@@ -86,7 +87,7 @@ const SLASH_COMMANDS: SlashCommand[] = [
 const PLUS_ACTIONS = [
   { id: "upload", label: "Upload file", icon: Paperclip, implemented: true },
   { id: "task", label: "Create task", icon: CheckSquare, implemented: true, insert: "/task " },
-  { id: "artifact", label: "Generate artifact", icon: FileText, implemented: false },
+  { id: "artifact", label: "Generate artifact", icon: FileText, implemented: true, insert: "/report " },
   { id: "memory", label: "Save memory", icon: Save, implemented: true, insert: "/memory " },
   { id: "maya", label: "Ask Maya", icon: Sparkles, implemented: true, insert: "@Maya " },
   { id: "decision", label: "Create decision", icon: MessageSquarePlus, implemented: true, insert: "/memory Decision: " },
@@ -102,6 +103,16 @@ export type SlashCommandResult =
   | { type: "archive" }
   | { type: "assign"; employeeId: string; employeeName: string }
   | { type: "send"; text: string };
+
+const ARTIFACT_SLASH = /^\/(prd|report|brief|proposal|checklist)\b/i;
+
+const ARTIFACT_LABELS: Record<string, string> = {
+  prd: "Generate PRD",
+  report: "Generate report",
+  brief: "Generate brief",
+  proposal: "Generate proposal",
+  checklist: "Generate checklist",
+};
 
 function parseSlashCommand(text: string, employees: AIEmployee[]): SlashCommandResult | null {
   const trimmed = text.trim();
@@ -159,15 +170,26 @@ export function ChatComposer({
   draftText,
   onDraftConsumed,
   onSlashCommand,
+  contextFiles,
+  artifactIntent,
+  onContextConsumed,
 }: {
   employees: AIEmployee[];
-  onSend: (text: string, mentionsJson?: MentionRef[], attachmentFileIds?: string[]) => void | Promise<void>;
+  onSend: (
+    text: string,
+    mentionsJson?: MentionRef[],
+    attachmentFileIds?: string[],
+    contextFileIds?: string[],
+  ) => void | Promise<void>;
   onUploadFiles?: (files: File[]) => Promise<ComposerUploadedFile[]>;
   disabled?: boolean;
   placeholder?: string;
   draftText?: string;
   onDraftConsumed?: () => void;
   onSlashCommand?: (result: SlashCommandResult) => void | Promise<void>;
+  contextFiles?: Array<{ id: string; displayName: string }>;
+  artifactIntent?: { type: SavedArtifactType; label: string } | null;
+  onContextConsumed?: () => void;
 }) {
   const [value, setValue] = useState("");
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
@@ -414,12 +436,12 @@ export function ChatComposer({
     }
 
     const command = text.startsWith("/") ? SLASH_COMMANDS.find((item) => text.toLowerCase().startsWith(item.cmd)) : null;
-    if (command && !command.implemented) {
+    if (command && !command.implemented && !ARTIFACT_SLASH.test(text)) {
       setCommandNotice(command.notice ?? "That action arrives later in Phase 3.");
       return;
     }
 
-    const slash = parseSlashCommand(text, employees);
+    const slash = ARTIFACT_SLASH.test(text) ? null : parseSlashCommand(text, employees);
     if (slash && onSlashCommand) {
       if (slash.type !== "help") {
         setValue("");
@@ -430,7 +452,7 @@ export function ChatComposer({
         await onSlashCommand(slash);
         return;
       }
-      setCommandNotice("Commands: /task /memory /summarize /ask /archive /assign. Artifact commands unlock in V19.6.2.");
+      setCommandNotice("Commands: /task /memory /summarize /prd /report /brief /proposal /checklist /ask /archive /assign.");
       setShowCommands(true);
       return;
     }
@@ -449,6 +471,7 @@ export function ChatComposer({
         sendText,
         trackedMentions.length ? trackedMentions : undefined,
         readyAttachmentIds.length ? readyAttachmentIds : undefined,
+        contextFiles?.length ? contextFiles.map((file) => file.id) : undefined,
       );
       setValue("");
       setMentionQuery(null);
@@ -456,6 +479,7 @@ export function ChatComposer({
       setTrackedMentions([]);
       setAttachments((prev) => prev.filter((attachment) => attachment.status === "failed"));
       setCommandNotice(null);
+      onContextConsumed?.();
     } finally {
       setSending(false);
     }
@@ -765,6 +789,26 @@ export function ChatComposer({
           </div>
         )}
 
+        {(contextFiles?.length || artifactIntent) && (
+          <div className="mb-1 flex flex-wrap gap-1.5 px-1">
+            {artifactIntent && (
+              <span className="inline-flex items-center gap-1 rounded-full border border-violet-200 bg-violet-50 px-2 py-0.5 text-[11px] font-medium text-violet-700">
+                <FileText className="h-3 w-3" />
+                {artifactIntent.label}
+              </span>
+            )}
+            {contextFiles?.map((file) => (
+              <span
+                key={file.id}
+                className="inline-flex items-center gap-1 rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-[11px] font-medium text-sky-700"
+              >
+                <Paperclip className="h-3 w-3" />
+                {file.displayName}
+              </span>
+            ))}
+          </div>
+        )}
+
         {trackedMentions.length > 0 && (
           <div className="mb-1 flex flex-wrap gap-1.5 px-1">
             {trackedMentions.map((mention) => (
@@ -874,7 +918,7 @@ export function ChatComposer({
               type="button"
               onClick={() => void send()}
               disabled={!canSend}
-              className="flex h-9 w-9 items-center justify-center rounded-[11px] bg-accent text-white shadow-[0_4px_12px_-5px_rgba(232,93,44,0.5)] transition-all hover:brightness-105 disabled:opacity-40 active:scale-95"
+              className="flex h-9 w-9 items-center justify-center rounded-[11px] bg-accent text-white shadow-[0_4px_12px_-5px_rgba(47,111,237,0.5)] transition-all hover:brightness-105 disabled:opacity-40 active:scale-95"
               aria-label="Send message"
             >
               {sending ? (

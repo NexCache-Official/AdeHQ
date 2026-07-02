@@ -28,6 +28,7 @@ import { isAiQueueingBlocked } from "@/lib/topic-ai-control";
 import { getAiParticipationMode, isHiringTopic, isSmartAssistMode } from "@/lib/topics";
 import { isMayaEmployee } from "@/lib/maya-employee";
 import { messageError } from "@/lib/server/message-errors";
+import { detectArtifactIntent } from "@/lib/server/file-context";
 import type { MentionRef, MessageArtifact } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -41,6 +42,7 @@ type MessageBody = {
   mentionsJson?: MentionRef[];
   slashCommand?: string;
   attachmentFileIds?: string[];
+  contextFileIds?: string[];
 };
 
 function displayNameFromUser(user: {
@@ -143,6 +145,9 @@ export async function POST(
     if (mentionsJson) humanMessage.mentionsJson = mentionsJson;
 
     const attachmentFileIds = [...new Set((body.attachmentFileIds ?? []).filter(Boolean))];
+    const contextFileIds = [...new Set((body.contextFileIds ?? []).filter(Boolean))];
+    const priorityFileIds = [...new Set([...attachmentFileIds, ...contextFileIds])];
+    const artifactIntent = detectArtifactIntent(trimmed);
     if (attachmentFileIds.length) {
       const { data: fileRows, error: fileError } = await client
         .from("workspace_files")
@@ -359,9 +364,23 @@ export async function POST(
     const decisions = orchestrationId
       ? rawDecisions.map((d) => ({
           ...d,
-          runMetadata: { ...d.runMetadata, orchestrationId },
+          runMetadata: {
+            ...d.runMetadata,
+            orchestrationId,
+            attachmentFileIds: priorityFileIds,
+            contextFileIds,
+            artifactIntent: artifactIntent ?? undefined,
+          },
         }))
-      : rawDecisions;
+      : rawDecisions.map((d) => ({
+          ...d,
+          runMetadata: {
+            ...d.runMetadata,
+            attachmentFileIds: priorityFileIds,
+            contextFileIds,
+            artifactIntent: artifactIntent ?? undefined,
+          },
+        }));
     const orchestratorDebug =
       process.env.NEXT_PUBLIC_ORCHESTRATION_DEBUG === "true" ||
       request.headers.get("X-AdeHQ-Debug") === "true"

@@ -37,6 +37,12 @@ import {
 import type { PersistedOrchestrationEmployeeStatus } from "@/lib/orchestration/types";
 import { serializeUnknownError } from "@/lib/server/message-errors";
 import { roomIdFromRow } from "@/lib/server/db-row";
+import {
+  buildFileContextPrompt,
+  detectArtifactIntent,
+  loadAttachmentFileIds,
+  retrieveFileContext,
+} from "@/lib/server/file-context";
 import { nowISO } from "@/lib/utils";
 
 async function persistRunOrchestrationPhase(
@@ -179,6 +185,24 @@ export async function processQueuedAgentRun(
       .maybeSingle();
 
     let content = options.content ?? (triggerMsg?.content ? String(triggerMsg.content) : "");
+
+    const attachmentFileIds = [
+      ...new Set([
+        ...((runMetadata.attachmentFileIds as string[] | undefined) ?? []),
+        ...((runMetadata.contextFileIds as string[] | undefined) ?? []),
+        ...(await loadAttachmentFileIds(client, workspaceId, triggerMessageId)),
+      ]),
+    ];
+    const artifactIntent =
+      (runMetadata.artifactIntent as { type: import("@/lib/types").SavedArtifactType; instruction?: string } | undefined) ??
+      detectArtifactIntent(content);
+
+    const fileContextBundle = await retrieveFileContext(client, workspaceId, topicId, {
+      userMessage: content,
+      priorityFileIds: attachmentFileIds,
+    });
+    const fileContextPrompt = buildFileContextPrompt(fileContextBundle);
+    const usedFileContext = fileContextBundle.chunks.length > 0;
 
     if (
       (collaborationRole === "collaborator" || collaborationRole === "panelist") &&
@@ -332,6 +356,8 @@ export async function processQueuedAgentRun(
           priority: t.priority,
         })),
         humanParticipants: ctx.humanParticipants,
+        fileContextPrompt: fileContextPrompt || undefined,
+        artifactIntent,
       },
       {
         mode: options.mode,
@@ -373,6 +399,10 @@ export async function processQueuedAgentRun(
       effect,
       triggerMessageId,
       runId,
+      {
+        fileContext: fileContextBundle,
+        usedFileContext,
+      },
     );
 
     const isDm = ctx.room.kind === "dm";
@@ -478,9 +508,11 @@ export async function processQueuedAgentRun(
           ? ("task_created" as const)
           : effect.approvals.length > 0
             ? ("approval_requested" as const)
-            : effect.memory.length > 0
+            : (effect.memorySuggestions ?? []).length > 0
               ? ("memory_suggested" as const)
-              : response.reply.trim().length > 80
+              : effect.memory.length > 0
+              ? ("memory_suggested" as const)
+              : (effect.artifacts ?? []).length > 0 || response.reply.trim().length > 80
                 ? ("meaningful_ai_reply" as const)
                 : null;
 

@@ -36,7 +36,7 @@ export default function DirectMessagesPage() {
         <button
           type="button"
           onClick={ui.openHire}
-          className="flex items-center gap-1.5 rounded-xl bg-accent px-4 py-2.5 text-[12.5px] font-semibold text-white shadow-[0_4px_14px_-6px_rgba(232,93,44,0.5)] transition-all hover:brightness-105"
+          className="flex items-center gap-1.5 rounded-xl bg-accent px-4 py-2.5 text-[12.5px] font-semibold text-white shadow-[0_4px_14px_-6px_rgba(47,111,237,0.5)] transition-all hover:brightness-105"
         >
           <UserPlus className="h-4 w-4" strokeWidth={2} />
           Hire AI Employee

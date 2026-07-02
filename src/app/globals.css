@@ -5,20 +5,27 @@
 :root {
   color-scheme: light;
 
-  /* AdeHQ V18 design tokens (from AdeHQ.dc.html) */
-  --rail: #1a1714;
-  --rail-2: #262119;
-  --canvas: #f6f3ee;
+  /* AdeHQ — Onyx Blue theme (from AdeHQ.dc.html) */
+  --rail: #000000;
+  --rail-2: #12151b;
+  --canvas: #ffffff;
   --surface: #ffffff;
-  --muted: #f0ede6;
-  --border: #e6e1d8;
-  --border-2: #efebe3;
-  --ink: #221f1a;
-  --ink-2: #6c685f;
-  --ink-3: #9b968b;
-  --accent: #e85d2c;
-  --accent-d: #ce4e22;
-  --accent-soft: #fbe9de;
+  --muted: #eef0f3;
+  --border: #e1e4ea;
+  --border-2: #ebedf1;
+  --ink: #0b0d12;
+  --ink-2: #535a66;
+  --ink-3: #868c99;
+  --accent: #2f6fed;
+  --accent-d: #2557c7;
+  --accent-soft: #e7effe;
+  --accent-2: #5fa0ff;
+  --accent-glow: rgba(47, 111, 237, 0.5);
+  --sel: rgba(47, 111, 237, 0.16);
+  --hero-grad: linear-gradient(135deg, #000000, #10141c 60%, #0b1830);
+  --hero-glow: rgba(47, 111, 237, 0.4);
+  --hero-glow2: rgba(34, 211, 238, 0.18);
+  --logo-grad: linear-gradient(140deg, #000000, #2f6fed);
   --green: #1ba672;
   --green-soft: #e3f4eb;
   --amber: #cb8a1b;
@@ -42,7 +49,7 @@ body {
 }
 
 ::selection {
-  background: rgba(232, 93, 44, 0.18);
+  background: var(--sel);
 }
 
 /* Scrollbars */
@@ -113,7 +120,7 @@ body {
     animation: fadeup 0.34s cubic-bezier(0.2, 0.7, 0.3, 1);
   }
   .hero-dark {
-    background: linear-gradient(135deg, #1f1b16 0%, #2c2419 60%, #3a2a1a 100%);
+    background: var(--hero-grad);
   }
   .ins-tab-active {
     @apply bg-accent-soft text-accent-d;
@@ -131,7 +138,7 @@ body {
     text-wrap: balance;
   }
   .bg-dots {
-    background-image: radial-gradient(rgba(156, 150, 139, 0.15) 1px, transparent 1px);
+    background-image: radial-gradient(rgba(134, 140, 153, 0.15) 1px, transparent 1px);
     background-size: 22px 22px;
   }
 }

@@ -35,7 +35,7 @@ import { cn } from "@/lib/utils";
 const STAGE_LABELS = ["Welcome", "Step 1 of 3", "Step 2 of 3", "Step 3 of 3", "Complete"] as const;
 const JOURNEY_LABELS = ["Welcome", "Define the work", "First room", "Meet Maya", "Launch"] as const;
 
-const CONFETTI_COLORS = ["var(--accent)", "#F2974E", "#22D3EE", "#1BA672", "#ffffff", "#9A6BCB"];
+const CONFETTI_COLORS = ["var(--accent)", "#5FA0FF", "#22D3EE", "#1BA672", "#ffffff", "#9A6BCB"];
 
 function Confetti() {
   return (
@@ -281,7 +281,7 @@ export function OnboardingFlow() {
         />
 
         <header className="relative z-[3] flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-[var(--accent)] to-[#F2974E] shadow-[0_8px_24px_-8px_rgba(232,93,44,.55)]">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-[var(--accent)] to-[var(--accent-2)] shadow-[0_8px_24px_-8px_rgba(47,111,237,.55)]">
             <Sparkles className="h-5 w-5 text-white" strokeWidth={2} />
           </div>
           <div className="flex flex-col gap-0.5">
@@ -319,7 +319,7 @@ export function OnboardingFlow() {
           </div>
           <div className="h-1 overflow-hidden rounded bg-muted">
             <div
-              className="h-full rounded bg-gradient-to-r from-[var(--accent)] to-[#F2974E] transition-[width] duration-500 ease-out"
+              className="h-full rounded bg-gradient-to-r from-[var(--accent)] to-[var(--accent-2)] transition-[width] duration-500 ease-out"
               style={{ width: `${progressPct}%` }}
             />
           </div>
@@ -359,7 +359,7 @@ export function OnboardingFlow() {
                 <button
                   type="button"
                   onClick={next}
-                  className="inline-flex items-center gap-2.5 self-start rounded-xl border-0 bg-[var(--accent)] px-[26px] py-3.5 text-[15.5px] font-semibold text-white shadow-[0_8px_24px_-8px_rgba(232,93,44,.55)] transition hover:brightness-105 active:translate-y-px"
+                  className="inline-flex items-center gap-2.5 self-start rounded-xl border-0 bg-[var(--accent)] px-[26px] py-3.5 text-[15.5px] font-semibold text-white shadow-[0_8px_24px_-8px_rgba(47,111,237,.55)] transition hover:brightness-105 active:translate-y-px"
                 >
                   Begin setup
                   <ArrowRight className="h-[18px] w-[18px]" />
@@ -612,7 +612,7 @@ export function OnboardingFlow() {
                   </p>
                   <div className="obd-fade-up flex w-full max-w-[520px] overflow-hidden rounded-2xl border border-border bg-surface text-left shadow-[0_12px_30px_-14px_rgba(40,34,24,0.22)]">
                     <div className="flex w-[52px] shrink-0 flex-col items-center gap-3.5 bg-[var(--rail)] py-3.5">
-                      <div className="h-[26px] w-[26px] rounded-lg bg-gradient-to-br from-[var(--accent)] to-[#F2974E]" />
+                      <div className="h-[26px] w-[26px] rounded-lg bg-gradient-to-br from-[var(--accent)] to-[var(--accent-2)]" />
                       <div className="h-[22px] w-[22px] rounded-md bg-white/14" />
                       <div className="h-[22px] w-[22px] rounded-md bg-white/8" />
                     </div>
@@ -676,7 +676,7 @@ export function OnboardingFlow() {
                 className={cn(
                   "inline-flex items-center gap-2 rounded-xl border-0 px-6 py-3.5 text-[14.5px] font-semibold transition",
                   canContinue && !busy
-                    ? "cursor-pointer bg-[var(--accent)] text-white shadow-[0_8px_24px_-8px_rgba(232,93,44,.55)] hover:brightness-105 active:translate-y-px"
+                    ? "cursor-pointer bg-[var(--accent)] text-white shadow-[0_8px_24px_-8px_rgba(47,111,237,.55)] hover:brightness-105 active:translate-y-px"
                     : "cursor-not-allowed bg-muted text-ink-3 shadow-none",
                 )}
               >
@@ -709,7 +709,7 @@ export function OnboardingFlow() {
               type="button"
               disabled={busy}
               onClick={() => void openMayaHiringJourney()}
-              className="inline-flex items-center gap-2.5 rounded-xl border-0 bg-[var(--accent)] px-[26px] py-3.5 text-[15px] font-semibold text-white shadow-[0_8px_24px_-8px_rgba(232,93,44,.55)] transition hover:brightness-105 active:translate-y-px disabled:opacity-70"
+              className="inline-flex items-center gap-2.5 rounded-xl border-0 bg-[var(--accent)] px-[26px] py-3.5 text-[15px] font-semibold text-white shadow-[0_8px_24px_-8px_rgba(47,111,237,.55)] transition hover:brightness-105 active:translate-y-px disabled:opacity-70"
             >
               {busy ? (
                 <Loader2 className="h-4 w-4 animate-spin" />

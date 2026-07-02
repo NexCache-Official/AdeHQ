@@ -41,12 +41,53 @@ export const EmailDraftEffectSchema = z.object({
   company: z.string().optional(),
 });
 
+export const CitationEffectSchema = z.object({
+  fileId: z.string(),
+  chunkId: z.string(),
+  label: z.string(),
+  quote: z.string().optional(),
+});
+
+export const ArtifactEffectSchema = z.object({
+  title: z.string(),
+  artifactType: z.enum([
+    "prd",
+    "report",
+    "brief",
+    "research_summary",
+    "meeting_notes",
+    "strategy_memo",
+    "email_draft",
+    "proposal",
+    "checklist",
+    "decision",
+    "note",
+    "other",
+  ]),
+  contentMarkdown: z.string(),
+  status: z.enum(["draft", "saved"]).optional(),
+  sourceFileIds: z.array(z.string()).optional(),
+  sourceChunkIds: z.array(z.string()).optional(),
+  sourceCitations: z.array(CitationEffectSchema).optional(),
+});
+
+export const MemorySuggestionEffectSchema = z.object({
+  text: z.string(),
+  reason: z.string().optional(),
+  sourceFileId: z.string().optional(),
+  sourceChunkId: z.string().optional(),
+  sourceArtifactId: z.string().optional(),
+});
+
 export const EmployeeEffectsSchema = z.object({
   workLog: z.array(WorkLogEffectSchema).default([]),
   tasks: z.array(TaskEffectSchema).default([]),
   memory: z.array(MemoryEffectSchema).default([]),
   approvals: z.array(ApprovalEffectSchema).default([]),
   emailDrafts: z.array(EmailDraftEffectSchema).default([]),
+  citations: z.array(CitationEffectSchema).default([]),
+  artifacts: z.array(ArtifactEffectSchema).default([]),
+  memorySuggestions: z.array(MemorySuggestionEffectSchema).default([]),
   statusChange: z.enum(["idle", "working", "waiting_approval", "on_call", "blocked"]).optional(),
   handoffTo: z.array(z.string()).optional(),
   currentTask: z.string().optional(),

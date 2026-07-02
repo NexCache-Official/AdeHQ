@@ -49,7 +49,7 @@ export type WorkstreamPreset = {
 
 const PRESETS: Record<WorkforceOutcomeId, WorkstreamPreset[]> = {
   launch_product: [
-    { id: "launch", name: "Launch Room", accent: "#e85d2c", topics: ["Product planning", "Market research", "Launch tasks"], suggestedHires: ["Product Manager", "Market Research Analyst", "Sales Development Representative"] },
+    { id: "launch", name: "Launch Room", accent: "#2f6fed", topics: ["Product planning", "Market research", "Launch tasks"], suggestedHires: ["Product Manager", "Market Research Analyst", "Sales Development Representative"] },
     { id: "product", name: "Product Planning", accent: "#8b5cf6", topics: ["Roadmap", "PRDs", "Prioritization"], suggestedHires: ["Product Manager", "UX Designer"] },
     { id: "research", name: "Market Research", accent: "#14b8a6", topics: ["Competitors", "Customer insights", "Positioning"], suggestedHires: ["Market Research Analyst", "Competitive Intelligence Analyst"] },
     { id: "sales", name: "Sales Outreach", accent: "#22c55e", topics: ["Outbound", "Pipeline", "Follow-ups"], suggestedHires: ["Sales Development Representative", "Account Executive"] },

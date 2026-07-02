@@ -68,10 +68,13 @@ function toEmployeeResponse(
       approvals: effects.approvals ?? [],
       emailDrafts: effects.emailDrafts ?? [],
       statusChange: effects.statusChange,
-      handoffTo: normalizeHandoff(effects.handoffTo),
-      currentTask: effects.currentTask,
-    },
-  };
+    handoffTo: normalizeHandoff(effects.handoffTo),
+    currentTask: effects.currentTask,
+    citations: effects.citations ?? [],
+    artifacts: effects.artifacts ?? [],
+    memorySuggestions: effects.memorySuggestions ?? [],
+  },
+};
 }
 
 function errorResponse(
@@ -202,6 +205,8 @@ export async function routeEmployeeResponse(
     roomEmployees: input.allEmployees.map((e) => ({ id: e.id, name: e.name, role: e.role })),
     humanParticipants: input.humanParticipants,
     userMessage: input.message,
+    fileContextPrompt: input.fileContextPrompt,
+    artifactIntent: input.artifactIntent,
   };
 
   if (provider === "mock" || options.mode === "mock") {

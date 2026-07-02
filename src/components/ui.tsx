@@ -141,7 +141,7 @@ export function Modal({
       {open && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <motion.div
-            className="absolute inset-0 bg-[#1a1714]/40 backdrop-blur-[3px]"
+            className="absolute inset-0 bg-[#0b0d12]/40 backdrop-blur-[3px]"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0, pointerEvents: "none" as const }}

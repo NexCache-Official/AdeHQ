@@ -124,6 +124,9 @@ export function RoomChat({
   draftText,
   onDraftConsumed,
   onSlashCommand,
+  contextFiles,
+  artifactIntent,
+  onContextConsumed,
   isDm = false,
   onSummarize,
   summarizing = false,
@@ -134,6 +137,9 @@ export function RoomChat({
   draftText?: string;
   onDraftConsumed?: () => void;
   onSlashCommand?: (result: SlashCommandResult) => void | Promise<void>;
+  contextFiles?: Array<{ id: string; displayName: string }>;
+  artifactIntent?: { type: import("@/lib/types").SavedArtifactType; label: string } | null;
+  onContextConsumed?: () => void;
   isDm?: boolean;
   onSummarize?: () => void;
   summarizing?: boolean;
@@ -605,6 +611,7 @@ export function RoomChat({
     clientMessageId?: string,
     mentionsJson?: import("@/lib/types").MentionRef[],
     attachmentFileIds?: string[],
+    contextFileIds?: string[],
   ) => {
     if (!topic || topic.status === "archived" || room.status === "archived") return;
     setFailedSend(null);
@@ -636,6 +643,7 @@ export function RoomChat({
         clientMessageId: messageId,
         mentionsJson,
         attachmentFileIds,
+        contextFileIds,
         mode: "live" as const,
       };
 
@@ -859,10 +867,11 @@ export function RoomChat({
     text: string,
     mentionsJson?: import("@/lib/types").MentionRef[],
     attachmentFileIds?: string[],
+    contextFileIds?: string[],
   ) => {
     if (!topic || topic.status === "archived" || room.status === "archived") return;
     if (useServerApi) {
-      await sendViaServer(text, undefined, mentionsJson, attachmentFileIds);
+      await sendViaServer(text, undefined, mentionsJson, attachmentFileIds, contextFileIds);
       return;
     }
     if (ENABLE_DEMO_MODE) {
@@ -1146,6 +1155,9 @@ export function RoomChat({
             draftText={draftText}
             onDraftConsumed={onDraftConsumed}
             onSlashCommand={onSlashCommand}
+            contextFiles={contextFiles}
+            artifactIntent={artifactIntent}
+            onContextConsumed={onContextConsumed}
           />
           {!chatDisabled && (
           <p className="px-1.5 pt-[7px] text-[11px] text-ink-3">

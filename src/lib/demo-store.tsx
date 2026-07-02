@@ -1062,7 +1062,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           tasks: room.tasks ?? [],
           memory: room.memory ?? [],
           unread: room.unread ?? 0,
-          accent: room.accent ?? "#f97316",
+          accent: room.accent ?? "#2f6fed",
           status: room.status ?? "active",
           createdAt: timestamp,
           updatedAt: timestamp,

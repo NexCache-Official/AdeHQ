@@ -23,7 +23,7 @@ export function OnboardingJourneyNav({ steps, progressLinePct }: OnboardingJourn
       <div className="relative">
         <div className="absolute bottom-[11px] left-[13px] top-[11px] w-0.5 rounded-sm bg-white/12" />
         <div
-          className="absolute left-[13px] top-[11px] w-0.5 rounded-sm bg-gradient-to-b from-[var(--accent)] to-[#F2974E] transition-[height] duration-500 ease-out"
+          className="absolute left-[13px] top-[11px] w-0.5 rounded-sm bg-gradient-to-b from-[var(--accent)] to-[var(--accent-2)] transition-[height] duration-500 ease-out"
           style={{ height: `${progressLinePct}%` }}
         />
         <div className="flex flex-col gap-px">

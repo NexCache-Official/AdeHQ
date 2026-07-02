@@ -2,8 +2,11 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type {
   AIEmployee,
   Approval,
+  ArtifactEffect,
   EmployeePermissions,
+  FileCitationEffect,
   MemoryEntry,
+  MemorySuggestionEffect,
   MentionRef,
   MessageArtifact,
   ProjectRoom,
@@ -20,6 +23,12 @@ import { ensureGeneralTopic, topicFromRow } from "@/lib/server/topic-helpers";
 import { fetchTopicSummary } from "@/lib/topic-summary/persistence";
 import { defaultModelModeForRole, normalizeModelMode } from "@/lib/ai/model-catalog";
 import { sanitizeReplyForChat } from "@/lib/ai/normalize-model-response";
+import {
+  artifactWorkLogAction,
+  insertWorkGraphEdge,
+  type FileContextBundle,
+  validateCitations,
+} from "@/lib/server/file-context";
 import { extractMentions, nowISO, uid } from "@/lib/utils";
 
 type DbRow = Record<string, unknown>;
@@ -59,7 +68,7 @@ function employeeFromRow(row: DbRow, tools: ToolAccess[]): AIEmployee {
     approvalsRequested: Number(row.approvals_requested ?? 0),
     avgResponseTime: String(row.avg_response_time ?? "-"),
     trustScore: Number(row.trust_score ?? 75),
-    accent: String(row.accent ?? "#f97316"),
+    accent: String(row.accent ?? "#2f6fed"),
     defaultRoomId: row.default_room_id ? String(row.default_room_id) : undefined,
     participationStyle: row.participation_style
       ? (String(row.participation_style) as AIEmployee["participationStyle"])
@@ -409,7 +418,7 @@ export async function loadTopicContext(
     tasks: openTasks.map((t) => t.id),
     memory: memory.map((m) => m.id),
     unread: Number(roomRow.unread ?? 0),
-    accent: String(roomRow.accent ?? "#f97316"),
+    accent: String(roomRow.accent ?? "#2f6fed"),
     createdAt: String(roomRow.created_at ?? nowISO()),
     updatedAt: String(roomRow.updated_at ?? nowISO()),
   };
@@ -527,17 +536,173 @@ export async function persistEmployeeEffects(
       recipient?: string;
       company?: string;
     }>;
+    citations?: FileCitationEffect[];
+    artifacts?: ArtifactEffect[];
+    memorySuggestions?: MemorySuggestionEffect[];
     statusChange?: AIEmployee["status"];
     currentTask?: string;
   },
   triggerMessageId?: string,
   agentRunId?: string,
+  options?: {
+    fileContext?: FileContextBundle | null;
+    usedFileContext?: boolean;
+  },
 ): Promise<{ aiMessage: RoomMessage; artifacts: MessageArtifact[] }> {
   reply = sanitizeReplyForChat(reply);
   const artifacts: MessageArtifact[] = [];
   const createdTaskIds: string[] = [];
   const createdMemoryIds: string[] = [];
   const createdApprovalIds: string[] = [];
+  const createdArtifactIds: string[] = [];
+
+  const validatedCitations =
+    options?.fileContext && effect.citations?.length
+      ? validateCitations(effect.citations, options.fileContext)
+      : [];
+
+  for (const citation of validatedCitations) {
+    artifacts.push({
+      type: "file",
+      id: citation.chunkId,
+      label: citation.label,
+      meta: {
+        fileId: citation.fileId,
+        chunkId: citation.chunkId,
+        fileName: citation.fileName,
+        locator: citation.locator,
+        quote: citation.quote,
+        fileStatus: "ready",
+      },
+    });
+  }
+
+  for (const draft of effect.artifacts ?? []) {
+    const artifactId = uid("art");
+    const sourceFileIds = [...new Set(draft.sourceFileIds ?? [])];
+    const sourceChunkIds = [...new Set(draft.sourceChunkIds ?? [])];
+    const sourceCitations = (draft.sourceCitations ?? validatedCitations).map((item) => ({
+      fileId: item.fileId,
+      chunkId: item.chunkId,
+      label: item.label,
+      quote: item.quote ?? null,
+      fileName: (item as FileCitationEffect & { fileName?: string }).fileName ?? null,
+      locator: (item as FileCitationEffect & { locator?: string }).locator ?? null,
+    }));
+
+    const { error: artifactError } = await client.from("artifacts").insert({
+      workspace_id: workspaceId,
+      id: artifactId,
+      room_id: roomId,
+      topic_id: topicId,
+      title: draft.title,
+      artifact_type: draft.artifactType,
+      status: draft.status ?? "saved",
+      content_markdown: draft.contentMarkdown,
+      content_json: {},
+      created_by_type: "ai",
+      created_by_id: employee.id,
+      source_file_ids: sourceFileIds,
+      source_message_ids: triggerMessageId ? [triggerMessageId] : [],
+      source_chunk_ids: sourceChunkIds,
+      source_citations: sourceCitations,
+    });
+    if (artifactError) throw artifactError;
+
+    await client.from("artifact_versions").insert({
+      artifact_id: artifactId,
+      version_number: 1,
+      content_markdown: draft.contentMarkdown,
+      content_json: {},
+      source_citations: sourceCitations,
+      created_by_type: "ai",
+      created_by_id: employee.id,
+    });
+
+    createdArtifactIds.push(artifactId);
+    artifacts.push({
+      type: "artifact",
+      id: artifactId,
+      label: draft.title,
+      meta: {
+        artifactType: draft.artifactType,
+        artifactStatus: draft.status ?? "saved",
+        createdByName: employee.name,
+        sourceCount: sourceFileIds.length + sourceChunkIds.length,
+      },
+    });
+
+    await insertWorkGraphEdge(client, {
+      workspaceId,
+      fromObjectType: "artifact",
+      fromObjectId: artifactId,
+      relationType: "created_from_message",
+      toObjectType: "message",
+      toObjectId: triggerMessageId ?? "",
+    }).catch(() => undefined);
+
+    for (const fileId of sourceFileIds) {
+      await insertWorkGraphEdge(client, {
+        workspaceId,
+        fromObjectType: "artifact",
+        fromObjectId: artifactId,
+        relationType: "sources_file",
+        toObjectType: "file",
+        toObjectId: fileId,
+      }).catch(() => undefined);
+    }
+
+    const action = artifactWorkLogAction(draft.artifactType);
+    const { error: artifactLogError } = await client.from("work_log_events").insert({
+      workspace_id: workspaceId,
+      id: uid("wl"),
+      room_id: roomId,
+      topic_id: topicId,
+      employee_id: employee.id,
+      action,
+      summary: `Generated ${draft.artifactType.replace(/_/g, " ")}: ${draft.title}`,
+      status: "success",
+      related_entity_type: "artifact",
+      related_entity_id: artifactId,
+      agent_run_id: agentRunId ?? null,
+      created_at: nowISO(),
+    });
+    if (artifactLogError) throw artifactLogError;
+  }
+
+  for (const [index, suggestion] of (effect.memorySuggestions ?? []).entries()) {
+    const suggestionKey = uid("mem-sug");
+    artifacts.push({
+      type: "memory_suggestion",
+      id: suggestionKey,
+      label: `Save to memory: ${suggestion.text.slice(0, 56)}${suggestion.text.length > 56 ? "…" : ""}`,
+      meta: {
+        memoryText: suggestion.text,
+        reason: suggestion.reason,
+        sourceFileId: suggestion.sourceFileId,
+        sourceChunkId: suggestion.sourceChunkId,
+        sourceArtifactId: suggestion.sourceArtifactId,
+        suggestionKey,
+        suggestionIndex: index,
+      },
+    });
+  }
+
+  if (options?.usedFileContext && !(effect.artifacts ?? []).length) {
+    const hasFileWorkLog = effect.workLog.some((entry) =>
+      ["answered_question_about_file", "generated_artifact"].includes(
+        String(entry.action ?? "").toLowerCase(),
+      ),
+    );
+    if (!hasFileWorkLog) {
+      effect.workLog.push({
+        action: "answered_question_about_file",
+        summary: "Answered using uploaded file context",
+        status: "success",
+        relatedEntityType: "file",
+      });
+    }
+  }
 
   for (const draft of effect.memory) {
     const entry: MemoryEntry = {
@@ -757,6 +922,26 @@ export async function persistEmployeeEffects(
     created_at: aiMessage.createdAt,
   });
   if (messageError) throw messageError;
+
+  for (const artifactId of createdArtifactIds) {
+    await client.from("message_attachments").insert({
+      workspace_id: workspaceId,
+      message_id: aiMessage.id,
+      artifact_id: artifactId,
+      attachment_type: "artifact",
+    });
+  }
+
+  if (triggerMessageId && (options?.usedFileContext || validatedCitations.length)) {
+    await insertWorkGraphEdge(client, {
+      workspaceId,
+      fromObjectType: "message",
+      fromObjectId: aiMessage.id,
+      relationType: "answers_with_files",
+      toObjectType: "message",
+      toObjectId: triggerMessageId,
+    }).catch(() => undefined);
+  }
 
   const nextStatus = effect.statusChange ?? "idle";
   const { error: employeeError } = await client

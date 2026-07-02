@@ -47,7 +47,7 @@ function CallsInner() {
   const startCall = () => {
     if (!room) return;
     const participants: CallParticipant[] = [
-      { id: state.user?.id ?? "user-shubham", type: "human", name: state.user?.name ?? "You", accent: "#f97316", speaking: false },
+      { id: state.user?.id ?? "user-shubham", type: "human", name: state.user?.name ?? "You", accent: "#2f6fed", speaking: false },
       ...roomEmployees
         .filter((e) => selected.includes(e.id))
         .map((e) => ({ id: e.id, type: "ai" as const, name: e.name, accent: e.accent, speaking: false })),

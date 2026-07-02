@@ -73,7 +73,7 @@ export default function HomePage() {
     <PageContainer wide className="pb-16">
       {/* Command center hero */}
       <div className="relative mb-[18px] overflow-hidden rounded-[22px] hero-dark p-8 text-white shadow-[0_20px_50px_-24px_rgba(40,30,15,0.5)] sm:p-8">
-        <div className="pointer-events-none absolute -right-16 -top-16 h-[280px] w-[280px] rounded-full bg-[radial-gradient(circle,rgba(232,93,44,0.42),transparent_70%)] blur-[20px]" />
+        <div className="pointer-events-none absolute -right-16 -top-16 h-[280px] w-[280px] rounded-full bg-[radial-gradient(circle,var(--hero-glow),transparent_70%)] blur-[20px]" />
         <div className="pointer-events-none absolute bottom-[-90px] right-[120px] h-[220px] w-[220px] rounded-full bg-[radial-gradient(circle,rgba(242,151,78,0.22),transparent_70%)] blur-[10px]" />
         <div className="relative">
           <div className="flex items-center gap-2 text-[12.5px] font-medium text-white/60">

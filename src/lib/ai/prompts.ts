@@ -1,4 +1,4 @@
-import type { AIEmployee, MemoryEntry, ProjectRoom, RoomMessage, RoomTopic, Workspace } from "@/lib/types";
+import type { AIEmployee, MemoryEntry, ProjectRoom, RoomMessage, RoomTopic, SavedArtifactType, Workspace } from "@/lib/types";
 import type { EmployeeRoleKey } from "@/lib/types";
 import { isMayaEmployee } from "@/lib/maya-employee";
 import type { TopicSummary } from "@/lib/topic-summary/types";
@@ -15,6 +15,8 @@ type PromptContext = {
   roomEmployees: { id: string; name: string; role: string }[];
   humanParticipants: { id: string; name: string }[];
   userMessage: string;
+  fileContextPrompt?: string;
+  artifactIntent?: { type: SavedArtifactType; instruction?: string } | null;
 };
 
 function formatTopicSummaryForPrompt(summary: TopicSummary): string {
@@ -45,6 +47,57 @@ function formatTopicSummaryForPrompt(summary: TopicSummary): string {
   ].filter(Boolean);
   const block = parts.join("\n");
   return block.length <= 2200 ? block : `${block.slice(0, 2199)}…`;
+}
+
+function artifactTypeInstructions(type: SavedArtifactType): string {
+  switch (type) {
+    case "prd":
+      return `PRD structure: Overview, Problem, Goals, Users, Requirements, User stories, Non-goals, Success metrics, Risks/open questions, Sources.`;
+    case "report":
+      return `Report structure: Executive summary, Key findings, Evidence/sources, Implications, Recommendations, Next actions.`;
+    case "brief":
+      return `Brief structure: concise, action-oriented summary with context, recommendation, and next steps.`;
+    case "proposal":
+      return `Proposal structure: situation, approach, deliverables, timeline, and ask.`;
+    case "checklist":
+      return `Checklist structure: grouped actionable items with owners or sequencing where useful.`;
+    case "research_summary":
+      return `Research summary: key findings, evidence, confidence, and open questions.`;
+    case "strategy_memo":
+      return `Strategy memo: context, options, recommendation, risks, and next moves.`;
+    case "meeting_notes":
+      return `Meeting notes: attendees/context, decisions, action items, open questions.`;
+    default:
+      return `Use clear markdown headings and keep the deliverable structured and scannable.`;
+  }
+}
+
+function fileAwareRules(hasFileContext: boolean, artifactIntent?: PromptContext["artifactIntent"]): string {
+  if (!hasFileContext && !artifactIntent) return "";
+
+  const parts: string[] = [];
+
+  if (hasFileContext) {
+    parts.push(`File Q&A rules:
+- Use the provided file context when answering factual questions.
+- Cite every factual claim derived from files inline as [[source:fileName|locator|short snippet]].
+- Also include matching entries in effects.citations with fileId, chunkId, label, and optional quote.
+- Do not invent file content. If information is missing, say what is missing.
+- Do not cite files or chunks that were not provided in context.
+- For spreadsheets, mention sheet and row references when available.
+- If the user wants a structured deliverable, populate effects.artifacts instead of dumping it only in reply.
+- Suggest 1–3 effects.memorySuggestions for durable facts the user may want to save — do not auto-save memory.`);
+  }
+
+  if (artifactIntent) {
+    parts.push(`Artifact generation requested (${artifactIntent.type.replace(/_/g, " ")}):
+- Put the full deliverable in effects.artifacts[0] with title, artifactType "${artifactIntent.type}", contentMarkdown, source_file/chunk ids, and sourceCitations.
+- Keep reply short (1–3 sentences) pointing to the generated artifact.
+- ${artifactTypeInstructions(artifactIntent.type)}
+- Include a Sources section in the artifact content when file context was used.`);
+  }
+
+  return parts.join("\n\n");
 }
 
 function roleWorkflowRules(roleKey: EmployeeRoleKey): string {
@@ -207,7 +260,7 @@ Important rules:
 - NEVER put JSON, code blocks, bullet dumps, or schema in "reply".
 - Format useful work with clean Markdown: short headings when helpful, concise bullets for plans, tables only for comparisons, and fenced code blocks only for real code/config.
 - Do not over-greet. Do not say "as an AI". Do not mention providers, models, tokens, or raw infrastructure.
-- Do not invent citations. When real file sources are provided in a future file-Q&A run, cite them inline as [[source:file name|page/sheet/row label|short snippet]].
+- Do not invent citations. When file sources are provided below, cite them inline as [[source:file name|page/sheet/row label|short snippet]] and in effects.citations.
 - Match how real people text:
   - Greetings ("hi", "hey") → 1–2 short sentences. Don't pitch unprompted work.
   - Simple asks → brief, direct answer.
@@ -219,15 +272,20 @@ Important rules:
 - If an action needs approval, request it in natural language.
 - Whenever you complete meaningful work (drafts, research, outreach), you MUST populate effects — memory, tasks, workLog. Chat-only replies are for greetings and clarifying questions — use empty effects.workLog for greetings and banter.
 
+${fileAwareRules(Boolean(ctx.fileContextPrompt), ctx.artifactIntent)}
+
 ${roleWorkflowRules(ctx.employee.roleKey)}
 
 Internal JSON format (reply = human speech, effects = backend only):
 {
   "reply": "Natural language only — what you'd type in Slack.",
   "effects": {
-    "workLog": [{ "action": "read_context", "summary": "...", "status": "success" }],
+    "workLog": [{ "action": "answered_question_about_file", "summary": "...", "status": "success" }],
     "tasks": [{ "title": "Follow up with Neil", "status": "open", "assigneeType": "ai", "priority": "medium" }],
-    "memory": [{ "type": "general", "title": "Lead: Neil @ Green Cutting", "content": "Warm referral from Mike at exhibition." }],
+    "memory": [],
+    "memorySuggestions": [{ "text": "Pricing uses three tiers: Starter, Growth, Enterprise.", "reason": "Useful for future work", "sourceFileId": "...", "sourceChunkId": "..." }],
+    "citations": [{ "fileId": "...", "chunkId": "...", "label": "Pricing.csv · rows 20–40", "quote": "..." }],
+    "artifacts": [{ "title": "Q1 PRD", "artifactType": "prd", "contentMarkdown": "# Overview\\n...", "status": "saved", "sourceFileIds": ["..."], "sourceChunkIds": ["..."], "sourceCitations": [] }],
     "emailDrafts": [{ "subject": "...", "body": "...", "recipient": "Neil", "company": "Green Cutting Inc." }],
     "approvals": [],
     "statusChange": "working",
@@ -276,6 +334,6 @@ ${employees || "(none)"}
 Human participants:
 ${humans || "(none)"}
 
-User message:
+${ctx.fileContextPrompt ? `${ctx.fileContextPrompt}\n\n` : ""}User message:
 ${ctx.userMessage}${brevityHint}`;
 }

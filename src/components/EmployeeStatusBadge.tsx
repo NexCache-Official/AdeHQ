@@ -9,7 +9,7 @@ const STATUS_STYLE: Record<
 > = {
   online: { label: "Online", color: "#16A34A", soft: "#DCFCE7", dot: "bg-emerald-500" },
   idle: { label: "Idle", color: "#9B968B", soft: "#F0EDE6", dot: "bg-ink-3" },
-  working: { label: "Working", color: "#E85D2C", soft: "#FBE9DE", dot: "bg-accent" },
+  working: { label: "Working", color: "#2F6FED", soft: "#E7EFFE", dot: "bg-accent" },
   waiting_approval: {
     label: "Waiting for approval",
     color: "#CB8A1B",

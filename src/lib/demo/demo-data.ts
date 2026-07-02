@@ -696,7 +696,7 @@ function buildCalls(): Call[] {
       title: "Forgefield Launch Standup",
       status: "ended",
       participants: [
-        { id: "user-shubham", type: "human", name: "Shubham", accent: "#f97316", speaking: false },
+        { id: "user-shubham", type: "human", name: "Shubham", accent: "#2f6fed", speaking: false },
         { id: "emp-research", type: "ai", name: "Research Employee", accent: "#22d3ee", speaking: false },
         { id: "emp-pm", type: "ai", name: "PM Employee", accent: "#ea580c", speaking: false },
         { id: "emp-eng", type: "ai", name: "Engineering Employee", accent: "#5b8cff", speaking: false },

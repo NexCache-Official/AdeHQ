@@ -80,7 +80,7 @@ export function OnboardingOrgGraph({
         {showRoom && (
           <div className="obd-pop-node absolute left-[78px] top-[120px] flex -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-1.5 text-center">
             <div
-              className="flex h-[46px] w-[46px] items-center justify-center rounded-[14px] border border-[color-mix(in_srgb,var(--accent)_70%,transparent)] bg-[color-mix(in_srgb,var(--accent)_22%,#1A1714)] shadow-[0_8px_22px_-8px_color-mix(in_srgb,var(--accent)_60%,transparent)]"
+              className="flex h-[46px] w-[46px] items-center justify-center rounded-[14px] border border-[color-mix(in_srgb,var(--accent)_70%,transparent)] bg-[color-mix(in_srgb,var(--accent)_22%,#0B0D12)] shadow-[0_8px_22px_-8px_color-mix(in_srgb,var(--accent)_60%,transparent)]"
             >
               <LayoutGrid className="h-[22px] w-[22px] text-[var(--accent)]" strokeWidth={1.9} />
             </div>

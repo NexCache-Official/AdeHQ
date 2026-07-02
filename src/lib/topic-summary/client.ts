@@ -71,3 +71,25 @@ export async function saveSuggestedMemoryClient(
   }
   notifyTopicSummaryUpdated(topicId);
 }
+
+export async function saveFileMemorySuggestionClient(
+  topicId: string,
+  payload: {
+    text: string;
+    reason?: string;
+    sourceFileId?: string;
+    sourceChunkId?: string;
+    sourceArtifactId?: string;
+  },
+): Promise<void> {
+  const headers = await authHeaders();
+  const res = await fetch(`/api/topics/${topicId}/memory-suggestions`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error ?? "Unable to save memory suggestion.");
+  }
+}

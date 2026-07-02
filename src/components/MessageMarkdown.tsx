@@ -180,7 +180,7 @@ function CodeBlock({ code, language }: { code: string; language?: string }) {
   };
 
   return (
-    <div className="my-3 overflow-hidden rounded-xl border border-border bg-[#1f1b16] text-white shadow-[0_12px_32px_-26px_rgba(31,27,22,0.45)]">
+    <div className="my-3 overflow-hidden rounded-xl border border-border bg-[#12151b] text-white shadow-[0_12px_32px_-26px_rgba(11,13,18,0.45)]">
       <div className="flex items-center justify-between gap-3 border-b border-white/10 px-3 py-2">
         <span className="font-mono text-[10px] uppercase text-white/55">{language || "code"}</span>
         <button

@@ -38,7 +38,7 @@ export function ApplicantCard({
       className={cn(
         "relative rounded-[18px] border bg-surface p-5 transition hover:-translate-y-1 hover:shadow-xl",
         a.recommended
-          ? "border-accent/40 shadow-[0_20px_44px_-28px_rgba(232,93,44,0.35)]"
+          ? "border-accent/40 shadow-[0_20px_44px_-28px_rgba(47,111,237,0.35)]"
           : "border-border",
       )}
     >
@@ -213,9 +213,9 @@ export function ApplicantCard({
 export function GeneratingScreen({ genStep }: { genStep: number }) {
   return (
     <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-canvas p-8">
-      <div className="pointer-events-none absolute left-1/2 top-[32%] h-[520px] w-[520px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[radial-gradient(circle,rgba(232,93,44,0.12),transparent_62%)] blur-md" />
+      <div className="pointer-events-none absolute left-1/2 top-[32%] h-[520px] w-[520px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[radial-gradient(circle,rgba(47,111,237,0.12),transparent_62%)] blur-md" />
       <div className="relative mb-8 text-center">
-        <div className="mx-auto mb-5 h-16 w-16 animate-spin rounded-[18px] bg-[conic-gradient(from_0deg,#e85d2c,#f59e0b,#e85d2c)] shadow-lg" />
+        <div className="mx-auto mb-5 h-16 w-16 animate-spin rounded-[18px] bg-[conic-gradient(from_0deg,#2f6fed,#5fa0ff,#2f6fed)] shadow-lg" />
         <h1 className="mb-2.5 text-[30px] font-semibold tracking-tight">
           Finding your best AI employee candidates
         </h1>

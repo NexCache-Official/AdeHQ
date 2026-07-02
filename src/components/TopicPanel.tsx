@@ -142,6 +142,7 @@ export function TopicPanel({
   onParticipationChange,
   onAiControl,
   onAskAboutFile,
+  onGenerateReportFromFile,
   summarizing,
   topicActionBusy,
 }: {
@@ -165,6 +166,7 @@ export function TopicPanel({
   onParticipationChange?: (mode: AiParticipationMode) => void;
   onAiControl?: (action: "stop_all" | "resume") => void;
   onAskAboutFile?: (file: WorkspaceFile) => void;
+  onGenerateReportFromFile?: (file: WorkspaceFile) => void;
   summarizing?: boolean;
   topicActionBusy?: boolean;
 }) {
@@ -218,6 +220,22 @@ export function TopicPanel({
     } finally {
       setArtifactsLoading(false);
     }
+  }, [topic.id]);
+
+  useEffect(() => {
+    const openArtifact = async (event: Event) => {
+      const detail = (event as CustomEvent<{ artifactId?: string; topicId?: string }>).detail;
+      if (!detail?.artifactId || detail.topicId !== topic.id) return;
+      try {
+        const body = await apiJson<{ artifact: SavedArtifact }>(`/api/artifacts/${detail.artifactId}`);
+        setSelectedArtifact(body.artifact);
+        setTab("artifacts");
+      } catch {
+        // non-blocking
+      }
+    };
+    window.addEventListener("adehq:open-artifact", openArtifact);
+    return () => window.removeEventListener("adehq:open-artifact", openArtifact);
   }, [topic.id]);
 
   useEffect(() => {
@@ -689,11 +707,11 @@ export function TopicPanel({
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => void createSummaryArtifact(file)}
+                          onClick={() => (onGenerateReportFromFile ? onGenerateReportFromFile(file) : void createSummaryArtifact(file))}
                           disabled={!canCreateArtifact || isBusy}
                         >
                           {isBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <WandSparkles className="h-3.5 w-3.5" />}
-                          Create summary
+                          Generate report
                         </Button>
                         <Button
                           variant="ghost"

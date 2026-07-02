@@ -17,7 +17,7 @@ import { MayaDmHiringLayout } from "@/components/maya/MayaDmHiringWorkspace";
 import { OrchestrationUiProvider } from "@/components/orchestration/OrchestrationUiContext";
 import { roomAssignableEmployees, isMayaEmployee } from "@/lib/maya-employee";
 import { notifyTopicSummaryUpdated } from "@/lib/topic-summary/client";
-import type { AiParticipationMode, TopicPriority, WorkspaceFile } from "@/lib/types";
+import type { AiParticipationMode, TopicPriority, WorkspaceFile, SavedArtifactType } from "@/lib/types";
 import type { SlashCommandResult } from "@/components/ChatComposer";
 import {
   ArrowLeft,
@@ -40,6 +40,11 @@ export default function RoomDetailPage() {
   const [topicActionBusy, setTopicActionBusy] = useState(false);
   const [topicActionError, setTopicActionError] = useState<string | null>(null);
   const [composerDraft, setComposerDraft] = useState("");
+  const [composerContextFiles, setComposerContextFiles] = useState<Array<{ id: string; displayName: string }>>([]);
+  const [composerArtifactIntent, setComposerArtifactIntent] = useState<{
+    type: SavedArtifactType;
+    label: string;
+  } | null>(null);
   const [slashNotice, setSlashNotice] = useState<string | null>(null);
   const [addEmployeeOpen, setAddEmployeeOpen] = useState(false);
   const [addingEmployeeId, setAddingEmployeeId] = useState<string | null>(null);
@@ -367,7 +372,7 @@ export default function RoomDetailPage() {
 
     switch (result.type) {
       case "help":
-        setSlashNotice("Commands: /task /memory /summarize /ask /archive /assign. Artifact commands unlock in Phase 3.");
+        setSlashNotice("Commands: /task /memory /summarize /prd /report /brief /proposal /checklist /ask /archive /assign.");
         break;
       case "task":
         actions.createTask({
@@ -478,9 +483,22 @@ export default function RoomDetailPage() {
   const askAiAboutFile = (file: WorkspaceFile) => {
     const teammate = roomEmployees.find((e) => e?.roleKey === "research" || e?.roleKey === "pm") ?? roomEmployees[0];
     const prefix = teammate ? `@${teammate.name} ` : "";
-    setComposerDraft(
-      `${prefix}review ${file.displayName} and tell me the key points, risks, and recommended next steps for this topic.`,
-    );
+    setComposerContextFiles([{ id: file.id, displayName: file.displayName }]);
+    setComposerArtifactIntent(null);
+    setComposerDraft(`${prefix}What does ${file.displayName} say? Summarize the key points with sources.`);
+  };
+
+  const generateReportFromFile = (file: WorkspaceFile) => {
+    const teammate = roomEmployees.find((e) => e?.roleKey === "research" || e?.roleKey === "pm") ?? roomEmployees[0];
+    const prefix = teammate ? `@${teammate.name} ` : "";
+    setComposerContextFiles([{ id: file.id, displayName: file.displayName }]);
+    setComposerArtifactIntent({ type: "report", label: "Generate report" });
+    setComposerDraft(`${prefix}Turn ${file.displayName} into a report with sources.`);
+  };
+
+  const clearComposerContext = () => {
+    setComposerContextFiles([]);
+    setComposerArtifactIntent(null);
   };
 
   const saveSummaryToMemory = () => {
@@ -608,6 +626,9 @@ export default function RoomDetailPage() {
                 draftText={composerDraft}
                 onDraftConsumed={() => setComposerDraft("")}
                 onSlashCommand={handleSlashCommand}
+                contextFiles={composerContextFiles}
+                artifactIntent={composerArtifactIntent}
+                onContextConsumed={clearComposerContext}
                 onSummarize={summarizeTopic}
                 summarizing={summarizing}
                 onAddEmployee={() => setAddEmployeeOpen(true)}
@@ -637,6 +658,7 @@ export default function RoomDetailPage() {
               onParticipationChange={setParticipationMode}
               onAiControl={handleAiControl}
               onAskAboutFile={askAiAboutFile}
+              onGenerateReportFromFile={generateReportFromFile}
               summarizing={summarizing}
               topicActionBusy={topicActionBusy}
             />

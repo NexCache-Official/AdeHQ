@@ -18,7 +18,7 @@ export function roomFromRow(row: DbRow): ProjectRoom {
     tasks: [],
     memory: [],
     unread: Number(row.unread ?? 0),
-    accent: String(row.accent ?? "#f97316"),
+    accent: String(row.accent ?? "#2f6fed"),
     status: (row.status as RoomStatus) ?? "active",
     createdAt: String(row.created_at ?? nowISO()),
     updatedAt: String(row.updated_at ?? row.created_at ?? nowISO()),

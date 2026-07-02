@@ -6,7 +6,7 @@ import { useStore } from "@/lib/demo-store";
 import { EmployeeAvatar, HumanAvatar } from "./EmployeeAvatar";
 import { cn, formatTime } from "@/lib/utils";
 import { normalizeHumanDelivery } from "@/lib/message-delivery";
-import { saveSuggestedMemoryClient } from "@/lib/topic-summary/client";
+import { saveFileMemorySuggestionClient, saveSuggestedMemoryClient } from "@/lib/topic-summary/client";
 import { ArtifactCard, FileArtifactCard } from "./ArtifactCard";
 import { MessageMarkdown } from "./MessageMarkdown";
 import {
@@ -101,10 +101,19 @@ function MemorySuggestionArtifact({
   const suggestionIndex = artifact.meta?.suggestionIndex;
 
   const save = async () => {
-    if (typeof suggestionIndex !== "number") return;
     setBusy(true);
     try {
-      await saveSuggestedMemoryClient(topicId, suggestionIndex);
+      if (typeof suggestionIndex === "number") {
+        await saveSuggestedMemoryClient(topicId, suggestionIndex);
+      } else {
+        await saveFileMemorySuggestionClient(topicId, {
+          text,
+          reason: artifact.meta?.reason,
+          sourceFileId: artifact.meta?.sourceFileId,
+          sourceChunkId: artifact.meta?.sourceChunkId,
+          sourceArtifactId: artifact.meta?.sourceArtifactId,
+        });
+      }
       setSaved(true);
     } finally {
       setBusy(false);
@@ -336,7 +345,13 @@ export function RoomMessageItem({
   const memorySuggestions =
     message.artifacts?.filter((a) => a.type === "memory_suggestion") ?? [];
   const generatedArtifacts = message.artifacts?.filter((a) => a.type === "artifact") ?? [];
-  const fileArtifacts = message.artifacts?.filter((a) => a.type === "file") ?? [];
+  const citationArtifacts =
+    message.senderType === "ai"
+      ? (message.artifacts?.filter((a) => a.type === "file" && a.meta?.chunkId) ?? [])
+      : [];
+  const fileArtifacts = message.artifacts?.filter(
+    (a) => a.type === "file" && !a.meta?.chunkId,
+  ) ?? [];
   const otherArtifacts = (message.artifacts ?? []).filter(
     (
       a,
@@ -430,13 +445,40 @@ export function RoomMessageItem({
           <ArtifactCard
             key={artifact.id}
             title={artifact.label}
-            type={artifact.meta?.artifactType ?? "note"}
+            type={(artifact.meta?.artifactType as "prd" | "report" | "brief" | "proposal" | "decision" | "note") ?? "note"}
             createdBy={artifact.meta?.createdByName ?? message.senderName}
             timestamp={message.createdAt}
             sourceCount={artifact.meta?.sourceCount ?? 0}
             status={artifact.meta?.artifactStatus ?? "draft"}
+            onOpen={() => {
+              window.dispatchEvent(
+                new CustomEvent("adehq:open-artifact", {
+                  detail: { artifactId: artifact.id, topicId: message.topicId },
+                }),
+              );
+              window.dispatchEvent(
+                new CustomEvent("adehq:topic-artifacts-changed", {
+                  detail: { topicId: message.topicId },
+                }),
+              );
+            }}
           />
         ))}
+
+        {citationArtifacts.length > 0 && (
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {citationArtifacts.map((artifact) => (
+              <span
+                key={artifact.id}
+                className="inline-flex max-w-full items-center gap-1 rounded-full border border-accent/20 bg-accent-soft px-2 py-0.5 text-[11px] font-semibold text-accent-d"
+                title={artifact.meta?.quote}
+              >
+                <Sparkles className="h-3 w-3 shrink-0" />
+                <span className="truncate">{artifact.label}</span>
+              </span>
+            ))}
+          </div>
+        )}
 
         {fileArtifacts.map((artifact) => (
           <FileArtifactCard

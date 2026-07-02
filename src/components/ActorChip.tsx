@@ -29,7 +29,7 @@ export function ActorChip({
       {actor.type === "ai" && actor.employee ? (
         <EmployeeAvatar employee={actor.employee} size={size} showStatus={false} />
       ) : (
-        <HumanAvatar name={actor.name} size={size} accent={actor.type === "system" ? "#475569" : "#f97316"} />
+        <HumanAvatar name={actor.name} size={size} accent={actor.type === "system" ? "#475569" : "#2f6fed"} />
       )}
       <span className="text-sm font-medium text-slate-700">{actor.name}</span>
     </span>

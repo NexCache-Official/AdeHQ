@@ -9,7 +9,7 @@ import { EmployeeAvatar } from "./EmployeeAvatar";
 import { cn } from "@/lib/utils";
 import { Check, Hash } from "lucide-react";
 
-const ACCENTS = ["#f97316", "#5b8cff", "#22d3ee", "#34d399", "#f472b6", "#fbbf24"];
+const ACCENTS = ["#2f6fed", "#5b8cff", "#22d3ee", "#34d399", "#f472b6", "#fbbf24"];
 
 export function CreateRoomModal({
   open,

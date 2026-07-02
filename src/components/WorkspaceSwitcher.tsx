@@ -32,7 +32,7 @@ export function WorkspaceSwitcher({
   if (singleWorkspace && isRail) {
     return (
       <div className="mb-2.5 flex items-center gap-2.5 rounded-[13px] border border-white/[0.08] bg-white/[0.04] px-2.5 py-2">
-        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[9px] bg-gradient-to-br from-accent to-[#F2974E] text-[15px] font-extrabold text-white shadow-[0_2px_8px_-2px_rgba(232,93,44,0.6)]">
+        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[9px] bg-gradient-to-br from-accent to-[var(--accent-2)] text-[15px] font-extrabold text-white shadow-[0_2px_8px_-2px_rgba(47,111,237,0.6)]">
           {state.workspace.name.slice(0, 1).toUpperCase()}
         </div>
         <div className="min-w-0 flex-1">
@@ -62,7 +62,7 @@ export function WorkspaceSwitcher({
         )}
       >
         {isRail ? (
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[9px] bg-gradient-to-br from-accent to-[#F2974E] text-[15px] font-extrabold text-white">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[9px] bg-gradient-to-br from-accent to-[var(--accent-2)] text-[15px] font-extrabold text-white">
             {state.workspace.name.slice(0, 1).toUpperCase()}
           </div>
         ) : (

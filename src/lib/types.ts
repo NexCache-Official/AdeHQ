@@ -178,7 +178,7 @@ export type MessageArtifact = {
     scope?: string;
     reason?: string;
     suggestionIndex?: number;
-    artifactType?: "prd" | "report" | "brief" | "proposal" | "decision" | "note";
+    artifactType?: "prd" | "report" | "brief" | "proposal" | "decision" | "note" | SavedArtifactType;
     artifactStatus?: "draft" | "saved";
     createdByName?: string;
     sourceCount?: number;
@@ -186,6 +186,14 @@ export type MessageArtifact = {
     fileExtension?: string;
     fileSizeLabel?: string;
     fileStatus?: "attached" | "processing" | "ready" | "failed";
+    fileId?: string;
+    chunkId?: string;
+    locator?: string;
+    quote?: string;
+    sourceFileId?: string;
+    sourceChunkId?: string;
+    sourceArtifactId?: string;
+    suggestionKey?: string;
   };
 };
 
@@ -706,6 +714,31 @@ export type Call = {
 // AI engine I/O
 // ---------------------------------------------------------------------------
 
+export type FileCitationEffect = {
+  fileId: string;
+  chunkId: string;
+  label: string;
+  quote?: string;
+};
+
+export type ArtifactEffect = {
+  title: string;
+  artifactType: SavedArtifactType;
+  contentMarkdown: string;
+  status?: "draft" | "saved";
+  sourceFileIds?: string[];
+  sourceChunkIds?: string[];
+  sourceCitations?: FileCitationEffect[];
+};
+
+export type MemorySuggestionEffect = {
+  text: string;
+  reason?: string;
+  sourceFileId?: string;
+  sourceChunkId?: string;
+  sourceArtifactId?: string;
+};
+
 export type EmployeeResponseEffect = {
   workLog: Array<Partial<WorkLogEvent>>;
   tasks: Array<Partial<Task>>;
@@ -717,6 +750,9 @@ export type EmployeeResponseEffect = {
     recipient?: string;
     company?: string;
   }>;
+  citations?: FileCitationEffect[];
+  artifacts?: ArtifactEffect[];
+  memorySuggestions?: MemorySuggestionEffect[];
   statusChange?: EmployeeStatus;
   handoffTo?: string[];
   currentTask?: string;
@@ -740,6 +776,8 @@ export type SendMessageInput = {
   topicTasks?: Task[];
   topicApprovals?: Approval[];
   topicWorkLogs?: WorkLogEvent[];
+  fileContextPrompt?: string;
+  artifactIntent?: { type: SavedArtifactType; instruction?: string } | null;
 };
 
 // ---------------------------------------------------------------------------
