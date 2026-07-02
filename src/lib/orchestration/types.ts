@@ -152,6 +152,10 @@ export type OrchestratorInput = {
   }>;
   smartAssistEnabled: boolean;
   isDm?: boolean;
+  /** DM counterpart when `isDm` — used to auto-select the employee who should reply. */
+  dmEmployeeId?: string | null;
+  /** Maya's DM uses client-side flows (general chat + hiring topics), not room orchestration. */
+  isMayaDm?: boolean;
   isMayaHiringSession?: boolean;
 };
 

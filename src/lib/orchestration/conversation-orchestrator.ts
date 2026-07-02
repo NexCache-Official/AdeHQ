@@ -142,8 +142,45 @@ export function orchestrateConversationDeterministic(
     input.topicEmployees.length ? input.topicEmployees : input.roomEmployees,
   );
 
-  if (input.isMayaHiringSession || input.isDm) {
-    return emptyPlan("silent_note", "DM or hiring session — room orchestration skipped.");
+  if (input.isMayaDm || input.isMayaHiringSession) {
+    return emptyPlan("silent_note", "Maya DM — specialized client flow handles responses.");
+  }
+
+  if (input.isDm) {
+    if (!text || SILENT_NOTE_PATTERNS.some((p) => p.test(text))) {
+      const actions: SuggestedConversationAction[] = [];
+      if (/\bnote to self\b/i.test(text) || /\bremind myself\b/i.test(text)) {
+        actions.push({
+          type: "save_memory",
+          text,
+          reason: "This looks like a personal note you may want to save.",
+          confidence: 0.72,
+        });
+      }
+      return {
+        ...emptyPlan("silent_note", "Personal note — no AI reply.", 0.92),
+        suggestedActions: actions,
+      };
+    }
+
+    const dmEmployee =
+      (input.dmEmployeeId && employees.find((e) => e.id === input.dmEmployeeId)) ??
+      (employees.length === 1 ? employees[0] : undefined);
+
+    if (!dmEmployee) {
+      return emptyPlan("silent_note", "DM has no eligible AI employee to reply.", 0.85);
+    }
+
+    return planWithEmployees(
+      "direct_reply",
+      "Direct message — assigned employee replies.",
+      [dmEmployee],
+      {
+        confidence: 0.95,
+        workLogRequired: !isLowActionMessage(text),
+        workLogReason: "orchestration_completed",
+      },
+    );
   }
 
   if (!text || SILENT_NOTE_PATTERNS.some((p) => p.test(text)) || SOCIAL_THANKS_PATTERNS.some((p) => p.test(text))) {

@@ -25,7 +25,8 @@ import type { OrchestratorInput } from "@/lib/orchestration/types";
 import { loadChannelGovernanceContext } from "@/lib/server/channel-governance";
 import { queueAgentRuns } from "@/lib/server/queue-agent-runs";
 import { isAiQueueingBlocked } from "@/lib/topic-ai-control";
-import { getAiParticipationMode, isSmartAssistMode } from "@/lib/topics";
+import { getAiParticipationMode, isHiringTopic, isSmartAssistMode } from "@/lib/topics";
+import { isMayaEmployee } from "@/lib/maya-employee";
 import { messageError } from "@/lib/server/message-errors";
 import type { MentionRef } from "@/lib/types";
 
@@ -180,6 +181,13 @@ export async function POST(
       !isAiQueueingBlocked(topic) &&
       (isSmartAssistMode(participation) || participation === "active_team");
 
+    const dmEmployee = respondersCtx.room.dmEmployeeId
+      ? respondersCtx.employees.find((e) => e.id === respondersCtx.room.dmEmployeeId)
+      : respondersCtx.employees.length === 1
+        ? respondersCtx.employees[0]
+        : undefined;
+    const isMayaDm = Boolean(dmEmployee && isMayaEmployee(dmEmployee));
+
     const orchestratorInput: OrchestratorInput = {
       workspaceId,
       roomId: params.roomId,
@@ -194,7 +202,9 @@ export async function POST(
       existingTopics,
       smartAssistEnabled,
       isDm: respondersCtx.room.kind === "dm",
-      isMayaHiringSession: false,
+      dmEmployeeId: respondersCtx.room.dmEmployeeId,
+      isMayaDm,
+      isMayaHiringSession: isMayaDm && isHiringTopic(topic),
     };
 
     let orchestrationPlan = await orchestrateConversation(orchestratorInput);
@@ -354,6 +364,8 @@ export async function POST(
         if (invites.length) {
           hint = `Ask ${invites.map((a) => (a.type === "invite_employee" ? a.employeeName ?? "an employee" : "")).filter(Boolean).join(" and ")} to help.`;
         }
+      } else if (respondersCtx.room.kind === "dm") {
+        hint = "No AI reply was queued for this DM. Try sending the message again.";
       } else if (participationMode === "manual_only" || participationMode === "silent_observation") {
         hint = "Mention an employee with @ to get a response";
       } else if (isSmartAssistMode(participationMode) || participationMode === "active_team") {
