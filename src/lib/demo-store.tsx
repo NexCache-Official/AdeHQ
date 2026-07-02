@@ -36,7 +36,8 @@ import { getEmailRedirectUrl, setAuthNextPath } from "@/lib/auth/callback-sessio
 import { isEmailConfirmed } from "@/lib/auth/session";
 import { isRepeatedSignup } from "@/lib/auth/guards";
 import { resendSignupConfirmation } from "@/lib/auth/confirmation";
-import { mayaWelcomeMessage } from "@/lib/hiring/maya";
+import { mergeRoomMessages } from "@/lib/message-delivery";
+import { mayaWelcomeMessage, MAYA_EMPLOYEE_ID } from "@/lib/hiring/maya";
 import { resolveUniqueRoomName } from "@/lib/room-naming";
 import { isMayaEmployee, isSystemEmployee, mergeMayaIntoState, mayaEmployeeStatus, buildMayaDmRoom, buildMayaEmployee, ensureMayaDmTopicsInState, dedupeMayaDmRooms, mergeEmployeesById, resolveMayaDmRoomId } from "@/lib/maya-employee";
 import { isGroupChannel } from "@/lib/rooms";
@@ -248,9 +249,19 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 
   const setRemoteState = useCallback((loaded: DemoState) => {
     setState((previous) => {
+      const roomsWithMergedMessages = loaded.rooms.map((loadedRoom) => {
+        const previousRoom = previous.rooms.find((room) => room.id === loadedRoom.id);
+        if (!previousRoom) return loadedRoom;
+        return {
+          ...loadedRoom,
+          messages: mergeRoomMessages(previousRoom.messages, loadedRoom.messages),
+        };
+      });
+
       const merged = mergeMayaIntoState(
         {
           ...loaded,
+          rooms: roomsWithMergedMessages,
           employees: mergeEmployeesById(previous.employees, loaded.employees),
           settings: previous.settings ?? loaded.settings,
         },
@@ -1293,6 +1304,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           triggerMessageId: msg.triggerMessageId,
           pending: msg.pending,
           failed: msg.failed,
+          deliveryStatus: msg.deliveryStatus,
+          deliveredAt: msg.deliveredAt,
           createdAt: msg.createdAt ?? nowISO(),
         };
         const currentRoom = stateRef.current.rooms.find((room) => room.id === roomId);

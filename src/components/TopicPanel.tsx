@@ -393,7 +393,7 @@ export function TopicPanel({
                   </div>
                 </details>
               )}
-              <OrchestrationSidebarStatus topicId={topic.id} />
+              {!isDm && <OrchestrationSidebarStatus topicId={topic.id} />}
               <TopicSummaryPanel
                 topicId={topic.id}
                 summary={topicSummary}

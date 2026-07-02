@@ -153,7 +153,7 @@ export function RoomChat({
   }, [topicMessages.length, activeRuns.length]);
 
   useEffect(() => {
-    if (!topic || backend !== "supabase") return;
+    if (!topic || backend !== "supabase" || isDm) return;
     orchestrationUi.clearSession();
     let cancelled = false;
 
@@ -177,7 +177,7 @@ export function RoomChat({
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [topic?.id, backend, roomEmployees.length]);
+  }, [topic?.id, backend, roomEmployees.length, isDm]);
 
   useEffect(() => {
     if (!topic) return;
@@ -243,13 +243,15 @@ export function RoomChat({
       });
 
       for (const waiting of waitingRuns) {
-        orchestrationUi.updateEmployeePhase(waiting.employeeId, "waiting", undefined);
-        if (waiting.waitingOnEmployeeName) {
-          orchestrationUi.updateEmployeePhase(
-            waiting.employeeId,
-            "waiting",
-            `Waiting for ${waiting.waitingOnEmployeeName}`,
-          );
+        if (!isDm) {
+          orchestrationUi.updateEmployeePhase(waiting.employeeId, "waiting", undefined);
+          if (waiting.waitingOnEmployeeName) {
+            orchestrationUi.updateEmployeePhase(
+              waiting.employeeId,
+              "waiting",
+              `Waiting for ${waiting.waitingOnEmployeeName}`,
+            );
+          }
         }
       }
 
@@ -273,15 +275,24 @@ export function RoomChat({
           trace("agent-run", "info", `${run.employeeName} → reading context`, { runId: run.runId });
           if (triggerId) {
             markMessageSeenByEmployee(triggerId, run.employeeId, run.employeeName);
+            actions.updateMessage(room.id, triggerId, {
+              pending: false,
+              deliveryStatus: "delivered",
+              deliveredAt: new Date().toISOString(),
+            });
           }
-          orchestrationUi.updateEmployeePhase(run.employeeId, "reading", undefined, undefined, run.runId);
+          if (!isDm) {
+            orchestrationUi.updateEmployeePhase(run.employeeId, "reading", undefined, undefined, run.runId);
+          }
           setActiveRuns((prev) =>
             prev.map((r) =>
               r.runId === run.runId ? { ...r, phase: "reading" } : r,
             ),
           );
 
-          orchestrationUi.updateEmployeePhase(run.employeeId, "replying", undefined, undefined, run.runId);
+          if (!isDm) {
+            orchestrationUi.updateEmployeePhase(run.employeeId, "replying", undefined, undefined, run.runId);
+          }
           setActiveRuns((prev) =>
             prev.map((r) =>
               r.runId === run.runId ? { ...r, phase: "thinking" } : r,
@@ -369,14 +380,25 @@ export function RoomChat({
                 agentRunId: run.runId,
                 responseReason: data.responseReason ?? data.reason,
               });
+              if (triggerId) {
+                actions.updateMessage(room.id, triggerId, {
+                  pending: false,
+                  deliveryStatus: "delivered",
+                  deliveredAt: new Date().toISOString(),
+                });
+              }
             }
 
-            orchestrationUi.markEmployeeCompleted(run.employeeId);
+            if (!isDm) {
+              orchestrationUi.markEmployeeCompleted(run.employeeId);
+            }
             void actions.refreshTopics(room.id);
-            void actions.refreshWorkLogForTopic(topic.id);
+            if (!isDm) {
+              void actions.refreshWorkLogForTopic(topic.id);
+            }
             notifyTopicSummaryUpdated(topic.id);
 
-            if (Array.isArray(data.activatedRuns) && data.activatedRuns.length) {
+            if (!isDm && Array.isArray(data.activatedRuns) && data.activatedRuns.length) {
               for (const activated of data.activatedRuns as QueuedRunClient[]) {
                 orchestrationUi.updateEmployeePhase(
                   activated.employeeId,
@@ -413,7 +435,9 @@ export function RoomChat({
               runId: run.runId,
               error: message,
             });
-            orchestrationUi.updateEmployeePhase(run.employeeId, "failed", message, undefined, run.runId);
+            if (!isDm) {
+              orchestrationUi.updateEmployeePhase(run.employeeId, "failed", message, undefined, run.runId);
+            }
             setActiveRuns((prev) =>
               prev.map((r) =>
                 r.runId === run.runId ? { ...r, phase: "failed", error: message } : r,
@@ -430,7 +454,9 @@ export function RoomChat({
         setActiveRuns((prev) =>
           prev.filter((r) => r.phase !== "done" && r.phase !== "waiting_on"),
         );
-        orchestrationUi.markSessionCompleted();
+        if (!isDm) {
+          orchestrationUi.markSessionCompleted();
+        }
         void actions.refreshWorkLogForTopic(topic.id);
         notifyTopicSummaryUpdated(topic.id);
       }, 4000);
@@ -440,6 +466,7 @@ export function RoomChat({
     [
       actions,
       markMessageSeenByEmployee,
+      isDm,
       orchestrationUi,
       room.id,
       room.status,
@@ -626,13 +653,15 @@ export function RoomChat({
       }
 
       const employeeNames = new Map(roomEmployees.map((e) => [e.id, e.name]));
-      orchestrationUi.setOrchestrationFromSend({
-        orchestrationId: payload.orchestrationId ?? null,
-        triggerMessageId: payload.humanMessage?.id ?? messageId,
-        orchestrationPlan: payload.orchestrationPlan ?? null,
-        collaborationPlan: payload.collaborationPlan ?? null,
-        employeeNames,
-      });
+      if (!isDm) {
+        orchestrationUi.setOrchestrationFromSend({
+          orchestrationId: payload.orchestrationId ?? null,
+          triggerMessageId: payload.humanMessage?.id ?? messageId,
+          orchestrationPlan: payload.orchestrationPlan ?? null,
+          collaborationPlan: payload.collaborationPlan ?? null,
+          employeeNames,
+        });
+      }
 
       if (payload.collaborationPlan) {
         setCollaborationPlan(payload.collaborationPlan);
@@ -936,17 +965,18 @@ export function RoomChat({
               .map((run) => {
                 const employee = roomEmployees.find((e) => e.id === run.employeeId);
                 return (
-                  <div key={run.runId} className="mb-4 flex items-start gap-3">
-                    {employee && (
-                      <EmployeeAvatar employee={employee} size="md" showStatus={false} />
-                    )}
-                    <div className="rounded-2xl border border-border bg-muted px-4 py-3 text-sm text-ink-2">
-                      <span className="font-medium text-ink">{run.employeeName}</span> is typing
-                      <span className="ml-2 inline-flex gap-0.5 align-middle">
-                        <span className="typing-dot" />
-                        <span className="typing-dot" />
-                        <span className="typing-dot" />
-                      </span>
+                  <div key={run.runId} className="group/msg relative flex gap-3 rounded-[10px] px-0 py-1">
+                    <div className="shrink-0">
+                      {employee ? (
+                        <EmployeeAvatar employee={employee} size="md" showStatus={false} />
+                      ) : (
+                        <span className="inline-block h-9 w-9 rounded-full bg-muted" />
+                      )}
+                    </div>
+                    <div className="flex w-fit items-center gap-1.5 rounded-[13px] border border-border bg-surface px-3.5 py-2.5">
+                      <span className="typing-dot" />
+                      <span className="typing-dot" />
+                      <span className="typing-dot" />
                     </div>
                   </div>
                 );

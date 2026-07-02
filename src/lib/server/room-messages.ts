@@ -13,6 +13,7 @@ import type {
   ToolAccess,
   WorkLogEvent,
 } from "@/lib/types";
+import { normalizeHumanDelivery } from "@/lib/message-delivery";
 import { roomIdFromRow } from "@/lib/server/db-row";
 import { refreshTopicStats } from "@/lib/server/topic-stats";
 import { ensureGeneralTopic, topicFromRow } from "@/lib/server/topic-helpers";
@@ -69,7 +70,7 @@ function employeeFromRow(row: DbRow, tools: ToolAccess[]): AIEmployee {
 }
 
 function messageFromRow(row: DbRow): RoomMessage {
-  return {
+  return normalizeHumanDelivery({
     id: String(row.id),
     roomId: roomIdFromRow(row),
     topicId: row.topic_id ? String(row.topic_id) : undefined,
@@ -84,9 +85,9 @@ function messageFromRow(row: DbRow): RoomMessage {
     agentRunId: row.agent_run_id ? String(row.agent_run_id) : undefined,
     triggerMessageId: row.trigger_message_id ? String(row.trigger_message_id) : undefined,
     artifacts: row.artifacts ? (jsonArray(row.artifacts) as MessageArtifact[]) : undefined,
-    pending: Boolean(row.pending),
+    pending: row.pending === true,
     createdAt: String(row.created_at ?? nowISO()),
-  };
+  });
 }
 
 function memoryFromRow(row: DbRow): MemoryEntry {

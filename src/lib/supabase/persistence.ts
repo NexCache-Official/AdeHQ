@@ -31,6 +31,7 @@ import { mayaWelcomeMessage, MAYA_EMPLOYEE_ID } from "@/lib/hiring/maya";
 import { isMayaEmployee, mergeMayaIntoState, effectiveEmployeeStatus } from "@/lib/maya-employee";
 import { isGeneralTopic } from "@/lib/topics";
 import type { SystemEmployeeMetadata } from "@/lib/types";
+import { normalizeHumanDelivery } from "@/lib/message-delivery";
 import { topicFromRow, topicMemberFromRow } from "@/lib/server/topic-helpers";
 import { nowISO } from "@/lib/utils";
 import { supabase } from "./client";
@@ -825,7 +826,7 @@ function roomFromRow(
 }
 
 function messageFromRow(row: DbRow): RoomMessage {
-  return {
+  return normalizeHumanDelivery({
     id: row.id,
     roomId: roomIdFromRow(row),
     topicId: row.topic_id ?? undefined,
@@ -838,9 +839,9 @@ function messageFromRow(row: DbRow): RoomMessage {
     agentRunId: row.agent_run_id ?? undefined,
     triggerMessageId: row.trigger_message_id ?? undefined,
     artifacts: row.artifacts ? jsonArray(row.artifacts) : undefined,
-    pending: row.pending,
+    pending: row.pending === true,
     createdAt: row.created_at ?? nowISO(),
-  };
+  });
 }
 
 function taskFromRow(row: DbRow): Task {

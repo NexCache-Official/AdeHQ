@@ -5,8 +5,7 @@ import { RoomMessage } from "@/lib/types";
 import { useStore } from "@/lib/demo-store";
 import { EmployeeAvatar, HumanAvatar } from "./EmployeeAvatar";
 import { cn, formatTime } from "@/lib/utils";
-import { useOrchestrationUi } from "@/components/orchestration/OrchestrationUiContext";
-import { OrchestrationInlineChip } from "@/components/orchestration/OrchestrationInlineChip";
+import { normalizeHumanDelivery } from "@/lib/message-delivery";
 import {
   BrainCircuit,
   Check,
@@ -142,9 +141,10 @@ function DeliveryStatus({
   message: RoomMessage;
   isDm?: boolean;
 }) {
-  const isSending = message.pending || message.deliveryStatus === "sending";
-  const isFailed = message.failed || message.deliveryStatus === "failed";
-  const deliveredAt = message.deliveredAt ?? message.createdAt;
+  const normalized = normalizeHumanDelivery(message);
+  const isSending = normalized.pending || normalized.deliveryStatus === "sending";
+  const isFailed = normalized.failed || normalized.deliveryStatus === "failed";
+  const deliveredAt = normalized.deliveredAt ?? normalized.createdAt;
 
   if (isFailed) {
     return <span className="text-[10px] font-medium text-rose-600">Failed to send</span>;
@@ -154,13 +154,15 @@ function DeliveryStatus({
     return <span className="text-[10px] text-ink-3">Sending…</span>;
   }
 
+  const seenByAi = normalized.seenBy?.some((reader) => reader.type === "ai");
+
   return (
     <span className="inline-flex items-center gap-1.5 text-[10px] text-ink-3">
       <span>
-        Delivered · {formatTime(deliveredAt)}
+        {isDm && seenByAi ? "Seen" : "Delivered"} · {formatTime(deliveredAt)}
       </span>
       {message.seenBy && message.seenBy.length > 0 && (
-        <ReadReceiptAvatars seenBy={message.seenBy} isDm={isDm} />
+        <ReadReceiptAvatars seenBy={normalized.seenBy ?? message.seenBy} isDm={isDm} />
       )}
     </span>
   );
@@ -174,9 +176,7 @@ export function RoomMessageItem({
   isDm?: boolean;
 }) {
   const { state } = useStore();
-  const { getChipForMessage } = useOrchestrationUi();
   const employee = state.employees.find((e) => e.id === message.senderId);
-  const orchestrationChip = getChipForMessage(message.id);
 
   if (message.senderType === "system") {
     return (
@@ -233,7 +233,6 @@ export function RoomMessageItem({
             <div className="mt-1 flex flex-wrap items-center justify-end gap-2">
               <DeliveryStatus message={message} isDm={isDm} />
             </div>
-            {orchestrationChip && <OrchestrationInlineChip label={orchestrationChip} />}
           </>
         ) : message.pending ? (
           <div className="flex w-fit items-center gap-1.5 rounded-[13px] border border-border bg-surface px-3.5 py-2.5">
