@@ -38,11 +38,11 @@ export function Sidebar() {
   const router = useRouter();
   const { state, actions, backend } = useStore();
   const ui = useShellUI();
-  const [channelsOpen, setChannelsOpen] = useState(true);
+  const [roomsOpen, setRoomsOpen] = useState(true);
   const [dmsOpen, setDmsOpen] = useState(true);
 
   const pendingApprovals = state.approvals.filter((a) => a.status === "pending").length;
-  const channels = getGroupChannels(state.rooms);
+  const rooms = getGroupChannels(state.rooms);
   const dmRooms = getDirectMessages(state.rooms);
 
   const isActive = (href: string, exact?: boolean) =>
@@ -73,26 +73,26 @@ export function Sidebar() {
           <span className="flex-1">Home</span>
         </Link>
 
-        {/* Channels */}
+        {/* Rooms */}
         <div className="pt-3">
           <div className="group flex items-center gap-1 px-3 pb-1">
             <button
-              onClick={() => setChannelsOpen((v) => !v)}
+              onClick={() => setRoomsOpen((v) => !v)}
               className="flex flex-1 items-center gap-1 text-left section-title transition-colors hover:text-slate-700"
             >
-              <ChevronDown className={cn("h-3 w-3 transition-transform", !channelsOpen && "-rotate-90")} />
-              Channels
+              <ChevronDown className={cn("h-3 w-3 transition-transform", !roomsOpen && "-rotate-90")} />
+              Rooms
             </button>
             <button
               onClick={ui.openCreateRoom}
               className="rounded-md p-0.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
-              title="Create channel"
+              title="Create room"
             >
               <Plus className="h-3.5 w-3.5" />
             </button>
           </div>
-          {channelsOpen &&
-            channels.map((room) => {
+          {roomsOpen &&
+            rooms.map((room) => {
               const active = isRoomActive(room.id);
               return (
                 <Link

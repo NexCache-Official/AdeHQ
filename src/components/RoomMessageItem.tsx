@@ -7,15 +7,21 @@ import { EmployeeAvatar, HumanAvatar } from "./EmployeeAvatar";
 import { cn, formatTime } from "@/lib/utils";
 import { normalizeHumanDelivery } from "@/lib/message-delivery";
 import { saveSuggestedMemoryClient } from "@/lib/topic-summary/client";
+import { ArtifactCard, FileArtifactCard } from "./ArtifactCard";
+import { MessageMarkdown } from "./MessageMarkdown";
 import {
   BrainCircuit,
   Check,
   Copy,
+  FilePlus2,
   ListChecks,
   Loader2,
   Mail,
+  MoreHorizontal,
+  Quote,
   ScrollText,
   ShieldAlert,
+  Sparkles,
   X,
 } from "lucide-react";
 import { Button } from "./ui";
@@ -141,19 +147,6 @@ function MemorySuggestionArtifact({
   );
 }
 
-function renderContent(content: string) {
-  const parts = content.split(/(@[A-Za-z][A-Za-z ]*?Employee)/g);
-  return parts.map((part, i) =>
-    /^@[A-Za-z]/.test(part) && part.includes("Employee") ? (
-      <span key={i} className="font-medium text-accent">
-        {part}
-      </span>
-    ) : (
-      <span key={i}>{part}</span>
-    ),
-  );
-}
-
 function ReadReceiptAvatars({
   seenBy,
   isDm,
@@ -234,12 +227,96 @@ function DeliveryStatus({
   );
 }
 
+function MessageActions({
+  message,
+  isHuman,
+  hasSources,
+}: {
+  message: RoomMessage;
+  isHuman: boolean;
+  hasSources: boolean;
+}) {
+  const [copied, setCopied] = useState(false);
+
+  const copy = async () => {
+    await navigator.clipboard.writeText(message.content);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1600);
+  };
+
+  const disabledTitle = "Coming in Phase 3";
+
+  return (
+    <div className="absolute right-0 top-0 z-10 hidden -translate-y-1/2 items-center gap-0.5 rounded-full border border-border bg-surface p-0.5 shadow-md group-hover/msg:flex group-focus-within/msg:flex">
+      <button
+        type="button"
+        onClick={() => void copy()}
+        className="flex h-7 w-7 items-center justify-center rounded-full text-ink-3 transition-colors hover:bg-muted hover:text-ink"
+        aria-label="Copy message"
+        title="Copy"
+      >
+        {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+      </button>
+      <button
+        type="button"
+        disabled
+        title={isHuman ? disabledTitle : "Create artifact from this message in Phase 3"}
+        className="flex h-7 w-7 cursor-not-allowed items-center justify-center rounded-full text-ink-3 opacity-45"
+        aria-label={isHuman ? "Create task from message" : "Create artifact from this"}
+      >
+        {isHuman ? <ListChecks className="h-3.5 w-3.5" /> : <FilePlus2 className="h-3.5 w-3.5" />}
+      </button>
+      <button
+        type="button"
+        disabled
+        title="Save to memory in Phase 3"
+        className="flex h-7 w-7 cursor-not-allowed items-center justify-center rounded-full text-ink-3 opacity-45"
+        aria-label="Save to memory"
+      >
+        <BrainCircuit className="h-3.5 w-3.5" />
+      </button>
+      {isHuman ? (
+        <button
+          type="button"
+          disabled
+          title="Quote or reply in Phase 3"
+          className="flex h-7 w-7 cursor-not-allowed items-center justify-center rounded-full text-ink-3 opacity-45"
+          aria-label="Quote reply"
+        >
+          <Quote className="h-3.5 w-3.5" />
+        </button>
+      ) : (
+        <button
+          type="button"
+          disabled
+          title={hasSources ? "Source preview arrives with file Q&A" : disabledTitle}
+          className="flex h-7 w-7 cursor-not-allowed items-center justify-center rounded-full text-ink-3 opacity-45"
+          aria-label="View sources"
+        >
+          <Sparkles className="h-3.5 w-3.5" />
+        </button>
+      )}
+      <button
+        type="button"
+        disabled
+        title={disabledTitle}
+        className="flex h-7 w-7 cursor-not-allowed items-center justify-center rounded-full text-ink-3 opacity-45"
+        aria-label="More message actions"
+      >
+        <MoreHorizontal className="h-3.5 w-3.5" />
+      </button>
+    </div>
+  );
+}
+
 export function RoomMessageItem({
   message,
   isDm = false,
+  grouped = false,
 }: {
   message: RoomMessage;
   isDm?: boolean;
+  grouped?: boolean;
 }) {
   const { state } = useStore();
   const employee = state.employees.find((e) => e.id === message.senderId);
@@ -258,6 +335,8 @@ export function RoomMessageItem({
   const emailDrafts = message.artifacts?.filter((a) => a.type === "email_draft") ?? [];
   const memorySuggestions =
     message.artifacts?.filter((a) => a.type === "memory_suggestion") ?? [];
+  const generatedArtifacts = message.artifacts?.filter((a) => a.type === "artifact") ?? [];
+  const fileArtifacts = message.artifacts?.filter((a) => a.type === "file") ?? [];
   const otherArtifacts = (message.artifacts ?? []).filter(
     (
       a,
@@ -266,17 +345,26 @@ export function RoomMessageItem({
     } =>
       a.type !== "email_draft" &&
       a.type !== "memory_suggestion" &&
+      a.type !== "artifact" &&
+      a.type !== "file" &&
       !(isDm && a.type === "work_log") &&
       (a.type === "task" ||
         a.type === "memory" ||
         a.type === "approval" ||
         a.type === "work_log"),
   );
+  const hasSources = message.content.includes("[[source:");
 
   return (
-    <div className="group/msg relative flex gap-3 rounded-[10px] px-0 py-1">
-      <div className="shrink-0">
-        {isHuman ? (
+    <div
+      className={cn(
+        "group/msg relative flex gap-3 rounded-[10px] px-0 hover:bg-black/[0.015]",
+        grouped ? "py-0.5" : "py-2",
+      )}
+    >
+      <MessageActions message={message} isHuman={isHuman} hasSources={hasSources} />
+      <div className="w-9 shrink-0">
+        {grouped ? null : isHuman ? (
           <HumanAvatar name={message.senderName} size="md" />
         ) : employee ? (
           <EmployeeAvatar employee={employee} size="md" showStatus={false} />
@@ -286,30 +374,31 @@ export function RoomMessageItem({
       </div>
 
       <div className="min-w-0 flex-1">
-        <div className="mb-0.5 flex flex-wrap items-center gap-1.5">
-          <span className="text-[13.5px] font-semibold text-ink">{message.senderName}</span>
-          {!isHuman && (
-            <span className="rounded-[5px] bg-accent-soft px-1.5 py-0.5 text-[9px] font-bold text-accent">
-              AI
-            </span>
-          )}
-          {!isHuman && employee && (
-            <span className="text-[11px] text-ink-3">{employee.role}</span>
-          )}
-          {!isHuman && (
-            <span className="font-mono text-[10.5px] text-ink-3">{formatTime(message.createdAt)}</span>
-          )}
-        </div>
+        {!grouped && (
+          <div className="mb-0.5 flex flex-wrap items-center gap-1.5">
+            <span className="text-[13.5px] font-semibold text-ink">{message.senderName}</span>
+            {!isHuman && (
+              <span className="rounded-[5px] bg-accent-soft px-1.5 py-0.5 text-[9px] font-bold text-accent">
+                AI
+              </span>
+            )}
+            {!isHuman && employee && (
+              <span className="text-[11px] text-ink-3">{employee.role}</span>
+            )}
+            {!isHuman && (
+              <span className="font-mono text-[10.5px] text-ink-3">{formatTime(message.createdAt)}</span>
+            )}
+          </div>
+        )}
 
         {isHuman ? (
           <>
             <div
               className={cn(
-                "whitespace-pre-wrap text-[14px] leading-[1.55]",
                 message.pending ? "text-ink-2" : "text-ink",
               )}
             >
-              {renderContent(message.content)}
+              <MessageMarkdown content={message.content} compact />
             </div>
             <div className="mt-1 flex flex-wrap items-center justify-end gap-2">
               <DeliveryStatus message={message} isDm={isDm} />
@@ -322,9 +411,7 @@ export function RoomMessageItem({
             <span className="typing-dot" />
           </div>
         ) : (
-          <div className="whitespace-pre-wrap text-[14px] leading-[1.55] text-ink">
-            {renderContent(message.content)}
-          </div>
+          <MessageMarkdown content={message.content} />
         )}
 
         {emailDrafts.map((draft) => (
@@ -336,6 +423,29 @@ export function RoomMessageItem({
             key={artifact.id}
             artifact={artifact}
             topicId={message.topicId}
+          />
+        ))}
+
+        {generatedArtifacts.map((artifact) => (
+          <ArtifactCard
+            key={artifact.id}
+            title={artifact.label}
+            type={artifact.meta?.artifactType ?? "note"}
+            createdBy={artifact.meta?.createdByName ?? message.senderName}
+            timestamp={message.createdAt}
+            sourceCount={artifact.meta?.sourceCount ?? 0}
+            status={artifact.meta?.artifactStatus ?? "draft"}
+          />
+        ))}
+
+        {fileArtifacts.map((artifact) => (
+          <FileArtifactCard
+            key={artifact.id}
+            fileName={artifact.meta?.fileName ?? artifact.label}
+            extension={artifact.meta?.fileExtension}
+            size={artifact.meta?.fileSizeLabel}
+            status={artifact.meta?.fileStatus ?? "attached"}
+            className="mt-2 max-w-lg"
           />
         ))}
 

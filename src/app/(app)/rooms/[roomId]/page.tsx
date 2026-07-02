@@ -14,7 +14,7 @@ import { authHeaders } from "@/lib/api/auth-client";
 import { generalTopicForRoom, isGeneralTopic, topicsForRoom } from "@/lib/topics";
 import { MayaDmHiringLayout } from "@/components/maya/MayaDmHiringWorkspace";
 import { OrchestrationUiProvider } from "@/components/orchestration/OrchestrationUiContext";
-import { channelAssignableEmployees, isMayaEmployee } from "@/lib/maya-employee";
+import { roomAssignableEmployees, isMayaEmployee } from "@/lib/maya-employee";
 import { notifyTopicSummaryUpdated } from "@/lib/topic-summary/client";
 import type { AiParticipationMode, TopicPriority } from "@/lib/types";
 import type { SlashCommandResult } from "@/components/ChatComposer";
@@ -62,7 +62,7 @@ export default function RoomDetailPage() {
     [room, state.employees],
   );
   const assignableEmployees = useMemo(
-    () => channelAssignableEmployees(state.employees),
+    () => roomAssignableEmployees(state.employees),
     [state.employees],
   );
   const isMayaDm = Boolean(
@@ -360,7 +360,7 @@ export default function RoomDetailPage() {
 
     switch (result.type) {
       case "help":
-        setSlashNotice("Commands: /task /memory /summary /ask /archive /assign");
+        setSlashNotice("Commands: /task /memory /summarize /ask /archive /assign. Artifact commands unlock in Phase 3.");
         break;
       case "task":
         actions.createTask({

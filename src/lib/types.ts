@@ -160,7 +160,15 @@ export type MentionRef = {
 };
 
 export type MessageArtifact = {
-  type: "task" | "memory" | "approval" | "work_log" | "email_draft" | "memory_suggestion";
+  type:
+    | "task"
+    | "memory"
+    | "approval"
+    | "work_log"
+    | "email_draft"
+    | "memory_suggestion"
+    | "artifact"
+    | "file";
   id: string;
   label: string;
   meta?: {
@@ -172,6 +180,14 @@ export type MessageArtifact = {
     scope?: string;
     reason?: string;
     suggestionIndex?: number;
+    artifactType?: "prd" | "report" | "brief" | "proposal" | "decision" | "note";
+    artifactStatus?: "draft" | "saved";
+    createdByName?: string;
+    sourceCount?: number;
+    fileName?: string;
+    fileExtension?: string;
+    fileSizeLabel?: string;
+    fileStatus?: "attached" | "processing" | "ready" | "failed";
   };
 };
 
@@ -314,14 +330,14 @@ export type RoomMessage = {
   seenBy?: MessageSeenBy[];
 };
 
-/** `channel` = multi-member group space; `dm` = private 1:1 with one AI employee. */
+/** `room` = multi-member group space; `dm` = private 1:1 with one AI employee. */
 export type RoomKind = "room" | "dm";
 
 export type ChannelStatus = "active" | "archived";
 
 /**
  * A group room or DM. Stored in Supabase `rooms` table.
- * `roomId` on topics/messages is the parent channel id (group channel or DM).
+ * `roomId` on topics/messages is the parent room id (group room or DM).
  */
 export type ProjectRoom = {
   id: string;

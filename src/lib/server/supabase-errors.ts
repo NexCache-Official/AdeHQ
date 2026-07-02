@@ -28,14 +28,14 @@ export function mapTopicCreateError(error: unknown): { status: number; message: 
   if (code === "23505" || message.includes("channel_topics_room_title_unique")) {
     return {
       status: 409,
-      message: "A topic with this title already exists in the channel.",
+      message: "A topic with this title already exists in the room.",
     };
   }
 
   if (code === "23503") {
     return {
       status: 404,
-      message: "This channel was not found in your workspace. Refresh and try again.",
+      message: "This room was not found in your workspace. Refresh and try again.",
     };
   }
 
@@ -49,7 +49,7 @@ export function mapTopicCreateError(error: unknown): { status: number; message: 
   if (code === "42501" || message.toLowerCase().includes("row-level security")) {
     return {
       status: 403,
-      message: "You do not have permission to create topics in this channel.",
+      message: "You do not have permission to create topics in this room.",
     };
   }
 

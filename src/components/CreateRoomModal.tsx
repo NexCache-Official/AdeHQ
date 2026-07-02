@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button, Modal, ModalHeader } from "./ui";
 import { useStore } from "@/lib/demo-store";
-import { channelAssignableEmployees } from "@/lib/maya-employee";
+import { roomAssignableEmployees } from "@/lib/maya-employee";
 import { EmployeeAvatar } from "./EmployeeAvatar";
 import { cn } from "@/lib/utils";
 import { Check, Hash } from "lucide-react";
@@ -25,7 +25,7 @@ export function CreateRoomModal({
   const [brief, setBrief] = useState("");
   const [accent, setAccent] = useState(ACCENTS[0]);
   const [selected, setSelected] = useState<string[]>([]);
-  const assignableEmployees = channelAssignableEmployees(state.employees);
+  const assignableEmployees = roomAssignableEmployees(state.employees);
 
   const reset = () => {
     setName("");
@@ -81,7 +81,7 @@ export function CreateRoomModal({
             className="input-field"
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            placeholder="What is this channel for?"
+            placeholder="What is this room for?"
           />
         </label>
         <label className="block space-y-1.5">
@@ -118,7 +118,7 @@ export function CreateRoomModal({
           <div className="grid gap-2 sm:grid-cols-2">
             {assignableEmployees.length === 0 ? (
               <p className="sm:col-span-2 rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
-                Hire an AI employee first, then add them to this channel.
+                Hire an AI employee first, then add them to this room.
               </p>
             ) : (
               assignableEmployees.map((e) => {
@@ -151,7 +151,7 @@ export function CreateRoomModal({
       </div>
       <div className="flex items-center justify-end gap-2 border-t border-slate-200 px-6 py-4">
         <Button variant="ghost" onClick={close}>Cancel</Button>
-        <Button onClick={create} disabled={!name.trim()}>Create channel</Button>
+        <Button onClick={create} disabled={!name.trim()}>Create room</Button>
       </div>
     </Modal>
   );

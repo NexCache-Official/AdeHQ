@@ -454,7 +454,7 @@ export function AssignScreen({
         </button>
         <div className="rounded-xl border border-border bg-surface p-4 text-left">
           <p className="mb-3 text-xs font-medium uppercase tracking-wider text-ink-3">
-            Add to channel
+            Add to room
           </p>
           <div className="flex flex-wrap gap-2">
             {rooms.map((r) => (

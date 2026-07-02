@@ -3,7 +3,7 @@
 > The easiest way to create and manage your AI workforce.
 
 AdeHQ is a workspace where humans and AI employees collaborate in project rooms.
-Hire AI employees, chat in channels, assign tasks, review approvals, and inspect work logs —
+Hire AI employees, chat in rooms, assign tasks, review approvals, and inspect work logs —
 all backed by Supabase with SiliconFlow-powered employee replies.
 
 ## Documentation

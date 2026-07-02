@@ -246,7 +246,7 @@ export async function loadTopicContext(
   if (roomResult.error) throw roomResult.error;
   const roomRow = roomResult.data as DbRow;
   if (String(roomRow.status ?? "active") === "archived") {
-    throw new Error("This channel is archived.");
+    throw new Error("This room is archived.");
   }
   const lean = options.lean ?? roomRow.kind === "dm";
   const messageLimit = lean ? 12 : 50;

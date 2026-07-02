@@ -12,7 +12,7 @@ import {
 } from "@/lib/topics";
 import { effectiveEmployeeStatus } from "@/lib/maya-employee";
 import { cn } from "@/lib/utils";
-import { ChannelIcon, EmployeeAvatar } from "./EmployeeAvatar";
+import { RoomIcon, EmployeeAvatar } from "./EmployeeAvatar";
 import { EmployeeStatusBadge } from "./EmployeeStatusBadge";
 import { Plus, Archive } from "lucide-react";
 
@@ -209,10 +209,10 @@ export function TopicList({
       ) : room ? (
         <div className="border-b border-border-2 p-4">
           <div className="flex items-center gap-2.5">
-            <ChannelIcon />
+            <RoomIcon />
             <div className="min-w-0 flex-1">
               <div className="truncate text-[15px] font-semibold text-ink">{room.name}</div>
-              <div className="text-[11.5px] text-ink-2">Channel · {totalUnread} unread</div>
+              <div className="text-[11.5px] text-ink-2">Room · {totalUnread} unread</div>
             </div>
           </div>
           <button

@@ -79,8 +79,8 @@ export function HumanAvatar({
   );
 }
 
-/** Muted square icon container for channels (prototype style). */
-export function ChannelIcon({ className }: { className?: string }) {
+/** Muted square icon container for group rooms (prototype style). */
+export function RoomIcon({ className }: { className?: string }) {
   return (
     <div
       className={cn(
@@ -94,3 +94,6 @@ export function ChannelIcon({ className }: { className?: string }) {
     </div>
   );
 }
+
+/** @deprecated Use RoomIcon */
+export const ChannelIcon = RoomIcon;

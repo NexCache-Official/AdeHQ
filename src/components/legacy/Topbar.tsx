@@ -70,8 +70,8 @@ export function Topbar() {
         </Button>
         <Button size="sm" onClick={ui.openCreateRoom}>
           <Plus className="h-4 w-4" />
-          <span className="hidden sm:inline">Create Channel</span>
-          <span className="sm:hidden">Channel</span>
+          <span className="hidden sm:inline">Create Room</span>
+          <span className="sm:hidden">Room</span>
         </Button>
 
         <div className="relative">

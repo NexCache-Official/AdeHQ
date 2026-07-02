@@ -78,6 +78,45 @@ type QueuedRunClient = {
 };
 
 const MESSAGE_PAGE = 50;
+const GROUP_WINDOW_MS = 5 * 60 * 1000;
+
+function isSameCalendarDay(a: string, b: string): boolean {
+  const first = new Date(a);
+  const second = new Date(b);
+  return (
+    first.getFullYear() === second.getFullYear() &&
+    first.getMonth() === second.getMonth() &&
+    first.getDate() === second.getDate()
+  );
+}
+
+function daySeparatorLabel(iso: string): string {
+  const date = new Date(iso);
+  const today = new Date();
+  const yesterday = new Date(today);
+  yesterday.setDate(today.getDate() - 1);
+
+  if (isSameCalendarDay(iso, today.toISOString())) return "Today";
+  if (isSameCalendarDay(iso, yesterday.toISOString())) return "Yesterday";
+
+  return date.toLocaleDateString(undefined, {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    year: date.getFullYear() === today.getFullYear() ? undefined : "numeric",
+  });
+}
+
+function shouldGroupWithPrevious(
+  previous: import("@/lib/types").RoomMessage | undefined,
+  current: import("@/lib/types").RoomMessage,
+): boolean {
+  if (!previous) return false;
+  if (previous.senderType === "system" || current.senderType === "system") return false;
+  if (previous.senderType !== current.senderType || previous.senderId !== current.senderId) return false;
+  if (!isSameCalendarDay(previous.createdAt, current.createdAt)) return false;
+  return Math.abs(+new Date(current.createdAt) - +new Date(previous.createdAt)) <= GROUP_WINDOW_MS;
+}
 
 export function RoomChat({
   room,
@@ -142,6 +181,19 @@ export function RoomChat({
         ),
       })),
     [topicMessages, topicMembersForTopic, state.workspaceMembers],
+  );
+
+  const messageRows = useMemo(
+    () =>
+      displayMessages.map((message, index) => {
+        const previous = displayMessages[index - 1];
+        return {
+          message,
+          grouped: shouldGroupWithPrevious(previous, message),
+          showDaySeparator: !previous || !isSameCalendarDay(previous.createdAt, message.createdAt),
+        };
+      }),
+    [displayMessages],
   );
 
   const roomEmployees = room.aiEmployees
@@ -807,18 +859,18 @@ export function RoomChat({
   ).length;
 
   const isTopicArchived = topic.status === "archived";
-  const isChannelArchived = room.status === "archived";
-  const chatDisabled = isTopicArchived || isChannelArchived;
+  const isRoomArchived = room.status === "archived";
+  const chatDisabled = isTopicArchived || isRoomArchived;
 
   const placeholder = chatDisabled
-    ? isChannelArchived
-      ? "This channel is archived — restore it from the Channels page to send messages"
+    ? isRoomArchived
+      ? "This room is archived — restore it from the Rooms page to send messages"
       : "This topic is archived — restore it to send messages"
     : isDm && dmEmployee
-    ? `Message ${dmEmployee.name} directly… use @ to mention, / for commands`
+    ? `Message ${dmEmployee.name}… ask for a draft, summary, or artifact`
     : isMainChat
       ? `Message ${mainChatLabel(isDm)}…`
-      : `Discuss ${topic.title}… use @ to mention an employee`;
+      : `Ask the ${topic.title} topic… mention an employee or start with /`;
 
   return (
     <div className="flex h-full flex-col bg-canvas">
@@ -937,7 +989,11 @@ export function RoomChat({
             <EmptyState
               icon={MessagesSquare}
               title={isDm && dmEmployee ? `Message ${dmEmployee.name}` : `Start ${displayTitle}`}
-              description="Send a message here. Mention an AI employee with @ when you want help."
+              description={
+                isDm && dmEmployee
+                  ? `Ask ${dmEmployee.name} to draft, research, summarize, or turn a file into an artifact.`
+                  : "Start this workstream by asking an employee for help, uploading a file, or creating a task."
+              }
             />
             <div className="flex flex-wrap justify-center gap-2">
               <Button variant="secondary" size="sm" onClick={() => router.push("/settings")}>
@@ -954,11 +1010,17 @@ export function RoomChat({
           )
         ) : (
           <div className="mx-auto max-w-[760px]">
-            <div className="mb-[18px] mt-1.5 text-center">
-              <span className="rounded-full bg-muted px-3 py-0.5 text-[11px] text-ink-3">Today</span>
-            </div>
-            {displayMessages.map((m) => (
-              <RoomMessageItem key={m.id} message={m} isDm={isDm} />
+            {messageRows.map(({ message, grouped, showDaySeparator }) => (
+              <div key={message.id}>
+                {showDaySeparator && (
+                  <div className="mb-[18px] mt-1.5 text-center">
+                    <span className="rounded-full bg-muted px-3 py-0.5 text-[11px] text-ink-3">
+                      {daySeparatorLabel(message.createdAt)}
+                    </span>
+                  </div>
+                )}
+                <RoomMessageItem message={message} isDm={isDm} grouped={grouped} />
+              </div>
             ))}
             {activeRuns
               .filter((run) => ["reading", "thinking", "typing", "queued"].includes(run.phase))
@@ -1032,8 +1094,8 @@ export function RoomChat({
           )}
           {chatDisabled && (
             <div className="mb-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
-              {isChannelArchived
-                ? "This channel is archived. Messaging and AI responses are paused until you restore it."
+              {isRoomArchived
+                ? "This room is archived. Messaging and AI responses are paused until you restore it."
                 : "This topic is archived. Messaging and AI responses are paused until you restore it."}
             </div>
           )}

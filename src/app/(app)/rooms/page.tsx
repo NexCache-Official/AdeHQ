@@ -6,9 +6,9 @@ import { useState } from "react";
 import { useStore } from "@/lib/demo-store";
 import { useShellUI } from "@/components/AppShell";
 import { PageContainer } from "@/components/Page";
-import { ChannelIcon } from "@/components/EmployeeAvatar";
+import { RoomIcon } from "@/components/EmployeeAvatar";
 import { avatarGradient, initials } from "@/lib/utils";
-import { getArchivedGroupChannels, getGroupChannels } from "@/lib/rooms";
+import { getArchivedGroupRooms, getGroupRooms } from "@/lib/rooms";
 import { authHeaders } from "@/lib/api/auth-client";
 import type { ProjectRoom } from "@/lib/types";
 import {
@@ -26,67 +26,67 @@ export default function RoomsPage() {
   const { state, actions, backend } = useStore();
   const ui = useShellUI();
   const router = useRouter();
-  const channels = getGroupChannels(state.rooms);
-  const archivedChannels = getArchivedGroupChannels(state.rooms);
-  const [archivedOpen, setArchivedOpen] = useState(archivedChannels.length > 0);
+  const rooms = getGroupRooms(state.rooms);
+  const archivedRooms = getArchivedGroupRooms(state.rooms);
+  const [archivedOpen, setArchivedOpen] = useState(archivedRooms.length > 0);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [menuId, setMenuId] = useState<string | null>(null);
 
-  const runChannelAction = async (
-    channel: ProjectRoom,
+  const runRoomAction = async (
+    room: ProjectRoom,
     action: "archive" | "restore" | "delete",
   ) => {
     setError(null);
-    setBusyId(channel.id);
+    setBusyId(room.id);
     setMenuId(null);
     try {
       if (backend === "supabase") {
         const headers = await authHeaders();
         if (action === "restore") {
-          const res = await fetch(`/api/rooms/${channel.id}`, {
+          const res = await fetch(`/api/rooms/${room.id}`, {
             method: "PATCH",
             headers,
             body: JSON.stringify({ status: "active" }),
           });
           if (!res.ok) {
             const err = await res.json().catch(() => null);
-            throw new Error(err?.error ?? "Failed to restore channel");
+            throw new Error(err?.error ?? "Failed to restore room");
           }
           const { room: updated } = await res.json();
-          actions.updateRoom(channel.id, updated);
+          actions.updateRoom(room.id, updated);
         } else if (action === "archive") {
-          const res = await fetch(`/api/rooms/${channel.id}`, { method: "DELETE", headers });
+          const res = await fetch(`/api/rooms/${room.id}`, { method: "DELETE", headers });
           if (!res.ok) {
             const err = await res.json().catch(() => null);
-            throw new Error(err?.error ?? "Failed to archive channel");
+            throw new Error(err?.error ?? "Failed to archive room");
           }
           const { room: updated } = await res.json();
-          actions.updateRoom(channel.id, updated);
+          actions.updateRoom(room.id, updated);
         } else {
-          const res = await fetch(`/api/rooms/${channel.id}?permanent=true`, {
+          const res = await fetch(`/api/rooms/${room.id}?permanent=true`, {
             method: "DELETE",
             headers,
           });
           if (!res.ok) {
             const err = await res.json().catch(() => null);
-            throw new Error(err?.error ?? "Failed to delete channel");
+            throw new Error(err?.error ?? "Failed to delete room");
           }
-          actions.removeChannelPermanently(channel.id);
+          actions.removeChannelPermanently(room.id);
         }
       } else {
         if (action === "restore") {
-          actions.updateRoom(channel.id, { status: "active" });
+          actions.updateRoom(room.id, { status: "active" });
         } else if (action === "archive") {
-          actions.updateRoom(channel.id, { status: "archived" });
+          actions.updateRoom(room.id, { status: "archived" });
         } else {
-          actions.removeChannelPermanently(channel.id);
+          actions.removeChannelPermanently(room.id);
         }
       }
       setConfirmDeleteId(null);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Channel action failed");
+      setError(e instanceof Error ? e.message : "Room action failed");
     } finally {
       setBusyId(null);
     }
@@ -96,9 +96,9 @@ export default function RoomsPage() {
     <PageContainer wide>
       <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-ink">Channels</h1>
+          <h1 className="text-2xl font-bold tracking-tight text-ink">Rooms</h1>
           <p className="mt-1 text-sm text-ink-2">
-            Group spaces where you and your AI employees collaborate. Each channel has topics inside it.
+            Group spaces where you and your AI employees collaborate. Each room has topics inside it.
           </p>
         </div>
         <button
@@ -107,7 +107,7 @@ export default function RoomsPage() {
           className="flex items-center gap-1.5 rounded-xl border border-border bg-surface px-4 py-2.5 text-[12.5px] font-medium text-ink-2 transition-colors hover:bg-muted"
         >
           <Plus className="h-4 w-4" strokeWidth={2} />
-          Create channel
+          Create room
         </button>
       </div>
 
@@ -117,14 +117,14 @@ export default function RoomsPage() {
         </div>
       )}
 
-      {channels.length === 0 && archivedChannels.length === 0 ? (
+      {rooms.length === 0 && archivedRooms.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-border px-6 py-14 text-center text-sm text-ink-3">
           No rooms yet. Create one to start collaborating with your AI team.
         </div>
       ) : (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {channels.map((room) => (
-            <ChannelCard
+          {rooms.map((room) => (
+            <RoomCard
               key={room.id}
               room={room}
               employees={state.employees}
@@ -133,19 +133,19 @@ export default function RoomsPage() {
               confirmDelete={confirmDeleteId === room.id}
               onOpen={() => router.push(`/rooms/${room.id}`)}
               onToggleMenu={() => setMenuId((id) => (id === room.id ? null : room.id))}
-              onArchive={() => void runChannelAction(room, "archive")}
+              onArchive={() => void runRoomAction(room, "archive")}
               onDeleteRequest={() => {
                 setMenuId(null);
                 setConfirmDeleteId(room.id);
               }}
-              onDeleteConfirm={() => void runChannelAction(room, "delete")}
+              onDeleteConfirm={() => void runRoomAction(room, "delete")}
               onDeleteCancel={() => setConfirmDeleteId(null)}
             />
           ))}
         </div>
       )}
 
-      {archivedChannels.length > 0 && (
+      {archivedRooms.length > 0 && (
         <section className="mt-8">
           <button
             type="button"
@@ -153,12 +153,12 @@ export default function RoomsPage() {
             className="mb-3 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-ink-3"
           >
             {archivedOpen ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
-            Archived ({archivedChannels.length})
+            Archived ({archivedRooms.length})
           </button>
           {archivedOpen && (
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {archivedChannels.map((room) => (
-                <ChannelCard
+              {archivedRooms.map((room) => (
+                <RoomCard
                   key={room.id}
                   room={room}
                   employees={state.employees}
@@ -168,12 +168,12 @@ export default function RoomsPage() {
                   confirmDelete={confirmDeleteId === room.id}
                   onOpen={() => router.push(`/rooms/${room.id}`)}
                   onToggleMenu={() => setMenuId((id) => (id === room.id ? null : room.id))}
-                  onRestore={() => void runChannelAction(room, "restore")}
+                  onRestore={() => void runRoomAction(room, "restore")}
                   onDeleteRequest={() => {
                     setMenuId(null);
                     setConfirmDeleteId(room.id);
                   }}
-                  onDeleteConfirm={() => void runChannelAction(room, "delete")}
+                  onDeleteConfirm={() => void runRoomAction(room, "delete")}
                   onDeleteCancel={() => setConfirmDeleteId(null)}
                 />
               ))}
@@ -185,7 +185,7 @@ export default function RoomsPage() {
   );
 }
 
-function ChannelCard({
+function RoomCard({
   room,
   employees,
   archived = false,
@@ -228,7 +228,7 @@ function ChannelCard({
     >
       <button type="button" onClick={onOpen} className="block w-full text-left">
         <div className="flex items-center gap-2.5">
-          <ChannelIcon className="!h-[34px] !w-[34px] !rounded-[10px]" />
+          <RoomIcon className="!h-[34px] !w-[34px] !rounded-[10px]" />
           <div className="min-w-0 flex-1">
             <div className="font-semibold text-[13.5px] text-ink">{room.name}</div>
             <div className="truncate text-[11.5px] text-ink-3">{latest}</div>
@@ -266,7 +266,7 @@ function ChannelCard({
           onClick={onToggleMenu}
           disabled={busy}
           className="flex h-8 w-8 items-center justify-center rounded-lg text-ink-3 transition-colors hover:bg-muted hover:text-ink-2"
-          aria-label="Channel options"
+          aria-label="Room options"
         >
           <MoreHorizontal className="h-4 w-4" />
         </button>
@@ -276,7 +276,7 @@ function ChannelCard({
               href={`/rooms/${room.id}`}
               className="block px-3 py-2 text-xs text-ink-2 hover:bg-muted"
             >
-              Open channel
+              Open room
             </Link>
             {archived ? (
               onRestore && (
@@ -314,7 +314,7 @@ function ChannelCard({
         <div className="mt-3 rounded-xl border border-red-200 bg-red-50 p-3">
           <p className="text-xs text-red-900">
             Permanently delete <strong>{room.name}</strong>? This removes all topics, messages,
-            memory, and history in this channel.
+            memory, and history in this room.
           </p>
           <div className="mt-2 flex gap-2">
             <Button size="sm" variant="danger" onClick={onDeleteConfirm} disabled={busy}>

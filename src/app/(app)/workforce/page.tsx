@@ -25,7 +25,7 @@ const PIPELINE = [
 const RECOMMENDATIONS = [
   {
     title: "Add a Research analyst",
-    why: "Your Research channel has 3 open topics with no dedicated analyst assigned.",
+    why: "Your Research room has 3 open topics with no dedicated analyst assigned.",
   },
   {
     title: "Upgrade Sales capacity",

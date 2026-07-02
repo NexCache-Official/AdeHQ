@@ -40,7 +40,9 @@ import {
   BrainCircuit,
   CheckSquare,
   ChevronDown,
+  FileText,
   Loader2,
+  Paperclip,
   ScrollText,
   ShieldAlert,
   Sparkles,
@@ -51,6 +53,8 @@ import {
 const TABS = [
   { id: "overview", label: "Overview", icon: BookText },
   { id: "tasks", label: "Tasks", icon: CheckSquare },
+  { id: "files", label: "Files", icon: Paperclip },
+  { id: "artifacts", label: "Artifacts", icon: FileText },
   { id: "memory", label: "Memory", icon: BrainCircuit },
   { id: "approvals", label: "Approvals", icon: ShieldAlert },
   { id: "activity", label: "Work Log", icon: ScrollText },
@@ -185,6 +189,8 @@ export function TopicPanel({
 
   const counts: Record<string, number> = {
     tasks: topicTasks.length,
+    files: 0,
+    artifacts: 0,
     memory: topicMemory.length,
     approvals: topicApprovals.filter((a) => a.status === "pending").length,
     activity: topicLog.length,
@@ -456,6 +462,26 @@ export function TopicPanel({
               ) : (
                 topicMemory.map((m) => <MemoryCard key={m.id} memory={m} />)
               )}
+            </div>
+          )}
+
+          {tab === "files" && (
+            <div className="space-y-3">
+              <EmptyState
+                icon={Paperclip}
+                title="No files"
+                description="Upload a PDF, DOCX, spreadsheet, or CSV so your AI employees can work from source material."
+              />
+            </div>
+          )}
+
+          {tab === "artifacts" && (
+            <div className="space-y-3">
+              <EmptyState
+                icon={FileText}
+                title="No artifacts"
+                description="Generated PRDs, reports, briefs, and proposals will appear here."
+              />
             </div>
           )}
 

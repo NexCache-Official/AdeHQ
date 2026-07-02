@@ -99,7 +99,7 @@ export default function HomePage() {
               onClick={ui.openCreateRoom}
               className="inline-flex items-center gap-2 rounded-xl border border-white/16 bg-white/[0.06] px-4 py-2.5 text-[13px] font-medium text-white transition-colors hover:bg-white/10"
             >
-              <Plus className="h-4 w-4" /> Create channel
+              <Plus className="h-4 w-4" /> Create room
             </button>
             <button
               type="button"
