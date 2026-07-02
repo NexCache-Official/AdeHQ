@@ -13,6 +13,7 @@ import type {
   ToolAccess,
   WorkLogEvent,
 } from "@/lib/types";
+import { roomIdFromRow } from "@/lib/server/db-row";
 import { refreshTopicStats } from "@/lib/server/topic-stats";
 import { ensureGeneralTopic, topicFromRow } from "@/lib/server/topic-helpers";
 import { fetchTopicSummary } from "@/lib/topic-summary/persistence";
@@ -70,7 +71,7 @@ function employeeFromRow(row: DbRow, tools: ToolAccess[]): AIEmployee {
 function messageFromRow(row: DbRow): RoomMessage {
   return {
     id: String(row.id),
-    roomId: String(row.channel_id),
+    roomId: roomIdFromRow(row),
     topicId: row.topic_id ? String(row.topic_id) : undefined,
     senderType: row.sender_type as RoomMessage["senderType"],
     senderId: String(row.sender_id),
@@ -91,7 +92,7 @@ function messageFromRow(row: DbRow): RoomMessage {
 function memoryFromRow(row: DbRow): MemoryEntry {
   return {
     id: String(row.id),
-    roomId: String(row.channel_id),
+    roomId: roomIdFromRow(row),
     topicId: row.topic_id ? String(row.topic_id) : undefined,
     type: row.type as MemoryEntry["type"],
     title: String(row.title),
@@ -352,7 +353,7 @@ export async function loadTopicContext(
 
   const openTasks = ((tasksResult.data as DbRow[] | null) ?? []).map((row) => ({
     id: String(row.id),
-    roomId: String(row.channel_id),
+    roomId: roomIdFromRow(row),
     topicId: row.topic_id ? String(row.topic_id) : undefined,
     title: String(row.title),
     description: row.description ? String(row.description) : undefined,
@@ -368,7 +369,7 @@ export async function loadTopicContext(
 
   const topicApprovals = ((approvalsResult.data as DbRow[] | null) ?? []).map((row) => ({
     id: String(row.id),
-    roomId: String(row.channel_id),
+    roomId: roomIdFromRow(row),
     topicId: row.topic_id ? String(row.topic_id) : undefined,
     requestedBy: String(row.requested_by),
     title: String(row.title),
@@ -381,7 +382,7 @@ export async function loadTopicContext(
 
   const topicWorkLogs = ((workLogsResult.data as DbRow[] | null) ?? []).map((row) => ({
     id: String(row.id),
-    roomId: String(row.channel_id),
+    roomId: roomIdFromRow(row),
     topicId: row.topic_id ? String(row.topic_id) : undefined,
     employeeId: String(row.employee_id),
     action: String(row.action),

@@ -4,6 +4,8 @@ import { assertCanAccessRoom } from "@/lib/server/room-access";
 import { processQueuedAgentRun, AgentRunClaimError } from "@/lib/server/process-queued-run";
 import { createServiceRoleClient } from "@/lib/supabase/server";
 import { debugErrorPayload, serializeUnknownError } from "@/lib/server/message-errors";
+import { roomIdFromRow } from "@/lib/server/db-row";
+import { nowISO } from "@/lib/utils";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -21,7 +23,7 @@ export async function POST(
 
     const { data: runRow, error: runError } = await client
       .from("agent_runs")
-      .select("workspace_id, channel_id, topic_id, status, response_reason")
+      .select("workspace_id, room_id, topic_id, status, response_reason")
       .eq("id", params.runId)
       .maybeSingle();
 
@@ -31,11 +33,12 @@ export async function POST(
     }
 
     const workspaceId = body.workspaceId ?? String(runRow.workspace_id);
+    const roomId = roomIdFromRow(runRow as Record<string, unknown>);
     const { role } = await requireWorkspaceMembership(client, workspaceId, user.id);
     await assertCanAccessRoom(
       client,
       workspaceId,
-      String(runRow.channel_id),
+      roomId,
       user.id,
       role,
     );
@@ -78,7 +81,7 @@ export async function POST(
         : undefined,
       aiMessage: {
         id: result.aiMessageId,
-        roomId: String(runRow.channel_id),
+        roomId,
         topicId: runRow.topic_id ? String(runRow.topic_id) : undefined,
         senderType: "ai" as const,
         senderId: result.employeeId,
@@ -101,6 +104,20 @@ export async function POST(
     }
     console.error("[AdeHQ process agent run]", error);
     const message = serializeUnknownError(error);
+    try {
+      const serviceClient = createServiceRoleClient();
+      await serviceClient
+        .from("agent_runs")
+        .update({
+          status: "failed",
+          error_message: message,
+          completed_at: nowISO(),
+        })
+        .eq("id", params.runId)
+        .in("status", ["queued", "waiting", "running"]);
+    } catch {
+      // best-effort — prevents infinite client recovery loops
+    }
     const debug = request.headers.get("X-AdeHQ-Debug") === "true";
     return NextResponse.json(
       {

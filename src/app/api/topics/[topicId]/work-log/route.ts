@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { AuthError, requireAuthUser, requireWorkspaceMembership } from "@/lib/supabase/auth-server";
 import { assertCanAccessRoom } from "@/lib/server/room-access";
 import { topicFromRow } from "@/lib/server/topic-helpers";
+import { roomIdFromRow } from "@/lib/server/db-row";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -9,7 +10,7 @@ export const dynamic = "force-dynamic";
 function workLogFromRow(row: Record<string, unknown>) {
   return {
     id: String(row.id),
-    roomId: String(row.channel_id ?? row.room_id),
+    roomId: roomIdFromRow(row),
     topicId: row.topic_id ? String(row.topic_id) : undefined,
     employeeId: String(row.employee_id),
     action: String(row.action),

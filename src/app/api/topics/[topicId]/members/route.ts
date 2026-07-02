@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { AuthError, requireAuthUser, requireWorkspaceMembership } from "@/lib/supabase/auth-server";
 import { assertCanAccessRoom } from "@/lib/server/room-access";
 import { topicMemberFromRow } from "@/lib/server/topic-helpers";
+import { roomIdFromRow } from "@/lib/server/db-row";
 
 export const runtime = "nodejs";
 
@@ -19,7 +20,7 @@ export async function POST(
 
     const { data: topicRow, error: topicError } = await client
       .from("topics")
-      .select("workspace_id, channel_id")
+      .select("workspace_id, room_id")
       .eq("id", params.topicId)
       .maybeSingle();
     if (topicError) throw topicError;
@@ -28,7 +29,7 @@ export async function POST(
     }
 
     const workspaceId = String(topicRow.workspace_id);
-    const roomId = String(topicRow.channel_id);
+    const roomId = roomIdFromRow(topicRow as Record<string, unknown>);
     const { role } = await requireWorkspaceMembership(client, workspaceId, user.id);
     await assertCanAccessRoom(client, workspaceId, roomId, user.id, role);
 

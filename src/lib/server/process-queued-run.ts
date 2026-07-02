@@ -32,6 +32,7 @@ import {
 import { scheduleTopicSummaryRefresh } from "@/lib/topic-summary/refresh";
 import type { PersistedOrchestrationEmployeeStatus } from "@/lib/orchestration/types";
 import { serializeUnknownError } from "@/lib/server/message-errors";
+import { roomIdFromRow } from "@/lib/server/db-row";
 import { nowISO } from "@/lib/utils";
 
 async function persistRunOrchestrationPhase(
@@ -126,7 +127,7 @@ export async function processQueuedAgentRun(
 
   const run = claim.run;
   const employeeId = String(run.employee_id);
-  const roomId = String(run.channel_id);
+  const roomId = roomIdFromRow(run);
   const topicId = run.topic_id ? String(run.topic_id) : "";
   const triggerMessageId = String(run.trigger_message_id);
   const rootTriggerMessageId = run.root_trigger_message_id

@@ -104,6 +104,8 @@ export function RoomChat({
   const router = useRouter();
   const orchestrationUi = useOrchestrationUi();
   const triggerMessageIdRef = useRef<string | null>(null);
+  const failedRunIdsRef = useRef(new Set<string>());
+  const processingRunIdsRef = useRef(new Set<string>());
   const [failedSend, setFailedSend] = useState<PendingSend | null>(null);
   const [sendError, setSendError] = useState<string | null>(null);
   const [activeRuns, setActiveRuns] = useState<ActiveRun[]>([]);
@@ -264,6 +266,10 @@ export function RoomChat({
       const triggerId = triggerMessageIdRef.current;
 
       const processOneRun = async (run: QueuedRunClient) => {
+          if (failedRunIdsRef.current.has(run.runId)) return;
+          if (processingRunIdsRef.current.has(run.runId)) return;
+          processingRunIdsRef.current.add(run.runId);
+
           trace("agent-run", "info", `${run.employeeName} → reading context`, { runId: run.runId });
           if (triggerId) {
             markMessageSeenByEmployee(triggerId, run.employeeId, run.employeeName);
@@ -311,6 +317,7 @@ export function RoomChat({
                 runId: run.runId,
                 code: data.code,
               });
+              processingRunIdsRef.current.delete(run.runId);
               setActiveRuns((prev) => prev.filter((r) => r.runId !== run.runId));
               return;
             }
@@ -321,6 +328,8 @@ export function RoomChat({
                 runId: run.runId,
                 response: data,
               });
+              failedRunIdsRef.current.add(run.runId);
+              processingRunIdsRef.current.delete(run.runId);
               throw new Error(data.error ?? data.debug?.hint ?? "AI response failed");
             }
 
@@ -394,9 +403,12 @@ export function RoomChat({
                 r.runId === run.runId ? { ...r, phase: "done", error: undefined } : r,
               ),
             );
+            processingRunIdsRef.current.delete(run.runId);
           } catch (err) {
             const message = err instanceof Error ? err.message : "AI response failed";
             console.error("[AdeHQ process run]", err);
+            failedRunIdsRef.current.add(run.runId);
+            processingRunIdsRef.current.delete(run.runId);
             trace("agent-run", "error", `${run.employeeName} couldn't respond`, {
               runId: run.runId,
               error: message,
@@ -455,8 +467,11 @@ export function RoomChat({
           setCollaborationPlan(data.collaborationPlan);
         }
         const queued = (data.runs ?? []).filter(
-          (r: { status: string; stale?: boolean; processable?: boolean }) =>
-            r.status === "queued" && !r.stale,
+          (r: { runId: string; status: string; stale?: boolean; processable?: boolean }) =>
+            r.status === "queued" &&
+            !r.stale &&
+            !failedRunIdsRef.current.has(r.runId) &&
+            !processingRunIdsRef.current.has(r.runId),
         );
         const waiting = (data.collaborationPlan?.pendingParticipants ?? []).map(
           (p: {
@@ -491,6 +506,7 @@ export function RoomChat({
   }, [topic?.id, topic?.status, room.id, room.status, backend, processQueuedRuns, trace]);
 
   const retryRun = (run: ActiveRun) => {
+    failedRunIdsRef.current.delete(run.runId);
     trace("agent-run", "info", `Retrying ${run.employeeName}`, { runId: run.runId });
     void processQueuedRuns([
       { runId: run.runId, employeeId: run.employeeId, employeeName: run.employeeName },

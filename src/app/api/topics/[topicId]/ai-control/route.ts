@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { AuthError, requireAuthUser, requireWorkspaceMembership } from "@/lib/supabase/auth-server";
 import { assertCanAccessRoom } from "@/lib/server/room-access";
 import { getTopicForRoom, topicFromRow } from "@/lib/server/topic-helpers";
+import { roomIdFromRow } from "@/lib/server/db-row";
 import { nowISO } from "@/lib/utils";
 
 export const runtime = "nodejs";
@@ -160,7 +161,7 @@ export async function GET(
     if (!topic) {
       const { data: row } = await client
         .from("topics")
-        .select("workspace_id, channel_id, metadata")
+        .select("workspace_id, room_id, metadata")
         .eq("id", params.topicId)
         .maybeSingle();
       if (!row) {
@@ -171,7 +172,7 @@ export async function GET(
       await assertCanAccessRoom(
         client,
         workspaceId,
-        String(row.channel_id),
+        roomIdFromRow(row as Record<string, unknown>),
         user.id,
         role,
       );
