@@ -45,6 +45,19 @@ export function formatWorkLogTitle(employeeName: string | undefined, action: str
   return `${name} ${verb}`;
 }
 
+/** System-generated work log actions hidden from DM activity feeds. */
+const DM_HIDDEN_WORK_LOG_ACTIONS = new Set([
+  "orchestration_completed",
+  "panel_response_completed",
+  "collaboration_completed",
+  "handoff_completed",
+  "topic_suggested",
+  "topic_summary_refreshed",
+  "topic_memory_suggested",
+  "next_actions_suggested",
+  "memory_suggested",
+]);
+
 /** Skip noisy or non-work entries in compact sidebars. */
 export function shouldShowWorkLogInSidebar(action: string, summary?: string): boolean {
   const key = action.trim().toLowerCase();
@@ -52,4 +65,15 @@ export function shouldShowWorkLogInSidebar(action: string, summary?: string): bo
   if (key === "model fallback" || key === "model error") return false;
   if (/^greet/i.test(summary ?? "") || /^greet/i.test(action)) return false;
   return true;
+}
+
+export function shouldShowWorkLogInTopic(
+  action: string,
+  summary?: string,
+  opts?: { isDm?: boolean },
+): boolean {
+  if (!shouldShowWorkLogInSidebar(action, summary)) return false;
+  if (!opts?.isDm) return true;
+  const key = action.trim().toLowerCase().replace(/\s+/g, "_");
+  return !DM_HIDDEN_WORK_LOG_ACTIONS.has(key);
 }

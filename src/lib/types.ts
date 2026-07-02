@@ -160,7 +160,7 @@ export type MentionRef = {
 };
 
 export type MessageArtifact = {
-  type: "task" | "memory" | "approval" | "work_log" | "email_draft";
+  type: "task" | "memory" | "approval" | "work_log" | "email_draft" | "memory_suggestion";
   id: string;
   label: string;
   meta?: {
@@ -168,6 +168,10 @@ export type MessageArtifact = {
     body?: string;
     recipient?: string;
     company?: string;
+    memoryText?: string;
+    scope?: string;
+    reason?: string;
+    suggestionIndex?: number;
   };
 };
 

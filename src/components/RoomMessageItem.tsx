@@ -6,14 +6,17 @@ import { useStore } from "@/lib/demo-store";
 import { EmployeeAvatar, HumanAvatar } from "./EmployeeAvatar";
 import { cn, formatTime } from "@/lib/utils";
 import { normalizeHumanDelivery } from "@/lib/message-delivery";
+import { saveSuggestedMemoryClient } from "@/lib/topic-summary/client";
 import {
   BrainCircuit,
   Check,
   Copy,
   ListChecks,
+  Loader2,
   Mail,
   ScrollText,
   ShieldAlert,
+  X,
 } from "lucide-react";
 import { Button } from "./ui";
 
@@ -70,6 +73,69 @@ function EmailDraftCard({
       )}
       <div className="px-3 py-2.5">
         <p className="whitespace-pre-wrap text-[13px] leading-relaxed text-ink-2">{meta.body}</p>
+      </div>
+    </div>
+  );
+}
+
+function MemorySuggestionArtifact({
+  artifact,
+  topicId,
+}: {
+  artifact: import("@/lib/types").MessageArtifact;
+  topicId?: string;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [dismissed, setDismissed] = useState(false);
+
+  if (dismissed || saved || !topicId) return null;
+
+  const text = artifact.meta?.memoryText ?? artifact.label;
+  const suggestionIndex = artifact.meta?.suggestionIndex;
+
+  const save = async () => {
+    if (typeof suggestionIndex !== "number") return;
+    setBusy(true);
+    try {
+      await saveSuggestedMemoryClient(topicId, suggestionIndex);
+      setSaved(true);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="mt-2 w-full max-w-lg rounded-xl border border-cyan-200/80 bg-cyan-50/40 px-3 py-2.5">
+      <div className="flex items-start gap-2">
+        <BrainCircuit className="mt-0.5 h-4 w-4 shrink-0 text-cyan-700" />
+        <div className="min-w-0 flex-1">
+          <p className="text-[11px] font-semibold text-cyan-900">Save to memory?</p>
+          <p className="mt-0.5 text-[13px] leading-snug text-ink">{text}</p>
+          {artifact.meta?.reason && (
+            <p className="mt-1 text-[10px] text-ink-3">{artifact.meta.reason}</p>
+          )}
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            <Button
+              variant="secondary"
+              size="sm"
+              className="h-7 text-[11px]"
+              disabled={busy}
+              onClick={() => void save()}
+            >
+              {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
+              Save
+            </Button>
+            <button
+              type="button"
+              onClick={() => setDismissed(true)}
+              className="inline-flex h-7 items-center gap-1 rounded-lg px-2 text-[11px] text-ink-3 hover:bg-muted hover:text-ink"
+            >
+              <X className="h-3 w-3" />
+              Dismiss
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -190,7 +256,22 @@ export function RoomMessageItem({
 
   const isHuman = message.senderType === "human";
   const emailDrafts = message.artifacts?.filter((a) => a.type === "email_draft") ?? [];
-  const otherArtifacts = message.artifacts?.filter((a) => a.type !== "email_draft") ?? [];
+  const memorySuggestions =
+    message.artifacts?.filter((a) => a.type === "memory_suggestion") ?? [];
+  const otherArtifacts = (message.artifacts ?? []).filter(
+    (
+      a,
+    ): a is import("@/lib/types").MessageArtifact & {
+      type: "task" | "memory" | "approval" | "work_log";
+    } =>
+      a.type !== "email_draft" &&
+      a.type !== "memory_suggestion" &&
+      !(isDm && a.type === "work_log") &&
+      (a.type === "task" ||
+        a.type === "memory" ||
+        a.type === "approval" ||
+        a.type === "work_log"),
+  );
 
   return (
     <div className="group/msg relative flex gap-3 rounded-[10px] px-0 py-1">
@@ -248,6 +329,14 @@ export function RoomMessageItem({
 
         {emailDrafts.map((draft) => (
           <EmailDraftCard key={draft.id} label={draft.label} meta={draft.meta} />
+        ))}
+
+        {memorySuggestions.map((artifact) => (
+          <MemorySuggestionArtifact
+            key={artifact.id}
+            artifact={artifact}
+            topicId={message.topicId}
+          />
         ))}
 
         {otherArtifacts.length > 0 && (

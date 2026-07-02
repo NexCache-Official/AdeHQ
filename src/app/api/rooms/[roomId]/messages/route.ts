@@ -225,50 +225,54 @@ export async function POST(
     let orchestrationId: string | null = null;
     let topicSuggestions: Record<string, unknown>[] = [];
 
+    const isEmployeeDm = respondersCtx.room.kind === "dm";
+
     if (!isAiQueueingBlocked(topic)) {
       try {
-        orchestrationId = await persistOrchestrationPlan(client, {
-          workspaceId,
-          roomId: params.roomId,
-          topicId,
-          triggerMessageId: humanMessage.id,
-          createdBy: user.id,
-          plan: orchestrationPlan,
-        });
-
-        const suggestionGovernance = await fetchTopicSuggestionGovernance(
-          client,
-          workspaceId,
-          params.roomId,
-        );
-        const stewardSuggestions = filterTopicSuggestionsByGovernance(
-          suggestTopics(orchestratorInput, orchestrationPlan.intent, topic),
-          suggestionGovernance,
-          orchestratorInput,
-        );
-        if (stewardSuggestions.length) {
-          topicSuggestions = await persistTopicSuggestions(client, {
+        if (!isEmployeeDm) {
+          orchestrationId = await persistOrchestrationPlan(client, {
             workspaceId,
             roomId: params.roomId,
             topicId,
-            orchestrationId,
             triggerMessageId: humanMessage.id,
             createdBy: user.id,
-            suggestions: stewardSuggestions,
+            plan: orchestrationPlan,
           });
 
-          const first = stewardSuggestions[0];
-          if (first.confidence >= 0.78) {
-            await logOrchestrationWorkLog(client, {
+          const suggestionGovernance = await fetchTopicSuggestionGovernance(
+            client,
+            workspaceId,
+            params.roomId,
+          );
+          const stewardSuggestions = filterTopicSuggestionsByGovernance(
+            suggestTopics(orchestratorInput, orchestrationPlan.intent, topic),
+            suggestionGovernance,
+            orchestratorInput,
+          );
+          if (stewardSuggestions.length) {
+            topicSuggestions = await persistTopicSuggestions(client, {
               workspaceId,
               roomId: params.roomId,
               topicId,
-              employeeId: orchestrationEmployees[0]?.id ?? mentions[0] ?? "system",
-              action: "topic_suggested",
-              summary: `Suggested topic: ${first.type === "move_to_existing_topic" ? first.topicTitle : first.title}`,
-              relatedEntityType: "topic_suggestion",
-              relatedEntityId: String(topicSuggestions[0]?.id ?? ""),
+              orchestrationId,
+              triggerMessageId: humanMessage.id,
+              createdBy: user.id,
+              suggestions: stewardSuggestions,
             });
+
+            const first = stewardSuggestions[0];
+            if (first.confidence >= 0.78) {
+              await logOrchestrationWorkLog(client, {
+                workspaceId,
+                roomId: params.roomId,
+                topicId,
+                employeeId: orchestrationEmployees[0]?.id ?? mentions[0] ?? "system",
+                action: "topic_suggested",
+                summary: `Suggested topic: ${first.type === "move_to_existing_topic" ? first.topicTitle : first.title}`,
+                relatedEntityType: "topic_suggestion",
+                relatedEntityId: String(topicSuggestions[0]?.id ?? ""),
+              });
+            }
           }
         }
       } catch (persistError) {

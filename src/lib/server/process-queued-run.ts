@@ -29,7 +29,11 @@ import {
   finalizeOrchestrationIfComplete,
   updateOrchestrationEmployeeStatus,
 } from "@/lib/orchestration/persistence";
-import { scheduleTopicSummaryRefresh } from "@/lib/topic-summary/refresh";
+import { scheduleTopicSummaryRefresh, refreshTopicSummary } from "@/lib/topic-summary/refresh";
+import {
+  buildMemorySuggestionArtifacts,
+  filterDmMessageArtifacts,
+} from "@/lib/topic-summary/message-artifacts";
 import type { PersistedOrchestrationEmployeeStatus } from "@/lib/orchestration/types";
 import { serializeUnknownError } from "@/lib/server/message-errors";
 import { roomIdFromRow } from "@/lib/server/db-row";
@@ -359,7 +363,7 @@ export async function processQueuedAgentRun(
       stripAllEffects: collaborationOnly && !effect.tasks.length,
     });
 
-    const { aiMessage, artifacts } = await persistEmployeeEffects(
+    let { aiMessage, artifacts } = await persistEmployeeEffects(
       client,
       workspaceId,
       roomId,
@@ -370,6 +374,11 @@ export async function processQueuedAgentRun(
       triggerMessageId,
       runId,
     );
+
+    const isDm = ctx.room.kind === "dm";
+    if (isDm) {
+      artifacts = filterDmMessageArtifacts(artifacts);
+    }
 
     await persistRunOrchestrationPhase(
       client,
@@ -474,17 +483,47 @@ export async function processQueuedAgentRun(
               : response.reply.trim().length > 80
                 ? ("meaningful_ai_reply" as const)
                 : null;
+
       if (refreshTrigger) {
-        scheduleTopicSummaryRefresh(client, {
-          workspaceId,
-          roomId,
-          topicId,
-          topicTitle: ctx.topic.title,
-          topicDescription: ctx.topic.description,
-          trigger: refreshTrigger,
-          employeeId,
-        });
+        if (isDm) {
+          const refreshResult = await refreshTopicSummary(client, {
+            workspaceId,
+            roomId,
+            topicId,
+            topicTitle: ctx.topic.title,
+            topicDescription: ctx.topic.description,
+            trigger: refreshTrigger,
+            employeeId,
+            logWorkEvents: false,
+          });
+          if (refreshResult.summary?.suggestedMemory.length) {
+            artifacts = [
+              ...artifacts,
+              ...buildMemorySuggestionArtifacts(refreshResult.summary.suggestedMemory),
+            ];
+          }
+        } else {
+          scheduleTopicSummaryRefresh(client, {
+            workspaceId,
+            roomId,
+            topicId,
+            topicTitle: ctx.topic.title,
+            topicDescription: ctx.topic.description,
+            trigger: refreshTrigger,
+            employeeId,
+          });
+        }
       }
+    }
+
+    if (isDm) {
+      const payload = artifacts.length ? artifacts : null;
+      await client
+        .from("messages")
+        .update({ artifacts: payload })
+        .eq("workspace_id", workspaceId)
+        .eq("id", aiMessage.id);
+      aiMessage = { ...aiMessage, artifacts: payload ?? undefined };
     }
 
     return {

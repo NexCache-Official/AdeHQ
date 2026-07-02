@@ -177,8 +177,7 @@ export function orchestrateConversationDeterministic(
       [dmEmployee],
       {
         confidence: 0.95,
-        workLogRequired: !isLowActionMessage(text),
-        workLogReason: "orchestration_completed",
+        workLogRequired: false,
       },
     );
   }

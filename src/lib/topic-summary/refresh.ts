@@ -65,10 +65,13 @@ export async function refreshTopicSummary(
     trigger?: TopicSummaryRefreshTrigger;
     manual?: boolean;
     employeeId?: string;
+    /** When false, skip writing topic-summary work log events (e.g. employee DMs). */
+    logWorkEvents?: boolean;
   },
 ): Promise<RefreshTopicSummaryResult> {
   const trigger = params.trigger ?? (params.manual ? "manual" : "meaningful_ai_reply");
   const manual = Boolean(params.manual || trigger === "manual");
+  const logWorkEvents = params.logWorkEvents !== false;
 
   if (!shouldAutoRefreshTopicSummary(trigger)) {
     return { summary: null, refreshed: false, skippedReason: "trigger_not_eligible" };
@@ -143,44 +146,50 @@ export async function refreshTopicSummary(
   const employeeId = params.employeeId ?? "system";
 
   if (manual || changed) {
-    await logOrchestrationWorkLog(client, {
-      workspaceId: params.workspaceId,
-      roomId: params.roomId,
-      topicId: params.topicId,
-      employeeId,
-      action: "topic_summary_refreshed",
-      summary: manual
-        ? `Refreshed topic summary: ${params.topicTitle}`
-        : `Updated topic summary after ${trigger.replace(/_/g, " ")}`,
-      relatedEntityType: "topic",
-      relatedEntityId: params.topicId,
-    });
+    if (logWorkEvents) {
+      await logOrchestrationWorkLog(client, {
+        workspaceId: params.workspaceId,
+        roomId: params.roomId,
+        topicId: params.topicId,
+        employeeId,
+        action: "topic_summary_refreshed",
+        summary: manual
+          ? `Refreshed topic summary: ${params.topicTitle}`
+          : `Updated topic summary after ${trigger.replace(/_/g, " ")}`,
+        relatedEntityType: "topic",
+        relatedEntityId: params.topicId,
+      });
+    }
   }
 
   if (saved.suggestedMemory.length > 0 && changed) {
-    await logOrchestrationWorkLog(client, {
-      workspaceId: params.workspaceId,
-      roomId: params.roomId,
-      topicId: params.topicId,
-      employeeId,
-      action: "topic_memory_suggested",
-      summary: `${saved.suggestedMemory.length} memory suggestion(s) for ${params.topicTitle}`,
-      relatedEntityType: "topic",
-      relatedEntityId: params.topicId,
-    });
+    if (logWorkEvents) {
+      await logOrchestrationWorkLog(client, {
+        workspaceId: params.workspaceId,
+        roomId: params.roomId,
+        topicId: params.topicId,
+        employeeId,
+        action: "topic_memory_suggested",
+        summary: `${saved.suggestedMemory.length} memory suggestion(s) for ${params.topicTitle}`,
+        relatedEntityType: "topic",
+        relatedEntityId: params.topicId,
+      });
+    }
   }
 
   if (saved.nextActions.length > 0 && changed) {
-    await logOrchestrationWorkLog(client, {
-      workspaceId: params.workspaceId,
-      roomId: params.roomId,
-      topicId: params.topicId,
-      employeeId,
-      action: "next_actions_suggested",
-      summary: `${saved.nextActions.length} next action(s) for ${params.topicTitle}`,
-      relatedEntityType: "topic",
-      relatedEntityId: params.topicId,
-    });
+    if (logWorkEvents) {
+      await logOrchestrationWorkLog(client, {
+        workspaceId: params.workspaceId,
+        roomId: params.roomId,
+        topicId: params.topicId,
+        employeeId,
+        action: "next_actions_suggested",
+        summary: `${saved.nextActions.length} next action(s) for ${params.topicTitle}`,
+        relatedEntityType: "topic",
+        relatedEntityId: params.topicId,
+      });
+    }
   }
 
   return { summary: saved, refreshed: true };

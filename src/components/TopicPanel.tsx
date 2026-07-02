@@ -18,6 +18,7 @@ import { TaskCard } from "./TaskCard";
 import { MemoryCard } from "./MemoryCard";
 import { ApprovalCard } from "./ApprovalCard";
 import { WorkLogTimeline } from "./WorkLogTimeline";
+import { shouldShowWorkLogInTopic } from "@/lib/work-log-labels";
 import { OrchestrationSidebarStatus } from "@/components/orchestration/OrchestrationSidebarStatus";
 import { TopicSummaryPanel } from "@/components/topic-summary/TopicSummaryPanel";
 import { useTopicSummary } from "@/components/topic-summary/useTopicSummary";
@@ -168,6 +169,7 @@ export function TopicPanel({
   const topicApprovals = approvals.filter((a) => a.topicId === topic.id);
   const topicLog = workLog
     .filter((w) => w.topicId === topic.id)
+    .filter((w) => shouldShowWorkLogInTopic(w.action, w.summary, { isDm }))
     .sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt));
 
   const humanParticipants = room.humans
