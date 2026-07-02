@@ -128,7 +128,7 @@ create table if not exists public.employee_tools (
     on delete cascade
 );
 
-create table if not exists public.project_rooms (
+create table if not exists public.rooms (
   workspace_id uuid not null references public.workspaces(id) on delete cascade,
   id text not null,
   name text not null,
@@ -138,10 +138,12 @@ create table if not exists public.project_rooms (
   brief text not null default '',
   unread integer not null default 0,
   accent text not null default '#f97316',
+  status text not null default 'active'
+    check (status in ('active', 'archived')),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   primary key (workspace_id, id),
-  constraint project_rooms_kind_shape check (
+  constraint rooms_kind_shape check (
     (kind = 'dm' and dm_employee_id is not null)
     or (kind <> 'dm' and dm_employee_id is null)
   )
@@ -155,7 +157,7 @@ create table if not exists public.room_members (
   created_at timestamptz not null default now(),
   primary key (workspace_id, room_id, member_type, member_id),
   foreign key (workspace_id, room_id)
-    references public.project_rooms(workspace_id, id)
+    references public.rooms(workspace_id, id)
     on delete cascade
 );
 
@@ -176,7 +178,7 @@ create table if not exists public.messages (
   created_at timestamptz not null default now(),
   primary key (workspace_id, id),
   foreign key (workspace_id, room_id)
-    references public.project_rooms(workspace_id, id)
+    references public.rooms(workspace_id, id)
     on delete cascade
 );
 
@@ -197,7 +199,7 @@ create table if not exists public.tasks (
   updated_at timestamptz not null default now(),
   primary key (workspace_id, id),
   foreign key (workspace_id, room_id)
-    references public.project_rooms(workspace_id, id)
+    references public.rooms(workspace_id, id)
     on delete cascade
 );
 
@@ -216,7 +218,7 @@ create table if not exists public.memory_entries (
   updated_at timestamptz not null default now(),
   primary key (workspace_id, id),
   foreign key (workspace_id, room_id)
-    references public.project_rooms(workspace_id, id)
+    references public.rooms(workspace_id, id)
     on delete cascade
 );
 
@@ -236,7 +238,7 @@ create table if not exists public.approvals (
   updated_at timestamptz not null default now(),
   primary key (workspace_id, id),
   foreign key (workspace_id, room_id)
-    references public.project_rooms(workspace_id, id)
+    references public.rooms(workspace_id, id)
     on delete cascade
 );
 
@@ -255,7 +257,7 @@ create table if not exists public.work_log_events (
   created_at timestamptz not null default now(),
   primary key (workspace_id, id),
   foreign key (workspace_id, room_id)
-    references public.project_rooms(workspace_id, id)
+    references public.rooms(workspace_id, id)
     on delete cascade
 );
 
@@ -273,7 +275,7 @@ create table if not exists public.calls (
   updated_at timestamptz not null default now(),
   primary key (workspace_id, id),
   foreign key (workspace_id, room_id)
-    references public.project_rooms(workspace_id, id)
+    references public.rooms(workspace_id, id)
     on delete cascade
 );
 
@@ -343,7 +345,7 @@ create table if not exists public.agent_runs (
   completed_at timestamptz,
   primary key (workspace_id, id),
   foreign key (workspace_id, room_id)
-    references public.project_rooms(workspace_id, id) on delete cascade
+    references public.rooms(workspace_id, id) on delete cascade
 );
 
 create table if not exists public.agent_run_steps (
@@ -454,9 +456,9 @@ create trigger set_employee_tools_updated_at
 before update on public.employee_tools
 for each row execute function public.set_updated_at();
 
-drop trigger if exists set_project_rooms_updated_at on public.project_rooms;
-create trigger set_project_rooms_updated_at
-before update on public.project_rooms
+drop trigger if exists set_rooms_updated_at on public.rooms;
+create trigger set_rooms_updated_at
+before update on public.rooms
 for each row execute function public.set_updated_at();
 
 drop trigger if exists set_tasks_updated_at on public.tasks;
@@ -536,7 +538,7 @@ alter table public.tools enable row level security;
 alter table public.workspace_tools enable row level security;
 alter table public.ai_employees enable row level security;
 alter table public.employee_tools enable row level security;
-alter table public.project_rooms enable row level security;
+alter table public.rooms enable row level security;
 alter table public.room_members enable row level security;
 alter table public.messages enable row level security;
 alter table public.tasks enable row level security;
@@ -686,9 +688,9 @@ on public.employee_tools for all
 using (public.is_workspace_member(workspace_id))
 with check (public.is_workspace_member(workspace_id));
 
-drop policy if exists "project_rooms_all_member" on public.project_rooms;
-create policy "project_rooms_all_member"
-on public.project_rooms for all
+drop policy if exists "rooms_all_member" on public.rooms;
+create policy "rooms_all_member"
+on public.rooms for all
 using (public.is_workspace_member(workspace_id))
 with check (public.is_workspace_member(workspace_id));
 

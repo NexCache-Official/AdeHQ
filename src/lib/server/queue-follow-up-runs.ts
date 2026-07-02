@@ -7,7 +7,7 @@ import {
   MAX_AI_TO_AI_HOPS,
   MAX_FOLLOW_UP_RUNS_PER_ROOT,
   MAX_SAME_EMPLOYEE_REENTRY,
-} from "@/lib/server/channel-governance";
+} from "@/lib/server/room-governance";
 import { isAiQueueingBlocked, isEmployeeBlockedInTopic } from "@/lib/topic-ai-control";
 import type { ResponderDecision } from "@/lib/server/decide-responders";
 import { queueAgentRuns, type QueuedRun } from "@/lib/server/queue-agent-runs";

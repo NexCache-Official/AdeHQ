@@ -1,5 +1,5 @@
 import type { AIEmployee, AiParticipationMode, ParticipationStyle } from "@/lib/types";
-import { isBroadcastToEveryone } from "@/lib/server/channel-governance";
+import { isBroadcastToEveryone } from "@/lib/server/room-governance";
 
 const ROLE_KEYWORDS: Record<string, string[]> = {
   pm: ["roadmap", "plan", "feature", "priority", "user", "onboarding", "requirements", "milestone", "scope", "product", "problem", "solution"],

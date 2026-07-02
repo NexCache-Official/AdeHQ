@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { AuthError } from "@/lib/supabase/auth-server";
-import { assertChannelActive } from "@/lib/server/channel-helpers";
+import { assertRoomActive } from "@/lib/server/room-helpers";
 
 export async function getWorkspaceMemberRole(
   client: SupabaseClient,
@@ -71,5 +71,5 @@ export async function assertCanSendRoomMessage(
   role: string,
 ): Promise<void> {
   await assertCanAccessRoom(client, workspaceId, roomId, userId, role);
-  await assertChannelActive(client, workspaceId, roomId);
+  await assertRoomActive(client, workspaceId, roomId);
 }

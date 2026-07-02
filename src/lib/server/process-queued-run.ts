@@ -17,12 +17,12 @@ import {
 } from "@/lib/supabase/ai-runtime";
 import { loadTopicContext, persistEmployeeEffects } from "@/lib/server/room-messages";
 import { assertTopicInRoom } from "@/lib/server/topic-helpers";
-import { assertChannelActive } from "@/lib/server/channel-helpers";
+import { assertRoomActive } from "@/lib/server/room-helpers";
 import {
   queueCollaboratorRuns,
   queueFollowUpRuns,
 } from "@/lib/server/queue-follow-up-runs";
-import { GREETING_MAX_OUTPUT_TOKENS } from "@/lib/server/channel-governance";
+import { GREETING_MAX_OUTPUT_TOKENS } from "@/lib/server/room-governance";
 import type { QueuedRun } from "@/lib/server/queue-agent-runs";
 import type { CollaborationRole, ConversationPlan } from "@/lib/types";
 import {
@@ -150,7 +150,7 @@ export async function processQueuedAgentRun(
   if (!topicId) throw new Error("Agent run missing topic.");
 
   await assertTopicInRoom(client, workspaceId, roomId, topicId);
-  await assertChannelActive(client, workspaceId, roomId);
+  await assertRoomActive(client, workspaceId, roomId);
 
   const { data: usageRow } = await client
     .from("ai_usage_events")

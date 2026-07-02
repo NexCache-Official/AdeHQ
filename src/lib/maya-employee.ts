@@ -15,7 +15,6 @@ export type SystemEmployeeMetadata = {
   dmOnly?: boolean;
   canBeArchived?: boolean;
   canBeAssignedToRooms?: boolean;
-  canBeAssignedToChannels?: boolean;
   isDefaultWorkspaceEmployee?: boolean;
   purpose?: string;
 };
@@ -63,7 +62,6 @@ export function effectiveEmployeeStatus(
 function cannotAssignToRooms(metadata?: SystemEmployeeMetadata): boolean {
   if (!metadata) return false;
   if (metadata.canBeAssignedToRooms === false) return true;
-  if (metadata.canBeAssignedToChannels === false) return true;
   return false;
 }
 
@@ -76,9 +74,6 @@ export function roomAssignableEmployees(employees: AIEmployee[]): AIEmployee[] {
     return true;
   });
 }
-
-/** @deprecated Use roomAssignableEmployees */
-export const channelAssignableEmployees = roomAssignableEmployees;
 
 export function mergeEmployeesById(local: AIEmployee[], remote: AIEmployee[]): AIEmployee[] {
   const merged = new Map(remote.map((employee) => [employee.id, employee]));

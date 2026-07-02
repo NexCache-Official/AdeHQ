@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useStore } from "@/lib/demo-store";
-import { getGroupChannels } from "@/lib/rooms";
+import { getGroupRooms } from "@/lib/rooms";
 import { PageContainer, PageHeader } from "@/components/Page";
 import { MemoryCard } from "@/components/MemoryCard";
 import { Button, Modal, ModalHeader } from "@/components/ui";
@@ -21,7 +21,7 @@ export default function MemoryPage() {
   const [status, setStatus] = useState<MemoryStatus | "all">("all");
   const [createOpen, setCreateOpen] = useState(false);
 
-  const groupChannels = getGroupChannels(state.rooms);
+  const groupRooms = getGroupRooms(state.rooms);
 
   const filtered = state.memory.filter((m) => {
     if (type !== "all" && m.type !== type) return false;
@@ -30,7 +30,7 @@ export default function MemoryPage() {
     return true;
   });
 
-  const byRoom = groupChannels
+  const byRoom = groupRooms
     .map((r) => ({ room: r, items: filtered.filter((m) => m.roomId === r.id) }))
     .filter((g) => g.items.length > 0);
 
@@ -86,11 +86,11 @@ export default function MemoryPage() {
 
 function CreateMemoryModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { state, actions } = useStore();
-  const groupChannels = getGroupChannels(state.rooms);
+  const groupRooms = getGroupRooms(state.rooms);
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
   const [type, setType] = useState<MemoryType>("decision");
-  const [roomId, setRoomId] = useState(groupChannels[0]?.id ?? "");
+  const [roomId, setRoomId] = useState(groupRooms[0]?.id ?? "");
 
   const create = () => {
     if (!title.trim() || !roomId) return;
@@ -130,7 +130,7 @@ function CreateMemoryModal({ open, onClose }: { open: boolean; onClose: () => vo
           <label className="block space-y-1.5">
             <span className="text-xs font-medium text-slate-500">Room</span>
             <select className="input-field" value={roomId} onChange={(e) => setRoomId(e.target.value)}>
-              {groupChannels.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
+              {groupRooms.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
             </select>
           </label>
         </div>

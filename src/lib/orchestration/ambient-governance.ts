@@ -1,7 +1,7 @@
 import {
-  type ChannelGovernanceContext,
+  type RoomGovernanceContext,
   isRoomCooldownActive,
-} from "@/lib/server/channel-governance";
+} from "@/lib/server/room-governance";
 import { isHelpRequest } from "@/lib/server/ambient-collaboration";
 import type { OrchestrationPlan, OrchestratorInput } from "./types";
 
@@ -22,10 +22,10 @@ function blockedPlan(reason: string): OrchestrationPlan {
 }
 
 /** Apply room ambient cooldown rules to a V19.4 orchestration plan. */
-export function applyChannelGovernanceToPlan(
+export function applyRoomGovernanceToPlan(
   plan: OrchestrationPlan,
   input: Pick<OrchestratorInput, "messageText" | "mentionedEmployeeIds" | "isDm">,
-  governance: ChannelGovernanceContext,
+  governance: RoomGovernanceContext,
 ): OrchestrationPlan {
   if (!plan.shouldRespond || input.isDm) return plan;
   if (input.mentionedEmployeeIds.length > 0) return plan;

@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useStore } from "@/lib/demo-store";
 import { partitionWorkforce } from "@/lib/maya-employee";
 import { MAYA_EMPLOYEE_NAME } from "@/lib/hiring/maya";
-import { getGroupChannels } from "@/lib/rooms";
+import { getGroupRooms } from "@/lib/rooms";
 import { useShellUI } from "@/components/AppShell";
 import { PageContainer } from "@/components/Page";
 import { EmployeeCard } from "@/components/EmployeeCard";
@@ -52,12 +52,12 @@ export default function HomePage() {
     .slice(0, 6);
   const { hired, maya } = partitionWorkforce(employees);
   const workingCount = hired.filter((e) => e.status === "working").length;
-  const channels = getGroupChannels(state.rooms);
+  const rooms = getGroupRooms(state.rooms);
   const firstName = state.user?.name?.split(" ")[0] ?? "there";
 
   const stats = [
     { label: "AI employees", value: hired.length, sub: maya.length ? `${MAYA_EMPLOYEE_NAME} included · ${workingCount} working` : `${workingCount} working now`, href: "/workforce" },
-    { label: "Rooms", value: channels.length, sub: "Active workstreams", href: "/rooms" },
+    { label: "Rooms", value: rooms.length, sub: "Active workstreams", href: "/rooms" },
     { label: "Open tasks", value: activeTasks.length, sub: "Across all rooms", href: "/tasks" },
     { label: "Approvals", value: pendingApprovals.length, sub: pendingApprovals.length ? "Needs review" : "All clear", href: "/approvals", alert: pendingApprovals.length > 0 },
     { label: "Memory", value: state.memory.length, sub: "Facts & decisions", href: "/memory" },
@@ -66,8 +66,8 @@ export default function HomePage() {
 
   const heroSub =
     pendingApprovals.length > 0
-      ? `${pendingApprovals.length} approval${pendingApprovals.length === 1 ? "" : "s"} waiting — your team is active across ${channels.length} room${channels.length === 1 ? "" : "s"}.`
-      : `Your AI employees are working across ${channels.length} room${channels.length === 1 ? "" : "s"}. Give them a task, review their work, or jump on a call.`;
+      ? `${pendingApprovals.length} approval${pendingApprovals.length === 1 ? "" : "s"} waiting — your team is active across ${rooms.length} room${rooms.length === 1 ? "" : "s"}.`
+      : `Your AI employees are working across ${rooms.length} room${rooms.length === 1 ? "" : "s"}. Give them a task, review their work, or jump on a call.`;
 
   return (
     <PageContainer wide className="pb-16">
@@ -149,7 +149,7 @@ export default function HomePage() {
           <section>
             <SectionHeader title="Active rooms" href="/rooms" linkLabel="All rooms" />
             <div className="grid gap-3 sm:grid-cols-2">
-              {channels.map((r) => (
+              {rooms.map((r) => (
                 <ProjectRoomCard key={r.id} room={r} />
               ))}
             </div>

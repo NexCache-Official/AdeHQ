@@ -1,6 +1,6 @@
 type DbRow = Record<string, unknown>;
 
-/** Resolve room id from a row after channels→rooms renames (supports legacy column). */
+/** Resolve room id from a database row. */
 export function roomIdFromRow(row: DbRow): string {
-  return String(row.room_id ?? row.channel_id ?? "");
+  return String(row.room_id ?? "");
 }

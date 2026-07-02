@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { nowISO } from "@/lib/utils";
 
-/** Recompute denormalized counters on channel_topics after writes. */
+/** Recompute denormalized counters on topics after writes. */
 export async function refreshTopicStats(
   client: SupabaseClient,
   topicId: string,

@@ -69,6 +69,7 @@ using (public.is_workspace_member(workspace_id))
 with check (public.is_workspace_member(workspace_id));
 
 drop index if exists public.channel_topics_channel_title_unique;
+drop index if exists public.room_topics_room_title_unique;
 create unique index topics_room_title_unique
   on public.topics (room_id, lower(title))
   where status <> 'archived';

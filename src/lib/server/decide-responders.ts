@@ -1,5 +1,5 @@
 import type { AIEmployee, MentionRef, ProjectRoom, ResponseReason, RoomTopic } from "@/lib/types";
-import type { ChannelGovernanceContext } from "@/lib/server/channel-governance";
+import type { RoomGovernanceContext } from "@/lib/server/room-governance";
 import { planConversation } from "@/lib/server/conversation-orchestrator";
 
 export type ResponderDecision = {
@@ -12,7 +12,7 @@ export type ResponderDecision = {
 export type DecideRespondersOptions = {
   forceEmployeeIds?: string[];
   maxParallel?: number;
-  governance?: ChannelGovernanceContext;
+  governance?: RoomGovernanceContext;
   rootTriggerMessageId?: string;
 };
 

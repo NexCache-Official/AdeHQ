@@ -40,7 +40,7 @@ import { mergeRoomMessages } from "@/lib/message-delivery";
 import { mayaWelcomeMessage, MAYA_EMPLOYEE_ID } from "@/lib/hiring/maya";
 import { resolveUniqueRoomName } from "@/lib/room-naming";
 import { isMayaEmployee, isSystemEmployee, mergeMayaIntoState, mayaEmployeeStatus, buildMayaDmRoom, buildMayaEmployee, ensureMayaDmTopicsInState, dedupeMayaDmRooms, mergeEmployeesById, resolveMayaDmRoomId } from "@/lib/maya-employee";
-import { isGroupChannel } from "@/lib/rooms";
+import { isGroupRoom } from "@/lib/rooms";
 import { nowISO, uid } from "./utils";
 import { SUPABASE_WORKSPACE_TABLES } from "./supabase/config";
 import { supabase } from "./supabase/client";
@@ -164,7 +164,7 @@ type StoreActions = {
   createRoom: (room: Partial<ProjectRoom> & { name: string }) => ProjectRoom;
   openOrCreateDM: (employeeId: string) => ProjectRoom;
   updateRoom: (id: string, patch: Partial<ProjectRoom>) => void;
-  removeChannelPermanently: (channelId: string) => void;
+  removeRoomPermanently: (roomId: string) => void;
   addEmployeeToRoom: (roomId: string, employeeId: string) => void;
   removeEmployeeFromRoom: (roomId: string, employeeId: string) => void;
   markRoomRead: (roomId: string) => void;
@@ -411,9 +411,9 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       }, 250);
     };
 
-    let channel = supabase.channel(`workspace:${workspaceId}`);
+    let realtimeSubscription = supabase.channel(`workspace:${workspaceId}`);
     SUPABASE_WORKSPACE_TABLES.forEach((table) => {
-      channel = channel.on(
+      realtimeSubscription = realtimeSubscription.on(
         "postgres_changes",
         {
           event: "*",
@@ -425,7 +425,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       );
     });
 
-    channel = channel
+    realtimeSubscription = realtimeSubscription
       .on(
         "postgres_changes",
         {
@@ -447,11 +447,11 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         refresh,
       );
 
-    void channel.subscribe();
+    void realtimeSubscription.subscribe();
 
     return () => {
       if (refreshTimer) clearTimeout(refreshTimer);
-      void supabase.removeChannel(channel);
+      void supabase.removeChannel(realtimeSubscription);
     };
   }, [backend, hydrated, loadRemote, state.user, state.workspace.id]);
 
@@ -964,7 +964,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           ? current.rooms.find((room) => room.id === employee.defaultRoomId)
           : undefined;
         const validDefaultRoomId =
-          defaultRoom && isGroupChannel(defaultRoom) ? defaultRoom.id : undefined;
+          defaultRoom && isGroupRoom(defaultRoom) ? defaultRoom.id : undefined;
         const safeEmployee =
           validDefaultRoomId === employee.defaultRoomId
             ? employee
@@ -1179,20 +1179,20 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         runRemote((workspaceId) => persistRoomMetadata(workspaceId, updated));
       },
 
-      removeChannelPermanently: (channelId) => {
+      removeRoomPermanently: (roomId) => {
         set((s) => {
-          const topicIds = new Set(s.topics.filter((t) => t.roomId === channelId).map((t) => t.id));
+          const topicIds = new Set(s.topics.filter((t) => t.roomId === roomId).map((t) => t.id));
           return {
             ...s,
-            rooms: s.rooms.filter((r) => r.id !== channelId),
-            topics: s.topics.filter((t) => t.roomId !== channelId),
-            topicMembers: s.topicMembers.filter((m) => m.roomId !== channelId),
-            tasks: s.tasks.filter((t) => t.roomId !== channelId),
-            memory: s.memory.filter((m) => m.roomId !== channelId),
-            approvals: s.approvals.filter((a) => a.roomId !== channelId),
-            workLog: s.workLog.filter((w) => w.roomId !== channelId),
+            rooms: s.rooms.filter((r) => r.id !== roomId),
+            topics: s.topics.filter((t) => t.roomId !== roomId),
+            topicMembers: s.topicMembers.filter((m) => m.roomId !== roomId),
+            tasks: s.tasks.filter((t) => t.roomId !== roomId),
+            memory: s.memory.filter((m) => m.roomId !== roomId),
+            approvals: s.approvals.filter((a) => a.roomId !== roomId),
+            workLog: s.workLog.filter((w) => w.roomId !== roomId),
             employees: s.employees.map((e) =>
-              e.defaultRoomId === channelId ? { ...e, defaultRoomId: undefined } : e,
+              e.defaultRoomId === roomId ? { ...e, defaultRoomId: undefined } : e,
             ),
           };
         });
@@ -1200,12 +1200,9 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 
       addEmployeeToRoom: (roomId, employeeId) => {
         const employee = stateRef.current.employees.find((e) => e.id === employeeId);
-        if (
-          employee?.metadata?.canBeAssignedToRooms === false ||
-          employee?.metadata?.canBeAssignedToChannels === false
-        ) return;
+        if (employee?.metadata?.canBeAssignedToRooms === false) return;
         const current = stateRef.current.rooms.find((room) => room.id === roomId);
-        if (!current || !isGroupChannel(current) || current.aiEmployees.includes(employeeId)) return;
+        if (!current || !isGroupRoom(current) || current.aiEmployees.includes(employeeId)) return;
         const updated = {
           ...current,
           aiEmployees: [...current.aiEmployees, employeeId],

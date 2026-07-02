@@ -94,8 +94,6 @@ export type SystemEmployeeMetadata = {
   dmOnly?: boolean;
   canBeArchived?: boolean;
   canBeAssignedToRooms?: boolean;
-  /** @deprecated Use canBeAssignedToRooms */
-  canBeAssignedToChannels?: boolean;
   isDefaultWorkspaceEmployee?: boolean;
   purpose?: string;
   collaborationPermissions?: import("@/lib/orchestration/types").EmployeeCollaborationPermissions;
@@ -333,7 +331,7 @@ export type RoomMessage = {
 /** `room` = multi-member group space; `dm` = private 1:1 with one AI employee. */
 export type RoomKind = "room" | "dm";
 
-export type ChannelStatus = "active" | "archived";
+export type RoomStatus = "active" | "archived";
 
 /**
  * A group room or DM. Stored in Supabase `rooms` table.
@@ -355,7 +353,7 @@ export type ProjectRoom = {
   unread: number;
   accent: string;
   /** Group rooms can be archived; DMs stay active. */
-  status?: ChannelStatus;
+  status?: RoomStatus;
   createdAt: string;
   updatedAt: string;
 };

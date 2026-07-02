@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 import {
   findDmRoomForEmployee,
   getDirectMessages,
-  getGroupChannels,
+  getGroupRooms,
   isDirectMessage,
 } from "@/lib/rooms";
 import { isMayaEmployee, partitionWorkforce } from "@/lib/maya-employee";
@@ -62,7 +62,7 @@ export function Sidebar() {
 
   const pendingApprovals = state.approvals.filter((a) => a.status === "pending").length;
   const openTasks = state.tasks.filter((t) => t.status !== "done").length;
-  const channels = getGroupChannels(state.rooms);
+  const rooms = getGroupRooms(state.rooms);
   const { maya, hired } = partitionWorkforce(state.employees);
   const sidebarDmEmployees = [...maya, ...hired];
   const dmRooms = getDirectMessages(state.rooms);
@@ -73,7 +73,7 @@ export function Sidebar() {
     () => (activeRoomId ? state.rooms.find((r) => r.id === activeRoomId) : undefined),
     [activeRoomId, state.rooms],
   );
-  const onChannelRoom = activeRoom && !isDirectMessage(activeRoom);
+  const onGroupRoom = activeRoom && !isDirectMessage(activeRoom);
   const onDmRoom = activeRoom && isDirectMessage(activeRoom);
 
   const isActive = (href: string, exact?: boolean) =>
@@ -123,9 +123,9 @@ export function Sidebar() {
           label="Rooms"
           icon={Hash}
           href="/rooms"
-          count={channels.length}
-          isSectionActive={pathname === "/rooms" || !!onChannelRoom}
-          forceOpen={!!onChannelRoom}
+          count={rooms.length}
+          isSectionActive={pathname === "/rooms" || !!onGroupRoom}
+          forceOpen={!!onGroupRoom}
           headerAction={
             <button
               type="button"
@@ -137,10 +137,10 @@ export function Sidebar() {
             </button>
           }
         >
-          {channels.length === 0 ? (
+          {rooms.length === 0 ? (
             <p className="px-2 py-1.5 text-[11px] leading-relaxed text-white/35">No rooms yet</p>
           ) : (
-            channels.slice(0, MAX_SIDEBAR_ITEMS).map((room) => (
+            rooms.slice(0, MAX_SIDEBAR_ITEMS).map((room) => (
               <SidebarNestedLink
                 key={room.id}
                 href={`/rooms/${room.id}`}
@@ -151,11 +151,11 @@ export function Sidebar() {
               />
             ))
           )}
-          {channels.length > MAX_SIDEBAR_ITEMS && (
+          {rooms.length > MAX_SIDEBAR_ITEMS && (
             <SidebarNestedLink
               href="/rooms"
               icon={<Hash className="h-3.5 w-3.5 opacity-50" strokeWidth={2} />}
-              label={`+${channels.length - MAX_SIDEBAR_ITEMS} more`}
+              label={`+${rooms.length - MAX_SIDEBAR_ITEMS} more`}
             />
           )}
         </SidebarCollapsibleSection>

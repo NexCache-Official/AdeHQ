@@ -18,7 +18,7 @@ import {
 } from "@/lib/demo";
 import { AIEmployee, EmployeePermissions, ToolAccess } from "@/lib/types";
 import { roleIcon, toolIcon } from "@/lib/icons";
-import { getGroupChannels } from "@/lib/rooms";
+import { getGroupRooms } from "@/lib/rooms";
 import { cn, uid, nowISO, avatarGradient } from "@/lib/utils";
 import { EmployeeAvatar } from "./EmployeeAvatar";
 import {
@@ -114,7 +114,7 @@ export function HireEmployeeModal({
     });
   };
 
-  const groupChannels = useMemo(() => getGroupChannels(state.rooms), [state.rooms]);
+  const groupRooms = useMemo(() => getGroupRooms(state.rooms), [state.rooms]);
 
   const selectedToolList = useMemo<ToolAccess[]>(
     () =>
@@ -157,7 +157,7 @@ export function HireEmployeeModal({
       trustScore: 75,
       accent: template.accent,
       defaultRoomId:
-        roomId && groupChannels.some((r) => r.id === roomId) ? roomId : undefined,
+        roomId && groupRooms.some((r) => r.id === roomId) ? roomId : undefined,
       lastActiveAt: nowISO(),
       createdAt: nowISO(),
     };
@@ -174,8 +174,8 @@ export function HireEmployeeModal({
       {hired ? (
         <HireSuccess
           employee={hired}
-          roomId={roomId && groupChannels.some((r) => r.id === roomId) ? roomId : ""}
-          rooms={groupChannels}
+          roomId={roomId && groupRooms.some((r) => r.id === roomId) ? roomId : ""}
+          rooms={groupRooms}
           onAddToRoom={(rid) => {
             actions.addEmployeeToRoom(rid, hired.id);
             close();
@@ -319,7 +319,7 @@ export function HireEmployeeModal({
                 <Field label="Default room / project">
                   <select className="input-field" value={roomId} onChange={(e) => setRoomId(e.target.value)}>
                     <option value="">No default room</option>
-                    {groupChannels.map((r) => (
+                    {groupRooms.map((r) => (
                       <option key={r.id} value={r.id}>{r.name}</option>
                     ))}
                   </select>
@@ -416,7 +416,7 @@ export function HireEmployeeModal({
                   </div>
                 </div>
                 <ReviewRow label="Standing instructions" value={instructions} />
-                <ReviewRow label="Default room" value={groupChannels.find((r) => r.id === roomId)?.name ?? "None"} />
+                <ReviewRow label="Default room" value={groupRooms.find((r) => r.id === roomId)?.name ?? "None"} />
                 <div>
                   <div className="mb-1.5 section-title">Tools ({selectedToolList.length})</div>
                   <div className="flex flex-wrap gap-1.5">
@@ -498,7 +498,7 @@ function HireSuccess({
   onDone: () => void;
 }) {
   const [selectedRoom, setSelectedRoom] = useState(roomId || rooms[0]?.id || "");
-  const hasChannels = rooms.length > 0;
+  const hasRooms = rooms.length > 0;
 
   return (
     <div className="px-8 py-10 text-center">
@@ -527,7 +527,7 @@ function HireSuccess({
       </p>
 
       <div className="mx-auto mt-6 max-w-sm space-y-3">
-        {hasChannels ? (
+        {hasRooms ? (
           <>
             <select
               value={selectedRoom}

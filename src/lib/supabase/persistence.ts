@@ -39,7 +39,7 @@ import { supabase } from "./client";
 type DbRow = Record<string, any>;
 
 function roomIdFromRow(row: DbRow): string {
-  return String(row.room_id ?? row.channel_id ?? "");
+  return String(row.room_id ?? "");
 }
 
 const DEMO_HUMAN_ID = "user-shubham";
@@ -819,7 +819,7 @@ function roomFromRow(
     memory: memoryIds,
     unread: row.unread ?? 0,
     accent: row.accent ?? "#f97316",
-    status: (row.status as import("@/lib/types").ChannelStatus) ?? "active",
+    status: (row.status as import("@/lib/types").RoomStatus) ?? "active",
     createdAt: row.created_at ?? nowISO(),
     updatedAt: row.updated_at ?? row.created_at ?? nowISO(),
   };

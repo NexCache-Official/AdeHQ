@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Modal } from "./ui";
 import { useStore } from "@/lib/demo-store";
-import { getDirectMessages, getGroupChannels } from "@/lib/rooms";
+import { getDirectMessages, getGroupRooms } from "@/lib/rooms";
 import { EmployeeAvatar } from "./EmployeeAvatar";
 import {
   Bot,
@@ -89,7 +89,7 @@ export function CommandBar({
       accent: e.accent,
       run: () => { router.push(`/workforce/${e.id}`); onClose(); },
     }));
-    const channels: Item[] = getGroupChannels(state.rooms).map((r) => ({
+    const rooms: Item[] = getGroupRooms(state.rooms).map((r) => ({
       id: `r-${r.id}`,
       label: r.name,
       hint: "Room",
@@ -103,7 +103,7 @@ export function CommandBar({
       icon: MessagesSquare,
       run: () => { router.push(`/rooms/${r.id}`); onClose(); },
     }));
-    return [...actions, ...nav, ...employees, ...channels, ...dms];
+    return [...actions, ...nav, ...employees, ...rooms, ...dms];
   }, [router, onClose, onHire, onCreateRoom, state.employees, state.rooms]);
 
   const filtered = useMemo(() => {

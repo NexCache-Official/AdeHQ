@@ -1,15 +1,14 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { ChannelStatus, ProjectRoom, RoomKind } from "@/lib/types";
+import type { ProjectRoom, RoomKind, RoomStatus } from "@/lib/types";
 import { nowISO } from "@/lib/utils";
 
 type DbRow = Record<string, unknown>;
 
 export function roomFromRow(row: DbRow): ProjectRoom {
-  const kind = String(row.kind ?? "room");
   return {
     id: String(row.id),
     name: String(row.name),
-    kind: (kind === "channel" ? "room" : kind) as RoomKind,
+    kind: String(row.kind ?? "room") as RoomKind,
     dmEmployeeId: row.dm_employee_id ? String(row.dm_employee_id) : undefined,
     description: String(row.description ?? ""),
     brief: String(row.brief ?? ""),
@@ -20,14 +19,11 @@ export function roomFromRow(row: DbRow): ProjectRoom {
     memory: [],
     unread: Number(row.unread ?? 0),
     accent: String(row.accent ?? "#f97316"),
-    status: (row.status as ChannelStatus) ?? "active",
+    status: (row.status as RoomStatus) ?? "active",
     createdAt: String(row.created_at ?? nowISO()),
     updatedAt: String(row.updated_at ?? row.created_at ?? nowISO()),
   };
 }
-
-/** @deprecated Use roomFromRow */
-export const channelFromRow = roomFromRow;
 
 export async function loadRoom(
   client: SupabaseClient,
@@ -44,9 +40,6 @@ export async function loadRoom(
   return data ? roomFromRow(data as DbRow) : null;
 }
 
-/** @deprecated Use loadRoom */
-export const loadChannel = loadRoom;
-
 export async function assertRoomActive(
   client: SupabaseClient,
   workspaceId: string,
@@ -61,9 +54,6 @@ export async function assertRoomActive(
   }
   return room;
 }
-
-/** @deprecated Use assertRoomActive */
-export const assertChannelActive = assertRoomActive;
 
 /** Hard-delete a group room and all associated data (cascade). DMs cannot be deleted here. */
 export async function permanentlyDeleteRoom(
@@ -84,6 +74,3 @@ export async function permanentlyDeleteRoom(
     .eq("id", roomId);
   if (error) throw error;
 }
-
-/** @deprecated Use permanentlyDeleteRoom */
-export const permanentlyDeleteChannel = permanentlyDeleteRoom;

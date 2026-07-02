@@ -3,7 +3,7 @@
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useStore } from "@/lib/demo-store";
-import { getGroupChannels, isGroupChannel } from "@/lib/rooms";
+import { getGroupRooms, isGroupRoom } from "@/lib/rooms";
 import { PageContainer, PageHeader } from "@/components/Page";
 import { CallRoom } from "@/components/CallRoom";
 import { Button, Card, Modal, ModalHeader } from "@/components/ui";
@@ -16,16 +16,16 @@ import { Check, ListChecks, Phone, PhoneCall, Users } from "lucide-react";
 function CallsInner() {
   const { state, actions } = useStore();
   const searchParams = useSearchParams();
-  const groupChannels = useMemo(() => getGroupChannels(state.rooms), [state.rooms]);
+  const groupRooms = useMemo(() => getGroupRooms(state.rooms), [state.rooms]);
   const [activeCall, setActiveCall] = useState<Call | null>(null);
   const [setupOpen, setSetupOpen] = useState(false);
-  const [roomId, setRoomId] = useState(groupChannels[0]?.id ?? "");
+  const [roomId, setRoomId] = useState(groupRooms[0]?.id ?? "");
   const [selected, setSelected] = useState<string[]>([]);
 
   const roomParam = searchParams.get("room");
 
   useEffect(() => {
-    if (roomParam && state.rooms.some((r) => r.id === roomParam && isGroupChannel(r))) {
+    if (roomParam && state.rooms.some((r) => r.id === roomParam && isGroupRoom(r))) {
       setRoomId(roomParam);
       setSetupOpen(true);
     }
@@ -160,7 +160,7 @@ function CallsInner() {
           <label className="block space-y-1.5">
             <span className="text-xs font-medium text-slate-500">Room</span>
             <select className="input-field" value={roomId} onChange={(e) => setRoomId(e.target.value)}>
-              {groupChannels.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
+              {groupRooms.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
             </select>
           </label>
           <div className="space-y-2">

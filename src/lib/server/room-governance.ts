@@ -72,18 +72,18 @@ export function pickGreetingEmployee(employees: AIEmployee[]): AIEmployee | unde
   );
 }
 
-export type ChannelGovernanceContext = {
+export type RoomGovernanceContext = {
   lastMessageSenderType?: "human" | "ai" | "system";
   lastAmbientResponseAt?: string | null;
 };
 
-export async function loadChannelGovernanceContext(
+export async function loadRoomGovernanceContext(
   client: SupabaseClient,
   workspaceId: string,
   roomId: string,
   topicId: string,
   excludeMessageId?: string,
-): Promise<ChannelGovernanceContext> {
+): Promise<RoomGovernanceContext> {
   const since = new Date(Date.now() - ROOM_AMBIENT_COOLDOWN_MS).toISOString();
 
   let lastMsgQuery = client
@@ -113,7 +113,7 @@ export async function loadChannelGovernanceContext(
 
   return {
     lastMessageSenderType: lastMsgResult.data?.sender_type as
-      | ChannelGovernanceContext["lastMessageSenderType"]
+      | RoomGovernanceContext["lastMessageSenderType"]
       | undefined,
     lastAmbientResponseAt: ambientResult.data?.started_at
       ? String(ambientResult.data.started_at)
@@ -121,7 +121,7 @@ export async function loadChannelGovernanceContext(
   };
 }
 
-export function isRoomCooldownActive(ctx: ChannelGovernanceContext): boolean {
+export function isRoomCooldownActive(ctx: RoomGovernanceContext): boolean {
   if (!ctx.lastAmbientResponseAt) return false;
   return Date.now() - +new Date(ctx.lastAmbientResponseAt) < ROOM_AMBIENT_COOLDOWN_MS;
 }

@@ -73,7 +73,7 @@ export default function RoomsPage() {
             const err = await res.json().catch(() => null);
             throw new Error(err?.error ?? "Failed to delete room");
           }
-          actions.removeChannelPermanently(room.id);
+          actions.removeRoomPermanently(room.id);
         }
       } else {
         if (action === "restore") {
@@ -81,7 +81,7 @@ export default function RoomsPage() {
         } else if (action === "archive") {
           actions.updateRoom(room.id, { status: "archived" });
         } else {
-          actions.removeChannelPermanently(room.id);
+          actions.removeRoomPermanently(room.id);
         }
       }
       setConfirmDeleteId(null);

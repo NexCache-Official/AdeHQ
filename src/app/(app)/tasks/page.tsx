@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useStore } from "@/lib/demo-store";
-import { getGroupChannels } from "@/lib/rooms";
+import { getGroupRooms } from "@/lib/rooms";
 import { PageContainer, PageHeader } from "@/components/Page";
 import { TaskCard } from "@/components/TaskCard";
 import { Button, Modal, ModalHeader } from "@/components/ui";
@@ -25,7 +25,7 @@ export default function TasksPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [roomFilter, setRoomFilter] = useState("all");
 
-  const groupChannels = getGroupChannels(state.rooms);
+  const groupRooms = getGroupRooms(state.rooms);
   const tasks = state.tasks.filter((t) => roomFilter === "all" || t.roomId === roomFilter);
 
   return (
@@ -44,7 +44,7 @@ export default function TasksPage() {
       <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <select className="input-field sm:w-56" value={roomFilter} onChange={(e) => setRoomFilter(e.target.value)}>
           <option value="all">All rooms</option>
-          {groupChannels.map((r) => (
+          {groupRooms.map((r) => (
             <option key={r.id} value={r.id}>{r.name}</option>
           ))}
         </select>
@@ -190,9 +190,9 @@ function Meta({ label, children }: { label: string; children: React.ReactNode })
 
 function CreateTaskGlobalModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { state, actions } = useStore();
-  const groupChannels = getGroupChannels(state.rooms);
+  const groupRooms = getGroupRooms(state.rooms);
   const [title, setTitle] = useState("");
-  const [roomId, setRoomId] = useState(groupChannels[0]?.id ?? "");
+  const [roomId, setRoomId] = useState(groupRooms[0]?.id ?? "");
   const [assignee, setAssignee] = useState("");
   const [priority, setPriority] = useState<"low" | "medium" | "high">("medium");
 
@@ -226,7 +226,7 @@ function CreateTaskGlobalModal({ open, onClose }: { open: boolean; onClose: () =
           <label className="block space-y-1.5">
             <span className="text-xs font-medium text-slate-500">Room</span>
             <select className="input-field" value={roomId} onChange={(e) => { setRoomId(e.target.value); setAssignee(""); }}>
-              {groupChannels.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
+              {groupRooms.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
             </select>
           </label>
           <label className="block space-y-1.5">

@@ -3,7 +3,7 @@ import {
   isGroupGreeting,
   isLowActionMessage,
   pickGreetingEmployee,
-} from "@/lib/server/channel-governance";
+} from "@/lib/server/room-governance";
 import { isHelpRequest } from "@/lib/server/ambient-collaboration";
 import { extractMentionsInOrder } from "@/lib/utils";
 import { filterOrchestrationEmployees } from "./collaboration-permissions";

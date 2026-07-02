@@ -8,13 +8,13 @@ import type {
   ResponseReason,
   RoomTopic,
 } from "@/lib/types";
-import type { ChannelGovernanceContext } from "@/lib/server/channel-governance";
+import type { RoomGovernanceContext } from "@/lib/server/room-governance";
 import {
   isBroadcastToEveryone,
   isGroupGreeting,
   isRoomCooldownActive,
   pickGreetingEmployee,
-} from "@/lib/server/channel-governance";
+} from "@/lib/server/room-governance";
 import { getEffectiveParticipationMode, filterAllowedEmployees } from "@/lib/topic-ai-control";
 import { isGeneralTopic } from "@/lib/topics";
 import { pickSmartResponders } from "@/lib/server/smart-participation";
@@ -172,7 +172,7 @@ function buildPanelPlan(
 export type PlanConversationOptions = {
   forceEmployeeIds?: string[];
   maxParallel?: number;
-  governance?: ChannelGovernanceContext;
+  governance?: RoomGovernanceContext;
   rootTriggerMessageId?: string;
 };
 

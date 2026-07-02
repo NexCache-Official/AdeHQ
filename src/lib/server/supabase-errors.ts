@@ -25,7 +25,7 @@ export function mapTopicCreateError(error: unknown): { status: number; message: 
   const message = postgrestErrorMessage(error);
   const code = postgrestErrorCode(error);
 
-  if (code === "23505" || message.includes("channel_topics_room_title_unique")) {
+  if (code === "23505" || message.includes("topics_room_title_unique")) {
     return {
       status: 409,
       message: "A topic with this title already exists in the room.",

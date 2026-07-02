@@ -9,7 +9,7 @@ import {
 } from "@/lib/server/room-messages";
 import { assertTopicInRoom, ensureGeneralTopic } from "@/lib/server/topic-helpers";
 import { filterOrchestrationEmployees } from "@/lib/orchestration/collaboration-permissions";
-import { applyChannelGovernanceToPlan } from "@/lib/orchestration/ambient-governance";
+import { applyRoomGovernanceToPlan } from "@/lib/orchestration/ambient-governance";
 import { orchestrateConversation } from "@/lib/orchestration/conversation-orchestrator";
 import { orchestrationPlanToLegacyResult } from "@/lib/orchestration/legacy-adapter";
 import {
@@ -22,7 +22,7 @@ import {
 import { filterTopicSuggestionsByGovernance } from "@/lib/orchestration/topic-governance";
 import { suggestTopics } from "@/lib/orchestration/topic-steward";
 import type { OrchestratorInput } from "@/lib/orchestration/types";
-import { loadChannelGovernanceContext } from "@/lib/server/channel-governance";
+import { loadRoomGovernanceContext } from "@/lib/server/room-governance";
 import { queueAgentRuns } from "@/lib/server/queue-agent-runs";
 import { isAiQueueingBlocked } from "@/lib/topic-ai-control";
 import { getAiParticipationMode, isHiringTopic, isSmartAssistMode } from "@/lib/topics";
@@ -102,7 +102,7 @@ export async function POST(
       if (msg.includes("archived")) {
         return messageError("topic_archived", msg, 400, { topicId });
       }
-      if (msg.includes("room is archived") || msg.includes("channel is archived")) {
+      if (msg.includes("room is archived")) {
         return messageError("room_archived", msg, 400, { topicId });
       }
       return messageError("topic_not_in_room", msg, 404, { topicId });
@@ -209,14 +209,14 @@ export async function POST(
 
     let orchestrationPlan = await orchestrateConversation(orchestratorInput);
 
-    const governance = await loadChannelGovernanceContext(
+    const governance = await loadRoomGovernanceContext(
       client,
       workspaceId,
       params.roomId,
       topicId,
       humanMessage.id,
     );
-    orchestrationPlan = applyChannelGovernanceToPlan(
+    orchestrationPlan = applyRoomGovernanceToPlan(
       orchestrationPlan,
       orchestratorInput,
       governance,

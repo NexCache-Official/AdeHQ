@@ -9,7 +9,7 @@ import {
 } from "@/lib/supabase/ai-runtime";
 import { getOutputTokenCap, type ModelMode } from "@/lib/ai/model-catalog";
 import type { ResponderDecision } from "@/lib/server/decide-responders";
-import { GREETING_MAX_OUTPUT_TOKENS } from "@/lib/server/channel-governance";
+import { GREETING_MAX_OUTPUT_TOKENS } from "@/lib/server/room-governance";
 import { createServiceRoleClient } from "@/lib/supabase/server";
 
 export type QueuedRun = {

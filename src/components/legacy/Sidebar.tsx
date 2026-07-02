@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { getDirectMessages, getGroupChannels } from "@/lib/rooms";
+import { getDirectMessages, getGroupRooms } from "@/lib/rooms";
 import { useStore } from "@/lib/demo-store";
 import { useShellUI } from "./AppShell";
 import { EmployeeAvatar } from "./EmployeeAvatar";
@@ -42,7 +42,7 @@ export function Sidebar() {
   const [dmsOpen, setDmsOpen] = useState(true);
 
   const pendingApprovals = state.approvals.filter((a) => a.status === "pending").length;
-  const rooms = getGroupChannels(state.rooms);
+  const rooms = getGroupRooms(state.rooms);
   const dmRooms = getDirectMessages(state.rooms);
 
   const isActive = (href: string, exact?: boolean) =>

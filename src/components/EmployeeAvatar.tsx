@@ -95,5 +95,3 @@ export function RoomIcon({ className }: { className?: string }) {
   );
 }
 
-/** @deprecated Use RoomIcon */
-export const ChannelIcon = RoomIcon;

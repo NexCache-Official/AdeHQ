@@ -9,7 +9,7 @@ export function topicFromRow(row: DbRow): RoomTopic {
   return {
     id: String(row.id),
     workspaceId: String(row.workspace_id),
-    roomId: String(row.room_id ?? row.channel_id),
+    roomId: String(row.room_id),
     title: String(row.title),
     slug: row.slug ? String(row.slug) : null,
     description: row.description ? String(row.description) : null,
@@ -37,7 +37,7 @@ export function topicMemberFromRow(row: DbRow): TopicMember {
   return {
     id: String(row.id),
     workspaceId: String(row.workspace_id),
-    roomId: String(row.room_id ?? row.channel_id),
+    roomId: String(row.room_id),
     topicId: String(row.topic_id),
     memberType: row.member_type as TopicMember["memberType"],
     memberId: String(row.member_id),

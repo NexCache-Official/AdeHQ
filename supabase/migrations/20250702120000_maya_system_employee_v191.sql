@@ -47,7 +47,7 @@ select
   '#0ea5e9',
   true,
   'maya_recruiting_manager',
-  '{"dmOnly":true,"canBeArchived":false,"canBeAssignedToChannels":false,"purpose":"hire_and_manage_ai_employees"}'::jsonb
+  '{"dmOnly":true,"canBeArchived":false,"canBeAssignedToRooms":false,"purpose":"hire_and_manage_ai_employees"}'::jsonb
 from public.workspaces w
 where not exists (
   select 1

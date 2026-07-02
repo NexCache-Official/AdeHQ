@@ -5,7 +5,7 @@ import {
   permanentlyDeleteRoom,
   roomFromRow,
   loadRoom,
-} from "@/lib/server/channel-helpers";
+} from "@/lib/server/room-helpers";
 import { getWorkspaceIdForRoom } from "@/lib/server/room-messages";
 import { nowISO } from "@/lib/utils";
 
