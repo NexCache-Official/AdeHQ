@@ -61,7 +61,7 @@ export function useResponder() {
         pending: true,
       });
 
-      await sleep(850 + Math.random() * 700);
+      await sleep(400 + Math.random() * 450);
 
       const input: SendMessageInput = {
         employee,
@@ -148,7 +148,7 @@ export function useResponder() {
       });
 
       actions.updateEmployee(employeeId, {
-        status: resp.effect.statusChange ?? "idle",
+        status: resp.effect.statusChange ?? "online",
         currentTask: resp.effect.currentTask ?? employee.currentTask,
         messagesSent: employee.messagesSent + 1,
         memoryCount: employee.memoryCount + createdMemory.length,

@@ -55,7 +55,9 @@ export function mayaEmployeeStatus(): AIEmployee["status"] {
 export function effectiveEmployeeStatus(
   employee: Pick<AIEmployee, "status" | "systemEmployeeKey" | "id">,
 ): AIEmployee["status"] {
-  return isMayaEmployee(employee) ? mayaEmployeeStatus() : employee.status;
+  if (isMayaEmployee(employee)) return mayaEmployeeStatus();
+  if (employee.status === "idle") return "online";
+  return employee.status ?? "online";
 }
 
 function cannotAssignToRooms(metadata?: SystemEmployeeMetadata): boolean {

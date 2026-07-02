@@ -193,16 +193,11 @@ export function applyChipMutation(
 export const READY_BRIEF_PHRASE = "I have enough to draft a strong job brief";
 
 export function recruiterReadyMessage(brief: AiEmployeeJobBrief): string {
-  const seniority =
-    brief.seniorityLevel === "advisor" || brief.seniorityLevel === "manager"
-      ? "senior"
-      : brief.seniorityLevel === "specialist"
-        ? "mid-level"
-        : "focused";
   const focus =
+    brief.businessFocus[0] ??
     brief.technicalFocus[0] ??
     brief.coreResponsibilities[0] ??
-    brief.businessFocus[0] ??
     "the work you described";
-  return `I have enough to draft a strong brief. I've set this up as a ${brief.roleTitle.toLowerCase()} with ${seniority} autonomy around ${focus.toLowerCase()}. You can review the brief or generate candidates.`;
+  const role = brief.roleTitle.toLowerCase();
+  return `Nice — I've got a solid ${role} brief shaping up around ${focus.toLowerCase()}. Take a look when you're ready, or we can keep tuning it before generating candidates.`;
 }

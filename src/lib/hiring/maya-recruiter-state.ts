@@ -41,21 +41,28 @@ export function isHiringSmallTalk(text: string): boolean {
 }
 
 const OPTIMISTIC_ACKS = [
-  "Got it — I'm updating the role brief with that.",
-  "That helps. I'm folding this into the job brief now.",
-  "Great context. I'll update the role brief and ask one sharper follow-up if anything is missing.",
-  "Understood — shaping the brief around that now.",
+  "Got it — updating the brief with that.",
+  "Makes sense — folding this in now.",
+  "Helpful — I'll reflect that in the role brief.",
+  "Clear — shaping the brief around that.",
 ];
 
 export function pickOptimisticAck(seed?: string): string {
-  if (!seed?.trim()) {
-    return OPTIMISTIC_ACKS[0];
+  const trimmed = seed?.trim() ?? "";
+  if (trimmed) {
+    const short = trimmed.length > 48 ? `${trimmed.slice(0, 45)}…` : trimmed;
+    const contextual = [
+      `Got it — ${short}. Updating the brief.`,
+      `${short} — noted. I'll fold that into the brief.`,
+      `Makes sense — ${short}. One sec while I update the brief.`,
+    ];
+    let hash = 0;
+    for (let i = 0; i < trimmed.length; i += 1) {
+      hash = (hash + trimmed.charCodeAt(i) * (i + 1)) % contextual.length;
+    }
+    return contextual[hash];
   }
-  let hash = 0;
-  for (let i = 0; i < seed.length; i += 1) {
-    hash = (hash + seed.charCodeAt(i) * (i + 1)) % OPTIMISTIC_ACKS.length;
-  }
-  return OPTIMISTIC_ACKS[hash];
+  return OPTIMISTIC_ACKS[0];
 }
 
 export function inferSectionsUpdating(message: string): BriefUpdateSection[] {

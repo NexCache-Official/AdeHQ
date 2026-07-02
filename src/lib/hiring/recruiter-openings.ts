@@ -9,7 +9,7 @@ export function buildRecruiterOpeningMessage(opts: {
 }): string {
   const role = getRoleByKey(opts.roleKey ?? undefined);
   if (role) {
-    return `Let's hire a ${role.title}. ${role.questionTemplates.coreWork}`;
+    return `Let's bring on a ${role.title}. ${role.questionTemplates.coreWork}`;
   }
 
   const roleSeed = opts.roleSeed?.trim() ?? "";

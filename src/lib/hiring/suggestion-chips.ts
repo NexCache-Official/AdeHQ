@@ -358,6 +358,13 @@ export function extractExamplesFromRecruiterMessage(text: string): string[] {
   return [];
 }
 
+function matchesUserAnswer(label: string, answer: string): boolean {
+  const a = answer.trim().toLowerCase();
+  const b = label.trim().toLowerCase();
+  if (!a || !b) return false;
+  return a === b || a.includes(b) || b.includes(a);
+}
+
 export function generateSuggestionChips(
   readiness: RecruiterReadiness,
   currentBrief: AiEmployeeJobBrief,
@@ -377,12 +384,19 @@ export function generateSuggestionChips(
   const primary = primaryMissingField(readiness.missing);
   const userTurns = conversation.filter((message) => message.role === "user").length;
   const lastAde = [...conversation].reverse().find((m) => m.role === "ade")?.text ?? "";
+  const lastUser = [...conversation].reverse().find((m) => m.role === "user")?.text.trim() ?? "";
   const fromQuestion = extractExamplesFromRecruiterMessage(lastAde);
 
   if (fromQuestion.length >= 2) {
-    const chips = chipsFromLabels(fromQuestion, "answer_question", 4);
-    pushChip(chips, NOT_SURE, NOT_SURE);
-    return chips;
+    const chips = chipsFromLabels(
+      fromQuestion.filter((label) => !matchesUserAnswer(label, lastUser)),
+      "answer_question",
+      4,
+    );
+    if (chips.length >= 2) {
+      pushChip(chips, NOT_SURE, NOT_SURE);
+      return chips;
+    }
   }
 
   if (userTurns === 0 && role?.questionTemplates.coreWorkChips.length) {

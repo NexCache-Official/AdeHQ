@@ -65,6 +65,15 @@ export function isGeneralTopic(topic: RoomTopic): boolean {
   return topic.title.toLowerCase() === "general" || Boolean(topic.metadata?.isMainChat);
 }
 
+export function isHiringTopic(topic: Pick<RoomTopic, "metadata" | "title">): boolean {
+  if (topic.metadata?.hiringSession === true) return true;
+  return /^hire:/i.test(topic.title.trim());
+}
+
+export function hiringTopicTitle(roleTitle: string): string {
+  return `Hire: ${roleTitle}`;
+}
+
 export function generalTopicForRoom(topics: RoomTopic[], roomId: string): RoomTopic | undefined {
   return topics.find((t) => t.roomId === roomId && isGeneralTopic(t));
 }

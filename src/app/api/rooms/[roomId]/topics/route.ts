@@ -25,6 +25,7 @@ type CreateTopicBody = {
   priority?: TopicPriority;
   aiEmployeeIds?: string[];
   starterMessage?: string;
+  metadata?: Record<string, unknown>;
 };
 
 export async function GET(
@@ -112,7 +113,7 @@ export async function POST(
         priority: body.priority ?? "normal",
         created_by_type: "human",
         created_by_id: user.id,
-        metadata: { aiParticipationMode: "smart_assist" },
+        metadata: { aiParticipationMode: "smart_assist", ...(body.metadata ?? {}) },
       })
       .select("*")
       .single();

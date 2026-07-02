@@ -13,12 +13,14 @@ import {
 } from "@/lib/hiring/build-brief";
 import { applyChipMutation, READY_BRIEF_PHRASE, recruiterReadyMessage } from "@/lib/hiring/chip-mutations";
 import { buildRecruiterOpeningMessage } from "@/lib/hiring/recruiter-openings";
+import { applyRoleFocusAnswer } from "@/lib/hiring/role-focus-answers";
 import { getRoleByKey } from "@/lib/hiring/role-library";
 import {
   checklistFromBrief,
 } from "@/lib/hiring/recruiter-checklist";
 import {
   assessRecruiterReadiness,
+  buildRecruiterTurnMessage,
   chooseNextRecruiterQuestion,
   finalizeReadinessScore,
   generateSuggestionChips,
@@ -31,6 +33,7 @@ import {
   MAYA_EMPLOYEE_TITLE,
   MAYA_HIRE_LANGUAGE_RULE,
 } from "@/lib/hiring/maya";
+import { isHiringSmallTalk } from "@/lib/hiring/maya-recruiter-state";
 import type {
   AiEmployeeJobBrief,
   RecruiterMessage,
@@ -167,6 +170,8 @@ function useRecruiterLlm(
   if (mode === "refine" || mode === "brief_refine" || mode === "regenerate") return true;
   if (action === "refine_section") return true;
   const lastUser = [...conversation].reverse().find((m) => m.role === "user")?.text ?? "";
+  const userTurns = conversation.filter((m) => m.role === "user").length;
+  if (userTurns >= 1 && lastUser.trim().length > 2 && !isHiringSmallTalk(lastUser)) return true;
   if (lastUser.length > 220) return true;
   return false;
 }
@@ -190,12 +195,16 @@ function buildResponse(input: {
   const lastUser = [...input.conversation].reverse().find((m) => m.role === "user")?.text ?? "";
   const chipMutation = lastUser ? applyChipMutation(lastUser, input.brief) : null;
   let brief = chipMutation?.brief ?? input.brief;
-  const changedFields = chipMutation?.changedFields ?? [];
+  const roleKey = input.body.roleKey ?? null;
+  const roleFocus = lastUser ? applyRoleFocusAnswer(lastUser, brief, roleKey) : null;
+  if (roleFocus) {
+    brief = roleFocus.brief;
+  }
+  const changedFields = [...(chipMutation?.changedFields ?? []), ...(roleFocus ? ["businessFocus"] : [])];
 
   const baseReadiness = assessRecruiterReadiness(input.conversation, brief);
   const canReviewBrief = input.forceCanReview || baseReadiness.ready;
   const readiness = finalizeReadinessScore(baseReadiness, brief, canReviewBrief);
-  const roleKey = input.body.roleKey ?? null;
   let suggestionChips = generateSuggestionChips(readiness, brief, input.conversation, roleKey);
   if (canReviewBrief && !suggestionChips.some((chip) => chip.intent === "review_brief")) {
     suggestionChips = [
@@ -224,7 +233,7 @@ function buildResponse(input: {
     } else if (canReviewBrief) {
       message = recruiterReadyMessage(brief);
     } else {
-      message = recruiterMessageFor(readiness, input.conversation, brief, roleKey);
+      message = buildRecruiterTurnMessage(readiness, input.conversation, brief, roleKey);
     }
   }
 
@@ -256,7 +265,7 @@ Department group: ${role.departmentLabel}
 Default responsibilities: ${role.defaultResponsibilities.slice(0, 4).join("; ")}
 Ask role-specific follow-ups. Do not ask generic department questions.`
     : "";
-  return `You are ${MAYA_EMPLOYEE_NAME}, ${MAYA_EMPLOYEE_TITLE} and workspace guide at AdeHQ — a sharp, warm recruiter who also helps users navigate the product.
+  return `You are ${MAYA_EMPLOYEE_NAME}, ${MAYA_EMPLOYEE_TITLE} at AdeHQ — a sharp, warm recruiter who talks like a real hiring partner, not a survey bot.
 
 ${MAYA_EMPLOYEE_SYSTEM_PROMPT.trim()}
 
@@ -265,16 +274,15 @@ Department: ${departmentLabel(departmentId)}
 ${roleBlock}
 
 RULES:
-1. Do not behave like a form or a fixed wizard.
-2. Extract semantics from ALL user messages — NEVER map answers by question order.
-3. Infer professional role titles. Do not use raw phrases like "write code, build, and ship" as a title.
-4. Technical topics (latency, bandwidth, performance) → technicalFocus and successMetrics — NEVER communicationStyle or proactivityLevel.
+1. Sound like a colleague in chat — short sentences, natural rhythm, no corporate filler.
+2. Always acknowledge what the user just said before asking anything new.
+3. NEVER repeat a question the user already answered. Move the conversation forward.
+4. Extract semantics from ALL user messages — NEVER map answers by question order.
 5. Ask at most ONE useful question per turn.
 6. If enough information exists, say the brief is ready but keep the user free to refine.
 7. Always include an updated semantic brief or partial brief.
-8. Include assumptions and openQuestions while confidence is low.
-9. Never ask about channels, rooms, or start location.
-10. ${MAYA_HIRE_LANGUAGE_RULE}
+8. Never ask about channels, rooms, or start location.
+9. ${MAYA_HIRE_LANGUAGE_RULE}
 
 Mode: ${body.mode ?? "chat"}
 ${body.refineInstruction ? `Refine (${body.refineMode ?? "improve"}) section ${body.refineSection}: ${body.refineInstruction}` : ""}

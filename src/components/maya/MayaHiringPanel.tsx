@@ -2,7 +2,6 @@
 
 import { BriefDocumentPreview } from "@/components/hiring/BriefDocumentPreview";
 import { ApplicantCard } from "@/components/hiring/HireScreens";
-import { Button } from "@/components/ui";
 import { useMayaDmHiringContext } from "@/components/maya/MayaDmHiringContext";
 import type { AiEmployeeApplicant } from "@/lib/hiring/types";
 import { Loader2, Sparkles } from "lucide-react";
@@ -56,6 +55,24 @@ export function MayaHiringPanel() {
       )}
 
       <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4">
+        {session.briefReady && session.candidates.length === 0 && (
+          <div className="shrink-0 border-b border-border px-4 py-3">
+            <button
+              type="button"
+              onClick={() => void generateCandidates()}
+              disabled={generatingCandidates || session.busy}
+              className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-ink px-4 py-2.5 text-sm font-medium text-white disabled:opacity-50"
+            >
+              {generatingCandidates ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Sparkles className="h-4 w-4" />
+              )}
+              Generate 3 candidates
+            </button>
+          </div>
+        )}
+
         {showBrief && (
           <section className="min-h-0 shrink-0">
             <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-3">
@@ -100,24 +117,6 @@ export function MayaHiringPanel() {
           </section>
         )}
 
-        {session.briefReady && session.candidates.length === 0 && (
-          <div className="shrink-0 pt-1">
-            <Button
-              variant="primary"
-              size="sm"
-              className="w-full"
-              onClick={() => void generateCandidates()}
-              disabled={generatingCandidates || session.busy}
-            >
-              {generatingCandidates ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Sparkles className="h-4 w-4" />
-              )}
-              Generate 3 candidates
-            </Button>
-          </div>
-        )}
       </div>
     </div>
   );

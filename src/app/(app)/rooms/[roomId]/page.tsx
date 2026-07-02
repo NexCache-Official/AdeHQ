@@ -509,7 +509,6 @@ export default function RoomDetailPage() {
 
       <OrchestrationUiProvider>
       <div className="flex min-h-0 flex-1 overflow-hidden">
-        {!isMayaDm && (
         <div className="hidden w-[266px] shrink-0 lg:block">
           <TopicList
             topics={roomTopics}
@@ -518,22 +517,20 @@ export default function RoomDetailPage() {
             selectedTopicId={selectedTopic?.id}
             userId={state.user?.id}
             isDm={isDm}
-            room={isDm ? undefined : room}
+            room={isDm && !isMayaDm ? undefined : room}
             dmEmployee={isDm ? roomEmployees[0] : undefined}
             onSelect={selectTopic}
             onNewTopic={() => setNewTopicOpen(true)}
           />
         </div>
-        )}
 
         {isMayaDm ? (
-          <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden">
-            <MayaDmHiringLayout
-              mayaRoomId={roomId}
-              mayaTopicId={selectedTopic?.id}
-              firstName={state.user?.name?.split(" ")[0]}
-            />
-          </div>
+          <MayaDmHiringLayout
+            mayaRoomId={roomId}
+            selectedTopic={selectedTopic}
+            onSelectTopic={selectTopic}
+            firstName={state.user?.name?.split(" ")[0]}
+          />
         ) : (
           <>
         <div className="min-w-0 flex-1 border-r border-border bg-canvas">

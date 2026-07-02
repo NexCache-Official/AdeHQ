@@ -9,9 +9,14 @@ import {
   MAYA_RECRUITER_TAGLINE,
 } from "@/lib/hiring/maya";
 import type { MayaRecruiterState } from "@/lib/hiring/maya-recruiter-state";
-import type { RecruiterReadiness, RecruiterSuggestionChip } from "@/lib/hiring/types";
+import type {
+  AiEmployeeApplicant,
+  RecruiterReadiness,
+  RecruiterSuggestionChip,
+} from "@/lib/hiring/types";
 import { AdeOrb } from "@/components/hiring/HireChrome";
 import { TypewriterText } from "@/components/hiring/BriefSections";
+import { Sparkles } from "lucide-react";
 
 export function RecruiterChat({
   messages,
@@ -25,6 +30,11 @@ export function RecruiterChat({
   variant = "recruiter",
   placeholder = "What job do you need done?",
   emptyState,
+  candidates = [],
+  onGenerateCandidates,
+  onInterviewCandidate,
+  onHireCandidate,
+  generatingCandidates = false,
 }: {
   messages: { role: "ade" | "user"; text: string; isOptimistic?: boolean }[];
   chips: RecruiterSuggestionChip[];
@@ -37,6 +47,11 @@ export function RecruiterChat({
   variant?: "recruiter" | "refinement";
   placeholder?: string;
   emptyState?: React.ReactNode;
+  candidates?: AiEmployeeApplicant[];
+  onGenerateCandidates?: () => void;
+  onInterviewCandidate?: (candidate: AiEmployeeApplicant) => void;
+  onHireCandidate?: (candidate: AiEmployeeApplicant) => void;
+  generatingCandidates?: boolean;
 }) {
   const [input, setInput] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -76,6 +91,10 @@ export function RecruiterChat({
       onReview();
       return;
     }
+    if (chip.intent === "generate_candidates" && onGenerateCandidates) {
+      onGenerateCandidates();
+      return;
+    }
     onSend(
       chip.value,
       chip.intent === "draft_brief_now" ? "draft_now" : "message",
@@ -108,6 +127,23 @@ export function RecruiterChat({
             {readinessLabel} · {readiness.score}%
           </div>
         )}
+        {briefReady && onGenerateCandidates && candidates.length === 0 && (
+          <button
+            type="button"
+            onClick={onGenerateCandidates}
+            disabled={busy || generatingCandidates}
+            className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-ink px-3 py-1.5 text-[11px] font-semibold text-white disabled:opacity-50"
+          >
+            {generatingCandidates ? (
+              "Generating…"
+            ) : (
+              <>
+                <Sparkles className="h-3.5 w-3.5" />
+                Generate 3 candidates
+              </>
+            )}
+          </button>
+        )}
       </div>
 
       <div
@@ -132,9 +168,58 @@ export function RecruiterChat({
           >
             <AdeOrb size={26} initials="M" />
             <div className="rounded-[4px_14px_14px_14px] border border-border bg-muted px-3.5 py-2.5 text-sm text-ink-2">
-              {thinkingLabel}
+              <span className="inline-flex items-center gap-2">
+                {thinkingLabel}
+                <span className="inline-flex gap-0.5">
+                  <span className="typing-dot" />
+                  <span className="typing-dot" />
+                  <span className="typing-dot" />
+                </span>
+              </span>
             </div>
           </motion.div>
+        )}
+        {candidates.length > 0 && (
+          <div className="mt-2 grid gap-3 md:grid-cols-3">
+            {candidates.map((candidate) => (
+              <div
+                key={candidate.id}
+                className="flex flex-col rounded-2xl border border-border bg-surface p-4 shadow-sm"
+              >
+                <div className="mb-2 flex items-center gap-2">
+                  <AdeOrb size={36} initials={candidate.first} grad={candidate.grad} />
+                  <div className="min-w-0">
+                    <div className="truncate text-sm font-semibold">{candidate.name}</div>
+                    <div className="truncate text-[11px] text-ink-3">{candidate.title}</div>
+                  </div>
+                </div>
+                {candidate.recommended && (
+                  <span className="mb-2 w-fit rounded-full bg-accent-soft px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-accent-700">
+                    Recommended
+                  </span>
+                )}
+                <p className="mb-3 line-clamp-3 text-xs leading-relaxed text-ink-2">
+                  {candidate.strengths[0] ?? candidate.engineLabel}
+                </p>
+                <div className="mt-auto flex flex-col gap-2">
+                  <button
+                    type="button"
+                    onClick={() => onInterviewCandidate?.(candidate)}
+                    className="rounded-lg border border-border py-2 text-xs font-medium hover:bg-muted"
+                  >
+                    Interview
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onHireCandidate?.(candidate)}
+                    className="rounded-lg bg-ink py-2 text-xs font-medium text-white"
+                  >
+                    Hire {candidate.first}
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
         )}
       </div>
 

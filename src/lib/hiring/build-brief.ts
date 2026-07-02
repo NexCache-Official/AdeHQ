@@ -1,4 +1,5 @@
 import { DEPARTMENT_CARDS } from "./data";
+import { applyRoleFocusAnswer } from "./role-focus-answers";
 import { synthesizeRoleTitle } from "./role-title-synthesizer";
 import { getRoleByKey, legacyDepartmentIdForRole } from "./role-library";
 import type { AiEmployeeJobBrief, RecruiterMessage } from "./types";
@@ -254,7 +255,12 @@ export function synthesizeBriefFromRole(
   };
 
   if (userLines.length > 0) {
-    return synthesizeBriefFromConversation(role.title, messages, role.legacyDepartmentId ?? "custom", brief);
+    let enriched = synthesizeBriefFromConversation(role.title, messages, role.legacyDepartmentId ?? "custom", brief);
+    for (const line of userLines) {
+      const focus = applyRoleFocusAnswer(line, enriched, roleKey);
+      if (focus) enriched = focus.brief;
+    }
+    return enriched;
   }
   return brief;
 }

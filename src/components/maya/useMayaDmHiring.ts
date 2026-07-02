@@ -26,9 +26,11 @@ import {
   finalizeReadinessScore,
   generateSuggestionChips,
 } from "@/lib/hiring/recruiter-brain";
+import { classifyMayaDmIntent, workspaceGuideReply } from "@/lib/hiring/maya-dm-intent";
 import { inferRoleFromText, inferenceOpeningMessage } from "@/lib/hiring/role-inference";
 import { getRoleByKey, legacyDepartmentIdForRole } from "@/lib/hiring/role-library";
 import { useHiringSessionSync } from "@/lib/hiring/use-hiring-session-sync";
+import { generalTopicForRoom } from "@/lib/topics";
 import type {
   AiEmployeeApplicant,
   AiEmployeeJobBrief,
@@ -39,9 +41,16 @@ import type {
 type UseMayaDmHiringOptions = {
   mayaRoomId: string;
   mayaTopicId?: string;
+  pendingStartText?: string;
+  onPendingStartConsumed?: () => void;
 };
 
-export function useMayaDmHiring({ mayaRoomId, mayaTopicId }: UseMayaDmHiringOptions) {
+export function useMayaDmHiring({
+  mayaRoomId,
+  mayaTopicId,
+  pendingStartText,
+  onPendingStartConsumed,
+}: UseMayaDmHiringOptions) {
   const { state: appState, actions } = useStore();
   const router = useRouter();
   const {
@@ -165,7 +174,10 @@ export function useMayaDmHiring({ mayaRoomId, mayaTopicId }: UseMayaDmHiringOpti
   );
 
   const beginRecruiter = useCallback(
-    async (seed: string, opts?: { roleKey?: string | null; openingMessage?: string }) => {
+    async (
+      seed: string,
+      opts?: { roleKey?: string | null; openingMessage?: string; userText?: string },
+    ) => {
       const roleKey = opts?.roleKey ?? session.roleKey;
       const opening =
         opts?.openingMessage ??
@@ -174,19 +186,28 @@ export function useMayaDmHiring({ mayaRoomId, mayaTopicId }: UseMayaDmHiringOpti
           roleKey,
           departmentId: effectiveDepartmentId,
         });
+      const userText = opts?.userText?.trim();
 
       dispatch({ type: "SET_STEP", step: "recruiter" });
       const localBrief = synthesizeBriefForHiringContext({
         roleSeed: seed,
-        messages: [],
+        messages: userText ? [{ role: "user", text: userText }] : [],
         departmentId: effectiveDepartmentId,
         roleKey,
       });
 
-      dispatch({ type: "SET_MESSAGES", messages: [{ role: "ade", text: opening }] });
+      const openingMessages = userText
+        ? [
+            { role: "user" as const, text: userText },
+            { role: "ade" as const, text: opening },
+          ]
+        : [{ role: "ade" as const, text: opening }];
+
+      dispatch({ type: "SET_MESSAGES", messages: openingMessages });
+      if (userText) syncMessageToRoom("human", userText);
       syncMessageToRoom("ai", opening);
-      dispatch({ type: "SET_BRIEF_PARTIAL", briefPartial: localBrief });
-      const openingConversation = [{ role: "ade" as const, text: opening }];
+
+      const openingConversation = openingMessages;
       const localReadiness = assessRecruiterReadiness(openingConversation, localBrief);
       dispatch({ type: "SET_READINESS", readiness: localReadiness });
       dispatch({
@@ -194,18 +215,32 @@ export function useMayaDmHiring({ mayaRoomId, mayaTopicId }: UseMayaDmHiringOpti
         chips: generateSuggestionChips(localReadiness, localBrief, openingConversation, roleKey),
       });
       prevBriefRef.current = { ...localBrief };
+      dispatch({ type: "SET_BRIEF_PARTIAL", briefPartial: localBrief });
       dispatch({ type: "SET_BRIEF_READY", briefReady: false });
 
       dispatch({ type: "SET_BUSY", busy: true });
       try {
         const res = await callRecruiter(
-          recruiterPayload({ roleSeed: seed, roleKey, conversation: [], action: "message" }),
+          recruiterPayload({
+            roleSeed: seed,
+            roleKey,
+            conversation: openingConversation,
+            action: "message",
+          }),
         );
         const finalOpening = res.recruiterMessage ?? res.message ?? opening;
         if (finalOpening !== opening) {
-          dispatch({ type: "SET_MESSAGES", messages: [{ role: "ade", text: finalOpening }] });
+          dispatch({
+            type: "SET_MESSAGES",
+            messages: userText
+              ? [
+                  { role: "user", text: userText },
+                  { role: "ade", text: finalOpening },
+                ]
+              : [{ role: "ade", text: finalOpening }],
+          });
         }
-        applyRecruiterResponse(res, undefined, false);
+        applyRecruiterResponse(res, openingMessages, false);
       } catch (e) {
         dispatch({
           type: "SET_ERROR",
@@ -235,6 +270,7 @@ export function useMayaDmHiring({ mayaRoomId, mayaTopicId }: UseMayaDmHiringOpti
         await beginRecruiter(match.title, {
           roleKey: match.roleKey,
           openingMessage: inferenceOpeningMessage(text, inference),
+          userText: text,
         });
         return;
       }
@@ -244,10 +280,22 @@ export function useMayaDmHiring({ mayaRoomId, mayaTopicId }: UseMayaDmHiringOpti
       await beginRecruiter(text, {
         roleKey: "custom",
         openingMessage: inferenceOpeningMessage(text, inference),
+        userText: text,
       });
     },
     [beginRecruiter],
   );
+
+  const pendingStartedRef = useRef(false);
+  useEffect(() => {
+    if (!pendingStartText || pendingStartedRef.current || session.recruiterMessages.length > 0) {
+      return;
+    }
+    pendingStartedRef.current = true;
+    void startFromUserText(pendingStartText).finally(() => {
+      onPendingStartConsumed?.();
+    });
+  }, [pendingStartText, session.recruiterMessages.length, startFromUserText, onPendingStartConsumed]);
 
   const generateCandidates = useCallback(async () => {
     const brief =
@@ -317,6 +365,7 @@ export function useMayaDmHiring({ mayaRoomId, mayaTopicId }: UseMayaDmHiringOpti
           roleKey: session.roleKey,
           mayaRoomId,
           mayaTopicId,
+          allTopics: appState.topics,
         });
         await completeDurableHire({
           state: { ...session, brief },
@@ -325,7 +374,12 @@ export function useMayaDmHiring({ mayaRoomId, mayaTopicId }: UseMayaDmHiringOpti
           candidateId: candidate.id,
         });
         resetAfterMayaHire();
-        router.push(`/rooms/${dmRoomId}`);
+        const mayaGeneral = generalTopicForRoom(appState.topics, mayaRoomId);
+        if (mayaGeneral) {
+          router.push(`/rooms/${mayaRoomId}?topic=${mayaGeneral.id}`);
+        } else {
+          router.push(`/rooms/${dmRoomId}`);
+        }
       } catch (e) {
         releaseHireLock();
         dispatch({
@@ -338,6 +392,7 @@ export function useMayaDmHiring({ mayaRoomId, mayaTopicId }: UseMayaDmHiringOpti
     },
     [
       actions,
+      appState.topics,
       appState.user?.name,
       completeDurableHire,
       effectiveDepartmentId,
@@ -389,15 +444,37 @@ export function useMayaDmHiring({ mayaRoomId, mayaTopicId }: UseMayaDmHiringOpti
       }
 
       if (session.recruiterMessages.length === 0) {
-        syncMessageToRoom("human", trimmed);
+        const intent = classifyMayaDmIntent(trimmed);
+        if (intent === "workspace_guide") {
+          syncMessageToRoom("human", trimmed);
+          const reply = workspaceGuideReply(trimmed, appState.user?.name?.split(" ")[0]);
+          dispatch({ type: "SET_MESSAGES", messages: [{ role: "user", text: trimmed }, { role: "ade", text: reply }] });
+          syncMessageToRoom("ai", reply);
+          return;
+        }
         if (isHiringSmallTalk(trimmed)) {
+          syncMessageToRoom("human", trimmed);
           const greeting =
-            "Hey — I'm Maya, your recruiting guide. Tell me what kind of AI employee you want to hire, or use a quick action above.";
-          dispatch({ type: "SET_MESSAGES", messages: [{ role: "ade", text: greeting }] });
+            "Hey — I'm Maya, your recruiting guide. Tell me what kind of AI employee you want to hire.";
+          dispatch({ type: "SET_MESSAGES", messages: [{ role: "user", text: trimmed }, { role: "ade", text: greeting }] });
           syncMessageToRoom("ai", greeting);
           return;
         }
+        syncMessageToRoom("human", trimmed);
         await startFromUserText(trimmed);
+        return;
+      }
+
+      const midIntent = classifyMayaDmIntent(trimmed, {
+        inHiringTopic: true,
+        hasHiringMessages: session.recruiterMessages.length > 0,
+      });
+      if (midIntent === "workspace_guide") {
+        syncMessageToRoom("human", trimmed);
+        const reply = workspaceGuideReply(trimmed, appState.user?.name?.split(" ")[0]);
+        dispatch({ type: "ADD_MESSAGE", message: { role: "user", text: trimmed } });
+        dispatch({ type: "ADD_MESSAGE", message: { role: "ade", text: reply } });
+        syncMessageToRoom("ai", reply);
         return;
       }
 
@@ -478,6 +555,7 @@ export function useMayaDmHiring({ mayaRoomId, mayaTopicId }: UseMayaDmHiringOpti
     },
     [
       applyRecruiterResponse,
+      appState.user?.name,
       effectiveDepartmentId,
       recruiterPayload,
       roleSeed,

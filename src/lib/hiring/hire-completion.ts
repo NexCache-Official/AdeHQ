@@ -4,7 +4,8 @@ import { candidateToEmployee } from "@/lib/hiring/map-candidate";
 import { isHiringSmallTalk } from "@/lib/hiring/maya-recruiter-state";
 import { MAYA_EMPLOYEE_ID, MAYA_EMPLOYEE_NAME } from "@/lib/hiring/maya";
 import type { AiEmployeeApplicant, AiEmployeeJobBrief } from "@/lib/hiring/types";
-import type { ProjectRoom, WorkLogEvent } from "@/lib/types";
+import type { ProjectRoom, RoomTopic, WorkLogEvent } from "@/lib/types";
+import { generalTopicForRoom } from "@/lib/topics";
 import { nowISO, uid } from "@/lib/utils";
 
 type HireActions = {
@@ -34,6 +35,7 @@ export function completeHireFromCandidate(params: {
   roleKey: string | null;
   mayaRoomId?: string;
   mayaTopicId?: string;
+  allTopics?: RoomTopic[];
 }): { employeeId: string; dmRoomId: string } {
   const employee = candidateToEmployee(
     params.candidate,
@@ -47,12 +49,15 @@ export function completeHireFromCandidate(params: {
 
   const dm = params.actions.openOrCreateDM(employee.id);
   const firstName = params.userName?.split(" ")[0] ?? "there";
+  const generalTopicId = params.allTopics
+    ? generalTopicForRoom(params.allTopics, dm.id)?.id
+    : undefined;
   params.actions.addMessage(dm.id, {
     senderType: "ai",
     senderId: employee.id,
     senderName: employee.name,
     content: welcomeMessage(employee.name, params.candidate.title, firstName, params.brief),
-    topicId: undefined,
+    topicId: generalTopicId,
   });
 
   const logRoomId = params.mayaRoomId ?? dm.id;

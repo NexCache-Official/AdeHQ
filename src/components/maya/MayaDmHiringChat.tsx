@@ -3,14 +3,26 @@
 import { MayaDmEmptyState } from "@/components/maya/MayaDmEmptyState";
 import { useMayaDmHiringContext } from "@/components/maya/MayaDmHiringContext";
 import { RecruiterChat } from "@/components/hiring/RecruiterChat";
+import type { AiEmployeeApplicant } from "@/lib/hiring/types";
 import { cn } from "@/lib/utils";
 
 type MayaDmHiringChatProps = {
   firstName?: string;
   className?: string;
+  candidates?: AiEmployeeApplicant[];
+  onGenerateCandidates?: () => void;
+  onInterviewCandidate?: (candidate: AiEmployeeApplicant) => void;
+  onHireCandidate?: (candidate: AiEmployeeApplicant) => void;
 };
 
-export function MayaDmHiringChat({ firstName, className }: MayaDmHiringChatProps) {
+export function MayaDmHiringChat({
+  firstName,
+  className,
+  candidates,
+  onGenerateCandidates,
+  onInterviewCandidate,
+  onHireCandidate,
+}: MayaDmHiringChatProps) {
   const hiring = useMayaDmHiringContext();
 
   return (
@@ -25,6 +37,11 @@ export function MayaDmHiringChat({ firstName, className }: MayaDmHiringChatProps
         onSend={hiring.sendUserMessage}
         onReview={hiring.goToBriefReview}
         placeholder="What job do you need done? e.g. sales outreach, market research…"
+        candidates={candidates ?? hiring.session.candidates}
+        onGenerateCandidates={onGenerateCandidates ?? (() => void hiring.generateCandidates())}
+        onInterviewCandidate={onInterviewCandidate}
+        onHireCandidate={onHireCandidate ?? ((c) => void hiring.hireCandidate(c))}
+        generatingCandidates={hiring.generatingCandidates}
         emptyState={
           !hiring.hasConversation ? (
             <MayaDmEmptyState

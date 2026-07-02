@@ -115,7 +115,10 @@ export function RoomChat({
   const bottomRef = useRef<HTMLDivElement>(null);
 
   const allTopicMessages = topic
-    ? room.messages.filter((m) => m.topicId === topic.id)
+    ? room.messages
+        .filter((m) => m.topicId === topic.id)
+        .slice()
+        .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
     : [];
   const topicMessages = allTopicMessages.slice(-messageLimit);
   const hasOlder = allTopicMessages.length > messageLimit;
@@ -662,7 +665,7 @@ export function RoomChat({
 
       // Background server processing may complete shortly — refresh to pick up AI replies.
       if (payload.queuedRuns?.length) {
-        setTimeout(() => void actions.refreshTopics(room.id), 4000);
+        setTimeout(() => void actions.refreshTopics(room.id), 1800);
       }
       void actions.refreshWorkLogForTopic(topic.id);
 
@@ -912,6 +915,26 @@ export function RoomChat({
             {displayMessages.map((m) => (
               <RoomMessageItem key={m.id} message={m} isDm={isDm} />
             ))}
+            {activeRuns
+              .filter((run) => ["reading", "thinking", "typing", "queued"].includes(run.phase))
+              .map((run) => {
+                const employee = roomEmployees.find((e) => e.id === run.employeeId);
+                return (
+                  <div key={run.runId} className="mb-4 flex items-start gap-3">
+                    {employee && (
+                      <EmployeeAvatar employee={employee} size="md" showStatus={false} />
+                    )}
+                    <div className="rounded-2xl border border-border bg-muted px-4 py-3 text-sm text-ink-2">
+                      <span className="font-medium text-ink">{run.employeeName}</span> is typing
+                      <span className="ml-2 inline-flex gap-0.5 align-middle">
+                        <span className="typing-dot" />
+                        <span className="typing-dot" />
+                        <span className="typing-dot" />
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
             <div ref={bottomRef} />
           </div>
         )}

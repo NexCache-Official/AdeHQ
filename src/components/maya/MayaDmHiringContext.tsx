@@ -10,13 +10,22 @@ const MayaDmHiringContext = createContext<MayaDmHiringValue | null>(null);
 export function MayaDmHiringProvider({
   mayaRoomId,
   mayaTopicId,
+  pendingStartText,
+  onPendingStartConsumed,
   children,
 }: {
   mayaRoomId: string;
   mayaTopicId?: string;
+  pendingStartText?: string;
+  onPendingStartConsumed?: () => void;
   children: React.ReactNode;
 }) {
-  const hiring = useMayaDmHiring({ mayaRoomId, mayaTopicId });
+  const hiring = useMayaDmHiring({
+    mayaRoomId,
+    mayaTopicId,
+    pendingStartText,
+    onPendingStartConsumed,
+  });
   return (
     <MayaDmHiringContext.Provider value={hiring}>{children}</MayaDmHiringContext.Provider>
   );

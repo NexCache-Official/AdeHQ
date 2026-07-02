@@ -5,6 +5,7 @@ import type {
   RecruiterReadiness,
 } from "./types";
 import { isHiringSmallTalk } from "./maya-recruiter-state";
+import { acknowledgeUserAnswer } from "./role-focus-answers";
 import { inferDepartmentId, isEngineeringBrief } from "./suggestion-chips";
 import { getRoleByKey } from "./role-library";
 
@@ -78,7 +79,11 @@ export function assessRecruiterReadiness(
 
   const roleKnown = hasRealValue(currentBrief.roleTitle);
   const domainKnown = isSpecificDomain(currentBrief.domain);
-  const coreKnown = userTurns >= 2 && currentBrief.coreResponsibilities.length >= 2;
+  const coreKnown =
+    userTurns >= 1 &&
+    (currentBrief.businessFocus.length > 0 ||
+      currentBrief.technicalFocus.length > 0 ||
+      currentBrief.coreResponsibilities.length >= 2);
   const focusKnown =
     userTurns >= 1 &&
     (currentBrief.technicalFocus.length > 0 || currentBrief.businessFocus.length > 0);
@@ -186,10 +191,12 @@ export function chooseNextRecruiterQuestion(
   readiness: RecruiterReadiness,
   currentBrief: AiEmployeeJobBrief,
   roleKey?: string | null,
+  conversation: RecruiterMessage[] = [],
 ): string {
   const missing = readiness.missing;
   const role = getRoleByKey(roleKey ?? undefined);
-  const deptId = inferDepartmentId(currentBrief);
+  const lastUser = [...conversation].reverse().find((m) => m.role === "user")?.text.trim() ?? "";
+  const lastAde = [...conversation].reverse().find((m) => m.role === "ade")?.text ?? "";
 
   if (readiness.ready) {
     return "I have enough to draft a strong job brief. You can review it now, or keep refining the role.";
@@ -198,32 +205,86 @@ export function chooseNextRecruiterQuestion(
     return "What kind of role should this AI employee play for your team?";
   }
   if (missing.includes("domain")) {
-    return `What product or domain should this ${currentBrief.roleTitle || "employee"} mainly work with? For example: your core product, a new initiative, or a specific market.`;
+    return `What product or market should they focus on? For example, your core product, a new category, or a specific customer segment.`;
   }
   if (missing.includes("core_work")) {
-    if (role?.questionTemplates.coreWork) return role.questionTemplates.coreWork;
+    if (role?.questionTemplates.coreWork && !lastUser) {
+      return role.questionTemplates.coreWork;
+    }
     if (isEngineeringBrief(currentBrief)) {
-      return "What should this engineer own first — building new features, fixing bugs, full-stack product work, infrastructure, or something else?";
+      return "What should they own first — new features, bugs, full-stack work, infra, or something else?";
     }
     return "What should this employee focus on day to day?";
   }
   if (missing.includes("technical_focus")) {
-    return "What product or stack will they mainly work with? For example: Next.js, Supabase, React, APIs, mobile, internal tools, or something else.";
+    return "What stack or systems will they mainly work with — Next.js, APIs, mobile, internal tools, or something else?";
   }
   if (missing.includes("business_focus")) {
-    return `Which business outcomes should this ${currentBrief.roleTitle || "employee"} own or support?`;
+    if (role?.title.toLowerCase().includes("research")) {
+      return "Which market or product should they watch — your category, a new segment, or a specific competitor set?";
+    }
+    return `What outcomes should this ${currentBrief.roleTitle || "employee"} drive in the next few months?`;
+  }
+  if (missing.includes("quality_preference")) {
+    return "Should they bias toward moving fast, balanced output, or higher polish before shipping?";
   }
   if (missing.includes("seniority") || missing.includes("autonomy")) {
-    return "How senior should they feel — a fast implementer, a reliable mid-level builder, or a senior engineer who can make architecture decisions?";
+    return "How much judgment should they carry — hands-on executor, steady mid-level, or senior advisor?";
   }
   if (missing.includes("communication_style")) {
-    return "How should this employee communicate with you and the team?";
+    return "How should they show up in the team — concise and direct, warm and collaborative, or more formal?";
   }
   if (missing.includes("tools")) {
-    return "What tools or systems should this employee use or understand?";
+    return "Any tools they should plug into from day one, or should we keep it lightweight for now?";
   }
   if (missing.includes("approval_rules")) {
-    return "What should this employee ask for approval before doing?";
+    return "Anything they should always run by you first — external messages, spend, publishing, that kind of thing?";
   }
+
+  if (lastAde && lastUser && normalizeQuestion(lastAde) === normalizeQuestion(lastUser)) {
+    return "What else would make this hire feel like a strong fit?";
+  }
+
   return "What else should I know to make this AI employee a better fit?";
+}
+
+function normalizeQuestion(text: string): string {
+  return text.toLowerCase().replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
+}
+
+export function buildRecruiterTurnMessage(
+  readiness: RecruiterReadiness,
+  conversation: RecruiterMessage[],
+  currentBrief: AiEmployeeJobBrief,
+  roleKey?: string | null,
+): string {
+  const lastUser = [...conversation].reverse().find((m) => m.role === "user")?.text.trim() ?? "";
+  const lastAde = [...conversation].reverse().find((m) => m.role === "ade")?.text ?? "";
+  const nextQuestion = chooseNextRecruiterQuestion(readiness, currentBrief, roleKey, conversation);
+
+  if (!lastUser || isHiringSmallTalk(lastUser)) {
+    return nextQuestion;
+  }
+
+  if (readiness.ready) {
+    return nextQuestion;
+  }
+
+  const ack = acknowledgeUserAnswer(lastUser, currentBrief, roleKey);
+  if (normalizeQuestion(lastAde) === normalizeQuestion(nextQuestion)) {
+    const alternate = chooseNextRecruiterQuestion(
+      {
+        ...readiness,
+        missing: readiness.missing.filter((field) => field !== "core_work"),
+      },
+      currentBrief,
+      roleKey,
+      conversation,
+    );
+    if (normalizeQuestion(alternate) !== normalizeQuestion(lastAde)) {
+      return `${ack} ${alternate}`;
+    }
+  }
+
+  return `${ack} ${nextQuestion}`;
 }
