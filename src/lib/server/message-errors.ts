@@ -8,6 +8,7 @@ export type MessageErrorCode =
   | "not_room_member"
   | "room_not_found"
   | "message_required"
+  | "attachment_not_found"
   | "send_failed"
   | "ai_runtime_failed_but_message_saved";
 

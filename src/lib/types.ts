@@ -328,6 +328,94 @@ export type RoomMessage = {
   seenBy?: MessageSeenBy[];
 };
 
+export type WorkspaceFileStatus = "uploaded" | "processing" | "ready" | "failed";
+export type WorkspaceFileParseStatus = "pending" | "processing" | "parsed" | "no_text" | "failed";
+
+export type WorkspaceFile = {
+  id: string;
+  workspaceId: string;
+  roomId?: string | null;
+  topicId?: string | null;
+  uploadedByUserId?: string | null;
+  originalName: string;
+  displayName: string;
+  mimeType: string;
+  extension: string;
+  sizeBytes: number;
+  storageBucket: string;
+  storagePath: string;
+  status: WorkspaceFileStatus;
+  parseStatus?: WorkspaceFileParseStatus | null;
+  extractedText?: string | null;
+  textPreview?: string | null;
+  pageCount?: number | null;
+  sheetCount?: number | null;
+  rowCount?: number | null;
+  checksum?: string | null;
+  sourceMetadata: Record<string, unknown>;
+  errorMessage?: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type FileChunk = {
+  id: string;
+  workspaceId: string;
+  fileId: string;
+  roomId?: string | null;
+  topicId?: string | null;
+  chunkIndex: number;
+  content: string;
+  contentPreview?: string | null;
+  pageStart?: number | null;
+  pageEnd?: number | null;
+  sheetName?: string | null;
+  rowStart?: number | null;
+  rowEnd?: number | null;
+  tokenEstimate?: number | null;
+  metadata: Record<string, unknown>;
+  embeddingStatus: string;
+  createdAt: string;
+};
+
+export type SavedArtifactType =
+  | "prd"
+  | "report"
+  | "brief"
+  | "research_summary"
+  | "meeting_notes"
+  | "strategy_memo"
+  | "email_draft"
+  | "proposal"
+  | "checklist"
+  | "decision"
+  | "note"
+  | "other";
+
+export type SavedArtifactStatus = "draft" | "saved" | "archived";
+
+export type SavedArtifact = {
+  id: string;
+  workspaceId: string;
+  roomId?: string | null;
+  topicId?: string | null;
+  title: string;
+  artifactType: SavedArtifactType;
+  status: SavedArtifactStatus;
+  contentMarkdown: string;
+  contentJson: Record<string, unknown>;
+  createdByType: "human" | "ai" | "system";
+  createdById?: string | null;
+  sourceFileIds: string[];
+  sourceMessageIds: string[];
+  sourceChunkIds: string[];
+  sourceCitations: Array<Record<string, unknown>>;
+  memorySavedAt?: string | null;
+  metadata: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+};
+
 /** `room` = multi-member group space; `dm` = private 1:1 with one AI employee. */
 export type RoomKind = "room" | "dm";
 
@@ -440,7 +528,7 @@ export type WorkLogEvent = {
   summary: string;
   toolUsed?: string;
   status: WorkLogStatus;
-  relatedEntityType?: "task" | "memory" | "approval" | "message";
+  relatedEntityType?: "task" | "memory" | "approval" | "message" | "topic" | "file" | "artifact";
   relatedEntityId?: string;
   agentRunId?: string;
   createdAt: string;

@@ -21,7 +21,7 @@ import { useResponder } from "@/lib/ai/use-responder";
 import { authHeaders } from "@/lib/api/auth-client";
 import { isGeneralTopic, mainChatLabel } from "@/lib/topics";
 import { RoomMessageItem } from "./RoomMessageItem";
-import { ChatComposer, type SlashCommandResult } from "./ChatComposer";
+import { ChatComposer, type ComposerUploadedFile, type SlashCommandResult } from "./ChatComposer";
 import { EmptyState } from "./States";
 import { Button } from "./ui";
 import { EmployeeAvatar } from "./EmployeeAvatar";
@@ -127,6 +127,7 @@ export function RoomChat({
   isDm = false,
   onSummarize,
   summarizing = false,
+  onAddEmployee,
 }: {
   room: ProjectRoom;
   topic?: RoomTopic;
@@ -136,6 +137,7 @@ export function RoomChat({
   isDm?: boolean;
   onSummarize?: () => void;
   summarizing?: boolean;
+  onAddEmployee?: () => void;
 }) {
   const { state, actions, backend } = useStore();
   const { trace } = useDebugTrace();
@@ -602,6 +604,7 @@ export function RoomChat({
     text: string,
     clientMessageId?: string,
     mentionsJson?: import("@/lib/types").MentionRef[],
+    attachmentFileIds?: string[],
   ) => {
     if (!topic || topic.status === "archived" || room.status === "archived") return;
     setFailedSend(null);
@@ -632,6 +635,7 @@ export function RoomChat({
         topicId: topic.id,
         clientMessageId: messageId,
         mentionsJson,
+        attachmentFileIds,
         mode: "live" as const,
       };
 
@@ -821,10 +825,44 @@ export function RoomChat({
     setTopicSuggestions((prev) => prev.filter((s) => s.id !== suggestionId));
   };
 
-  const handleSend = async (text: string, mentionsJson?: import("@/lib/types").MentionRef[]) => {
+  const uploadFiles = async (files: File[]): Promise<ComposerUploadedFile[]> => {
+    if (!topic) return [];
+    const auth = (await authHeaders()) as Record<string, string>;
+    const { "Content-Type": _contentType, ...headers } = auth;
+    const results: ComposerUploadedFile[] = [];
+
+    for (const file of files) {
+      const form = new FormData();
+      form.set("file", file);
+      form.set("workspaceId", state.workspace.id);
+      form.set("roomId", room.id);
+      form.set("topicId", topic.id);
+
+      const response = await fetch("/api/files/upload", {
+        method: "POST",
+        headers,
+        body: form,
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(payload?.error ?? "File upload failed.");
+      }
+      results.push(payload.file as ComposerUploadedFile);
+    }
+
+    void actions.refreshWorkLogForTopic(topic.id);
+    window.dispatchEvent(new CustomEvent("adehq:topic-files-changed", { detail: { topicId: topic.id } }));
+    return results;
+  };
+
+  const handleSend = async (
+    text: string,
+    mentionsJson?: import("@/lib/types").MentionRef[],
+    attachmentFileIds?: string[],
+  ) => {
     if (!topic || topic.status === "archived" || room.status === "archived") return;
     if (useServerApi) {
-      await sendViaServer(text, undefined, mentionsJson);
+      await sendViaServer(text, undefined, mentionsJson, attachmentFileIds);
       return;
     }
     if (ENABLE_DEMO_MODE) {
@@ -939,7 +977,7 @@ export function RoomChat({
           {!isDm && (
             <button
               type="button"
-              onClick={() => router.push("/workforce")}
+              onClick={onAddEmployee ?? (() => router.push("/workforce"))}
               className="hidden items-center gap-1.5 rounded-[10px] border border-border bg-surface px-[11px] py-[7px] text-xs font-medium text-ink-2 transition-colors hover:bg-muted sm:inline-flex"
             >
               <UserPlus className="h-3.5 w-3.5" strokeWidth={2} />
@@ -1102,6 +1140,7 @@ export function RoomChat({
           <ChatComposer
             employees={roomEmployees}
             onSend={handleSend}
+            onUploadFiles={useServerApi ? uploadFiles : undefined}
             disabled={!topic || chatDisabled}
             placeholder={placeholder}
             draftText={draftText}

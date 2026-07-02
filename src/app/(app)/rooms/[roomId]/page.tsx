@@ -7,6 +7,7 @@ import { RoomChat } from "@/components/RoomChat";
 import { TopicList } from "@/components/TopicList";
 import { TopicPanel } from "@/components/TopicPanel";
 import { NewTopicModal } from "@/components/NewTopicModal";
+import { AddEmployeeToRoomModal } from "@/components/AddEmployeeToRoomModal";
 import { EmployeeAvatar } from "@/components/EmployeeAvatar";
 import { Button } from "@/components/ui";
 import { EmptyState } from "@/components/States";
@@ -16,7 +17,7 @@ import { MayaDmHiringLayout } from "@/components/maya/MayaDmHiringWorkspace";
 import { OrchestrationUiProvider } from "@/components/orchestration/OrchestrationUiContext";
 import { roomAssignableEmployees, isMayaEmployee } from "@/lib/maya-employee";
 import { notifyTopicSummaryUpdated } from "@/lib/topic-summary/client";
-import type { AiParticipationMode, TopicPriority } from "@/lib/types";
+import type { AiParticipationMode, TopicPriority, WorkspaceFile } from "@/lib/types";
 import type { SlashCommandResult } from "@/components/ChatComposer";
 import {
   ArrowLeft,
@@ -40,6 +41,8 @@ export default function RoomDetailPage() {
   const [topicActionError, setTopicActionError] = useState<string | null>(null);
   const [composerDraft, setComposerDraft] = useState("");
   const [slashNotice, setSlashNotice] = useState<string | null>(null);
+  const [addEmployeeOpen, setAddEmployeeOpen] = useState(false);
+  const [addingEmployeeId, setAddingEmployeeId] = useState<string | null>(null);
 
   const room = state.rooms.find((r) => r.id === roomId);
   const isDm = room?.kind === "dm";
@@ -64,6 +67,10 @@ export default function RoomDetailPage() {
   const assignableEmployees = useMemo(
     () => roomAssignableEmployees(state.employees),
     [state.employees],
+  );
+  const addableEmployees = useMemo(
+    () => (room ? assignableEmployees.filter((employee) => !room.aiEmployees.includes(employee.id)) : []),
+    [assignableEmployees, room],
   );
   const isMayaDm = Boolean(
     isDm && roomEmployees[0] && isMayaEmployee(roomEmployees[0]),
@@ -419,11 +426,61 @@ export default function RoomDetailPage() {
     setTimeout(() => setSlashNotice(null), 4000);
   };
 
+  const addEmployeeToRoom = async (employeeId: string, addToTopic: boolean) => {
+    if (!room) return;
+    setAddingEmployeeId(employeeId);
+    try {
+      actions.addEmployeeToRoom(roomId, employeeId);
+
+      if (backend === "supabase") {
+        const headers = await authHeaders();
+        const roomResponse = await fetch(`/api/rooms/${roomId}/members`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({ employeeId }),
+        });
+        if (!roomResponse.ok) {
+          const payload = await roomResponse.json().catch(() => null);
+          throw new Error(payload?.error ?? "Unable to add employee to room.");
+        }
+
+        if (addToTopic && selectedTopic) {
+          const topicResponse = await fetch(`/api/topics/${selectedTopic.id}/members`, {
+            method: "POST",
+            headers,
+            body: JSON.stringify({ employeeId }),
+          });
+          if (!topicResponse.ok) {
+            const payload = await topicResponse.json().catch(() => null);
+            throw new Error(payload?.error ?? "Unable to add employee to topic.");
+          }
+          await actions.refreshTopics(roomId);
+        }
+      }
+
+      const employee = state.employees.find((candidate) => candidate.id === employeeId);
+      setSlashNotice(`${employee?.name ?? "Employee"} added to ${room.name}.`);
+      setTimeout(() => setSlashNotice(null), 3500);
+    } catch (error) {
+      setTopicActionError(error instanceof Error ? error.message : "Unable to add employee.");
+    } finally {
+      setAddingEmployeeId(null);
+    }
+  };
+
   const askAiAboutTopic = () => {
     const pm = roomEmployees.find((e) => e?.roleKey === "pm") ?? roomEmployees[0];
     if (!pm || !selectedTopic) return;
     const text = `@${pm.name} summarize the current state of this topic and suggest next steps.`;
     setComposerDraft(text);
+  };
+
+  const askAiAboutFile = (file: WorkspaceFile) => {
+    const teammate = roomEmployees.find((e) => e?.roleKey === "research" || e?.roleKey === "pm") ?? roomEmployees[0];
+    const prefix = teammate ? `@${teammate.name} ` : "";
+    setComposerDraft(
+      `${prefix}review ${file.displayName} and tell me the key points, risks, and recommended next steps for this topic.`,
+    );
   };
 
   const saveSummaryToMemory = () => {
@@ -553,6 +610,7 @@ export default function RoomDetailPage() {
                 onSlashCommand={handleSlashCommand}
                 onSummarize={summarizeTopic}
                 summarizing={summarizing}
+                onAddEmployee={() => setAddEmployeeOpen(true)}
               />
         </div>
 
@@ -578,6 +636,7 @@ export default function RoomDetailPage() {
               onCreateTaskFromSummary={createTaskFromSummary}
               onParticipationChange={setParticipationMode}
               onAiControl={handleAiControl}
+              onAskAboutFile={askAiAboutFile}
               summarizing={summarizing}
               topicActionBusy={topicActionBusy}
             />
@@ -603,6 +662,18 @@ export default function RoomDetailPage() {
         busy={creatingTopic}
         error={topicCreateError}
       />
+      {!isDm && (
+        <AddEmployeeToRoomModal
+          open={addEmployeeOpen}
+          onClose={() => setAddEmployeeOpen(false)}
+          roomName={room.name}
+          topicTitle={selectedTopic && !isGeneralTopic(selectedTopic) ? selectedTopic.title : undefined}
+          employees={addableEmployees}
+          currentEmployeeIds={room.aiEmployees}
+          onAdd={addEmployeeToRoom}
+          busyEmployeeId={addingEmployeeId}
+        />
+      )}
     </div>
   );
 }

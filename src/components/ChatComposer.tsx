@@ -32,6 +32,26 @@ import {
 } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
 
+export type ComposerUploadedFile = {
+  id: string;
+  displayName: string;
+  extension: string;
+  sizeBytes: number;
+  status: "ready" | "failed" | "processing" | "uploaded";
+  parseStatus?: "pending" | "processing" | "parsed" | "no_text" | "failed" | null;
+  errorMessage?: string | null;
+};
+
+type ComposerAttachment = {
+  localId: string;
+  fileId?: string;
+  fileName: string;
+  extension: string;
+  sizeLabel: string;
+  status: "uploading" | "processing" | "ready" | "failed" | "attached";
+  error?: string | null;
+};
+
 type SlashCommand = {
   cmd: string;
   label: string;
@@ -133,6 +153,7 @@ function extensionFor(fileName: string): string {
 export function ChatComposer({
   employees,
   onSend,
+  onUploadFiles,
   disabled,
   placeholder,
   draftText,
@@ -140,7 +161,8 @@ export function ChatComposer({
   onSlashCommand,
 }: {
   employees: AIEmployee[];
-  onSend: (text: string, mentionsJson?: MentionRef[]) => void | Promise<void>;
+  onSend: (text: string, mentionsJson?: MentionRef[], attachmentFileIds?: string[]) => void | Promise<void>;
+  onUploadFiles?: (files: File[]) => Promise<ComposerUploadedFile[]>;
   disabled?: boolean;
   placeholder?: string;
   draftText?: string;
@@ -155,7 +177,7 @@ export function ChatComposer({
   const [slashQuery, setSlashQuery] = useState<string | null>(null);
   const [trackedMentions, setTrackedMentions] = useState<MentionRef[]>([]);
   const [commandNotice, setCommandNotice] = useState<string | null>(null);
-  const [attachments, setAttachments] = useState<File[]>([]);
+  const [attachments, setAttachments] = useState<ComposerAttachment[]>([]);
   const [dragActive, setDragActive] = useState(false);
   const [sending, setSending] = useState(false);
   const [activeMentionIndex, setActiveMentionIndex] = useState(0);
@@ -224,8 +246,63 @@ export function ChatComposer({
   const addFiles = (files: FileList | File[]) => {
     const nextFiles = Array.from(files);
     if (!nextFiles.length) return;
-    setAttachments((prev) => [...prev, ...nextFiles]);
-    setCommandNotice("Files are staged here now. Upload and file Q&A arrive in V19.6.1.");
+    const staged = nextFiles.map((file) => ({
+      localId: `${file.name}-${file.size}-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      fileName: file.name,
+      extension: extensionFor(file.name),
+      sizeLabel: formatFileSize(file.size),
+      status: onUploadFiles ? ("uploading" as const) : ("attached" as const),
+    }));
+    setAttachments((prev) => [...prev, ...staged]);
+
+    if (!onUploadFiles) {
+      setCommandNotice("Files are staged here now. Upload and file Q&A arrive in V19.6.1.");
+      return;
+    }
+
+    void Promise.all(
+      nextFiles.map(async (file, index) => {
+        const localId = staged[index].localId;
+        try {
+          const [uploaded] = await onUploadFiles([file]);
+          setAttachments((prev) =>
+            prev.map((attachment) =>
+              attachment.localId === localId
+                ? {
+                    ...attachment,
+                    fileId: uploaded.id,
+                    fileName: uploaded.displayName,
+                    extension: uploaded.extension,
+                    sizeLabel: formatFileSize(uploaded.sizeBytes),
+                    status:
+                      uploaded.status === "ready"
+                        ? "ready"
+                        : uploaded.status === "failed"
+                          ? "failed"
+                          : "processing",
+                    error:
+                      uploaded.parseStatus === "no_text"
+                        ? "No extractable text found."
+                        : uploaded.errorMessage ?? null,
+                  }
+                : attachment,
+            ),
+          );
+        } catch (error) {
+          setAttachments((prev) =>
+            prev.map((attachment) =>
+              attachment.localId === localId
+                ? {
+                    ...attachment,
+                    status: "failed",
+                    error: error instanceof Error ? error.message : "Upload failed.",
+                  }
+                : attachment,
+            ),
+          );
+        }
+      }),
+    );
   };
 
   const insertText = (text: string) => {
@@ -318,17 +395,27 @@ export function ChatComposer({
   };
 
   const send = async () => {
+    const readyAttachmentIds = attachments
+      .filter((attachment) => attachment.fileId && attachment.status === "ready")
+      .map((attachment) => attachment.fileId as string);
+    const waitingOnFiles = attachments.some((attachment) =>
+      ["uploading", "processing", "attached"].includes(attachment.status),
+    );
+    const failedFiles = attachments.some((attachment) => attachment.status === "failed");
     const text = value.trim();
     if ((!text && attachments.length === 0) || disabled || sending) return;
+    if (waitingOnFiles) {
+      setCommandNotice("Wait for attached files to finish processing before sending.");
+      return;
+    }
+    if (failedFiles && readyAttachmentIds.length === 0 && !text) {
+      setCommandNotice("Remove failed files or add a message before sending.");
+      return;
+    }
 
     const command = text.startsWith("/") ? SLASH_COMMANDS.find((item) => text.toLowerCase().startsWith(item.cmd)) : null;
     if (command && !command.implemented) {
       setCommandNotice(command.notice ?? "That action arrives later in Phase 3.");
-      return;
-    }
-
-    if (attachments.length > 0) {
-      setCommandNotice("Files are staged in the composer only. Upload and file Q&A arrive in V19.6.1.");
       return;
     }
 
@@ -350,11 +437,24 @@ export function ChatComposer({
 
     setSending(true);
     try {
-      await onSend(text, trackedMentions.length ? trackedMentions : undefined);
+      const sendText =
+        text ||
+        (readyAttachmentIds.length
+          ? `Uploaded ${attachments
+              .filter((attachment) => readyAttachmentIds.includes(attachment.fileId ?? ""))
+              .map((attachment) => attachment.fileName)
+              .join(", ")}`
+          : "");
+      await onSend(
+        sendText,
+        trackedMentions.length ? trackedMentions : undefined,
+        readyAttachmentIds.length ? readyAttachmentIds : undefined,
+      );
       setValue("");
       setMentionQuery(null);
       setSlashQuery(null);
       setTrackedMentions([]);
+      setAttachments((prev) => prev.filter((attachment) => attachment.status === "failed"));
       setCommandNotice(null);
     } finally {
       setSending(false);
@@ -654,11 +754,11 @@ export function ChatComposer({
           <div className="mb-1.5 grid gap-1.5 sm:grid-cols-2">
             {attachments.map((file, index) => (
               <FileArtifactCard
-                key={`${file.name}-${file.size}-${index}`}
-                fileName={file.name}
-                extension={extensionFor(file.name)}
-                size={formatFileSize(file.size)}
-                status="attached"
+                key={file.localId}
+                fileName={file.fileName}
+                extension={file.extension}
+                size={file.error ? file.error : file.sizeLabel}
+                status={file.status}
                 onRemove={() => setAttachments((prev) => prev.filter((_, i) => i !== index))}
               />
             ))}

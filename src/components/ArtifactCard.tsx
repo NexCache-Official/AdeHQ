@@ -144,7 +144,7 @@ export function FileArtifactCard({
   fileName: string;
   extension?: string;
   size?: string;
-  status?: "attached" | "processing" | "ready" | "failed";
+  status?: "attached" | "uploading" | "processing" | "ready" | "failed";
   onRemove?: () => void;
   className?: string;
 }) {

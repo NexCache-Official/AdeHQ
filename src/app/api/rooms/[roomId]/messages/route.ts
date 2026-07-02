@@ -28,7 +28,7 @@ import { isAiQueueingBlocked } from "@/lib/topic-ai-control";
 import { getAiParticipationMode, isHiringTopic, isSmartAssistMode } from "@/lib/topics";
 import { isMayaEmployee } from "@/lib/maya-employee";
 import { messageError } from "@/lib/server/message-errors";
-import type { MentionRef } from "@/lib/types";
+import type { MentionRef, MessageArtifact } from "@/lib/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -40,6 +40,7 @@ type MessageBody = {
   mode?: "mock" | "live";
   mentionsJson?: MentionRef[];
   slashCommand?: string;
+  attachmentFileIds?: string[];
 };
 
 function displayNameFromUser(user: {
@@ -140,6 +141,54 @@ export async function POST(
     }
     humanMessage.mentions = mentions;
     if (mentionsJson) humanMessage.mentionsJson = mentionsJson;
+
+    const attachmentFileIds = [...new Set((body.attachmentFileIds ?? []).filter(Boolean))];
+    if (attachmentFileIds.length) {
+      const { data: fileRows, error: fileError } = await client
+        .from("workspace_files")
+        .select("id, display_name, extension, size_bytes, status")
+        .eq("workspace_id", workspaceId)
+        .eq("room_id", params.roomId)
+        .eq("topic_id", topicId)
+        .in("id", attachmentFileIds);
+      if (fileError) throw fileError;
+      if ((fileRows ?? []).length !== attachmentFileIds.length) {
+        return messageError("attachment_not_found", "One or more files are not available in this topic.", 400);
+      }
+
+      const fileArtifacts: MessageArtifact[] = (fileRows ?? []).map((file) => ({
+        type: "file",
+        id: String(file.id),
+        label: String(file.display_name),
+        meta: {
+          fileName: String(file.display_name),
+          fileExtension: String(file.extension),
+          fileSizeLabel:
+            Number(file.size_bytes) < 1024 * 1024
+              ? `${Math.max(1, Math.round(Number(file.size_bytes) / 1024))} KB`
+              : `${(Number(file.size_bytes) / 1024 / 1024).toFixed(1)} MB`,
+          fileStatus: file.status === "ready" ? "ready" : file.status === "failed" ? "failed" : "processing",
+        },
+      }));
+
+      const { error: attachError } = await client.from("message_attachments").insert(
+        attachmentFileIds.map((fileId) => ({
+          workspace_id: workspaceId,
+          message_id: humanMessage.id,
+          file_id: fileId,
+          attachment_type: "file",
+        })),
+      );
+      if (attachError) throw attachError;
+
+      const { error: updateMessageError } = await client
+        .from("messages")
+        .update({ artifacts: fileArtifacts })
+        .eq("workspace_id", workspaceId)
+        .eq("id", humanMessage.id);
+      if (updateMessageError) throw updateMessageError;
+      humanMessage.artifacts = fileArtifacts;
+    }
 
     const orchestrationEmployees = filterOrchestrationEmployees(respondersCtx.employees);
 

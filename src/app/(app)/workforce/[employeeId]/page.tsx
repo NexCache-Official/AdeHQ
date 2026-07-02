@@ -109,10 +109,12 @@ export default function EmployeeProfilePage() {
             </div>
             <p className="mt-0.5 text-sm text-slate-500">{employee.role} · {employee.seniority}</p>
             <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-500">
-              <span className="chip">{employee.provider} · {employee.model}</span>
-              {employee.provider.toLowerCase() === "siliconflow" && (
-                <span className="chip bg-emerald-50 text-emerald-700">Live AI</span>
-              )}
+              <span className="chip bg-emerald-50 text-emerald-700">
+                {employee.provider === "mock" ? "Simulated" : "Live AI"}
+              </span>
+              <span className="chip">
+                {MODEL_MODE_LABELS[employee.modelMode ?? defaultModelModeForRole(employee.roleKey)]} intelligence
+              </span>
               {room && <span className="chip">{room.name}</span>}
               <span className="text-slate-500">Active {timeAgo(employee.lastActiveAt)}</span>
             </div>
@@ -162,12 +164,26 @@ export default function EmployeeProfilePage() {
         <div className="space-y-6 lg:col-span-2">
           {/* Role & instructions */}
           <Card className="p-5">
-            <h2 className="mb-3 text-sm font-semibold text-slate-900">Role & instructions</h2>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="Standing instructions" value={employee.instructions} />
-              <Field label="Communication style" value={employee.communicationStyle} />
-              <Field label="Success criteria" value={employee.successCriteria} />
-              <Field label="Seniority" value={employee.seniority} />
+            <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h2 className="text-sm font-semibold text-slate-900">Operating brief</h2>
+                <p className="mt-0.5 text-xs text-slate-500">
+                  The essentials this employee uses when deciding how to work.
+                </p>
+              </div>
+              {!isMayaEmployee(employee) && (
+                <Button size="sm" variant="ghost" onClick={() => setEditOpen(true)}>
+                  <Pencil className="h-3.5 w-3.5" /> Edit brief
+                </Button>
+              )}
+            </div>
+            <div className="grid gap-4 lg:grid-cols-[minmax(0,1.3fr)_minmax(260px,0.7fr)]">
+              <InstructionField label="Standing instructions" value={employee.instructions} />
+              <div className="space-y-4">
+                <CompactField label="Communication style" value={employee.communicationStyle} />
+                <CompactField label="Success criteria" value={employee.successCriteria} />
+                <CompactField label="Seniority" value={employee.seniority} />
+              </div>
             </div>
           </Card>
 
@@ -298,11 +314,49 @@ export default function EmployeeProfilePage() {
   );
 }
 
-function Field({ label, value }: { label: string; value: string }) {
+function parseInstructionItems(value: string): { label?: string; value: string }[] {
+  const normalized = value
+    .replace(/\s+(Role|Department|Domain|Mission|Seniority|Autonomy|Core responsibilities|Business focus|Communication style|Proactivity|Quality preference|Approval rules|Success metrics|Open questions):/g, "\n$1:")
+    .replace(/\s+-\s+/g, "\n- ")
+    .trim();
+
+  return normalized
+    .split(/\n+/)
+    .map((line) => line.trim().replace(/^-\s*/, ""))
+    .filter(Boolean)
+    .map((line) => {
+      const match = line.match(/^([^:]{2,34}):\s*(.+)$/);
+      if (!match) return { value: line };
+      return { label: match[1], value: match[2] };
+    });
+}
+
+function InstructionField({ label, value }: { label: string; value: string }) {
+  const items = parseInstructionItems(value);
   return (
     <div>
+      <div className="section-title mb-2">{label}</div>
+      <div className="max-h-[360px] space-y-2 overflow-y-auto rounded-xl border border-border bg-muted/60 p-3">
+        {items.map((item, index) => (
+          <div key={`${item.label ?? "item"}-${index}`} className="rounded-lg bg-surface px-3 py-2">
+            {item.label && (
+              <div className="mb-0.5 text-[10px] font-semibold uppercase tracking-wide text-ink-3">
+                {item.label}
+              </div>
+            )}
+            <p className="text-sm leading-relaxed text-slate-700">{item.value}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function CompactField({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-xl border border-border bg-muted/60 p-3">
       <div className="section-title mb-1">{label}</div>
-      <p className="text-sm leading-relaxed text-slate-600">{value}</p>
+      <p className="text-sm leading-relaxed text-slate-700">{value}</p>
     </div>
   );
 }

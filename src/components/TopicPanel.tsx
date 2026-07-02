@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type {
   AIEmployee,
   AiParticipationMode,
@@ -11,6 +11,8 @@ import type {
   Task,
   TopicMember,
   WorkLogEvent,
+  SavedArtifact,
+  WorkspaceFile,
   WorkspaceMember,
 } from "@/lib/types";
 import { EmployeeAvatar } from "./EmployeeAvatar";
@@ -18,13 +20,16 @@ import { TaskCard } from "./TaskCard";
 import { MemoryCard } from "./MemoryCard";
 import { ApprovalCard } from "./ApprovalCard";
 import { WorkLogTimeline } from "./WorkLogTimeline";
+import { ArtifactCard, FileArtifactCard } from "./ArtifactCard";
+import { MessageMarkdown } from "./MessageMarkdown";
 import { shouldShowWorkLogInTopic } from "@/lib/work-log-labels";
 import { OrchestrationSidebarStatus } from "@/components/orchestration/OrchestrationSidebarStatus";
 import { TopicSummaryPanel } from "@/components/topic-summary/TopicSummaryPanel";
 import { useTopicSummary } from "@/components/topic-summary/useTopicSummary";
 import { EmptyState } from "./States";
-import { Button } from "./ui";
-import { cn } from "@/lib/utils";
+import { Button, Modal, ModalHeader } from "./ui";
+import { authHeaders } from "@/lib/api/auth-client";
+import { cn, formatTime } from "@/lib/utils";
 import {
   getAiParticipationMode,
   isGeneralTopic,
@@ -48,6 +53,7 @@ import {
   Sparkles,
   Trash2,
   Users,
+  WandSparkles,
 } from "lucide-react";
 
 const TABS = [
@@ -89,6 +95,32 @@ function modeIsSelected(current: AiParticipationMode, option: AiParticipationMod
   return current === option;
 }
 
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}
+
+function artifactCardType(type: SavedArtifact["artifactType"]) {
+  if (type === "research_summary" || type === "strategy_memo") return "report";
+  if (type === "meeting_notes" || type === "checklist" || type === "email_draft" || type === "other") return "note";
+  return type;
+}
+
+async function apiJson<T>(url: string, init?: RequestInit): Promise<T> {
+  const headers = await authHeaders();
+  const response = await fetch(url, {
+    ...init,
+    headers: {
+      ...headers,
+      ...(init?.headers ?? {}),
+    },
+  });
+  const body = (await response.json().catch(() => ({}))) as { error?: string } & T;
+  if (!response.ok) throw new Error(body.error ?? "Request failed.");
+  return body;
+}
+
 export function TopicPanel({
   topic,
   room,
@@ -109,6 +141,7 @@ export function TopicPanel({
   onCreateTaskFromSummary,
   onParticipationChange,
   onAiControl,
+  onAskAboutFile,
   summarizing,
   topicActionBusy,
 }: {
@@ -131,11 +164,21 @@ export function TopicPanel({
   onCreateTaskFromSummary?: (title: string, ownerEmployeeId?: string) => void;
   onParticipationChange?: (mode: AiParticipationMode) => void;
   onAiControl?: (action: "stop_all" | "resume") => void;
+  onAskAboutFile?: (file: WorkspaceFile) => void;
   summarizing?: boolean;
   topicActionBusy?: boolean;
 }) {
   const [tab, setTab] = useState<(typeof TABS)[number]["id"]>("overview");
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [topicFiles, setTopicFiles] = useState<WorkspaceFile[]>([]);
+  const [topicArtifacts, setTopicArtifacts] = useState<SavedArtifact[]>([]);
+  const [filesLoading, setFilesLoading] = useState(false);
+  const [artifactsLoading, setArtifactsLoading] = useState(false);
+  const [selectedArtifact, setSelectedArtifact] = useState<SavedArtifact | null>(null);
+  const [artifactBusyId, setArtifactBusyId] = useState<string | null>(null);
+  const [fileBusyId, setFileBusyId] = useState<string | null>(null);
+  const [fileError, setFileError] = useState<string | null>(null);
+  const [artifactError, setArtifactError] = useState<string | null>(null);
   const isMainChat = isGeneralTopic(topic);
   const displayTitle = isMainChat ? mainChatLabel(isDm) : topic.title;
   const participation = getAiParticipationMode(topic);
@@ -149,6 +192,55 @@ export function TopicPanel({
     refresh: refreshTopicSummary,
   } = useTopicSummary(topic.id);
 
+  const loadFiles = useCallback(async () => {
+    setFilesLoading(true);
+    setFileError(null);
+    try {
+      const body = await apiJson<{ files: WorkspaceFile[] }>(`/api/topics/${topic.id}/files`);
+      setTopicFiles(body.files ?? []);
+    } catch (error) {
+      setTopicFiles([]);
+      setFileError(error instanceof Error ? error.message : "Could not load files.");
+    } finally {
+      setFilesLoading(false);
+    }
+  }, [topic.id]);
+
+  const loadArtifacts = useCallback(async () => {
+    setArtifactsLoading(true);
+    setArtifactError(null);
+    try {
+      const body = await apiJson<{ artifacts: SavedArtifact[] }>(`/api/topics/${topic.id}/artifacts`);
+      setTopicArtifacts(body.artifacts ?? []);
+    } catch (error) {
+      setTopicArtifacts([]);
+      setArtifactError(error instanceof Error ? error.message : "Could not load artifacts.");
+    } finally {
+      setArtifactsLoading(false);
+    }
+  }, [topic.id]);
+
+  useEffect(() => {
+    void loadFiles();
+    void loadArtifacts();
+
+    const refreshFiles = (event: Event) => {
+      const detail = (event as CustomEvent<{ topicId?: string }>).detail;
+      if (!detail?.topicId || detail.topicId === topic.id) void loadFiles();
+    };
+    const refreshArtifacts = (event: Event) => {
+      const detail = (event as CustomEvent<{ topicId?: string }>).detail;
+      if (!detail?.topicId || detail.topicId === topic.id) void loadArtifacts();
+    };
+
+    window.addEventListener("adehq:topic-files-changed", refreshFiles);
+    window.addEventListener("adehq:topic-artifacts-changed", refreshArtifacts);
+    return () => {
+      window.removeEventListener("adehq:topic-files-changed", refreshFiles);
+      window.removeEventListener("adehq:topic-artifacts-changed", refreshArtifacts);
+    };
+  }, [loadArtifacts, loadFiles, topic.id]);
+
   const handleSummarize = () => {
     void refreshTopicSummary(true).then((result) => {
       if (result?.refreshed) onWorkLogRefresh?.();
@@ -159,6 +251,91 @@ export function TopicPanel({
     void refreshTopicSummary(true).then((result) => {
       if (result?.refreshed) onWorkLogRefresh?.();
     });
+  };
+
+  const createSummaryArtifact = async (file: WorkspaceFile) => {
+    setFileBusyId(file.id);
+    setArtifactError(null);
+    try {
+      const content =
+        file.extractedText?.trim() ||
+        file.textPreview?.trim() ||
+        "No extractable text was found for this file.";
+      const clipped = content.length > 4200 ? `${content.slice(0, 4200).trim()}\n\n...` : content;
+      const body = await apiJson<{ artifact: SavedArtifact }>("/api/artifacts", {
+        method: "POST",
+        body: JSON.stringify({
+          workspaceId: file.workspaceId,
+          roomId: room.id,
+          topicId: topic.id,
+          title: `${file.displayName} summary`,
+          artifactType: "research_summary",
+          contentMarkdown: `# ${file.displayName} summary\n\n${clipped}`,
+          sourceFileIds: [file.id],
+          sourceCitations: file.textPreview
+            ? [
+                {
+                  fileId: file.id,
+                  fileName: file.displayName,
+                  snippet: file.textPreview,
+                },
+              ]
+            : [],
+        }),
+      });
+      setTopicArtifacts((current) => [body.artifact, ...current.filter((a) => a.id !== body.artifact.id)]);
+      setTab("artifacts");
+      window.dispatchEvent(new CustomEvent("adehq:topic-artifacts-changed", { detail: { topicId: topic.id } }));
+    } catch (error) {
+      setArtifactError(error instanceof Error ? error.message : "Could not create artifact.");
+    } finally {
+      setFileBusyId(null);
+    }
+  };
+
+  const deleteFile = async (file: WorkspaceFile) => {
+    setFileBusyId(file.id);
+    setFileError(null);
+    try {
+      await apiJson(`/api/files/${file.id}`, { method: "DELETE" });
+      await loadFiles();
+      window.dispatchEvent(new CustomEvent("adehq:topic-files-changed", { detail: { topicId: topic.id } }));
+    } catch (error) {
+      setFileError(error instanceof Error ? error.message : "Could not remove file.");
+    } finally {
+      setFileBusyId(null);
+    }
+  };
+
+  const saveArtifact = async (artifact: SavedArtifact) => {
+    setArtifactBusyId(artifact.id);
+    setArtifactError(null);
+    try {
+      const body = await apiJson<{ artifact: SavedArtifact }>(`/api/artifacts/${artifact.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ status: "saved" }),
+      });
+      setTopicArtifacts((current) => current.map((item) => (item.id === artifact.id ? body.artifact : item)));
+      if (selectedArtifact?.id === artifact.id) setSelectedArtifact(body.artifact);
+    } catch (error) {
+      setArtifactError(error instanceof Error ? error.message : "Could not save artifact.");
+    } finally {
+      setArtifactBusyId(null);
+    }
+  };
+
+  const saveArtifactToMemory = async (artifact: SavedArtifact) => {
+    setArtifactBusyId(artifact.id);
+    setArtifactError(null);
+    try {
+      await apiJson(`/api/artifacts/${artifact.id}/save-memory`, { method: "POST" });
+      await loadArtifacts();
+      onWorkLogRefresh?.();
+    } catch (error) {
+      setArtifactError(error instanceof Error ? error.message : "Could not save artifact to memory.");
+    } finally {
+      setArtifactBusyId(null);
+    }
   };
 
   const topicEmployees = topicMembers
@@ -189,8 +366,8 @@ export function TopicPanel({
 
   const counts: Record<string, number> = {
     tasks: topicTasks.length,
-    files: 0,
-    artifacts: 0,
+    files: topicFiles.length,
+    artifacts: topicArtifacts.length,
     memory: topicMemory.length,
     approvals: topicApprovals.filter((a) => a.status === "pending").length,
     activity: topicLog.length,
@@ -467,21 +644,128 @@ export function TopicPanel({
 
           {tab === "files" && (
             <div className="space-y-3">
-              <EmptyState
-                icon={Paperclip}
-                title="No files"
-                description="Upload a PDF, DOCX, spreadsheet, or CSV so your AI employees can work from source material."
-              />
+              {filesLoading ? (
+                <div className="flex items-center gap-2 rounded-xl border border-border bg-muted px-3 py-2 text-xs text-ink-3">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  Loading files…
+                </div>
+              ) : topicFiles.length === 0 ? (
+                <EmptyState
+                  icon={Paperclip}
+                  title="No files"
+                  description="Upload a PDF, DOCX, spreadsheet, or CSV so your AI employees can work from source material."
+                />
+              ) : (
+                topicFiles.map((file) => {
+                  const isBusy = fileBusyId === file.id;
+                  const canCreateArtifact = file.status === "ready" && file.parseStatus !== "no_text";
+                  return (
+                    <div key={file.id} className="rounded-xl border border-border bg-surface p-2.5">
+                      <FileArtifactCard
+                        fileName={file.displayName}
+                        extension={file.extension}
+                        size={formatFileSize(file.sizeBytes)}
+                        status={file.status === "failed" ? "failed" : file.status === "ready" ? "ready" : "processing"}
+                        className="border-border-2 shadow-none"
+                      />
+                      {file.errorMessage && (
+                        <p className="mt-2 text-[11px] text-red-600">{file.errorMessage}</p>
+                      )}
+                      {file.textPreview && (
+                        <p className="mt-2 line-clamp-3 text-[11.5px] leading-relaxed text-ink-3">
+                          {file.textPreview}
+                        </p>
+                      )}
+                      <div className="mt-2 flex flex-wrap gap-1.5">
+                        {onAskAboutFile && (
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            onClick={() => onAskAboutFile(file)}
+                          >
+                            Ask about this
+                          </Button>
+                        )}
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => void createSummaryArtifact(file)}
+                          disabled={!canCreateArtifact || isBusy}
+                        >
+                          {isBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <WandSparkles className="h-3.5 w-3.5" />}
+                          Create summary
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => void deleteFile(file)}
+                          disabled={isBusy}
+                        >
+                          Remove
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+              {fileError && <p className="text-xs text-red-600">{fileError}</p>}
             </div>
           )}
 
           {tab === "artifacts" && (
             <div className="space-y-3">
-              <EmptyState
-                icon={FileText}
-                title="No artifacts"
-                description="Generated PRDs, reports, briefs, and proposals will appear here."
-              />
+              {artifactsLoading ? (
+                <div className="flex items-center gap-2 rounded-xl border border-border bg-muted px-3 py-2 text-xs text-ink-3">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  Loading artifacts…
+                </div>
+              ) : topicArtifacts.length === 0 ? (
+                <EmptyState
+                  icon={FileText}
+                  title="No artifacts"
+                  description="Generated PRDs, reports, briefs, and proposals will appear here."
+                />
+              ) : (
+                topicArtifacts.map((artifact) => {
+                  const isBusy = artifactBusyId === artifact.id;
+                  return (
+                    <div key={artifact.id} className="space-y-2">
+                      <ArtifactCard
+                        title={artifact.title}
+                        type={artifactCardType(artifact.artifactType)}
+                        timestamp={artifact.createdAt}
+                        sourceCount={
+                          artifact.sourceFileIds.length +
+                          artifact.sourceMessageIds.length +
+                          artifact.sourceChunkIds.length
+                        }
+                        status={artifact.status === "saved" ? "saved" : "draft"}
+                        onOpen={() => setSelectedArtifact(artifact)}
+                        onSave={artifact.status === "saved" ? undefined : () => void saveArtifact(artifact)}
+                        onCopy={() => void navigator.clipboard.writeText(artifact.contentMarkdown)}
+                        className="mt-0 max-w-none"
+                      />
+                      <div className="flex flex-wrap gap-1.5 pl-1">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => void saveArtifactToMemory(artifact)}
+                          disabled={isBusy || !!artifact.memorySavedAt}
+                        >
+                          {isBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <BrainCircuit className="h-3.5 w-3.5" />}
+                          {artifact.memorySavedAt ? "In memory" : "Save to memory"}
+                        </Button>
+                        {artifact.memorySavedAt && (
+                          <span className="self-center text-[11px] text-ink-3">
+                            {formatTime(artifact.memorySavedAt)}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+              {artifactError && <p className="text-xs text-red-600">{artifactError}</p>}
             </div>
           )}
 
@@ -585,6 +869,32 @@ export function TopicPanel({
           )}
         </div>
       </div>
+      {selectedArtifact && (
+        <Modal open onClose={() => setSelectedArtifact(null)} size="lg">
+          <ModalHeader
+            title={selectedArtifact.title}
+            subtitle={`${selectedArtifact.artifactType.replace(/_/g, " ")} · ${selectedArtifact.status}`}
+            icon={<FileText className="h-5 w-5" />}
+            onClose={() => setSelectedArtifact(null)}
+          />
+          <div className="max-h-[70vh] overflow-y-auto px-6 py-5">
+            <MessageMarkdown content={selectedArtifact.contentMarkdown || "No artifact content."} />
+            {selectedArtifact.sourceCitations.length > 0 && (
+              <div className="mt-5 rounded-xl border border-border bg-muted p-3">
+                <div className="section-title mb-1">Sources</div>
+                <div className="space-y-2 text-xs text-ink-3">
+                  {selectedArtifact.sourceCitations.slice(0, 4).map((source, index) => (
+                    <p key={index}>
+                      {typeof source.fileName === "string" ? source.fileName : "Source"}
+                      {typeof source.snippet === "string" ? ` — ${source.snippet}` : ""}
+                    </p>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }

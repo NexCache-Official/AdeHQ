@@ -28,6 +28,9 @@ const ENTITY_ICON = {
   memory: BrainCircuit,
   approval: ShieldAlert,
   message: FileText,
+  topic: FileText,
+  file: FileText,
+  artifact: FileText,
 };
 
 export function WorkLogTimeline({
