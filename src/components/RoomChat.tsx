@@ -46,7 +46,15 @@ import {
 import { EmployeeStatusDot } from "./EmployeeStatusBadge";
 import { STATUS_META } from "@/lib/icons";
 import { effectiveEmployeeStatus, isMayaEmployee } from "@/lib/maya-employee";
+import { MAYA_EMPLOYEE_SUBTITLE } from "@/lib/hiring/maya";
 import { MayaDmEmptyState } from "@/components/maya/MayaDmEmptyState";
+import { MayaHiringInlineCards } from "@/components/maya/MayaHiringInlineCards";
+import { MayaHiringTopicSuggestionCard } from "@/components/maya/MayaHiringTopicSuggestionCard";
+import { MayaEmployeePickerCard } from "@/components/maya/MayaArtifactCard";
+import { useMayaRoomCoordinator } from "@/components/maya/MayaRoomCoordinator";
+import { useMayaDmResponder } from "@/components/maya/useMayaDmResponder";
+import { useOptionalMayaDmHiringContext } from "@/components/maya/MayaDmHiringContext";
+import { isHiringTopic } from "@/lib/topics";
 import {
   ParticipantAvatarStack,
   requestOpenPeopleTab,
@@ -332,6 +340,28 @@ export function RoomChat({
   const dmEmployee = isDm
     ? roomEmployees.find((e) => e.id === room.dmEmployeeId) ?? roomEmployees[0]
     : undefined;
+
+  const isMayaDmEmployee = Boolean(dmEmployee && isMayaEmployee(dmEmployee));
+  const coordinator = useMayaRoomCoordinator();
+  const mayaHiring = useOptionalMayaDmHiringContext();
+  const isMayaHiringMode = Boolean(
+    isMayaDmEmployee &&
+      topic &&
+      (coordinator?.isHiringTopic || coordinator?.isDirectChatHiring || isHiringTopic(topic)),
+  );
+  const isMayaGeneralChat = Boolean(
+    isMayaDmEmployee && topic && isGeneralTopic(topic) && !coordinator?.isDirectChatHiring,
+  );
+
+  const mayaResponder = useMayaDmResponder({
+    mayaRoomId: room.id,
+    topicId: topic?.id ?? "",
+    workspaceId: state.workspace?.id,
+    backend,
+    firstName: state.user?.name?.split(" ")[0],
+    onCreateHiringTopic: coordinator?.handleCreateHiringTopic,
+    onContinueHiringHere: coordinator?.handleContinueHiringHere,
+  });
 
   const useServerApi = backend === "supabase";
 
@@ -951,11 +981,24 @@ export function RoomChat({
     contextFileIds?: string[],
   ) => {
     if (!topic || topic.status === "archived" || room.status === "archived") return;
+
+    if (isMayaHiringMode && mayaHiring) {
+      await mayaHiring.sendUserMessage(text);
+      return;
+    }
+
     if (useServerApi) {
       await sendViaServer(text, undefined, mentionsJson, attachmentFileIds, contextFileIds);
+      if (isMayaGeneralChat && topic.id) {
+        await mayaResponder.handleUserMessage(text);
+      }
       return;
     }
     if (ENABLE_DEMO_MODE) {
+      if (isMayaGeneralChat) {
+        await mayaResponder.sendWithUserEcho(text);
+        return;
+      }
       await sendViaDemo(text);
     }
   };
@@ -994,6 +1037,10 @@ export function RoomChat({
     ? isRoomArchived
       ? "This room is archived — restore it from the Rooms page to send messages"
       : "This topic is archived — restore it to send messages"
+    : isMayaDmEmployee && isMainChat
+      ? "Ask Maya about hiring, your workforce, or AdeHQ…"
+      : isMayaHiringMode
+        ? "What job do you need done? e.g. sales outreach, market research…"
     : isDm && dmEmployee
     ? `Message ${dmEmployee.name}… ask for a draft, summary, or artifact`
     : isMainChat
@@ -1024,13 +1071,16 @@ export function RoomChat({
                     <EmployeeStatusDot status={effectiveEmployeeStatus(dmEmployee)} />
                     Online · {dmEmployee.role}
                   </>
-                ) : (
+                ) : dmEmployee ? (
                   <>
                     <EmployeeStatusDot status={dmEmployee.status} />
                     {STATUS_META[dmEmployee.status].label} · {dmEmployee.provider} · {dmEmployee.model}
                   </>
-                )}
+                ) : null}
               </div>
+              {isMayaDmEmployee && isMainChat && (
+                <p className="truncate text-[10.5px] text-ink-3">{MAYA_EMPLOYEE_SUBTITLE}</p>
+              )}
             </div>
           </>
         ) : (
@@ -1198,6 +1248,46 @@ export function RoomChat({
                   </div>
                 );
               })}
+            {isMayaGeneralChat && mayaResponder.phase !== "idle" && dmEmployee && (
+              <div className="group/msg relative flex gap-3 rounded-[10px] px-0 py-1">
+                <div className="shrink-0">
+                  <EmployeeAvatar employee={dmEmployee} size="md" showStatus={false} />
+                </div>
+                <div className="flex w-fit items-center gap-1.5 rounded-[13px] border border-border bg-surface px-3.5 py-2.5">
+                  <span className="text-[11px] text-ink-3">
+                    {mayaResponder.phase === "reading"
+                      ? "Reading…"
+                      : mayaResponder.phase === "thinking"
+                        ? "Thinking…"
+                        : "Typing…"}
+                  </span>
+                  <span className="typing-dot" />
+                  <span className="typing-dot" />
+                  <span className="typing-dot" />
+                </div>
+              </div>
+            )}
+            {isMayaGeneralChat && mayaResponder.pendingProposal && (
+              <div className="mx-auto max-w-3xl">
+                <MayaHiringTopicSuggestionCard
+                  roleTitle={mayaResponder.pendingProposal.roleTitle}
+                  activeAction={mayaResponder.activeProposalAction}
+                  disabled={mayaResponder.busy}
+                  onAction={(action) => void mayaResponder.handleProposalAction(action)}
+                  className="max-w-lg"
+                />
+              </div>
+            )}
+            {isMayaGeneralChat && mayaResponder.employeePickerRoster.length > 0 && (
+              <div className="mx-auto max-w-3xl">
+                <MayaEmployeePickerCard
+                  employees={mayaResponder.employeePickerRoster}
+                  disabled={mayaResponder.busy}
+                  onSelect={(id) => void mayaResponder.handleEmployeePick(id)}
+                />
+              </div>
+            )}
+            {isMayaHiringMode && <MayaHiringInlineCards />}
             <div ref={bottomRef} />
           </div>
         )}

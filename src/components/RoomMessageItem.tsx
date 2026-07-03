@@ -6,7 +6,7 @@ import { useStore } from "@/lib/demo-store";
 import { EmployeeAvatar, HumanAvatar } from "./EmployeeAvatar";
 import { cn, formatTime } from "@/lib/utils";
 import { normalizeHumanDelivery } from "@/lib/message-delivery";
-import { saveFileMemorySuggestionClient, saveSuggestedMemoryClient } from "@/lib/topic-summary/client";
+import { saveFileMemorySuggestionClient, saveSuggestedMemoryClient, dismissMemorySuggestionClient, fetchTopicSummaryClient } from "@/lib/topic-summary/client";
 import { MemoryScopeSelect } from "@/components/memory/MemoryScopeSelect";
 import { defaultMemoryScope } from "@/lib/memory/scope-rules";
 import type { MemoryScope } from "@/lib/types";
@@ -114,10 +114,25 @@ function MemorySuggestionArtifact({
   const { state, actions } = useStore();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [saved, setSaved] = useState(false);
-  const [wasDuplicate, setWasDuplicate] = useState(false);
+  const [hidden, setHidden] = useState(false);
   const [saveScope, setSaveScope] = useState<MemoryScope | undefined>();
   const [lifecycleState, setLifecycleState] = useState<MemorySuggestionState | undefined>();
+  const [serverLifecycle, setServerLifecycle] = useState<
+    Record<string, MemorySuggestionState> | undefined
+  >();
+
+  useEffect(() => {
+    if (!topicId) return;
+    let cancelled = false;
+    void fetchTopicSummaryClient(topicId).then((summary) => {
+      if (!cancelled && summary?.memorySuggestionLifecycle) {
+        setServerLifecycle(summary.memorySuggestionLifecycle);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [topicId]);
 
   const room = state.rooms.find((r) => r.id === roomId);
   const topic = state.topics.find((t) => t.id === topicId);
@@ -128,19 +143,26 @@ function MemorySuggestionArtifact({
   const suggestionKey = artifact.meta?.suggestionKey ?? artifact.id;
   const resolvedState = resolveSuggestionState(
     suggestionKey,
-    undefined,
+    serverLifecycle,
     topicId ? readLocalSuggestionLifecycle(topicId) : undefined,
     lifecycleState,
   );
 
-  if (shouldHideSuggestion(resolvedState) || saved || !topicId) return null;
+  if (shouldHideSuggestion(resolvedState) || hidden || !topicId) return null;
 
   const text = artifact.meta?.memoryText ?? artifact.label;
   const suggestionIndex = artifact.meta?.suggestionIndex;
+  const isTerminal = resolvedState === "saved" || resolvedState === "already_saved";
 
-  const dismiss = () => {
-    setLocalSuggestionState(topicId, suggestionKey, "dismissed");
+  const dismiss = async () => {
     setLifecycleState("dismissed");
+    setLocalSuggestionState(topicId, suggestionKey, "dismissed");
+    try {
+      await dismissMemorySuggestionClient(topicId, suggestionKey);
+    } catch {
+      // local dismiss still applies
+    }
+    window.setTimeout(() => setHidden(true), 400);
   };
 
   const save = async () => {
@@ -165,8 +187,8 @@ function MemorySuggestionArtifact({
       const nextState: MemorySuggestionState = result.duplicate ? "already_saved" : "saved";
       setLocalSuggestionState(topicId, suggestionKey, nextState);
       setLifecycleState(nextState);
-      setWasDuplicate(result.duplicate);
-      window.setTimeout(() => setSaved(true), result.duplicate ? 0 : 800);
+      setServerLifecycle((prev) => ({ ...prev, [suggestionKey]: nextState }));
+      window.setTimeout(() => setHidden(true), result.duplicate ? 600 : 900);
     } catch (err) {
       setLifecycleState("failed");
       setError(err instanceof Error ? err.message : "Could not save memory.");
@@ -186,8 +208,10 @@ function MemorySuggestionArtifact({
             <p className="mt-1 text-[10px] text-ink-3">{artifact.meta.reason}</p>
           )}
           {error && <p className="mt-1 text-[10px] text-red-600">{error}</p>}
-          {wasDuplicate && !error && (
-            <p className="mt-1 text-[10px] text-ink-3">Already saved to memory.</p>
+          {isTerminal && !error && (
+            <p className="mt-1 text-[10px] text-emerald-700">
+              {resolvedState === "already_saved" ? "Already saved to memory." : "Saved to memory."}
+            </p>
           )}
           {scopeCtx && (
             <div className="mt-2">
@@ -204,20 +228,23 @@ function MemorySuggestionArtifact({
               variant="secondary"
               size="sm"
               className="h-7 text-[11px]"
-              disabled={busy}
+              disabled={busy || isTerminal}
               onClick={() => void save()}
             >
               {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
               {resolvedState === "saving"
                 ? "Saving…"
-                : resolvedState === "already_saved"
-                  ? "Already saved"
-                  : "Save"}
+                : resolvedState === "saved"
+                  ? "Saved"
+                  : resolvedState === "already_saved"
+                    ? "Already saved"
+                    : "Save"}
             </Button>
             <button
               type="button"
-              onClick={dismiss}
-              className="inline-flex h-7 items-center gap-1 rounded-lg px-2 text-[11px] text-ink-3 hover:bg-muted hover:text-ink"
+              onClick={() => void dismiss()}
+              disabled={busy || isTerminal}
+              className="inline-flex h-7 items-center gap-1 rounded-lg px-2 text-[11px] text-ink-3 hover:bg-muted hover:text-ink disabled:opacity-50"
             >
               <X className="h-3 w-3" />
               Dismiss

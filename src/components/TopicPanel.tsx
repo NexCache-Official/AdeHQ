@@ -27,6 +27,8 @@ import { MessageMarkdown } from "./MessageMarkdown";
 import { shouldShowWorkLogInTopic } from "@/lib/work-log-labels";
 import { OPEN_PEOPLE_TAB_EVENT } from "@/components/people/RoomMembersPopover";
 import { OrchestrationSidebarStatus } from "@/components/orchestration/OrchestrationSidebarStatus";
+import { MayaTopicOverview } from "@/components/maya/MayaTopicOverview";
+import { isActiveMemory } from "@/lib/memory/active-filter";
 import { useDebugTrace } from "@/components/DebugProvider";
 import { TopicSummaryPanel } from "@/components/topic-summary/TopicSummaryPanel";
 import { saveTopicSummaryToMemoryClient } from "@/lib/topic-summary/client";
@@ -136,6 +138,7 @@ export function TopicPanel({
   workLog,
   workspaceMembers = [],
   isDm = false,
+  isMayaDm = false,
   onSummarize,
   onArchive,
   onUnarchive,
@@ -163,6 +166,7 @@ export function TopicPanel({
   workspaceMembers?: WorkspaceMember[];
   topicMessages?: RoomMessage[];
   isDm?: boolean;
+  isMayaDm?: boolean;
   onSummarize: () => void;
   onArchive: () => void;
   onUnarchive?: () => void;
@@ -380,7 +384,9 @@ export function TopicPanel({
 
   const topicTasks = tasks.filter((t) => t.topicId === topic.id);
   const topicMemory = memory.filter(
-    (m) => m.topicId === topic.id || (m.roomId === room.id && m.status === "pinned" && !m.topicId),
+    (m) =>
+      isActiveMemory(m) &&
+      (m.topicId === topic.id || (m.roomId === room.id && m.status === "pinned" && !m.topicId)),
   );
   const topicApprovals = approvals.filter((a) => a.topicId === topic.id);
   const topicLog = workLog
@@ -625,7 +631,10 @@ export function TopicPanel({
                   </div>
                 </div>
               )}
-              {onParticipationChange && (
+              {isMayaDm && (
+                <MayaTopicOverview topic={topic} employees={employees} />
+              )}
+              {onParticipationChange && !isMayaDm && (
                 <details className="group">
                   <summary className="flex cursor-pointer list-none items-center gap-1.5 rounded-lg border border-border bg-muted px-2.5 py-1.5 text-xs text-ink-2 hover:bg-surface [&::-webkit-details-marker]:hidden">
                     <ChevronDown className="h-3.5 w-3.5 shrink-0 text-ink-3 transition-transform group-open:rotate-180" />

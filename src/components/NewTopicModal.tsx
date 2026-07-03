@@ -3,9 +3,24 @@
 import { useMemo, useState } from "react";
 import type { AIEmployee, TopicPriority } from "@/lib/types";
 import { TOPIC_TEMPLATES } from "@/lib/topics";
+import { isMayaEmployee } from "@/lib/maya-employee";
 import { EmployeeAvatar } from "./EmployeeAvatar";
 import { Button, Modal, ModalHeader } from "./ui";
 import { Hash, Plus } from "lucide-react";
+
+const MAYA_DM_WORKFLOW_TYPES = [
+  { id: "hire", label: "Hire: Role", titlePrefix: "Hire: " },
+  { id: "improve", label: "Improve: Employee", titlePrefix: "Improve: " },
+  { id: "workspace", label: "Workspace help", titlePrefix: "Workspace: " },
+  { id: "general", label: "General discussion", titlePrefix: "" },
+] as const;
+
+const EMPLOYEE_DM_WORKFLOW_TYPES = [
+  { id: "research", label: "Research topic", titlePrefix: "Research: " },
+  { id: "followup", label: "Follow-up", titlePrefix: "Follow-up: " },
+  { id: "file", label: "File / artifact discussion", titlePrefix: "Files: " },
+  { id: "general", label: "General discussion", titlePrefix: "" },
+] as const;
 
 export function NewTopicModal({
   open,
@@ -14,6 +29,8 @@ export function NewTopicModal({
   onCreate,
   busy,
   error,
+  isDm = false,
+  dmEmployee,
 }: {
   open: boolean;
   onClose: () => void;
@@ -24,9 +41,12 @@ export function NewTopicModal({
     priority: TopicPriority;
     aiEmployeeIds: string[];
     starterMessage?: string;
+    workflowType?: string;
   }) => Promise<void>;
   busy?: boolean;
   error?: string | null;
+  isDm?: boolean;
+  dmEmployee?: AIEmployee;
 }) {
   const [templateId, setTemplateId] = useState("custom");
   const [title, setTitle] = useState("");
@@ -34,8 +54,11 @@ export function NewTopicModal({
   const [priority, setPriority] = useState<TopicPriority>("normal");
   const [starterMessage, setStarterMessage] = useState("");
   const [selectedEmployees, setSelectedEmployees] = useState<string[]>([]);
+  const [workflowType, setWorkflowType] = useState("general");
 
   const template = TOPIC_TEMPLATES.find((t) => t.id === templateId);
+  const isMaya = Boolean(dmEmployee && isMayaEmployee(dmEmployee));
+  const workflowTypes = isMaya ? MAYA_DM_WORKFLOW_TYPES : EMPLOYEE_DM_WORKFLOW_TYPES;
 
   const suggestedEmployees = useMemo(() => {
     if (!template?.suggestedRoles.length) return [];
@@ -49,10 +72,26 @@ export function NewTopicModal({
     if (!tpl || id === "custom") return;
     setTitle(tpl.label);
     setDescription(tpl.description);
-    const ids = assignableEmployees
-      .filter((e) => (tpl.suggestedRoles as readonly string[]).includes(e.roleKey))
-      .map((e) => e.id);
-    setSelectedEmployees(ids);
+    if (!isDm) {
+      const ids = assignableEmployees
+        .filter((e) => (tpl.suggestedRoles as readonly string[]).includes(e.roleKey))
+        .map((e) => e.id);
+      setSelectedEmployees(ids);
+    }
+  };
+
+  const applyWorkflow = (id: string) => {
+    setWorkflowType(id);
+    const wf = workflowTypes.find((w) => w.id === id);
+    if (!wf || !title.trim()) {
+      if (wf?.titlePrefix && !title.trim()) {
+        setTitle(wf.titlePrefix.replace(/: $/, ""));
+      }
+      return;
+    }
+    if (wf.titlePrefix && !title.startsWith(wf.titlePrefix)) {
+      setTitle(`${wf.titlePrefix}${title.replace(/^(Hire|Improve|Research|Follow-up|Files|Workspace):\s*/i, "")}`);
+    }
   };
 
   const toggleEmployee = (id: string) => {
@@ -68,14 +107,16 @@ export function NewTopicModal({
         title: title.trim(),
         description: description.trim(),
         priority,
-        aiEmployeeIds: selectedEmployees,
+        aiEmployeeIds: isDm ? [] : selectedEmployees,
         starterMessage: starterMessage.trim() || undefined,
+        workflowType: isDm ? workflowType : undefined,
       });
       setTitle("");
       setDescription("");
       setStarterMessage("");
       setSelectedEmployees([]);
       setTemplateId("custom");
+      setWorkflowType("general");
       onClose();
     } catch {
       // Parent surfaces the error message; keep the modal open for edits.
@@ -84,27 +125,44 @@ export function NewTopicModal({
 
   return (
     <Modal open={open} onClose={onClose} size="md">
-      <ModalHeader title="New topic" onClose={onClose} icon={<Hash className="h-5 w-5" />} />
+      <ModalHeader
+        title={isDm ? `New topic with ${dmEmployee?.name ?? "employee"}` : "New topic"}
+        onClose={onClose}
+        icon={<Hash className="h-5 w-5" />}
+      />
       <div className="max-h-[70vh] space-y-4 overflow-y-auto p-5">
         {error && (
           <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
             {error}
           </p>
         )}
-        <label className="block space-y-1.5">
-          <span className="text-xs font-medium text-slate-500">Template</span>
-          <select
-            className="input-field"
-            value={templateId}
-            onChange={(e) => applyTemplate(e.target.value)}
-          >
-            {TOPIC_TEMPLATES.map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.label}
-              </option>
-            ))}
-          </select>
-        </label>
+
+        {isDm ? (
+          <label className="block space-y-1.5">
+            <span className="text-xs font-medium text-slate-500">Topic type</span>
+            <select
+              className="input-field"
+              value={workflowType}
+              onChange={(e) => applyWorkflow(e.target.value)}
+            >
+              {workflowTypes.map((w) => (
+                <option key={w.id} value={w.id}>{w.label}</option>
+              ))}
+            </select>
+            <p className="text-[11px] text-ink-3">
+              Direct Chat stays your main thread — this creates a focused side topic with {dmEmployee?.name}.
+            </p>
+          </label>
+        ) : (
+          <label className="block space-y-1.5">
+            <span className="text-xs font-medium text-slate-500">Template</span>
+            <select className="input-field" value={templateId} onChange={(e) => applyTemplate(e.target.value)}>
+              {TOPIC_TEMPLATES.map((t) => (
+                <option key={t.id} value={t.id}>{t.label}</option>
+              ))}
+            </select>
+          </label>
+        )}
 
         <label className="block space-y-1.5">
           <span className="text-xs font-medium text-slate-500">Title</span>
@@ -112,18 +170,18 @@ export function NewTopicModal({
             className="input-field"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            placeholder="Browser Agent v0"
+            placeholder={isDm ? "e.g. Q3 pipeline research" : "Browser Agent v0"}
             autoFocus
           />
         </label>
 
         <label className="block space-y-1.5">
-          <span className="text-xs font-medium text-slate-500">Description / brief</span>
+          <span className="text-xs font-medium text-slate-500">Purpose (optional)</span>
           <textarea
             className="input-field min-h-[72px] resize-none"
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            placeholder="What is this workstream about?"
+            placeholder={isDm ? "What is this side thread for?" : "What is this workstream about?"}
           />
         </label>
 
@@ -141,7 +199,7 @@ export function NewTopicModal({
           </select>
         </label>
 
-        {assignableEmployees.length > 0 && (
+        {!isDm && assignableEmployees.length > 0 && (
           <div className="space-y-1.5">
             <span className="text-xs font-medium text-slate-500">Assign AI employees</span>
             {suggestedEmployees.length > 0 && selectedEmployees.length === 0 && (

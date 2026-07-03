@@ -50,6 +50,7 @@ export async function POST(
         suggestion,
         suggestionIndex: body.suggestionIndex,
         scopeOverride: body.scope as import("@/lib/types").MemoryScope | undefined,
+        topicTitle: topic.title,
       });
       return NextResponse.json({ ok: true, memoryId, duplicate, memory });
     }

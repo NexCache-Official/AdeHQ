@@ -1058,6 +1058,7 @@ function memoryRow(workspaceId: string, entry: MemoryEntry): DbRow {
     suggested_by_id: entry.suggestedById ?? null,
     saved_by_user_id: entry.savedByUserId ?? null,
     metadata: entry.metadata ?? {},
+    deleted_at: entry.deletedAt ?? null,
   };
 }
 

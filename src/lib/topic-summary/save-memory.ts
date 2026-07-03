@@ -11,7 +11,38 @@ import type { MemoryEntry, MemoryScope } from "@/lib/types";
 import { nowISO, uid } from "@/lib/utils";
 import { fetchTopicSummary, updateMemorySuggestionLifecycle } from "./persistence";
 import { normalizeMemoryScope, scopeUsesTopicId } from "@/lib/memory/scope-rules";
+import type { MemoryCuratorContext } from "@/lib/memory/curator";
 import type { TopicSummaryMemorySuggestion } from "./types";
+
+export function memoryCuratorContext(params: {
+  workspaceId: string;
+  roomId: string;
+  topicId?: string | null;
+  topicTitle?: string;
+  userId: string;
+  savedByName?: string;
+  isDm?: boolean;
+  dmEmployeeId?: string;
+  dmEmployeeName?: string;
+  suggestedByName?: string;
+  sourceMessageId?: string;
+  sourceEmployeeId?: string;
+}): MemoryCuratorContext {
+  return {
+    workspaceId: params.workspaceId,
+    roomId: params.roomId,
+    topicId: params.topicId,
+    topicTitle: params.topicTitle,
+    isDm: params.isDm,
+    dmEmployeeId: params.dmEmployeeId,
+    dmEmployeeName: params.dmEmployeeName,
+    savedByName: params.savedByName,
+    suggestedByName: params.suggestedByName,
+    sourceMessageId: params.sourceMessageId,
+    sourceEmployeeId: params.sourceEmployeeId,
+    sourceType: params.sourceMessageId ? "message" : undefined,
+  };
+}
 
 export type SaveMemoryResult = {
   memoryId: string;
@@ -60,6 +91,13 @@ export async function saveTopicSummaryToMemory(
     isTopicSummary: true,
     summaryText,
     dedupeKey: "",
+    curatorContext: memoryCuratorContext({
+      workspaceId: params.workspaceId,
+      roomId: params.roomId,
+      topicId: params.topicId,
+      topicTitle: params.topicTitle,
+      userId: params.userId,
+    }),
   });
 
   const dedupeInput = {
@@ -115,6 +153,10 @@ export async function saveSuggestedMemoryToMemory(
     employeeId?: string;
     scopeOverride?: MemoryScope;
     dmEmployeeId?: string;
+    topicTitle?: string;
+    isDm?: boolean;
+    dmEmployeeName?: string;
+    savedByName?: string;
   },
 ): Promise<SaveMemoryResult> {
   const scope = normalizeMemoryScope(params.scopeOverride ?? params.suggestion.scope);
@@ -130,6 +172,20 @@ export async function saveSuggestedMemoryToMemory(
     scopeOverride: scope,
     dmEmployeeId: params.dmEmployeeId,
     dedupeKey: "",
+    curatorContext: memoryCuratorContext({
+      workspaceId: params.workspaceId,
+      roomId: params.roomId,
+      topicId: topicScoped ? params.topicId : null,
+      topicTitle: params.topicTitle,
+      userId: params.userId,
+      savedByName: params.savedByName,
+      isDm: params.isDm,
+      dmEmployeeId: params.dmEmployeeId,
+      dmEmployeeName: params.dmEmployeeName,
+      suggestedByName: undefined,
+      sourceMessageId: params.suggestion.sourceMessageId,
+      sourceEmployeeId: params.suggestion.suggestedByEmployeeId,
+    }),
   });
 
   const suggestionKey = suggestionKeyForTopicSummary(params.topicId, {

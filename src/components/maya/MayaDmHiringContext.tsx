@@ -59,3 +59,7 @@ export function useMayaDmHiringContext() {
   }
   return ctx;
 }
+
+export function useOptionalMayaDmHiringContext() {
+  return useContext(MayaDmHiringContext);
+}

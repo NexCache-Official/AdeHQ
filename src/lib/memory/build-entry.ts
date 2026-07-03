@@ -9,6 +9,7 @@ import {
 import { normalizeMemoryScope } from "./scope-rules";
 import type { MemoryEntry, MemoryScope } from "@/lib/types";
 import type { TopicSummaryMemorySuggestion } from "@/lib/topic-summary/types";
+import { curateMemoryDraft, type MemoryCuratorContext } from "./curator";
 
 export type MemoryBuildInput = {
   workspaceId: string;
@@ -30,6 +31,7 @@ export type MemoryBuildInput = {
   sourceArtifactId?: string;
   sourceMessageId?: string;
   dedupeKey: string;
+  curatorContext?: MemoryCuratorContext;
 };
 
 function stripMentionPrefix(text: string): string {
@@ -137,16 +139,23 @@ export function buildMemoryEntryFields(input: MemoryBuildInput): {
 
   if (input.suggestion) {
     const fields = resolveSuggestionFields(input.suggestion);
+    const curated = input.curatorContext
+      ? curateMemoryDraft(fields.content || input.suggestion.text, input.curatorContext, {
+          rawTitle: fields.title,
+          reason: input.suggestion.reason,
+          scopeOverride: scope,
+        })
+      : null;
     const senderId = input.suggestion.sourceMessageId
       ? input.suggestion.suggestedByEmployeeId
       : input.suggestion.suggestedByEmployeeId;
     return {
-      title: fields.title,
-      content: fields.content,
-      type: categoryToLegacyType(fields.category),
-      category: fields.category,
-      scope,
-      tags: fields.tags,
+      title: curated?.title ?? fields.title,
+      content: curated?.content ?? fields.content,
+      type: categoryToLegacyType(curated?.category ?? fields.category),
+      category: curated?.category ?? fields.category,
+      scope: curated?.scope ?? scope,
+      tags: curated?.tags ?? fields.tags,
       sourceType: "ai_suggestion",
       sourceMessageId: input.suggestion.sourceMessageId,
       sourceEmployeeId: senderId,
@@ -159,22 +168,30 @@ export function buildMemoryEntryFields(input: MemoryBuildInput): {
         sourceRoomId: input.roomId,
         suggestionIndex: input.suggestionIndex,
         dmEmployeeId: input.dmEmployeeId,
-        scope,
+        scope: curated?.scope ?? scope,
+        curatorConfidence: curated?.confidence,
+        duplicateOfId: curated?.duplicateOfId,
       },
     };
   }
 
   const text = input.freeText?.trim() ?? "";
-  const category = inferMemoryCategory(text, input.reason);
-  const title = cleanMemoryTitle(text, category);
-  const content = compactMemoryContent(title, text);
+  const curated = input.curatorContext
+    ? curateMemoryDraft(text, input.curatorContext, {
+        reason: input.reason,
+        scopeOverride: scope,
+      })
+    : null;
+  const category = curated?.category ?? inferMemoryCategory(text, input.reason);
+  const title = curated?.title ?? cleanMemoryTitle(text, category);
+  const content = curated?.content ?? (compactMemoryContent(title, text) || text);
   return {
     title,
-    content: content || text,
+    content,
     type: categoryToLegacyType(category),
     category,
-    scope,
-    tags: inferMemoryTags(text, category),
+    scope: curated?.scope ?? scope,
+    tags: curated?.tags ?? inferMemoryTags(text, category),
     sourceType: input.sourceFileId ? "file" : input.sourceArtifactId ? "artifact" : "manual",
     sourceMessageId: input.sourceMessageId,
     savedByUserId: input.userId,
@@ -184,6 +201,8 @@ export function buildMemoryEntryFields(input: MemoryBuildInput): {
       sourceArtifactId: input.sourceArtifactId,
       sourceTopicId: input.topicId,
       sourceRoomId: input.roomId,
+      curatorConfidence: curated?.confidence,
+      duplicateOfId: curated?.duplicateOfId,
     },
   };
 }
@@ -226,6 +245,7 @@ export function memoryRowToEntry(row: Record<string, unknown>): MemoryEntry {
       (row.saved_by_user_id as string | undefined) ?? (metadata.savedByUserId as string | undefined),
     confidence: typeof row.confidence === "number" ? row.confidence : undefined,
     metadata,
+    deletedAt: row.deleted_at ? String(row.deleted_at) : undefined,
   };
 }
 

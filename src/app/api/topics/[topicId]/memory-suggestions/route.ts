@@ -3,6 +3,7 @@ import { AuthError, requireAuthUser, requireWorkspaceMembership } from "@/lib/su
 import { assertTopicInRoom } from "@/lib/server/topic-helpers";
 import { insertWorkGraphEdge } from "@/lib/server/file-context";
 import { buildMemoryEntryFields, memoryEntryToRow, memoryRowToEntry } from "@/lib/memory/build-entry";
+import { memoryCuratorContext } from "@/lib/topic-summary/save-memory";
 import { resolveMemoryInsert } from "@/lib/memory/dedupe";
 import { normalizeMemoryScope, scopeUsesTopicId } from "@/lib/memory/scope-rules";
 import { nowISO, uid } from "@/lib/utils";
@@ -43,6 +44,25 @@ export async function POST(
 
     const workspaceId = String(topicRow.workspace_id);
     const roomId = String(topicRow.room_id);
+    const topicTitle = String(topicRow.title ?? "");
+
+    const { data: roomRow } = await client
+      .from("rooms")
+      .select("kind, dm_employee_id")
+      .eq("id", roomId)
+      .maybeSingle();
+    const isDm = roomRow?.kind === "dm";
+    const dmEmployeeId = roomRow?.dm_employee_id ? String(roomRow.dm_employee_id) : undefined;
+    let dmEmployeeName: string | undefined;
+    if (dmEmployeeId) {
+      const { data: empRow } = await client
+        .from("ai_employees")
+        .select("name")
+        .eq("id", dmEmployeeId)
+        .maybeSingle();
+      dmEmployeeName = empRow?.name ? String(empRow.name) : undefined;
+    }
+
     await requireWorkspaceMembership(client, workspaceId, user.id);
     await assertTopicInRoom(client, workspaceId, roomId, params.topicId);
 
@@ -60,6 +80,17 @@ export async function POST(
       sourceMessageId: body.sourceMessageId,
       scopeOverride: scope,
       dedupeKey: "",
+      curatorContext: memoryCuratorContext({
+        workspaceId,
+        roomId,
+        topicId: topicScoped ? params.topicId : null,
+        topicTitle,
+        userId: user.id,
+        isDm,
+        dmEmployeeId,
+        dmEmployeeName,
+        sourceMessageId: body.sourceMessageId,
+      }),
     });
 
     const dedupeInput = {

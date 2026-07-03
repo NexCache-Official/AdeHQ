@@ -13,7 +13,7 @@ import { Button } from "@/components/ui";
 import { EmptyState } from "@/components/States";
 import { authHeaders } from "@/lib/api/auth-client";
 import { generalTopicForRoom, isGeneralTopic, topicsForRoom } from "@/lib/topics";
-import { MayaDmHiringLayout } from "@/components/maya/MayaDmHiringWorkspace";
+import { MayaRoomCoordinator } from "@/components/maya/MayaRoomCoordinator";
 import {
   ParticipantAvatarStack,
   RoomMembersPopover,
@@ -26,7 +26,7 @@ import {
   requestScrollToMessage,
   type JumpSource,
 } from "@/lib/navigation/jump-to-source";
-import type { AiParticipationMode, TopicPriority, WorkspaceFile, SavedArtifactType, RoomMessage } from "@/lib/types";
+import type { AiParticipationMode, TopicPriority, WorkspaceFile, SavedArtifactType, RoomMessage, RoomTopic } from "@/lib/types";
 import type { SlashCommandResult } from "@/components/ChatComposer";
 import {
   artifactSourcesFromMessage,
@@ -170,13 +170,16 @@ export default function RoomDetailPage() {
     priority: TopicPriority;
     aiEmployeeIds: string[];
     starterMessage?: string;
+    workflowType?: string;
   }) => {
     setTopicCreateError(null);
     setCreatingTopic(true);
     try {
-      for (const employeeId of payload.aiEmployeeIds) {
-        if (!room?.aiEmployees.includes(employeeId)) {
-          actions.addEmployeeToRoom(roomId, employeeId);
+      if (!isDm) {
+        for (const employeeId of payload.aiEmployeeIds) {
+          if (!room?.aiEmployees.includes(employeeId)) {
+            actions.addEmployeeToRoom(roomId, employeeId);
+          }
         }
       }
 
@@ -185,7 +188,11 @@ export default function RoomDetailPage() {
         const response = await fetch(`/api/rooms/${roomId}/topics`, {
           method: "POST",
           headers,
-          body: JSON.stringify(payload),
+          body: JSON.stringify({
+            ...payload,
+            aiEmployeeIds: isDm ? [] : payload.aiEmployeeIds,
+            metadata: payload.workflowType ? { dmWorkflowType: payload.workflowType } : undefined,
+          }),
         });
         if (!response.ok) {
           const err = await response.json().catch(() => null);
@@ -390,6 +397,99 @@ export default function RoomDetailPage() {
       setTimeout(() => setSlashNotice(null), 4000);
     } catch (e) {
       setTopicActionError(e instanceof Error ? e.message : "Failed to delete topic");
+    } finally {
+      setTopicActionBusy(false);
+    }
+  };
+
+  const renameTopicById = async (topic: RoomTopic, newTitle: string) => {
+    if (!newTitle.trim() || isGeneralTopic(topic)) return;
+    setTopicActionError(null);
+    setTopicActionBusy(true);
+    try {
+      if (backend === "supabase") {
+        const headers = await authHeaders();
+        const response = await fetch(`/api/topics/${topic.id}`, {
+          method: "PATCH",
+          headers,
+          body: JSON.stringify({ title: newTitle.trim() }),
+        });
+        if (!response.ok) {
+          const err = await response.json().catch(() => null);
+          throw new Error(err?.error ?? "Failed to rename topic");
+        }
+        const { topic: updated } = await response.json();
+        actions.upsertTopic(updated);
+      } else {
+        actions.upsertTopic({ ...topic, title: newTitle.trim(), updatedAt: new Date().toISOString() });
+      }
+    } catch (e) {
+      setTopicActionError(e instanceof Error ? e.message : "Failed to rename topic");
+      throw e;
+    } finally {
+      setTopicActionBusy(false);
+    }
+  };
+
+  const archiveTopicById = async (topic: RoomTopic) => {
+    if (isGeneralTopic(topic)) return;
+    const prev = selectedTopic?.id;
+    if (prev === topic.id) {
+      await archiveTopic();
+      return;
+    }
+    setTopicActionError(null);
+    setTopicActionBusy(true);
+    try {
+      if (backend === "supabase") {
+        const headers = await authHeaders();
+        const response = await fetch(`/api/topics/${topic.id}`, { method: "DELETE", headers });
+        if (!response.ok) {
+          const err = await response.json().catch(() => null);
+          throw new Error(err?.error ?? "Failed to archive topic");
+        }
+        const { topic: updated } = await response.json();
+        actions.upsertTopic(updated);
+      } else {
+        actions.upsertTopic({ ...topic, status: "archived", updatedAt: new Date().toISOString() });
+      }
+      if (selectedTopic?.id === topic.id) {
+        const general = generalTopicForRoom(roomTopics, roomId);
+        if (general) selectTopic(general.id);
+      }
+    } catch (e) {
+      setTopicActionError(e instanceof Error ? e.message : "Failed to archive topic");
+      throw e;
+    } finally {
+      setTopicActionBusy(false);
+    }
+  };
+
+  const deleteTopicById = async (topic: RoomTopic) => {
+    if (isGeneralTopic(topic)) return;
+    setTopicActionError(null);
+    setTopicActionBusy(true);
+    try {
+      if (backend === "supabase") {
+        const headers = await authHeaders();
+        const response = await fetch(`/api/topics/${topic.id}?permanent=true`, {
+          method: "DELETE",
+          headers,
+        });
+        if (!response.ok) {
+          const err = await response.json().catch(() => null);
+          throw new Error(err?.error ?? "Failed to delete topic");
+        }
+      }
+      actions.removeTopicPermanently(roomId, topic.id);
+      await actions.refreshTopics(roomId);
+      if (selectedTopic?.id === topic.id) {
+        const general = generalTopicForRoom(roomTopics, roomId);
+        if (general) selectTopic(general.id);
+      }
+    } catch (e) {
+      setTopicActionError(e instanceof Error ? e.message : "Failed to delete topic");
+      throw e;
     } finally {
       setTopicActionBusy(false);
     }
@@ -803,23 +903,92 @@ export default function RoomDetailPage() {
             selectedTopicId={selectedTopic?.id}
             userId={state.user?.id}
             isDm={isDm}
-            room={isDm && !isMayaDm ? undefined : room}
+            room={room}
             dmEmployee={isDm ? roomEmployees[0] : undefined}
             roomHumans={roomHumanParticipants}
             roomEmployees={roomEmployees.filter((e): e is NonNullable<typeof e> => !!e)}
             onOpenMembers={!isDm ? () => setMembersOpen(true) : undefined}
             onSelect={selectTopic}
             onNewTopic={() => setNewTopicOpen(true)}
+            onRenameTopic={renameTopicById}
+            onArchiveTopic={archiveTopicById}
+            onDeleteTopic={deleteTopicById}
+            topicActionBusy={topicActionBusy}
           />
         </div>
 
         {isMayaDm ? (
-          <MayaDmHiringLayout
+          <MayaRoomCoordinator
             mayaRoomId={roomId}
             selectedTopic={selectedTopic}
             onSelectTopic={selectTopic}
-            firstName={state.user?.name?.split(" ")[0]}
-          />
+          >
+            <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden">
+              <div className="min-w-0 flex-1 border-r border-border bg-canvas">
+                {slashNotice && (
+                  <div className="border-b border-accent-200 bg-accent-50 px-4 py-1.5 text-center text-xs text-accent-800">
+                    {slashNotice}
+                  </div>
+                )}
+                {topicActionError && (
+                  <div className="border-b border-red-200 bg-red-50 px-4 py-1.5 text-center text-xs text-red-800">
+                    {topicActionError}
+                  </div>
+                )}
+                <RoomChat
+                  room={room}
+                  topic={selectedTopic}
+                  isDm={isDm}
+                  draftText={composerDraft}
+                  onDraftConsumed={() => setComposerDraft("")}
+                  onSlashCommand={handleSlashCommand}
+                  contextFiles={composerContextFiles}
+                  artifactIntent={composerArtifactIntent}
+                  onContextConsumed={clearComposerContext}
+                  onSummarize={summarizeTopic}
+                  summarizing={summarizing}
+                  onAddEmployee={() => setAddEmployeeOpen(true)}
+                  messageActions={messageActions}
+                />
+              </div>
+              <div className="hidden w-[344px] shrink-0 xl:block">
+                {selectedTopic ? (
+                  <TopicPanel
+                    topic={selectedTopic}
+                    room={room}
+                    employees={state.employees}
+                    topicMembers={roomTopicMembers.filter((m) => m.topicId === selectedTopic.id)}
+                    topicMessages={room.messages.filter((m) => m.topicId === selectedTopic.id)}
+                    tasks={state.tasks}
+                    memory={state.memory}
+                    approvals={state.approvals}
+                    workLog={state.workLog}
+                    workspaceMembers={state.workspaceMembers}
+                    isDm={isDm}
+                    isMayaDm
+                    onSummarize={summarizeTopic}
+                    onArchive={archiveTopic}
+                    onUnarchive={unarchiveTopic}
+                    onDeletePermanently={deleteTopicPermanently}
+                    onSaveSummaryToMemory={saveSummaryToMemory}
+                    onWorkLogRefresh={saveSummaryToMemory}
+                    onCreateTaskFromSummary={createTaskFromSummary}
+                    onParticipationChange={setParticipationMode}
+                    onAiControl={handleAiControl}
+                    onAskAboutFile={askAiAboutFile}
+                    onGenerateReportFromFile={generateReportFromFile}
+                    onAddEmployee={() => setAddEmployeeOpen(true)}
+                    summarizing={summarizing}
+                    topicActionBusy={topicActionBusy}
+                  />
+                ) : (
+                  <div className="flex h-full items-center justify-center p-6 text-center text-xs text-ink-3">
+                    Select a topic to see context
+                  </div>
+                )}
+              </div>
+            </div>
+          </MayaRoomCoordinator>
         ) : (
           <>
         <div className="min-w-0 flex-1 border-r border-border bg-canvas">
@@ -896,7 +1065,9 @@ export default function RoomDetailPage() {
           setNewTopicOpen(false);
           setTopicCreateError(null);
         }}
-        assignableEmployees={assignableEmployees}
+        assignableEmployees={isDm ? [] : assignableEmployees}
+        isDm={isDm}
+        dmEmployee={isDm ? roomEmployees[0] : undefined}
         onCreate={createTopic}
         busy={creatingTopic}
         error={topicCreateError}

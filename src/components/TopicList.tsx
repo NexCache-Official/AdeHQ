@@ -16,6 +16,7 @@ import { RoomIcon, EmployeeAvatar } from "./EmployeeAvatar";
 import { ParticipantAvatarStack } from "@/components/people/RoomMembersPopover";
 import { EmployeeStatusBadge } from "./EmployeeStatusBadge";
 import { Plus, Archive } from "lucide-react";
+import { TopicRowMenu } from "@/components/TopicRowMenu";
 
 function MainChatIcon({ isDm }: { isDm: boolean }) {
   if (isDm) {
@@ -42,6 +43,10 @@ function TopicRow({
   isMain,
   isDm,
   archived,
+  onRename,
+  onArchive,
+  onDelete,
+  topicActionBusy,
 }: {
   topic: RoomTopic;
   label: string;
@@ -51,6 +56,10 @@ function TopicRow({
   isMain?: boolean;
   isDm?: boolean;
   archived?: boolean;
+  onRename?: (topic: RoomTopic, newTitle: string) => Promise<void>;
+  onArchive?: (topic: RoomTopic) => Promise<void>;
+  onDelete?: (topic: RoomTopic) => Promise<void>;
+  topicActionBusy?: boolean;
 }) {
   const running = topic.agentRunCount > 0;
 
@@ -90,11 +99,12 @@ function TopicRow({
   }
 
   return (
+    <div className="group/topicrow flex w-full items-center gap-1">
     <button
       type="button"
       onClick={onSelect}
       className={cn(
-        "topicrow flex w-full cursor-pointer items-center gap-[9px] rounded-[10px] px-[10px] py-2 text-left transition-colors",
+        "topicrow flex min-w-0 flex-1 cursor-pointer items-center gap-[9px] rounded-[10px] px-[10px] py-2 text-left transition-colors",
         selected ? "bg-accent-soft" : "hover:bg-black/[0.035]",
         archived && "opacity-70",
       )}
@@ -126,6 +136,16 @@ function TopicRow({
         </span>
       )}
     </button>
+    {!isMain && !archived && (onRename || onArchive || onDelete) && (
+      <TopicRowMenu
+        topic={topic}
+        onRename={onRename}
+        onArchive={onArchive}
+        onDelete={onDelete}
+        busy={topicActionBusy}
+      />
+    )}
+    </div>
   );
 }
 
@@ -143,6 +163,10 @@ export function TopicList({
   onOpenMembers,
   onSelect,
   onNewTopic,
+  onRenameTopic,
+  onArchiveTopic,
+  onDeleteTopic,
+  topicActionBusy,
 }: {
   topics: RoomTopic[];
   topicMembers: TopicMember[];
@@ -157,6 +181,10 @@ export function TopicList({
   onOpenMembers?: () => void;
   onSelect: (topicId: string) => void;
   onNewTopic: () => void;
+  onRenameTopic?: (topic: RoomTopic, newTitle: string) => Promise<void>;
+  onArchiveTopic?: (topic: RoomTopic) => Promise<void>;
+  onDeleteTopic?: (topic: RoomTopic) => Promise<void>;
+  topicActionBusy?: boolean;
 }) {
   const mainTopic = useMemo(
     () => generalTopicForRoom(topics, topics[0]?.roomId ?? room?.id ?? ""),
@@ -290,6 +318,10 @@ export function TopicList({
                 selected={topic.id === selectedTopicId}
                 unread={unreadFor(topic)}
                 onSelect={() => onSelect(topic.id)}
+                onRename={onRenameTopic}
+                onArchive={onArchiveTopic}
+                onDelete={onDeleteTopic}
+                topicActionBusy={topicActionBusy}
               />
             ))}
           </div>

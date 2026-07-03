@@ -195,6 +195,7 @@ export type MessageArtifact = {
     sourceChunkId?: string;
     sourceArtifactId?: string;
     suggestionKey?: string;
+    mayaArtifactKind?: string;
   };
 };
 
@@ -489,7 +490,7 @@ export type MemoryType =
   | "preference"
   | "instruction"
   | "general";
-export type MemoryStatus = "draft" | "approved" | "pinned" | "superseded";
+export type MemoryStatus = "draft" | "approved" | "pinned" | "superseded" | "archived";
 
 export type MemorySourceType =
   | "message"
@@ -535,6 +536,7 @@ export type MemoryEntry = {
   savedByUserId?: string;
   confidence?: number;
   metadata?: Record<string, unknown>;
+  deletedAt?: string;
 };
 
 export type ApprovalRisk = "low" | "medium" | "high";

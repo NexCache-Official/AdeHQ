@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useStore } from "@/lib/demo-store";
 import { MEMORY_UPDATED_EVENT } from "@/lib/topic-summary/client";
 import type { MemoryEntry } from "@/lib/types";
-import { MEMORY_CATEGORIES, type MemoryScope } from "@/lib/memory/categories";
+import { MEMORY_CATEGORIES, categoryToLegacyType, normalizeCategory, type MemoryScope } from "@/lib/memory/categories";
 import { scopeFilterMatches } from "@/lib/memory/attribution";
 import { PageContainer, PageHeader } from "@/components/Page";
 import { MemoryCard } from "@/components/MemoryCard";
@@ -12,9 +12,9 @@ import { Button, Modal, ModalHeader } from "@/components/ui";
 import { EmptyState } from "@/components/States";
 import { BrainCircuit, Plus, Search } from "lucide-react";
 import { MemoryStatus } from "@/lib/types";
-import { categoryToLegacyType, normalizeCategory } from "@/lib/memory/categories";
+import { isActiveMemory } from "@/lib/memory/active-filter";
 
-const STATUSES: (MemoryStatus | "all")[] = ["all", "draft", "approved", "pinned", "superseded"];
+const STATUSES: (MemoryStatus | "all")[] = ["all", "draft", "approved", "pinned", "archived", "superseded"];
 const SCOPES: { id: MemoryScope | "dm" | "all"; label: string }[] = [
   { id: "all", label: "All scopes" },
   { id: "workspace", label: "Workspace" },
@@ -65,7 +65,11 @@ export default function MemoryPage() {
     void refreshKey;
     return dedupeMemories(
       state.memory.filter((m) => {
-        if (status !== "all" && m.status !== status) return false;
+        if (status === "all") {
+          if (!isActiveMemory(m)) return false;
+        } else if (m.status !== status) {
+          return false;
+        }
         if (category !== "all" && normalizeCategory(m.category) !== category) return false;
         if (!scopeFilterMatches(m, scope)) return false;
         if (sourceType !== "all" && m.sourceType !== sourceType) return false;
