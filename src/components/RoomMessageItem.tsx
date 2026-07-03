@@ -7,6 +7,16 @@ import { EmployeeAvatar, HumanAvatar } from "./EmployeeAvatar";
 import { cn, formatTime } from "@/lib/utils";
 import { normalizeHumanDelivery } from "@/lib/message-delivery";
 import { saveFileMemorySuggestionClient, saveSuggestedMemoryClient } from "@/lib/topic-summary/client";
+import { MemoryScopeSelect } from "@/components/memory/MemoryScopeSelect";
+import { defaultMemoryScope } from "@/lib/memory/scope-rules";
+import type { MemoryScope } from "@/lib/types";
+import {
+  readLocalSuggestionLifecycle,
+  resolveSuggestionState,
+  setLocalSuggestionState,
+  shouldHideSuggestion,
+  type MemorySuggestionState,
+} from "@/lib/memory/suggestion-lifecycle";
 import {
   collectMessageSources,
   firstArtifactFromMessage,
@@ -32,6 +42,7 @@ import {
   X,
 } from "lucide-react";
 import { Button } from "./ui";
+import { useDebugTrace } from "./DebugProvider";
 
 const ARTIFACT_META = {
   task: { icon: ListChecks, color: "text-sky-700 bg-sky-50", href: "/tasks" },
@@ -91,65 +102,74 @@ function EmailDraftCard({
   );
 }
 
-/** localStorage key so a dismissed/saved memory suggestion doesn't reappear on refresh. */
-function memorySuggestionStorageKey(artifact: import("@/lib/types").MessageArtifact): string {
-  const key = artifact.meta?.suggestionKey ?? artifact.id;
-  return `adehq:mem-suggestion-dismissed:${key}`;
-}
-
 function MemorySuggestionArtifact({
   artifact,
   topicId,
+  roomId,
 }: {
   artifact: import("@/lib/types").MessageArtifact;
   topicId?: string;
+  roomId?: string;
 }) {
-  const storageKey = memorySuggestionStorageKey(artifact);
+  const { state, actions } = useStore();
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
-  const [dismissed, setDismissed] = useState(() => {
-    if (typeof window === "undefined") return false;
-    try {
-      return window.localStorage.getItem(storageKey) !== null;
-    } catch {
-      return false;
-    }
-  });
+  const [wasDuplicate, setWasDuplicate] = useState(false);
+  const [saveScope, setSaveScope] = useState<MemoryScope | undefined>();
+  const [lifecycleState, setLifecycleState] = useState<MemorySuggestionState | undefined>();
 
-  if (dismissed || saved || !topicId) return null;
+  const room = state.rooms.find((r) => r.id === roomId);
+  const topic = state.topics.find((t) => t.id === topicId);
+  const scopeCtx = room
+    ? { room, topic, employees: state.employees, isDm: room.kind === "dm" }
+    : null;
+
+  const suggestionKey = artifact.meta?.suggestionKey ?? artifact.id;
+  const resolvedState = resolveSuggestionState(
+    suggestionKey,
+    undefined,
+    topicId ? readLocalSuggestionLifecycle(topicId) : undefined,
+    lifecycleState,
+  );
+
+  if (shouldHideSuggestion(resolvedState) || saved || !topicId) return null;
 
   const text = artifact.meta?.memoryText ?? artifact.label;
   const suggestionIndex = artifact.meta?.suggestionIndex;
 
-  const rememberResolved = (reason: "saved" | "dismissed") => {
-    try {
-      window.localStorage.setItem(storageKey, reason);
-    } catch {
-      // storage unavailable — session-only dismissal still applies
-    }
-  };
-
   const dismiss = () => {
-    rememberResolved("dismissed");
-    setDismissed(true);
+    setLocalSuggestionState(topicId, suggestionKey, "dismissed");
+    setLifecycleState("dismissed");
   };
 
   const save = async () => {
     setBusy(true);
+    setError(null);
+    setLifecycleState("saving");
     try {
-      if (typeof suggestionIndex === "number") {
-        await saveSuggestedMemoryClient(topicId, suggestionIndex);
-      } else {
-        await saveFileMemorySuggestionClient(topicId, {
-          text,
-          reason: artifact.meta?.reason,
-          sourceFileId: artifact.meta?.sourceFileId,
-          sourceChunkId: artifact.meta?.sourceChunkId,
-          sourceArtifactId: artifact.meta?.sourceArtifactId,
-        });
-      }
-      rememberResolved("saved");
-      setSaved(true);
+      const scope = saveScope ?? (scopeCtx ? defaultMemoryScope(scopeCtx) : undefined);
+      const result =
+        typeof suggestionIndex === "number"
+          ? await saveSuggestedMemoryClient(topicId, suggestionIndex, { scope })
+          : await saveFileMemorySuggestionClient(topicId, {
+              text,
+              reason: artifact.meta?.reason,
+              sourceFileId: artifact.meta?.sourceFileId,
+              sourceChunkId: artifact.meta?.sourceChunkId,
+              sourceArtifactId: artifact.meta?.sourceArtifactId,
+              sourceMessageId: (artifact.meta as { sourceMessageId?: string } | undefined)?.sourceMessageId,
+              scope,
+            });
+      if (result.memory) actions.mergeMemoryEntry(result.memory);
+      const nextState: MemorySuggestionState = result.duplicate ? "already_saved" : "saved";
+      setLocalSuggestionState(topicId, suggestionKey, nextState);
+      setLifecycleState(nextState);
+      setWasDuplicate(result.duplicate);
+      window.setTimeout(() => setSaved(true), result.duplicate ? 0 : 800);
+    } catch (err) {
+      setLifecycleState("failed");
+      setError(err instanceof Error ? err.message : "Could not save memory.");
     } finally {
       setBusy(false);
     }
@@ -165,6 +185,20 @@ function MemorySuggestionArtifact({
           {artifact.meta?.reason && (
             <p className="mt-1 text-[10px] text-ink-3">{artifact.meta.reason}</p>
           )}
+          {error && <p className="mt-1 text-[10px] text-red-600">{error}</p>}
+          {wasDuplicate && !error && (
+            <p className="mt-1 text-[10px] text-ink-3">Already saved to memory.</p>
+          )}
+          {scopeCtx && (
+            <div className="mt-2">
+              <MemoryScopeSelect
+                compact
+                ctx={scopeCtx}
+                value={saveScope ?? defaultMemoryScope(scopeCtx)}
+                onChange={setSaveScope}
+              />
+            </div>
+          )}
           <div className="mt-2 flex flex-wrap gap-1.5">
             <Button
               variant="secondary"
@@ -174,7 +208,11 @@ function MemorySuggestionArtifact({
               onClick={() => void save()}
             >
               {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
-              Save
+              {resolvedState === "saving"
+                ? "Saving…"
+                : resolvedState === "already_saved"
+                  ? "Already saved"
+                  : "Save"}
             </Button>
             <button
               type="button"
@@ -533,6 +571,9 @@ export function RoomMessageItem({
   actionsDisabled?: boolean;
 }) {
   const { state } = useStore();
+  const { enabled: debugEnabled } = useDebugTrace();
+  const topic = state.topics.find((t) => t.id === message.topicId);
+  const messageRoomId = topic?.roomId;
   const employee = state.employees.find((e) => e.id === message.senderId);
 
   const mentionParticipants = useMemo(
@@ -573,27 +614,28 @@ export function RoomMessageItem({
   const fileArtifacts = message.artifacts?.filter(
     (a) => a.type === "file" && !a.meta?.chunkId,
   ) ?? [];
+  const workLogArtifacts = message.artifacts?.filter((a) => a.type === "work_log") ?? [];
   const otherArtifacts = (message.artifacts ?? []).filter(
     (
       a,
     ): a is import("@/lib/types").MessageArtifact & {
-      type: "task" | "memory" | "approval" | "work_log";
+      type: "task" | "memory" | "approval";
     } =>
       a.type !== "email_draft" &&
       a.type !== "memory_suggestion" &&
       a.type !== "artifact" &&
       a.type !== "file" &&
-      !(isDm && a.type === "work_log") &&
-      (a.type === "task" ||
-        a.type === "memory" ||
-        a.type === "approval" ||
-        a.type === "work_log"),
+      a.type !== "work_log" &&
+      (a.type === "task" || a.type === "memory" || a.type === "approval"),
   );
+  const debugWorkLogArtifacts = debugEnabled ? workLogArtifacts : [];
 
   return (
     <div
+      id={`msg-${message.id}`}
+      data-message-id={message.id}
       className={cn(
-        "group/msg relative flex gap-3 rounded-[10px] px-0 hover:bg-black/[0.015]",
+        "group/msg relative flex gap-3 rounded-[10px] px-0 transition-colors hover:bg-black/[0.015]",
         grouped ? "py-0.5" : "py-2",
       )}
     >
@@ -613,7 +655,7 @@ export function RoomMessageItem({
         )}
       </div>
 
-      <div className="min-w-0 flex-1">
+      <div className="relative min-w-0 flex-1">
         {!grouped && (
           <div className="mb-0.5 flex flex-wrap items-center gap-1.5">
             <span className="text-[13.5px] font-semibold text-ink">{message.senderName}</span>
@@ -629,6 +671,15 @@ export function RoomMessageItem({
               <span className="font-mono text-[10.5px] text-ink-3">{formatTime(message.createdAt)}</span>
             )}
           </div>
+        )}
+
+        {!grouped && !isHuman && workLogArtifacts.length > 0 && !debugEnabled && (
+          <span
+            className="pointer-events-none absolute right-0 top-0 flex h-5 w-5 items-center justify-center rounded-md text-violet-600 opacity-0 transition-opacity group-hover/msg:opacity-70"
+            title="Activity logged — see Activity tab"
+          >
+            <ScrollText className="h-3 w-3" />
+          </span>
         )}
 
         {isHuman ? (
@@ -672,6 +723,7 @@ export function RoomMessageItem({
             key={artifact.id}
             artifact={artifact}
             topicId={message.topicId}
+            roomId={messageRoomId}
           />
         ))}
 
@@ -725,9 +777,12 @@ export function RoomMessageItem({
           />
         ))}
 
-        {otherArtifacts.length > 0 && (
+        {(otherArtifacts.length > 0 || debugWorkLogArtifacts.length > 0) && (
           <div className="mt-2.5 flex flex-wrap gap-1.5">
-            {otherArtifacts.map((a) => {
+            {[...otherArtifacts, ...debugWorkLogArtifacts].map((a) => {
+              if (a.type !== "task" && a.type !== "memory" && a.type !== "approval" && a.type !== "work_log") {
+                return null;
+              }
               const meta = ARTIFACT_META[a.type];
               const Icon = meta.icon;
               return (

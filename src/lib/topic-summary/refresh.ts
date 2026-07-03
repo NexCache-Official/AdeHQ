@@ -134,6 +134,7 @@ export async function refreshTopicSummary(
     sourceMessageIds: ctx.sourceMessageIds,
     sourceWorkLogIds: ctx.sourceWorkLogIds,
     lastRefreshedAt: nowISO(),
+    memorySuggestionLifecycle: existing?.memorySuggestionLifecycle ?? {},
   };
 
   const changed = summariesMeaningfullyChanged(existing, nextSummary);

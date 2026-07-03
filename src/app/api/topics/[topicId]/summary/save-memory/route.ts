@@ -19,6 +19,7 @@ export async function POST(
     const { user, client } = await requireAuthUser(request);
     const body = (await request.json().catch(() => ({}))) as {
       suggestionIndex?: number;
+      scope?: string;
     };
 
     const { data: topicRow, error: topicError } = await client
@@ -41,17 +42,19 @@ export async function POST(
       if (!suggestion) {
         return NextResponse.json({ error: "Memory suggestion not found." }, { status: 404 });
       }
-      const { memoryId } = await saveSuggestedMemoryToMemory(client, {
+      const { memoryId, duplicate, memory } = await saveSuggestedMemoryToMemory(client, {
         workspaceId: topic.workspaceId,
         roomId: topic.roomId,
         topicId: params.topicId,
         userId: user.id,
         suggestion,
+        suggestionIndex: body.suggestionIndex,
+        scopeOverride: body.scope as import("@/lib/types").MemoryScope | undefined,
       });
-      return NextResponse.json({ ok: true, memoryId });
+      return NextResponse.json({ ok: true, memoryId, duplicate, memory });
     }
 
-    const { memoryId } = await saveTopicSummaryToMemory(client, {
+    const { memoryId, duplicate, memory } = await saveTopicSummaryToMemory(client, {
       workspaceId: topic.workspaceId,
       roomId: topic.roomId,
       topicId: params.topicId,
@@ -59,7 +62,7 @@ export async function POST(
       userId: user.id,
     });
 
-    return NextResponse.json({ ok: true, memoryId });
+    return NextResponse.json({ ok: true, memoryId, duplicate, memory });
   } catch (error) {
     if (error instanceof AuthError) {
       return NextResponse.json({ error: error.message }, { status: error.status });

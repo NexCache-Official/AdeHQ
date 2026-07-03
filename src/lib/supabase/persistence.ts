@@ -33,6 +33,7 @@ import { isGeneralTopic } from "@/lib/topics";
 import type { SystemEmployeeMetadata } from "@/lib/types";
 import { normalizeHumanDelivery } from "@/lib/message-delivery";
 import { topicFromRow, topicMemberFromRow } from "@/lib/server/topic-helpers";
+import { memoryRowToEntry } from "@/lib/memory/build-entry";
 import { nowISO } from "@/lib/utils";
 import { supabase } from "./client";
 
@@ -863,18 +864,7 @@ function taskFromRow(row: DbRow): Task {
 }
 
 function memoryFromRow(row: DbRow): MemoryEntry {
-  return {
-    id: row.id,
-    roomId: roomIdFromRow(row),
-    topicId: row.topic_id ?? undefined,
-    type: row.type,
-    title: row.title,
-    content: row.content,
-    status: row.status,
-    createdByType: row.created_by_type,
-    createdById: row.created_by_id,
-    createdAt: row.created_at ?? nowISO(),
-  };
+  return memoryRowToEntry(row as Record<string, unknown>);
 }
 
 function approvalFromRow(row: DbRow): Approval {
@@ -1054,6 +1044,18 @@ function memoryRow(workspaceId: string, entry: MemoryEntry): DbRow {
     created_by_type: entry.createdByType,
     created_by_id: entry.createdById,
     created_at: entry.createdAt,
+    updated_at: entry.updatedAt ?? entry.createdAt,
+    dedupe_key: entry.dedupeKey ?? null,
+    category: entry.category ?? null,
+    scope: entry.scope ?? null,
+    tags: entry.tags ?? [],
+    source_type: entry.sourceType ?? null,
+    source_message_id: entry.sourceMessageId ?? null,
+    source_employee_id: entry.sourceEmployeeId ?? null,
+    suggested_by_type: entry.suggestedByType ?? null,
+    suggested_by_id: entry.suggestedById ?? null,
+    saved_by_user_id: entry.savedByUserId ?? null,
+    metadata: entry.metadata ?? {},
   };
 }
 

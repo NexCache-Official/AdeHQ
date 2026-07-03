@@ -5,6 +5,7 @@ import { useStore } from "@/lib/demo-store";
 import { getGroupRooms } from "@/lib/rooms";
 import { PageContainer, PageHeader } from "@/components/Page";
 import { WorkLogTimeline } from "@/components/WorkLogTimeline";
+import { useDebugTrace } from "@/components/DebugProvider";
 import { Card } from "@/components/ui";
 import { EmptyState } from "@/components/States";
 import { shouldShowWorkLogInUserFeed } from "@/lib/work-log-labels";
@@ -12,6 +13,7 @@ import { ScrollText } from "lucide-react";
 
 export default function WorkLogPage() {
   const { state } = useStore();
+  const { enabled: debugEnabled } = useDebugTrace();
   const [employee, setEmployee] = useState("all");
   const [room, setRoom] = useState("all");
   const [statusF, setStatusF] = useState("all");
@@ -19,7 +21,7 @@ export default function WorkLogPage() {
   const groupRooms = getGroupRooms(state.rooms);
 
   const events = state.workLog
-    .filter((w) => shouldShowWorkLogInUserFeed(w.action, w.summary))
+    .filter((w) => shouldShowWorkLogInUserFeed(w.action, w.summary, { debugEnabled }))
     .filter((w) => employee === "all" || w.employeeId === employee)
     .filter((w) => room === "all" || w.roomId === room)
     .filter((w) => statusF === "all" || w.status === statusF)
@@ -55,7 +57,7 @@ export default function WorkLogPage() {
         <EmptyState icon={ScrollText} title="No activity yet" description="When your employees work, their actions show up here." />
       ) : (
         <Card className="p-3 sm:p-4">
-          <WorkLogTimeline events={events} />
+          <WorkLogTimeline events={events} debugEnabled={debugEnabled} />
         </Card>
       )}
     </PageContainer>

@@ -553,7 +553,7 @@ export async function processQueuedAgentRun(
           if (refreshResult.summary?.suggestedMemory.length) {
             artifacts = [
               ...artifacts,
-              ...buildMemorySuggestionArtifacts(refreshResult.summary.suggestedMemory),
+              ...buildMemorySuggestionArtifacts(refreshResult.summary.suggestedMemory, topicId),
             ];
           }
         } else {

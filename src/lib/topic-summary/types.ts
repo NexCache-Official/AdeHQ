@@ -12,13 +12,20 @@ export type TopicSummaryNextAction = {
   title: string;
   ownerEmployeeId?: string;
   sourceMessageId?: string;
+  status?: "Planned" | "In progress" | "Completed" | "Waiting for clarification";
 };
 
 export type TopicSummaryMemorySuggestion = {
+  /** Legacy raw text — prefer title + content when present */
   text: string;
-  scope: "workspace" | "room" | "topic" | "employee";
+  title?: string;
+  content?: string;
+  category?: string;
+  tags?: string[];
+  scope: "workspace" | "room" | "topic" | "employee_dm" | "employee_profile" | "employee";
   reason: string;
   sourceMessageId?: string;
+  suggestedByEmployeeId?: string;
 };
 
 export type TopicSummary = {
@@ -36,6 +43,7 @@ export type TopicSummary = {
   sourceMessageIds: string[];
   sourceWorkLogIds: string[];
   lastRefreshedAt: string | null;
+  memorySuggestionLifecycle?: Record<string, import("@/lib/memory/suggestion-lifecycle").MemorySuggestionState>;
 };
 
 export type TopicSummaryRefreshTrigger =

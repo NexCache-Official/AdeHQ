@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { AuthError, requireAuthUser, requireWorkspaceMembership } from "@/lib/supabase/auth-server";
 import { assertTopicInRoom } from "@/lib/server/topic-helpers";
 import { insertWorkGraphEdge } from "@/lib/server/file-context";
+import { buildMemoryEntryFields, memoryEntryToRow, memoryRowToEntry } from "@/lib/memory/build-entry";
+import { resolveMemoryInsert } from "@/lib/memory/dedupe";
+import { normalizeMemoryScope, scopeUsesTopicId } from "@/lib/memory/scope-rules";
 import { nowISO, uid } from "@/lib/utils";
 
 export const runtime = "nodejs";
@@ -13,7 +16,8 @@ type SaveMemorySuggestionBody = {
   sourceFileId?: string;
   sourceChunkId?: string;
   sourceArtifactId?: string;
-  scope?: "topic" | "room" | "workspace";
+  sourceMessageId?: string;
+  scope?: "topic" | "room" | "workspace" | "employee_dm" | "employee_profile" | "employee";
 };
 
 export async function POST(
@@ -42,39 +46,62 @@ export async function POST(
     await requireWorkspaceMembership(client, workspaceId, user.id);
     await assertTopicInRoom(client, workspaceId, roomId, params.topicId);
 
-    if (body.sourceFileId) {
-      const { data: fileRow } = await client
-        .from("workspace_files")
-        .select("id")
-        .eq("workspace_id", workspaceId)
-        .eq("id", body.sourceFileId)
-        .maybeSingle();
-      if (!fileRow) {
-        return NextResponse.json({ error: "Source file not found." }, { status: 400 });
-      }
+    const scope = normalizeMemoryScope(body.scope ?? "topic");
+    const topicScoped = scopeUsesTopicId(scope);
+    const fields = buildMemoryEntryFields({
+      workspaceId,
+      roomId,
+      topicId: topicScoped ? params.topicId : null,
+      userId: user.id,
+      freeText: body.text.trim(),
+      reason: body.reason,
+      sourceFileId: body.sourceFileId,
+      sourceArtifactId: body.sourceArtifactId,
+      sourceMessageId: body.sourceMessageId,
+      scopeOverride: scope,
+      dedupeKey: "",
+    });
+
+    const dedupeInput = {
+      workspaceId,
+      title: fields.title,
+      content: fields.content,
+      scope,
+      roomId,
+      topicId: topicScoped ? params.topicId : null,
+      sourceFileId: body.sourceFileId,
+      sourceArtifactId: body.sourceArtifactId,
+      sourceMessageId: body.sourceMessageId,
+      suggestionKey: body.sourceFileId
+        ? `file-memory:${body.sourceFileId}:${body.sourceChunkId ?? ""}:${fields.title}`
+        : body.sourceArtifactId
+          ? `artifact-memory:${body.sourceArtifactId}:${fields.title}`
+          : undefined,
+    };
+
+    const { dedupeKey, existing } = await resolveMemoryInsert(client, workspaceId, dedupeInput);
+    if (existing) {
+      return NextResponse.json({
+        memoryId: existing.id,
+        duplicate: true,
+        memory: existing,
+      });
     }
 
-    const topicScoped = (body.scope ?? "topic") === "topic";
     const memoryId = uid("mem");
-    const contentParts = [body.text.trim()];
-    if (body.reason?.trim()) contentParts.push(`\n\nReason: ${body.reason.trim()}`);
-    if (body.sourceFileId) contentParts.push(`\n\nSource file id: ${body.sourceFileId}`);
-    if (body.sourceChunkId) contentParts.push(`\nSource chunk id: ${body.sourceChunkId}`);
-    if (body.sourceArtifactId) contentParts.push(`\nSource artifact id: ${body.sourceArtifactId}`);
-
-    const { error: insertError } = await client.from("memory_entries").insert({
-      workspace_id: workspaceId,
-      id: memoryId,
-      room_id: roomId,
-      topic_id: topicScoped ? params.topicId : null,
-      type: "general",
-      title: body.text.trim().slice(0, 120),
-      content: contentParts.join(""),
-      status: "approved",
-      created_by_type: "human",
-      created_by_id: user.id,
-      created_at: nowISO(),
+    const createdAt = nowISO();
+    const row = memoryEntryToRow(workspaceId, memoryId, fields, {
+      roomId,
+      topicId: topicScoped ? params.topicId : null,
+      dedupeKey,
+      createdAt,
     });
+
+    const { data: inserted, error: insertError } = await client
+      .from("memory_entries")
+      .insert(row)
+      .select("*")
+      .single();
     if (insertError) throw insertError;
 
     if (body.sourceFileId) {
@@ -105,14 +132,18 @@ export async function POST(
       topic_id: params.topicId,
       employee_id: user.id,
       action: "saved_file_memory",
-      summary: `Saved memory from file work: ${body.text.trim().slice(0, 80)}`,
+      summary: `Saved memory: ${fields.title}`,
       status: "success",
-      related_entity_type: "memory",
-      related_entity_id: memoryId,
+      related_entity_type: body.sourceMessageId ? "message" : "memory",
+      related_entity_id: body.sourceMessageId ?? memoryId,
       created_at: nowISO(),
     });
 
-    return NextResponse.json({ memoryId });
+    return NextResponse.json({
+      memoryId,
+      duplicate: false,
+      memory: memoryRowToEntry(inserted as Record<string, unknown>),
+    });
   } catch (error) {
     if (error instanceof AuthError) {
       return NextResponse.json({ error: error.message }, { status: error.status });

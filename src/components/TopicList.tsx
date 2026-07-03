@@ -13,6 +13,7 @@ import {
 import { effectiveEmployeeStatus } from "@/lib/maya-employee";
 import { cn } from "@/lib/utils";
 import { RoomIcon, EmployeeAvatar } from "./EmployeeAvatar";
+import { ParticipantAvatarStack } from "@/components/people/RoomMembersPopover";
 import { EmployeeStatusBadge } from "./EmployeeStatusBadge";
 import { Plus, Archive } from "lucide-react";
 
@@ -137,6 +138,9 @@ export function TopicList({
   isDm = false,
   room,
   dmEmployee,
+  roomHumans = [],
+  roomEmployees = [],
+  onOpenMembers,
   onSelect,
   onNewTopic,
 }: {
@@ -148,6 +152,9 @@ export function TopicList({
   isDm?: boolean;
   room?: ProjectRoom;
   dmEmployee?: AIEmployee;
+  roomHumans?: Array<{ id: string; name: string }>;
+  roomEmployees?: AIEmployee[];
+  onOpenMembers?: () => void;
   onSelect: (topicId: string) => void;
   onNewTopic: () => void;
 }) {
@@ -215,6 +222,15 @@ export function TopicList({
               <div className="text-[11.5px] text-ink-2">Room · {totalUnread} unread</div>
             </div>
           </div>
+          {onOpenMembers && (
+            <div className="mt-2.5">
+              <ParticipantAvatarStack
+                humans={roomHumans}
+                employees={roomEmployees}
+                onClick={onOpenMembers}
+              />
+            </div>
+          )}
           <button
             type="button"
             onClick={onNewTopic}

@@ -301,6 +301,23 @@ body {
   }
 }
 
+.message-highlight {
+  animation: message-highlight-flash 3.2s ease-out;
+  border-radius: 10px;
+}
+
+@keyframes message-highlight-flash {
+  0%,
+  18% {
+    background-color: rgb(var(--c-accent-soft) / 0.95);
+    box-shadow: 0 0 0 2px rgb(var(--c-accent) / 0.25);
+  }
+  100% {
+    background-color: transparent;
+    box-shadow: none;
+  }
+}
+
 .typing-dot {
   @apply inline-block h-1.5 w-1.5 rounded-full bg-[var(--ink-3)];
   animation: bounce-dot 1.4s infinite ease-in-out both;

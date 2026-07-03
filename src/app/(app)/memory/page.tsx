@@ -1,44 +1,111 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useStore } from "@/lib/demo-store";
-import { getGroupRooms } from "@/lib/rooms";
+import { MEMORY_UPDATED_EVENT } from "@/lib/topic-summary/client";
+import type { MemoryEntry } from "@/lib/types";
+import { MEMORY_CATEGORIES, type MemoryScope } from "@/lib/memory/categories";
+import { scopeFilterMatches } from "@/lib/memory/attribution";
 import { PageContainer, PageHeader } from "@/components/Page";
 import { MemoryCard } from "@/components/MemoryCard";
 import { Button, Modal, ModalHeader } from "@/components/ui";
 import { EmptyState } from "@/components/States";
-import { cn } from "@/lib/utils";
-import { MemoryStatus, MemoryType } from "@/lib/types";
 import { BrainCircuit, Plus, Search } from "lucide-react";
+import { MemoryStatus } from "@/lib/types";
+import { categoryToLegacyType, normalizeCategory } from "@/lib/memory/categories";
 
-const TYPES: (MemoryType | "all")[] = ["all", "decision", "research", "architecture", "preference", "instruction", "general"];
 const STATUSES: (MemoryStatus | "all")[] = ["all", "draft", "approved", "pinned", "superseded"];
+const SCOPES: { id: MemoryScope | "dm" | "all"; label: string }[] = [
+  { id: "all", label: "All scopes" },
+  { id: "workspace", label: "Workspace" },
+  { id: "room", label: "Room" },
+  { id: "topic", label: "Topic" },
+  { id: "dm", label: "Employee DM" },
+  { id: "employee_profile", label: "Employee profile" },
+];
+const SOURCE_TYPES = ["all", "message", "topic_summary", "file", "artifact", "ai_suggestion", "manual"] as const;
+
+type GroupMode = "category" | "recent";
+
+function dedupeMemories(items: MemoryEntry[]): MemoryEntry[] {
+  const seen = new Set<string>();
+  const out: MemoryEntry[] = [];
+  for (const item of items) {
+    const key = item.dedupeKey ?? item.id;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(item);
+  }
+  return out;
+}
 
 export default function MemoryPage() {
-  const { state } = useStore();
+  const { state, actions } = useStore();
   const [query, setQuery] = useState("");
-  const [type, setType] = useState<MemoryType | "all">("all");
+  const [category, setCategory] = useState<string>("all");
   const [status, setStatus] = useState<MemoryStatus | "all">("all");
+  const [scope, setScope] = useState<MemoryScope | "dm" | "all">("all");
+  const [sourceType, setSourceType] = useState<(typeof SOURCE_TYPES)[number]>("all");
+  const [employeeId, setEmployeeId] = useState("all");
+  const [groupMode, setGroupMode] = useState<GroupMode>("category");
   const [createOpen, setCreateOpen] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
 
-  const groupRooms = getGroupRooms(state.rooms);
+  useEffect(() => {
+    const onMemoryUpdated = (event: Event) => {
+      const detail = (event as CustomEvent<{ memory?: MemoryEntry }>).detail;
+      if (detail?.memory) actions.mergeMemoryEntry(detail.memory);
+      setRefreshKey((k) => k + 1);
+    };
+    window.addEventListener(MEMORY_UPDATED_EVENT, onMemoryUpdated);
+    return () => window.removeEventListener(MEMORY_UPDATED_EVENT, onMemoryUpdated);
+  }, [actions]);
 
-  const filtered = state.memory.filter((m) => {
-    if (type !== "all" && m.type !== type) return false;
-    if (status !== "all" && m.status !== status) return false;
-    if (query && !`${m.title} ${m.content}`.toLowerCase().includes(query.toLowerCase())) return false;
-    return true;
-  });
+  const filtered = useMemo(() => {
+    void refreshKey;
+    return dedupeMemories(
+      state.memory.filter((m) => {
+        if (status !== "all" && m.status !== status) return false;
+        if (category !== "all" && normalizeCategory(m.category) !== category) return false;
+        if (!scopeFilterMatches(m, scope)) return false;
+        if (sourceType !== "all" && m.sourceType !== sourceType) return false;
+        if (employeeId !== "all") {
+          const matches =
+            m.suggestedById === employeeId ||
+            m.sourceEmployeeId === employeeId ||
+            m.createdById === employeeId;
+          if (!matches) return false;
+        }
+        if (query) {
+          const hay = `${m.title} ${m.content} ${(m.tags ?? []).join(" ")}`.toLowerCase();
+          if (!hay.includes(query.toLowerCase())) return false;
+        }
+        return true;
+      }),
+    );
+  }, [state.memory, status, category, scope, sourceType, employeeId, query, refreshKey]);
 
-  const byRoom = groupRooms
-    .map((r) => ({ room: r, items: filtered.filter((m) => m.roomId === r.id) }))
-    .filter((g) => g.items.length > 0);
+  const pinned = filtered.filter((m) => m.status === "pinned");
+  const recent = [...filtered]
+    .sort((a, b) => +new Date(b.updatedAt ?? b.createdAt) - +new Date(a.updatedAt ?? a.createdAt))
+    .slice(0, 24);
+
+  const byCategory = useMemo(() => {
+    const map = new Map<string, MemoryEntry[]>();
+    for (const item of filtered) {
+      const key = normalizeCategory(item.category);
+      const list = map.get(key) ?? [];
+      list.push(item);
+      map.set(key, list);
+    }
+    return [...map.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+  }, [filtered]);
 
   return (
     <PageContainer wide>
       <PageHeader
         title="Memory"
-        subtitle="Your project brain — decisions, research, and notes your AI employees rely on."
+        subtitle="Reusable context your AI employees can rely on."
         icon={<BrainCircuit className="h-5 w-5" />}
         actions={
           <Button onClick={() => setCreateOpen(true)}>
@@ -47,35 +114,94 @@ export default function MemoryPage() {
         }
       />
 
-      <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
-          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search memory…" className="input-field !pl-9" />
+      <div className="mb-4 flex flex-col gap-3">
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-3" />
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search memory…"
+            className="input-field !pl-9"
+          />
         </div>
-        <select className="input-field sm:w-40" value={type} onChange={(e) => setType(e.target.value as MemoryType | "all")}>
-          {TYPES.map((t) => <option key={t} value={t}>{t === "all" ? "All types" : t}</option>)}
-        </select>
-        <select className="input-field sm:w-40" value={status} onChange={(e) => setStatus(e.target.value as MemoryStatus | "all")}>
-          {STATUSES.map((s) => <option key={s} value={s}>{s === "all" ? "All statuses" : s}</option>)}
-        </select>
+        <div className="flex flex-wrap gap-2">
+          <select className="input-field w-auto min-w-[9rem]" value={scope} onChange={(e) => setScope(e.target.value as typeof scope)}>
+            {SCOPES.map((s) => (
+              <option key={s.id} value={s.id}>{s.label}</option>
+            ))}
+          </select>
+          <select className="input-field w-auto min-w-[10rem]" value={category} onChange={(e) => setCategory(e.target.value)}>
+            <option value="all">All categories</option>
+            {MEMORY_CATEGORIES.map((c) => (
+              <option key={c} value={c}>{c}</option>
+            ))}
+          </select>
+          <select className="input-field w-auto min-w-[8rem]" value={status} onChange={(e) => setStatus(e.target.value as MemoryStatus | "all")}>
+            {STATUSES.map((s) => (
+              <option key={s} value={s}>{s === "all" ? "All statuses" : s}</option>
+            ))}
+          </select>
+          <select className="input-field w-auto min-w-[9rem]" value={sourceType} onChange={(e) => setSourceType(e.target.value as typeof sourceType)}>
+            {SOURCE_TYPES.map((s) => (
+              <option key={s} value={s}>{s === "all" ? "All sources" : s.replace(/_/g, " ")}</option>
+            ))}
+          </select>
+          <select className="input-field w-auto min-w-[9rem]" value={employeeId} onChange={(e) => setEmployeeId(e.target.value)}>
+            <option value="all">All people</option>
+            {state.employees.map((e) => (
+              <option key={e.id} value={e.id}>{e.name}</option>
+            ))}
+          </select>
+          <select className="input-field w-auto min-w-[8rem]" value={groupMode} onChange={(e) => setGroupMode(e.target.value as GroupMode)}>
+            <option value="category">By category</option>
+            <option value="recent">Recent</option>
+          </select>
+        </div>
       </div>
 
       {filtered.length === 0 ? (
-        <EmptyState icon={BrainCircuit} title="No memory found" description="Try a different filter, or ask an employee to save a decision." action={{ label: "New memory", onClick: () => setCreateOpen(true) }} />
+        <EmptyState
+          icon={BrainCircuit}
+          title="No memory found"
+          description="Try a different filter, or save context from a topic summary or chat suggestion."
+          action={{ label: "New memory", onClick: () => setCreateOpen(true) }}
+        />
       ) : (
         <div className="space-y-8">
-          {byRoom.map(({ room, items }) => (
-            <section key={room.id}>
-              <div className="mb-3 flex items-center gap-2">
-                <span className="h-2 w-2 rounded-full" style={{ background: room.accent }} />
-                <h2 className="text-sm font-semibold text-slate-900">{room.name}</h2>
-                <span className="text-xs text-slate-500">{items.length}</span>
-              </div>
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                {items.map((m) => <MemoryCard key={m.id} memory={m} />)}
+          {pinned.length > 0 && (
+            <section>
+              <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-3">Pinned</h2>
+              <div className="grid gap-2 lg:grid-cols-2">
+                {pinned.map((m) => (
+                  <MemoryCard key={m.id} memory={m} compact />
+                ))}
               </div>
             </section>
-          ))}
+          )}
+
+          {groupMode === "recent" ? (
+            <section>
+              <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-3">Recent</h2>
+              <div className="grid gap-2 lg:grid-cols-2">
+                {recent.map((m) => (
+                  <MemoryCard key={m.id} memory={m} compact />
+                ))}
+              </div>
+            </section>
+          ) : (
+            byCategory.map(([cat, items]) => (
+              <section key={cat}>
+                <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-3">
+                  {cat} <span className="font-normal text-ink-3">({items.length})</span>
+                </h2>
+                <div className="grid gap-2 lg:grid-cols-2">
+                  {items.map((m) => (
+                    <MemoryCard key={m.id} memory={m} compact />
+                  ))}
+                </div>
+              </section>
+            ))
+          )}
         </div>
       )}
 
@@ -86,22 +212,26 @@ export default function MemoryPage() {
 
 function CreateMemoryModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { state, actions } = useStore();
-  const groupRooms = getGroupRooms(state.rooms);
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
-  const [type, setType] = useState<MemoryType>("decision");
-  const [roomId, setRoomId] = useState(groupRooms[0]?.id ?? "");
+  const [category, setCategory] = useState<string>("Decision");
+  const [roomId, setRoomId] = useState(state.rooms.find((r) => r.kind === "room")?.id ?? state.rooms[0]?.id ?? "");
 
   const create = () => {
     if (!title.trim() || !roomId) return;
     actions.createMemory({
       roomId,
       title: title.trim(),
-      content,
-      type,
+      content: content.trim(),
+      type: categoryToLegacyType(normalizeCategory(category)),
       status: "approved",
       createdByType: "human",
-      createdById: state.user?.id ?? "user-shubham",
+      createdById: state.user?.id ?? "user",
+      category: normalizeCategory(category),
+      scope: "room",
+      tags: [],
+      sourceType: "manual",
+      savedByUserId: state.user?.id,
     });
     setTitle("");
     setContent("");
@@ -110,32 +240,36 @@ function CreateMemoryModal({ open, onClose }: { open: boolean; onClose: () => vo
 
   return (
     <Modal open={open} onClose={onClose} size="md">
-      <ModalHeader title="Create a memory" subtitle="Add a decision or note to your project brain." onClose={onClose} icon={<BrainCircuit className="h-5 w-5" />} />
+      <ModalHeader title="Create memory" subtitle="Add reusable context for your AI employees." onClose={onClose} icon={<BrainCircuit className="h-5 w-5" />} />
       <div className="space-y-4 p-5">
         <label className="block space-y-1.5">
-          <span className="text-xs font-medium text-slate-500">Title</span>
-          <input className="input-field" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Launch as a Godot distribution" autoFocus />
+          <span className="text-xs font-medium text-ink-3">Title</span>
+          <input className="input-field" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Short, specific title" autoFocus />
         </label>
         <label className="block space-y-1.5">
-          <span className="text-xs font-medium text-slate-500">Content</span>
-          <textarea className="input-field min-h-[100px] resize-none" value={content} onChange={(e) => setContent(e.target.value)} />
+          <span className="text-xs font-medium text-ink-3">Content</span>
+          <textarea className="input-field min-h-[100px] resize-none" value={content} onChange={(e) => setContent(e.target.value)} placeholder="1–3 sentences of reusable context" />
         </label>
         <div className="grid grid-cols-2 gap-3">
           <label className="block space-y-1.5">
-            <span className="text-xs font-medium text-slate-500">Type</span>
-            <select className="input-field" value={type} onChange={(e) => setType(e.target.value as MemoryType)}>
-              {TYPES.filter((t) => t !== "all").map((t) => <option key={t} value={t}>{t}</option>)}
+            <span className="text-xs font-medium text-ink-3">Category</span>
+            <select className="input-field" value={category} onChange={(e) => setCategory(e.target.value)}>
+              {MEMORY_CATEGORIES.map((c) => (
+                <option key={c} value={c}>{c}</option>
+              ))}
             </select>
           </label>
           <label className="block space-y-1.5">
-            <span className="text-xs font-medium text-slate-500">Room</span>
+            <span className="text-xs font-medium text-ink-3">Room</span>
             <select className="input-field" value={roomId} onChange={(e) => setRoomId(e.target.value)}>
-              {groupRooms.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
+              {state.rooms.map((r) => (
+                <option key={r.id} value={r.id}>{r.name}</option>
+              ))}
             </select>
           </label>
         </div>
       </div>
-      <div className="flex justify-end gap-2 border-t border-slate-200 px-5 py-4">
+      <div className="flex justify-end gap-2 border-t border-border px-5 py-4">
         <Button variant="ghost" onClick={onClose}>Cancel</Button>
         <Button onClick={create} disabled={!title.trim()}>Save memory</Button>
       </div>

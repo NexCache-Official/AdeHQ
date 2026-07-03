@@ -1,13 +1,31 @@
 import { authHeaders } from "@/lib/api/auth-client";
+import type { MemoryEntry } from "@/lib/types";
 import type { TopicSummary } from "./types";
 
 export const TOPIC_SUMMARY_UPDATED_EVENT = "adehq:topic-summary-updated";
+export const MEMORY_UPDATED_EVENT = "adehq:memory-updated";
+
+export type MemorySaveResult = {
+  memoryId: string;
+  duplicate: boolean;
+  memory?: MemoryEntry;
+};
 
 export function notifyTopicSummaryUpdated(topicId: string) {
   if (typeof window === "undefined") return;
   window.dispatchEvent(
     new CustomEvent(TOPIC_SUMMARY_UPDATED_EVENT, { detail: { topicId } }),
   );
+}
+
+export function notifyMemoryUpdated(detail: {
+  memory?: MemoryEntry;
+  memoryId: string;
+  topicId?: string;
+  duplicate?: boolean;
+}) {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new CustomEvent(MEMORY_UPDATED_EVENT, { detail }));
 }
 
 export async function fetchTopicSummaryClient(topicId: string): Promise<TopicSummary | null> {
@@ -41,35 +59,64 @@ export async function refreshTopicSummaryClient(
   };
 }
 
-export async function saveTopicSummaryToMemoryClient(topicId: string): Promise<void> {
+async function parseMemorySaveResponse(res: Response): Promise<MemorySaveResult> {
+  if (!res.ok) {
+    const payload = await res.json().catch(() => ({}));
+    throw new Error(payload.error ?? "Unable to save memory.");
+  }
+  const payload = await res.json();
+  const result: MemorySaveResult = {
+    memoryId: String(payload.memoryId),
+    duplicate: Boolean(payload.duplicate),
+    memory: payload.memory as MemoryEntry | undefined,
+  };
+  return result;
+}
+
+export async function saveTopicSummaryToMemoryClient(topicId: string): Promise<MemorySaveResult> {
   const headers = await authHeaders();
   const res = await fetch(`/api/topics/${topicId}/summary/save-memory`, {
     method: "POST",
     headers,
     body: JSON.stringify({}),
   });
-  if (!res.ok) {
-    const payload = await res.json().catch(() => ({}));
-    throw new Error(payload.error ?? "Unable to save summary to memory.");
-  }
+  const result = await parseMemorySaveResponse(res);
   notifyTopicSummaryUpdated(topicId);
+  notifyMemoryUpdated({ ...result, topicId });
+  return result;
 }
 
 export async function saveSuggestedMemoryClient(
   topicId: string,
   suggestionIndex: number,
-): Promise<void> {
+  options?: { scope?: import("@/lib/types").MemoryScope },
+): Promise<MemorySaveResult> {
   const headers = await authHeaders();
   const res = await fetch(`/api/topics/${topicId}/summary/save-memory`, {
     method: "POST",
     headers,
-    body: JSON.stringify({ suggestionIndex }),
+    body: JSON.stringify({ suggestionIndex, scope: options?.scope }),
+  });
+  const result = await parseMemorySaveResponse(res);
+  notifyTopicSummaryUpdated(topicId);
+  notifyMemoryUpdated({ ...result, topicId });
+  return result;
+}
+
+export async function dismissMemorySuggestionClient(
+  topicId: string,
+  suggestionKey: string,
+): Promise<void> {
+  const headers = await authHeaders();
+  const res = await fetch(`/api/topics/${topicId}/memory-suggestions/dismiss`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ suggestionKey }),
   });
   if (!res.ok) {
     const payload = await res.json().catch(() => ({}));
-    throw new Error(payload.error ?? "Unable to save memory suggestion.");
+    throw new Error(payload.error ?? "Unable to dismiss memory suggestion.");
   }
-  notifyTopicSummaryUpdated(topicId);
 }
 
 export async function saveFileMemorySuggestionClient(
@@ -80,16 +127,17 @@ export async function saveFileMemorySuggestionClient(
     sourceFileId?: string;
     sourceChunkId?: string;
     sourceArtifactId?: string;
+    sourceMessageId?: string;
+    scope?: import("@/lib/types").MemoryScope;
   },
-): Promise<void> {
+): Promise<MemorySaveResult> {
   const headers = await authHeaders();
   const res = await fetch(`/api/topics/${topicId}/memory-suggestions`, {
     method: "POST",
     headers,
     body: JSON.stringify(payload),
   });
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body.error ?? "Unable to save memory suggestion.");
-  }
+  const result = await parseMemorySaveResponse(res);
+  notifyMemoryUpdated({ ...result, topicId });
+  return result;
 }

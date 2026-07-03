@@ -26,14 +26,22 @@ const summarySchema = z.object({
       title: z.string(),
       ownerEmployeeId: z.string().optional(),
       sourceMessageId: z.string().optional(),
+      status: z
+        .enum(["Planned", "In progress", "Completed", "Waiting for clarification"])
+        .optional(),
     }),
   ),
   suggestedMemory: z.array(
     z.object({
+      title: z.string().optional(),
+      content: z.string().optional(),
       text: z.string(),
+      category: z.string().optional(),
+      tags: z.array(z.string()).optional(),
       scope: z.enum(["workspace", "room", "topic", "employee"]),
       reason: z.string(),
       sourceMessageId: z.string().optional(),
+      suggestedByEmployeeId: z.string().optional(),
     }),
   ),
   isCasualConversation: z.boolean().optional(),
@@ -100,13 +108,23 @@ Return JSON only matching the schema.
 
 Rules:
 - Be concise and factual. Do not invent facts.
+- CRITICAL: Distinguish PLANNED work from COMPLETED work. Never describe proposals, intentions, or future plans as finished outcomes.
+- Do not write "Alex will identify leads" as if it already happened. Use honest phrasing: "Alex proposed…", "Planned:", or "Still requires…".
+- nextActions are proposals — default status "Planned". Use "Completed" only when work logs or messages show the work was done.
+- Use status on nextActions: Planned | In progress | Completed | Waiting for clarification.
+- Do not claim live external research, web searches, lead lists, market sizing, or competitor data unless work logs reference browser/search/file tools or uploaded sources were used.
+- If employees discussed research or outreach but no tools ran, say what was proposed and note that live execution still requires browser/search access or uploaded data.
+- For health supplements, regulated products, or medical claims: include a brief compliance caveat in summary or keyFacts when relevant (not medical/legal advice; verify regulations).
 - Use "No decision yet" as currentDecision only when no decision was made; otherwise use null when unclear.
 - openQuestions, keyFacts, nextActions, and suggestedMemory should be short bullet-quality items.
 - Preserve sourceMessageId from message IDs in brackets when an item came from a specific message.
 - suggestedMemory is a suggestion only — never imply it was saved.
+- For suggestedMemory: provide a short clean title (max ~8 words), 1–2 sentence content, category from: Company Context, Product / Service, Market Research, Sales, Customer / Client, Marketing, Operations, Decision, Preference, People / Workforce, Process / Playbook, File Finding, Topic Summary, Employee-Specific Context, Other.
+- Include 2–6 lowercase tags for retrieval. Prefer topic or room scope unless truly workspace-wide.
+- suggestedByEmployeeId: employee id when an AI message inspired the suggestion.
 - Set isCasualConversation true when the thread is only greetings, thanks, or small talk with no work substance.
 - If casual, keep summary minimal and leave lists mostly empty.
-- Distinguish facts, decisions, open questions, and next actions clearly.
+- whatHappened should describe what was actually discussed or completed in the thread, not promises about future work.
 - ownerEmployeeId must be an employee id from the context when assigning next actions.`,
     prompt: contextBlock,
     maxOutputTokens: 1400,

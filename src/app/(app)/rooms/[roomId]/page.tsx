@@ -12,11 +12,20 @@ import { EmployeeAvatar } from "@/components/EmployeeAvatar";
 import { Button } from "@/components/ui";
 import { EmptyState } from "@/components/States";
 import { authHeaders } from "@/lib/api/auth-client";
-import { generalTopicForRoom, isGeneralTopic, topicsForRoom } from "@/lib/topics";
+import { generalTopicForRoom, isGeneralTopic, isHiringTopic, topicsForRoom } from "@/lib/topics";
 import { MayaDmHiringLayout } from "@/components/maya/MayaDmHiringWorkspace";
+import {
+  ParticipantAvatarStack,
+  RoomMembersPopover,
+} from "@/components/people/RoomMembersPopover";
 import { OrchestrationUiProvider } from "@/components/orchestration/OrchestrationUiContext";
 import { roomAssignableEmployees, isMayaEmployee } from "@/lib/maya-employee";
 import { notifyTopicSummaryUpdated } from "@/lib/topic-summary/client";
+import {
+  JUMP_TO_SOURCE_EVENT,
+  requestScrollToMessage,
+  type JumpSource,
+} from "@/lib/navigation/jump-to-source";
 import type { AiParticipationMode, TopicPriority, WorkspaceFile, SavedArtifactType, RoomMessage } from "@/lib/types";
 import type { SlashCommandResult } from "@/components/ChatComposer";
 import {
@@ -57,6 +66,7 @@ export default function RoomDetailPage() {
   const [slashNotice, setSlashNotice] = useState<string | null>(null);
   const [addEmployeeOpen, setAddEmployeeOpen] = useState(false);
   const [addingEmployeeId, setAddingEmployeeId] = useState<string | null>(null);
+  const [membersOpen, setMembersOpen] = useState(false);
 
   const room = state.rooms.find((r) => r.id === roomId);
   const isDm = room?.kind === "dm";
@@ -70,9 +80,22 @@ export default function RoomDetailPage() {
   );
 
   const topicFromUrl = searchParams.get("topic");
+  const messageFromUrl = searchParams.get("message");
   const [selectedTopicId, setSelectedTopicId] = useState<string | undefined>(topicFromUrl ?? undefined);
 
   const selectedTopic = roomTopics.find((t) => t.id === selectedTopicId) ?? roomTopics[0];
+
+  const roomHumanParticipants = useMemo(
+    () =>
+      room?.humans.map((id) => {
+        const member = state.workspaceMembers.find((m) => m.userId === id);
+        return {
+          id,
+          name: member?.name ?? (id === state.user?.id ? "You" : "Teammate"),
+        };
+      }) ?? [],
+    [room?.humans, state.workspaceMembers, state.user?.id],
+  );
 
   const roomEmployees = useMemo(
     () => (room ? room.aiEmployees.map((id) => state.employees.find((e) => e.id === id)).filter(Boolean) : []),
@@ -88,6 +111,9 @@ export default function RoomDetailPage() {
   );
   const isMayaDm = Boolean(
     isDm && roomEmployees[0] && isMayaEmployee(roomEmployees[0]),
+  );
+  const isMayaHiringTopic = Boolean(
+    isMayaDm && selectedTopic && isHiringTopic(selectedTopic),
   );
 
   useEffect(() => {
@@ -116,6 +142,30 @@ export default function RoomDetailPage() {
     },
     [roomId, router],
   );
+
+  useEffect(() => {
+    const onJump = (event: Event) => {
+      const source = (event as CustomEvent<JumpSource>).detail;
+      if (source.roomId && source.roomId !== roomId) {
+        const params = new URLSearchParams();
+        if (source.topicId) params.set("topic", source.topicId);
+        if (source.messageId) params.set("message", source.messageId);
+        router.push(`/rooms/${source.roomId}?${params.toString()}`);
+        return;
+      }
+      if (source.topicId) setSelectedTopicId(source.topicId);
+      if (source.messageId) {
+        window.setTimeout(() => requestScrollToMessage(source.messageId!), 350);
+      }
+    };
+    window.addEventListener(JUMP_TO_SOURCE_EVENT, onJump);
+    return () => window.removeEventListener(JUMP_TO_SOURCE_EVENT, onJump);
+  }, [roomId, router]);
+
+  useEffect(() => {
+    if (!messageFromUrl) return;
+    window.setTimeout(() => requestScrollToMessage(messageFromUrl), 500);
+  }, [messageFromUrl, selectedTopicId]);
 
   const createTopic = async (payload: {
     title: string;
@@ -727,17 +777,13 @@ export default function RoomDetailPage() {
               ? `Direct message with ${roomEmployees[0]?.name ?? "AI employee"}`
               : `${roomTopics.length} topic${roomTopics.length === 1 ? "" : "s"} · you + ${roomEmployees.length} AI employee${roomEmployees.length === 1 ? "" : "s"}`}
           </p>
-          {!isDm && roomEmployees.length > 0 && (
-            <div className="mt-1 flex flex-wrap items-center gap-1.5">
-              {roomEmployees.slice(0, 4).map((employee) => (
-                <span key={employee?.id} className="chip bg-white">
-                  {employee?.name}
-                </span>
-              ))}
-              {roomEmployees.length > 4 && (
-                <span className="text-[11px] text-ink-3">+{roomEmployees.length - 4} more</span>
-              )}
-            </div>
+          {!isDm && (
+            <ParticipantAvatarStack
+              humans={roomHumanParticipants}
+              employees={roomEmployees.filter((e): e is NonNullable<typeof e> => !!e)}
+              onClick={() => setMembersOpen(true)}
+              className="mt-1"
+            />
           )}
         </div>
         <div className="hidden items-center gap-2 sm:flex">
@@ -762,12 +808,15 @@ export default function RoomDetailPage() {
             isDm={isDm}
             room={isDm && !isMayaDm ? undefined : room}
             dmEmployee={isDm ? roomEmployees[0] : undefined}
+            roomHumans={roomHumanParticipants}
+            roomEmployees={roomEmployees.filter((e): e is NonNullable<typeof e> => !!e)}
+            onOpenMembers={!isDm ? () => setMembersOpen(true) : undefined}
             onSelect={selectTopic}
             onNewTopic={() => setNewTopicOpen(true)}
           />
         </div>
 
-        {isMayaDm ? (
+        {isMayaHiringTopic ? (
           <MayaDmHiringLayout
             mayaRoomId={roomId}
             selectedTopic={selectedTopic}
@@ -811,6 +860,7 @@ export default function RoomDetailPage() {
               room={room}
               employees={state.employees}
               topicMembers={roomTopicMembers.filter((m) => m.topicId === selectedTopic.id)}
+              topicMessages={room.messages.filter((m) => m.topicId === selectedTopic.id)}
               tasks={state.tasks}
               memory={state.memory}
               approvals={state.approvals}
@@ -828,6 +878,7 @@ export default function RoomDetailPage() {
               onAiControl={handleAiControl}
               onAskAboutFile={askAiAboutFile}
               onGenerateReportFromFile={generateReportFromFile}
+              onAddEmployee={() => setAddEmployeeOpen(true)}
               summarizing={summarizing}
               topicActionBusy={topicActionBusy}
             />
@@ -865,6 +916,14 @@ export default function RoomDetailPage() {
           busyEmployeeId={addingEmployeeId}
         />
       )}
+      <RoomMembersPopover
+        open={membersOpen}
+        onClose={() => setMembersOpen(false)}
+        room={room}
+        employees={state.employees}
+        workspaceMembers={state.workspaceMembers}
+        currentUserId={state.user?.id}
+      />
     </div>
   );
 }

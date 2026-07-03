@@ -7,6 +7,7 @@ import type {
   TopicSummaryNextAction,
   TopicSummaryQuestion,
 } from "./types";
+import type { MemorySuggestionState } from "@/lib/memory/suggestion-lifecycle";
 
 type DbRow = Record<string, unknown>;
 
@@ -34,7 +35,13 @@ export function topicSummaryFromRow(row: DbRow): TopicSummary {
       ? row.source_work_log_ids.map(String)
       : [],
     lastRefreshedAt: row.last_refreshed_at ? String(row.last_refreshed_at) : null,
+    memorySuggestionLifecycle: parseLifecycle(row.memory_suggestion_lifecycle),
   };
+}
+
+function parseLifecycle(value: unknown): Record<string, MemorySuggestionState> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  return value as Record<string, MemorySuggestionState>;
 }
 
 export async function fetchTopicSummary(
@@ -72,6 +79,7 @@ export async function upsertTopicSummary(
     source_message_ids: summary.sourceMessageIds,
     source_work_log_ids: summary.sourceWorkLogIds,
     last_refreshed_at: summary.lastRefreshedAt ?? timestamp,
+    memory_suggestion_lifecycle: summary.memorySuggestionLifecycle ?? {},
     updated_at: timestamp,
   };
 
@@ -89,8 +97,33 @@ export async function upsertTopicSummary(
       summary: summary.summary,
       updated_at: timestamp,
     })
-    .eq("workspace_id", summary.workspaceId)
-    .eq("id", summary.topicId);
-
   return topicSummaryFromRow(data as DbRow);
+}
+
+export async function updateMemorySuggestionLifecycle(
+  client: SupabaseClient,
+  params: {
+    workspaceId: string;
+    topicId: string;
+    suggestionKey: string;
+    state: MemorySuggestionState;
+  },
+): Promise<Record<string, MemorySuggestionState>> {
+  const existing = await fetchTopicSummary(client, params.workspaceId, params.topicId);
+  const lifecycle = {
+    ...(existing?.memorySuggestionLifecycle ?? {}),
+    [params.suggestionKey]: params.state,
+  };
+
+  const { error } = await client
+    .from("topic_summaries")
+    .update({
+      memory_suggestion_lifecycle: lifecycle,
+      updated_at: nowISO(),
+    })
+    .eq("workspace_id", params.workspaceId)
+    .eq("topic_id", params.topicId);
+
+  if (error) throw error;
+  return lifecycle;
 }

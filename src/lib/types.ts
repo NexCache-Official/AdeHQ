@@ -489,6 +489,23 @@ export type MemoryType =
   | "general";
 export type MemoryStatus = "draft" | "approved" | "pinned" | "superseded";
 
+export type MemorySourceType =
+  | "message"
+  | "topic_summary"
+  | "file"
+  | "artifact"
+  | "manual"
+  | "ai_suggestion"
+  | "work_log";
+
+export type MemoryScope =
+  | "workspace"
+  | "room"
+  | "topic"
+  | "employee_dm"
+  | "employee_profile"
+  | "employee";
+
 export type MemoryEntry = {
   id: string;
   roomId: string;
@@ -501,6 +518,20 @@ export type MemoryEntry = {
   createdById: string;
   createdByRunId?: string;
   createdAt: string;
+  updatedAt?: string;
+  dedupeKey?: string;
+  /** User-facing category label */
+  category?: string;
+  scope?: MemoryScope;
+  tags?: string[];
+  sourceType?: MemorySourceType;
+  sourceMessageId?: string;
+  sourceEmployeeId?: string;
+  suggestedByType?: "human" | "ai" | "system";
+  suggestedById?: string;
+  savedByUserId?: string;
+  confidence?: number;
+  metadata?: Record<string, unknown>;
 };
 
 export type ApprovalRisk = "low" | "medium" | "high";

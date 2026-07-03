@@ -9,6 +9,9 @@ import { readDismissedOrchestrationIds } from "@/lib/orchestration/dismissed-orc
 import { enrichHumanSeenBy } from "@/lib/message-read-receipts";
 import { notifyTopicSummaryUpdated } from "@/lib/topic-summary/client";
 import {
+  SCROLL_TO_MESSAGE_EVENT,
+} from "@/lib/navigation/jump-to-source";
+import {
   TopicSuggestionCard,
   acceptTopicSuggestionApi,
   dismissTopicSuggestionApi,
@@ -44,6 +47,10 @@ import { EmployeeStatusDot } from "./EmployeeStatusBadge";
 import { STATUS_META } from "@/lib/icons";
 import { effectiveEmployeeStatus, isMayaEmployee } from "@/lib/maya-employee";
 import { MayaDmEmptyState } from "@/components/maya/MayaDmEmptyState";
+import {
+  ParticipantAvatarStack,
+  requestOpenPeopleTab,
+} from "@/components/people/RoomMembersPopover";
 
 type PendingSend = {
   clientMessageId: string;
@@ -177,9 +184,43 @@ export function RoomChat({
   const topicMessages = allTopicMessages.slice(-messageLimit);
   const hasOlder = allTopicMessages.length > messageLimit;
 
+  useEffect(() => {
+    const onScrollToMessage = (event: Event) => {
+      const { messageId } = (event as CustomEvent<{ messageId: string }>).detail;
+      const highlight = (el: HTMLElement) => {
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+        el.classList.add("message-highlight");
+        window.setTimeout(() => el.classList.remove("message-highlight"), 3200);
+      };
+      const tryScroll = () => {
+        const el = document.getElementById(`msg-${messageId}`);
+        if (el) {
+          highlight(el);
+          return true;
+        }
+        return false;
+      };
+      if (!tryScroll() && hasOlder) {
+        setMessageLimit((n) => Math.min(allTopicMessages.length, n + MESSAGE_PAGE));
+        window.setTimeout(tryScroll, 250);
+      }
+    };
+    window.addEventListener(SCROLL_TO_MESSAGE_EVENT, onScrollToMessage);
+    return () => window.removeEventListener(SCROLL_TO_MESSAGE_EVENT, onScrollToMessage);
+  }, [allTopicMessages.length, hasOlder, topic?.id]);
+
   const topicMembersForTopic = useMemo(
     () => (topic ? state.topicMembers.filter((m) => m.topicId === topic.id) : []),
     [state.topicMembers, topic],
+  );
+
+  const topicAiEmployees = useMemo(
+    () =>
+      topicMembersForTopic
+        .filter((m) => m.memberType === "ai")
+        .map((m) => state.employees.find((e) => e.id === m.memberId))
+        .filter((e): e is NonNullable<typeof e> => !!e),
+    [topicMembersForTopic, state.employees],
   );
 
   const displayMessages = useMemo(
@@ -993,15 +1034,29 @@ export function RoomChat({
             </div>
           </>
         ) : (
-          <div className="min-w-0">
-            <div className="flex items-center gap-1.5 text-sm font-semibold text-ink">
-              <span className="truncate">{displayTitle}</span>
-              <span className="truncate text-[11px] font-medium text-ink-3">in {room.name}</span>
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="min-w-0">
+                <div className="flex items-center gap-1.5 text-sm font-semibold text-ink">
+                  <span className="truncate">{displayTitle}</span>
+                  <span className="truncate text-[11px] font-medium text-ink-3">in {room.name}</span>
+                </div>
+                <p className="text-[11.5px] text-ink-2">
+                  {openTopicTasks} open task{openTopicTasks === 1 ? "" : "s"} ·{" "}
+                  {topicAiEmployees.length} employee{topicAiEmployees.length === 1 ? "" : "s"}
+                </p>
+              </div>
+              {topicAiEmployees.length > 0 && (
+                <button
+                  type="button"
+                  onClick={requestOpenPeopleTab}
+                  className="ml-auto rounded-lg p-0.5 hover:bg-muted"
+                  title="View participants"
+                >
+                  <ParticipantAvatarStack employees={topicAiEmployees} humans={[]} max={3} size="xs" />
+                </button>
+              )}
             </div>
-            <p className="text-[11.5px] text-ink-2">
-              {openTopicTasks} open task{openTopicTasks === 1 ? "" : "s"} · {roomEmployees.length}{" "}
-              employee{roomEmployees.length === 1 ? "" : "s"}
-            </p>
           </div>
         )}
 
@@ -1064,13 +1119,20 @@ export function RoomChat({
           </div>
         )}
         {topicMessages.length === 0 ? (
-          isDm && dmEmployee && isMayaEmployee(dmEmployee) && !chatDisabled ? (
+          isDm && dmEmployee && isMayaEmployee(dmEmployee) && isMainChat && !chatDisabled ? (
             <MayaDmEmptyState
               firstName={state.user?.name?.split(" ")[0] ?? "there"}
               onSendMessage={(text) => {
                 void handleSend(text);
               }}
             />
+          ) : isDm && dmEmployee && isMayaEmployee(dmEmployee) && !isMainChat && !chatDisabled ? (
+            <div className="mx-auto flex max-w-md flex-col items-center gap-3 px-4 py-10 text-center">
+              <h3 className="text-base font-semibold text-ink">This topic is for {displayTitle}</h3>
+              <p className="text-sm leading-relaxed text-ink-2">
+                Ask Maya a question or continue the workflow here.
+              </p>
+            </div>
           ) : (
           <div className="flex h-full flex-col items-center justify-center gap-4">
             <EmptyState

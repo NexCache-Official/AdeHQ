@@ -189,6 +189,7 @@ type StoreActions = {
   // memory
   createMemory: (m: Partial<MemoryEntry> & { title: string; content: string; roomId: string }) => MemoryEntry;
   updateMemory: (id: string, patch: Partial<MemoryEntry>) => void;
+  mergeMemoryEntry: (entry: MemoryEntry) => void;
 
   // approvals
   createApproval: (a: Partial<Approval> & { title: string; roomId: string; requestedBy: string }) => Approval;
@@ -1452,6 +1453,16 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           createdByType: m.createdByType ?? "ai",
           createdById: m.createdById ?? "",
           createdAt: nowISO(),
+          category: m.category,
+          scope: m.scope,
+          tags: m.tags,
+          sourceType: m.sourceType,
+          sourceMessageId: m.sourceMessageId,
+          suggestedById: m.suggestedById,
+          suggestedByType: m.suggestedByType,
+          savedByUserId: m.savedByUserId,
+          metadata: m.metadata,
+          dedupeKey: m.dedupeKey,
         };
         set((s) => ({
           ...s,
@@ -1473,6 +1484,22 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           memory: s.memory.map((m) => (m.id === id ? updated : m)),
         }));
         runRemote((workspaceId) => persistMemory(workspaceId, updated));
+      },
+
+      mergeMemoryEntry: (entry) => {
+        set((s) => {
+          const exists = s.memory.some((m) => m.id === entry.id);
+          const memory = exists
+            ? s.memory.map((m) => (m.id === entry.id ? entry : m))
+            : [entry, ...s.memory];
+          const rooms = s.rooms.map((room) =>
+            room.id === entry.roomId && !room.memory.includes(entry.id)
+              ? { ...room, memory: [...room.memory, entry.id] }
+              : room,
+          );
+          return { ...s, memory, rooms };
+        });
+        runRemote((workspaceId) => persistMemory(workspaceId, entry));
       },
 
       createApproval: (a) => {

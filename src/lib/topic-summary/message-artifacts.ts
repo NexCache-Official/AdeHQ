@@ -1,8 +1,10 @@
 import type { MessageArtifact } from "@/lib/types";
+import { suggestionKeyForTopicSummary } from "@/lib/memory/fingerprint";
 import type { TopicSummaryMemorySuggestion } from "./types";
 
 export function buildMemorySuggestionArtifacts(
   suggestions: TopicSummaryMemorySuggestion[],
+  topicId?: string,
 ): MessageArtifact[] {
   return suggestions.map((item, index) => ({
     type: "memory_suggestion" as const,
@@ -13,6 +15,16 @@ export function buildMemorySuggestionArtifacts(
       scope: item.scope,
       reason: item.reason,
       suggestionIndex: index,
+      ...(topicId
+        ? {
+            suggestionKey: suggestionKeyForTopicSummary(topicId, {
+              title: item.title,
+              content: item.content,
+              text: item.text,
+              sourceMessageId: item.sourceMessageId,
+            }),
+          }
+        : {}),
     },
   }));
 }

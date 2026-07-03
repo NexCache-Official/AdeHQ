@@ -2,7 +2,6 @@
 
 import { useRouter } from "next/navigation";
 import {
-  MAYA_DM_QUICK_ACTIONS,
   MAYA_EMPLOYEE_NAME,
   MAYA_EMPLOYEE_SUBTITLE,
   MAYA_WORKFORCE_BADGE,
@@ -76,13 +75,21 @@ export function MayaDmEmptyState({
 
   const chips = context?.setupComplete
     ? [
-        { id: "hire-analyst", label: "Hire a Market Research Analyst", message: "I need to hire a Market Research Analyst." },
-        { id: "hire-sdr", label: "Hire a Sales Development Representative", message: "I need to hire a Sales Development Representative." },
-        { id: "hire-engineer", label: "Hire a Software Engineer", message: "I need to hire a Software Engineer." },
-        { id: "role", label: "Not sure — help me decide", message: "I'm not sure what role I need — can you recommend one based on my goals?" },
-        { id: "browse", label: "Browse popular roles", message: "Show me popular roles I could hire for this workspace." },
+        { id: "hire-analyst", label: "Help me hire", message: "I need to hire a Market Research Analyst." },
+        { id: "guide", label: "Explain AdeHQ", message: "Walk me through how AdeHQ works and what I should do first." },
+        { id: "improve", label: "Improve an employee", intent: "improve_employee" as const },
+        { id: "room", label: "Create a room", message: "Help me create a new room for my team." },
+        { id: "workforce", label: "Review my workforce", message: "Review my current AI workforce and suggest improvements." },
+        { id: "next", label: "What should I do next?", message: "What should I focus on next in AdeHQ?" },
       ]
-    : MAYA_DM_QUICK_ACTIONS;
+    : [
+        { id: "hire", label: "Help me hire", message: "I need to hire an AI employee — help me choose a role." },
+        { id: "guide", label: "Explain AdeHQ", message: "Walk me through how AdeHQ works and what I should do first." },
+        { id: "improve", label: "Improve an employee", intent: "improve_employee" as const },
+        { id: "room", label: "Create a room", message: "Help me create a new room for my team." },
+        { id: "workforce", label: "Review my workforce", message: "Review my current AI workforce and suggest improvements." },
+        { id: "next", label: "What should I do next?", message: "What should I focus on next in AdeHQ?" },
+      ];
 
   const handleAction = (action: { href?: string; message?: string; intent?: string; label: string }) => {
     if ("href" in action && action.href) {
@@ -112,7 +119,10 @@ export function MayaDmEmptyState({
         </span>
       </div>
       <p className="text-sm text-ink-2">{MAYA_EMPLOYEE_SUBTITLE}</p>
-      <p className="mt-5 whitespace-pre-line text-left text-[14px] leading-relaxed text-ink-2">
+      <p className="mt-4 max-w-md text-[13px] leading-relaxed text-ink-2">
+        Ask Maya how AdeHQ works, who to hire, how to organize rooms, or how to improve your AI workforce.
+      </p>
+      <p className="mt-4 whitespace-pre-line text-left text-[14px] leading-relaxed text-ink-2">
         {welcome}
       </p>
       <div className="mt-6 flex w-full flex-wrap justify-center gap-2">

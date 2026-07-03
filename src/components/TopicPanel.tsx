@@ -1,12 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type {
   AIEmployee,
   AiParticipationMode,
   Approval,
   MemoryEntry,
   ProjectRoom,
+  RoomMessage,
   RoomTopic,
   Task,
   TopicMember,
@@ -15,7 +16,8 @@ import type {
   WorkspaceFile,
   WorkspaceMember,
 } from "@/lib/types";
-import { EmployeeAvatar } from "./EmployeeAvatar";
+import { useStore } from "@/lib/demo-store";
+import { EmployeeAvatar, HumanAvatar } from "./EmployeeAvatar";
 import { TaskCard } from "./TaskCard";
 import { MemoryCard } from "./MemoryCard";
 import { ApprovalCard } from "./ApprovalCard";
@@ -23,13 +25,16 @@ import { WorkLogTimeline } from "./WorkLogTimeline";
 import { ArtifactCard, FileArtifactCard } from "./ArtifactCard";
 import { MessageMarkdown } from "./MessageMarkdown";
 import { shouldShowWorkLogInTopic } from "@/lib/work-log-labels";
+import { OPEN_PEOPLE_TAB_EVENT } from "@/components/people/RoomMembersPopover";
 import { OrchestrationSidebarStatus } from "@/components/orchestration/OrchestrationSidebarStatus";
+import { useDebugTrace } from "@/components/DebugProvider";
 import { TopicSummaryPanel } from "@/components/topic-summary/TopicSummaryPanel";
+import { saveTopicSummaryToMemoryClient } from "@/lib/topic-summary/client";
 import { useTopicSummary } from "@/components/topic-summary/useTopicSummary";
 import { EmptyState } from "./States";
 import { Button, Modal, ModalHeader } from "./ui";
 import { authHeaders } from "@/lib/api/auth-client";
-import { cn, formatTime } from "@/lib/utils";
+import { cn, formatTime, timeAgo } from "@/lib/utils";
 import {
   getAiParticipationMode,
   isGeneralTopic,
@@ -46,10 +51,11 @@ import {
   CheckSquare,
   ChevronDown,
   FileText,
+  ListChecks,
   Loader2,
   Paperclip,
+  Plus,
   ScrollText,
-  ShieldAlert,
   Sparkles,
   Trash2,
   Users,
@@ -58,12 +64,10 @@ import {
 
 const TABS = [
   { id: "overview", label: "Overview", icon: BookText },
-  { id: "tasks", label: "Tasks", icon: CheckSquare },
-  { id: "files", label: "Files", icon: Paperclip },
-  { id: "artifacts", label: "Artifacts", icon: FileText },
+  { id: "work", label: "Work", icon: CheckSquare },
   { id: "memory", label: "Memory", icon: BrainCircuit },
-  { id: "approvals", label: "Approvals", icon: ShieldAlert },
-  { id: "activity", label: "Work Log", icon: ScrollText },
+  { id: "files", label: "Files", icon: Paperclip },
+  { id: "activity", label: "Activity", icon: ScrollText },
   { id: "people", label: "People", icon: Users },
 ] as const;
 
@@ -143,6 +147,8 @@ export function TopicPanel({
   onAiControl,
   onAskAboutFile,
   onGenerateReportFromFile,
+  topicMessages = [],
+  onAddEmployee,
   summarizing,
   topicActionBusy,
 }: {
@@ -155,6 +161,7 @@ export function TopicPanel({
   approvals: Approval[];
   workLog: WorkLogEvent[];
   workspaceMembers?: WorkspaceMember[];
+  topicMessages?: RoomMessage[];
   isDm?: boolean;
   onSummarize: () => void;
   onArchive: () => void;
@@ -167,9 +174,12 @@ export function TopicPanel({
   onAiControl?: (action: "stop_all" | "resume") => void;
   onAskAboutFile?: (file: WorkspaceFile) => void;
   onGenerateReportFromFile?: (file: WorkspaceFile) => void;
+  onAddEmployee?: () => void;
   summarizing?: boolean;
   topicActionBusy?: boolean;
 }) {
+  const { actions } = useStore();
+  const { enabled: debugEnabled } = useDebugTrace();
   const [tab, setTab] = useState<(typeof TABS)[number]["id"]>("overview");
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [topicFiles, setTopicFiles] = useState<WorkspaceFile[]>([]);
@@ -181,6 +191,13 @@ export function TopicPanel({
   const [fileBusyId, setFileBusyId] = useState<string | null>(null);
   const [fileError, setFileError] = useState<string | null>(null);
   const [artifactError, setArtifactError] = useState<string | null>(null);
+  const [newTaskTitle, setNewTaskTitle] = useState("");
+  const taskInputRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    const openPeople = () => setTab("people");
+    window.addEventListener(OPEN_PEOPLE_TAB_EVENT, openPeople);
+    return () => window.removeEventListener(OPEN_PEOPLE_TAB_EVENT, openPeople);
+  }, []);
   const isMainChat = isGeneralTopic(topic);
   const displayTitle = isMainChat ? mainChatLabel(isDm) : topic.title;
   const participation = getAiParticipationMode(topic);
@@ -229,7 +246,7 @@ export function TopicPanel({
       try {
         const body = await apiJson<{ artifact: SavedArtifact }>(`/api/artifacts/${detail.artifactId}`);
         setSelectedArtifact(body.artifact);
-        setTab("artifacts");
+        setTab("files");
       } catch {
         // non-blocking
       }
@@ -302,7 +319,7 @@ export function TopicPanel({
         }),
       });
       setTopicArtifacts((current) => [body.artifact, ...current.filter((a) => a.id !== body.artifact.id)]);
-      setTab("artifacts");
+      setTab("files");
       window.dispatchEvent(new CustomEvent("adehq:topic-artifacts-changed", { detail: { topicId: topic.id } }));
     } catch (error) {
       setArtifactError(error instanceof Error ? error.message : "Could not create artifact.");
@@ -368,8 +385,15 @@ export function TopicPanel({
   const topicApprovals = approvals.filter((a) => a.topicId === topic.id);
   const topicLog = workLog
     .filter((w) => w.topicId === topic.id)
-    .filter((w) => shouldShowWorkLogInTopic(w.action, w.summary, { isDm }))
+    .filter((w) => shouldShowWorkLogInTopic(w.action, w.summary, { isDm, debugEnabled }))
     .sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt));
+
+  const roomAiEmployees = room.aiEmployees
+    .map((id) => employees.find((e) => e.id === id))
+    .filter((e): e is AIEmployee => !!e);
+
+  const topicEmployeeIds = new Set(topicEmployees.map((e) => e.id));
+  const availableInRoom = roomAiEmployees.filter((e) => !topicEmployeeIds.has(e.id));
 
   const humanParticipants = room.humans
     .map((id) => {
@@ -383,21 +407,48 @@ export function TopicPanel({
     .filter((h) => h.id);
 
   const counts: Record<string, number> = {
-    tasks: topicTasks.length,
-    files: topicFiles.length,
-    artifacts: topicArtifacts.length,
+    work:
+      topicTasks.filter((t) => t.status !== "done").length +
+      topicApprovals.filter((a) => a.status === "pending").length,
+    files: topicFiles.length + topicArtifacts.length,
     memory: topicMemory.length,
-    approvals: topicApprovals.filter((a) => a.status === "pending").length,
     activity: topicLog.length,
     people: humanParticipants.length + topicEmployees.length,
   };
 
-  const insTitle = isDm
-    ? topicEmployees[0]?.name ?? displayTitle
-    : `${room.name} · ${displayTitle}`;
-  const insSub = isDm
-    ? topicEmployees[0]?.role ?? "Direct message"
-    : "Topic workstream";
+  const openTaskCount = topicTasks.filter((t) => t.status !== "done").length;
+  const workstreamSubtitle = isDm
+    ? "Direct message"
+    : isMainChat
+      ? "Main room discussion"
+      : `${room.name} workstream`;
+  const panelTitle = isMainChat ? mainChatLabel(isDm) : displayTitle;
+  const lastUpdatedLabel = topicSummary?.lastRefreshedAt
+    ? timeAgo(topicSummary.lastRefreshedAt)
+    : topic.updatedAt
+      ? timeAgo(topic.updatedAt)
+      : null;
+
+  const handleMemorySaved = (saved?: MemoryEntry, duplicate?: boolean) => {
+    if (saved) actions.mergeMemoryEntry(saved);
+    onWorkLogRefresh?.();
+    onSaveSummaryToMemory?.();
+    void duplicate;
+  };
+
+  const handleQuickSaveMemory = async () => {
+    if (!topicSummary?.summary?.trim()) {
+      setTab("overview");
+      return;
+    }
+    try {
+      const result = await saveTopicSummaryToMemoryClient(topic.id);
+      if (result.memory) actions.mergeMemoryEntry(result.memory);
+      onWorkLogRefresh?.();
+    } catch {
+      // TopicSummaryPanel shows errors for detailed saves
+    }
+  };
 
   return (
     <div className="flex h-full min-h-0 bg-surface">
@@ -425,8 +476,57 @@ export function TopicPanel({
 
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         <div className="shrink-0 border-b border-border-2 px-4 pb-3 pt-[15px]">
-          <h2 className="truncate text-[14.5px] font-bold tracking-tight text-ink">{insTitle}</h2>
-          <p className="text-[11.5px] text-ink-2">{insSub}</p>
+          <h2 className="truncate text-[14.5px] font-bold tracking-tight text-ink">{panelTitle}</h2>
+          <p className="text-[11.5px] text-ink-2">{workstreamSubtitle}</p>
+          <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[10.5px] text-ink-3">
+            <span>
+              {topicEmployees.length} employee{topicEmployees.length === 1 ? "" : "s"} active
+            </span>
+            <span>
+              {openTaskCount} open task{openTaskCount === 1 ? "" : "s"}
+            </span>
+            <span>
+              {topicMemory.length} saved memor{topicMemory.length === 1 ? "y" : "ies"}
+            </span>
+            {lastUpdatedLabel && <span>Updated {lastUpdatedLabel}</span>}
+          </div>
+          <div className="mt-2.5 flex flex-wrap gap-1.5">
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={handleSummarize}
+              disabled={summarizing || summaryRefreshing || summaryLoading || isArchived}
+            >
+              {summarizing || summaryRefreshing ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Sparkles className="h-3.5 w-3.5" />
+              )}
+              Summarize
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setTab("work");
+                requestAnimationFrame(() => taskInputRef.current?.focus());
+              }}
+              disabled={isArchived}
+            >
+              <ListChecks className="h-3.5 w-3.5" />
+              Create task
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => void handleQuickSaveMemory()}>
+              <BrainCircuit className="h-3.5 w-3.5" />
+              Save memory
+            </Button>
+            {onAddEmployee && !isDm && (
+              <Button variant="ghost" size="sm" onClick={onAddEmployee}>
+                <Plus className="h-3.5 w-3.5" />
+                Add employee
+              </Button>
+            )}
+          </div>
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-6 pt-3.5">
@@ -438,55 +538,46 @@ export function TopicPanel({
                   free the title and remove all history.
                 </div>
               )}
-              <div className="flex flex-wrap gap-1.5">
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={handleSummarize}
-                  disabled={summarizing || summaryRefreshing || summaryLoading || isArchived}
-                >
-                  {summarizing || summaryRefreshing ? (
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  ) : (
-                    <Sparkles className="h-3.5 w-3.5" />
-                  )}
-                  Summarize
-                </Button>
-                {!isMainChat &&
-                  (isArchived ? (
-                    <>
-                      {onUnarchive && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={onUnarchive}
-                          disabled={topicActionBusy}
-                        >
-                          <ArchiveRestore className="h-3.5 w-3.5" /> Restore topic
-                        </Button>
-                      )}
-                      {onDeletePermanently && !confirmDelete && (
-                        <Button
-                          variant="danger"
-                          size="sm"
-                          onClick={() => setConfirmDelete(true)}
-                          disabled={topicActionBusy}
-                        >
-                          <Trash2 className="h-3.5 w-3.5" /> Delete permanently
-                        </Button>
-                      )}
-                    </>
-                  ) : (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={onArchive}
-                      disabled={topicActionBusy}
-                    >
+              {!isMainChat &&
+                (isArchived ? (
+                  <div className="flex flex-wrap gap-1.5">
+                    {onUnarchive && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={onUnarchive}
+                        disabled={topicActionBusy}
+                      >
+                        <ArchiveRestore className="h-3.5 w-3.5" /> Restore topic
+                      </Button>
+                    )}
+                    {onDeletePermanently && !confirmDelete && (
+                      <Button
+                        variant="danger"
+                        size="sm"
+                        onClick={() => setConfirmDelete(true)}
+                        disabled={topicActionBusy}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" /> Delete permanently
+                      </Button>
+                    )}
+                  </div>
+                ) : (
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button variant="ghost" size="sm" onClick={onArchive} disabled={topicActionBusy}>
                       Archive
                     </Button>
-                  ))}
-              </div>
+                    {onDeletePermanently && !confirmDelete && (
+                      <button
+                        type="button"
+                        onClick={() => setConfirmDelete(true)}
+                        className="text-xs text-ink-3 underline-offset-2 hover:text-red-600 hover:underline"
+                      >
+                        Delete topic permanently…
+                      </button>
+                    )}
+                  </div>
+                ))}
               {!isMainChat && isArchived && confirmDelete && onDeletePermanently && (
                 <div className="rounded-xl border border-red-200 bg-red-50 p-3">
                   <p className="text-sm text-red-800">
@@ -510,15 +601,6 @@ export function TopicPanel({
                     </Button>
                   </div>
                 </div>
-              )}
-              {!isMainChat && !isArchived && onDeletePermanently && !confirmDelete && (
-                <button
-                  type="button"
-                  onClick={() => setConfirmDelete(true)}
-                  className="text-xs text-ink-3 underline-offset-2 hover:text-red-600 hover:underline"
-                >
-                  Delete topic permanently…
-                </button>
               )}
               {!isMainChat && !isArchived && confirmDelete && onDeletePermanently && (
                 <div className="rounded-xl border border-red-200 bg-red-50 p-3">
@@ -596,57 +678,81 @@ export function TopicPanel({
                   </div>
                 </details>
               )}
-              {!isDm && <OrchestrationSidebarStatus topicId={topic.id} />}
               <TopicSummaryPanel
                 topicId={topic.id}
+                roomId={room.id}
+                room={room}
+                topic={topic}
+                isDm={isDm}
                 summary={topicSummary}
                 employees={topicEmployees}
+                messages={topicMessages}
                 loading={summaryLoading}
                 refreshing={summaryRefreshing}
                 error={summaryError}
                 onRefresh={handleRefreshSummary}
                 onCreateTask={onCreateTaskFromSummary}
-                onMemorySaved={onSaveSummaryToMemory}
+                onMemorySaved={handleMemorySaved}
+                compactActions
               />
-              <section>
-                <div className="section-title mb-1.5">Open tasks</div>
-                {topicTasks.filter((t) => t.status !== "done").length === 0 ? (
-                  <p className="text-xs text-ink-3">No open tasks in this topic.</p>
-                ) : (
-                  <div className="space-y-2">
-                    {topicTasks
-                      .filter((t) => t.status !== "done")
-                      .slice(0, 3)
-                      .map((t) => (
-                        <TaskCard key={t.id} task={t} compact />
-                      ))}
-                  </div>
-                )}
-              </section>
-              <section>
-                <div className="section-title mb-1.5">Pending approvals</div>
-                {topicApprovals.filter((a) => a.status === "pending").length === 0 ? (
-                  <p className="text-xs text-ink-3">No pending approvals.</p>
-                ) : (
-                  <div className="space-y-2">
-                    {topicApprovals
-                      .filter((a) => a.status === "pending")
-                      .map((a) => (
-                        <ApprovalCard key={a.id} approval={a} />
-                      ))}
-                  </div>
-                )}
-              </section>
             </div>
           )}
 
-          {tab === "tasks" && (
-            <div className="space-y-2">
-              {topicTasks.length === 0 ? (
-                <EmptyState icon={CheckSquare} title="No tasks" description="Tasks linked to this topic appear here." />
-              ) : (
-                topicTasks.map((t) => <TaskCard key={t.id} task={t} compact />)
-              )}
+          {tab === "work" && (
+            <div className="space-y-4">
+              <section>
+                <div className="section-title mb-1.5">Tasks</div>
+                {onCreateTaskFromSummary && !isArchived && (
+                  <form
+                    className="mb-2 flex gap-1.5"
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      const title = newTaskTitle.trim();
+                      if (!title) return;
+                      onCreateTaskFromSummary(title);
+                      setNewTaskTitle("");
+                    }}
+                  >
+                    <input
+                      ref={taskInputRef}
+                      value={newTaskTitle}
+                      onChange={(e) => setNewTaskTitle(e.target.value)}
+                      placeholder="Add a task…"
+                      className="input-field h-8 flex-1 text-[13px]"
+                    />
+                    <Button
+                      type="submit"
+                      variant="secondary"
+                      size="sm"
+                      disabled={!newTaskTitle.trim()}
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                      Add
+                    </Button>
+                  </form>
+                )}
+                {topicTasks.length === 0 ? (
+                  <p className="text-xs text-ink-3">No tasks in this topic yet.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {topicTasks.map((t) => (
+                      <TaskCard key={t.id} task={t} compact />
+                    ))}
+                  </div>
+                )}
+              </section>
+              <section>
+                <div className="section-title mb-1.5">Approvals</div>
+                {topicApprovals.length === 0 ? (
+                  <p className="text-xs text-ink-3">No approvals in this topic.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {topicApprovals.map((a) => (
+                      <ApprovalCard key={a.id} approval={a} />
+                    ))}
+                  </div>
+                )}
+              </section>
             </div>
           )}
 
@@ -661,7 +767,9 @@ export function TopicPanel({
           )}
 
           {tab === "files" && (
-            <div className="space-y-3">
+            <div className="space-y-4">
+              <section>
+                <div className="section-title mb-1.5">Uploaded files</div>
               {filesLoading ? (
                 <div className="flex items-center gap-2 rounded-xl border border-border bg-muted px-3 py-2 text-xs text-ink-3">
                   <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -727,27 +835,21 @@ export function TopicPanel({
                 })
               )}
               {fileError && <p className="text-xs text-red-600">{fileError}</p>}
-            </div>
-          )}
-
-          {tab === "artifacts" && (
-            <div className="space-y-3">
+              </section>
+              <section>
+                <div className="section-title mb-1.5">Artifacts</div>
               {artifactsLoading ? (
                 <div className="flex items-center gap-2 rounded-xl border border-border bg-muted px-3 py-2 text-xs text-ink-3">
                   <Loader2 className="h-3.5 w-3.5 animate-spin" />
                   Loading artifacts…
                 </div>
               ) : topicArtifacts.length === 0 ? (
-                <EmptyState
-                  icon={FileText}
-                  title="No artifacts"
-                  description="Generated PRDs, reports, briefs, and proposals will appear here."
-                />
+                <p className="text-xs text-ink-3">No generated artifacts yet.</p>
               ) : (
                 topicArtifacts.map((artifact) => {
                   const isBusy = artifactBusyId === artifact.id;
                   return (
-                    <div key={artifact.id} className="space-y-2">
+                    <div key={artifact.id} className="mb-3 space-y-2">
                       <ArtifactCard
                         title={artifact.title}
                         type={artifactCardType(artifact.artifactType)}
@@ -784,31 +886,36 @@ export function TopicPanel({
                 })
               )}
               {artifactError && <p className="text-xs text-red-600">{artifactError}</p>}
-            </div>
-          )}
-
-          {tab === "approvals" && (
-            <div className="space-y-3">
-              {topicApprovals.length === 0 ? (
-                <EmptyState icon={ShieldAlert} title="No approvals" description="Approval requests for this topic appear here." />
-              ) : (
-                topicApprovals.map((a) => <ApprovalCard key={a.id} approval={a} />)
-              )}
+              </section>
             </div>
           )}
 
           {tab === "activity" && (
-            <div>
+            <div className="space-y-3">
               {topicLog.length === 0 ? (
-                <EmptyState icon={ScrollText} title="No activity" description="Work log events for this topic appear here." />
+                <EmptyState
+                  icon={ScrollText}
+                  title="No activity yet"
+                  description="Meaningful work in this topic will show up here."
+                />
               ) : (
-                <WorkLogTimeline events={topicLog} compact />
+                <WorkLogTimeline events={topicLog} compact debugEnabled={debugEnabled} />
+              )}
+              {debugEnabled && !isDm && (
+                <details className="rounded-xl border border-dashed border-border bg-muted/30 p-2">
+                  <summary className="cursor-pointer px-1 py-0.5 text-[11px] font-medium text-ink-3">
+                    Debug orchestration
+                  </summary>
+                  <div className="mt-2">
+                    <OrchestrationSidebarStatus topicId={topic.id} />
+                  </div>
+                </details>
               )}
             </div>
           )}
 
           {tab === "people" && (
-            <div className="space-y-2">
+            <div className="space-y-3">
               {isDm ? (
                 <>
                   <div className="section-title mb-1">Direct message</div>
@@ -827,47 +934,39 @@ export function TopicPanel({
                     This is a 1:1 conversation between you and this AI employee.
                   </p>
                 </>
+              ) : isMainChat ? (
+                <>
+                  <div className="section-title mb-1">In this room</div>
+                  <p className="mb-2 text-[11px] text-ink-3">
+                    Everyone in {room.name} can see General Chat.
+                  </p>
+                  {humanParticipants.map((human) => (
+                    <div
+                      key={human.id}
+                      className="flex items-center gap-3 rounded-xl border border-border bg-surface p-2.5"
+                    >
+                      <HumanAvatar name={human.name ?? "Teammate"} size="sm" />
+                      <div>
+                        <div className="text-sm font-medium text-ink">{human.name}</div>
+                        {human.email && (
+                          <div className="text-[11px] text-ink-3">{human.email}</div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                  {roomAiEmployees.map((e) => (
+                    <div key={e.id} className="flex items-center gap-3 rounded-xl border border-border bg-surface p-2.5">
+                      <EmployeeAvatar employee={e} size="sm" />
+                      <div>
+                        <div className="text-sm font-medium text-ink">{e.name}</div>
+                        <div className="text-[11px] text-ink-3">{e.role}</div>
+                      </div>
+                    </div>
+                  ))}
+                </>
               ) : (
                 <>
-                  <div className="section-title mb-1">People in this room</div>
-                  {humanParticipants.length === 0 ? (
-                    <p className="text-xs text-ink-3">No human members listed.</p>
-                  ) : (
-                    humanParticipants.map((human) => (
-                      <div
-                        key={human.id}
-                        className="flex items-center gap-3 rounded-xl border border-border bg-surface p-2.5"
-                      >
-                        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-muted text-xs font-semibold text-ink-2">
-                          {(human.name ?? "U").slice(0, 2).toUpperCase()}
-                        </div>
-                        <div>
-                          <div className="text-sm font-medium text-ink">{human.name}</div>
-                          {human.email && (
-                            <div className="text-[11px] text-ink-3">{human.email}</div>
-                          )}
-                        </div>
-                      </div>
-                    ))
-                  )}
-                  <div className="section-title mb-1 mt-3">AI employees in room</div>
-                  {room.aiEmployees.length === 0 ? (
-                    <p className="text-xs text-ink-3">No AI employees in this room.</p>
-                  ) : (
-                    room.aiEmployees
-                      .map((id) => employees.find((e) => e.id === id))
-                      .filter((e): e is AIEmployee => !!e)
-                      .map((e) => (
-                        <div key={e.id} className="flex items-center gap-3 rounded-xl border border-border bg-surface p-2.5">
-                          <EmployeeAvatar employee={e} size="sm" />
-                          <div>
-                            <div className="text-sm font-medium text-ink">{e.name}</div>
-                            <div className="text-[11px] text-ink-3">{e.role}</div>
-                          </div>
-                        </div>
-                      ))
-                  )}
-                  <div className="section-title mb-1 mt-3">AI employees in this topic</div>
+                  <div className="section-title mb-1">Working in this topic</div>
                   {topicEmployees.length === 0 ? (
                     <p className="text-xs text-ink-3">No AI employees assigned to this topic yet.</p>
                   ) : (
@@ -880,6 +979,50 @@ export function TopicPanel({
                         </div>
                       </div>
                     ))
+                  )}
+                  {humanParticipants.length > 0 && (
+                    <>
+                      <div className="section-title mb-1 mt-3">Humans in room</div>
+                      {humanParticipants.map((human) => (
+                        <div
+                          key={human.id}
+                          className="flex items-center gap-3 rounded-xl border border-border bg-surface p-2.5"
+                        >
+                          <HumanAvatar name={human.name ?? "Teammate"} size="sm" />
+                          <div>
+                            <div className="text-sm font-medium text-ink">{human.name}</div>
+                          </div>
+                        </div>
+                      ))}
+                    </>
+                  )}
+                  {availableInRoom.length > 0 && (
+                    <details className="mt-2 rounded-xl border border-border bg-muted/20 p-2">
+                      <summary className="cursor-pointer px-1 py-0.5 text-[11px] font-medium text-ink-3">
+                        Available in room ({availableInRoom.length})
+                      </summary>
+                      <div className="mt-2 space-y-1">
+                        {availableInRoom.map((e) => (
+                          <div
+                            key={e.id}
+                            className="flex items-center justify-between gap-2 rounded-lg border border-border bg-surface px-2.5 py-2"
+                          >
+                            <div className="flex items-center gap-2">
+                              <EmployeeAvatar employee={e} size="sm" showStatus={false} />
+                              <div>
+                                <div className="text-sm font-medium text-ink">{e.name}</div>
+                                <div className="text-[10px] text-ink-3">{e.role}</div>
+                              </div>
+                            </div>
+                            {onAddEmployee && (
+                              <Button variant="secondary" size="sm" className="h-7 text-[10px]" onClick={onAddEmployee}>
+                                Add to topic
+                              </Button>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </details>
                   )}
                 </>
               )}
