@@ -91,7 +91,7 @@ const PLUS_ACTIONS = [
   { id: "memory", label: "Save memory", icon: Save, implemented: true, insert: "/memory " },
   { id: "maya", label: "Ask Maya", icon: Sparkles, implemented: true, insert: "@Maya " },
   { id: "decision", label: "Create decision", icon: MessageSquarePlus, implemented: true, insert: "/memory Decision: " },
-  { id: "employee", label: "Add employee", icon: AtSign, implemented: false },
+  { id: "employee", label: "Add employee", icon: AtSign, implemented: true },
 ];
 
 export type SlashCommandResult =
@@ -173,6 +173,7 @@ export function ChatComposer({
   contextFiles,
   artifactIntent,
   onContextConsumed,
+  onAddEmployee,
 }: {
   employees: AIEmployee[];
   onSend: (
@@ -182,6 +183,7 @@ export function ChatComposer({
     contextFileIds?: string[],
   ) => void | Promise<void>;
   onUploadFiles?: (files: File[]) => Promise<ComposerUploadedFile[]>;
+  onAddEmployee?: () => void;
   disabled?: boolean;
   placeholder?: string;
   draftText?: string;
@@ -278,7 +280,7 @@ export function ChatComposer({
     setAttachments((prev) => [...prev, ...staged]);
 
     if (!onUploadFiles) {
-      setCommandNotice("Files are staged here now. Upload and file Q&A arrive in V19.6.1.");
+      setCommandNotice("File upload isn't available here. Open a topic to upload and ask about files.");
       return;
     }
 
@@ -740,6 +742,11 @@ export function ChatComposer({
                       setShowPlusMenu(false);
                       return;
                     }
+                    if (action.id === "employee") {
+                      onAddEmployee?.();
+                      setShowPlusMenu(false);
+                      return;
+                    }
                     if (action.insert) insertText(action.insert);
                   }}
                   className={cn(
@@ -842,7 +849,7 @@ export function ChatComposer({
           <button
             type="button"
             onClick={() => setShowPlusMenu((open) => !open)}
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[11px] text-ink-3 transition-colors hover:bg-muted hover:text-ink-2"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[11px] text-ink-3 transition-colors hover:bg-muted hover:text-ink-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/40"
             aria-label="Open add menu"
             title="Add"
           >
@@ -851,7 +858,7 @@ export function ChatComposer({
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
-            className="hidden h-9 w-9 shrink-0 items-center justify-center rounded-[11px] text-ink-3 transition-colors hover:bg-muted hover:text-ink-2 sm:flex"
+            className="hidden h-9 w-9 shrink-0 items-center justify-center rounded-[11px] text-ink-3 transition-colors hover:bg-muted hover:text-ink-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/40 sm:flex"
             aria-label="Attach file"
             title="Attach file"
           >
@@ -884,7 +891,7 @@ export function ChatComposer({
               type="button"
               onClick={() => setShowFormatting((open) => !open)}
               className={cn(
-                "flex h-[34px] w-[34px] items-center justify-center rounded-[10px] transition-colors hover:bg-muted hover:text-ink-2",
+                "flex h-[34px] w-[34px] items-center justify-center rounded-[10px] transition-colors hover:bg-muted hover:text-ink-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/40",
                 showFormatting ? "bg-muted text-ink-2" : "text-ink-3",
               )}
               title="Formatting"
@@ -899,7 +906,7 @@ export function ChatComposer({
                 setMentionQuery("");
                 inputRef.current?.focus();
               }}
-              className="flex h-[34px] w-[34px] items-center justify-center rounded-[10px] text-ink-3 transition-colors hover:bg-muted hover:text-ink-2"
+              className="flex h-[34px] w-[34px] items-center justify-center rounded-[10px] text-ink-3 transition-colors hover:bg-muted hover:text-ink-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/40"
               title="Mention employee"
               aria-label="Mention employee"
             >
@@ -908,7 +915,7 @@ export function ChatComposer({
             <button
               type="button"
               onClick={() => setShowCommands((open) => !open)}
-              className="flex h-[34px] w-[34px] items-center justify-center rounded-[10px] font-mono text-base font-semibold text-ink-3 transition-colors hover:bg-muted hover:text-ink-2"
+              className="flex h-[34px] w-[34px] items-center justify-center rounded-[10px] font-mono text-base font-semibold text-ink-3 transition-colors hover:bg-muted hover:text-ink-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/40"
               title="Slash command"
               aria-label="Open slash commands"
             >
@@ -918,7 +925,7 @@ export function ChatComposer({
               type="button"
               onClick={() => void send()}
               disabled={!canSend}
-              className="flex h-9 w-9 items-center justify-center rounded-[11px] bg-accent text-white shadow-[0_4px_12px_-5px_rgba(47,111,237,0.5)] transition-all hover:brightness-105 disabled:opacity-40 active:scale-95"
+              className="flex h-9 w-9 items-center justify-center rounded-[11px] bg-accent text-white shadow-[0_4px_12px_-5px_rgba(47,111,237,0.5)] transition-all hover:brightness-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/60 disabled:opacity-40 active:scale-95"
               aria-label="Send message"
             >
               {sending ? (
@@ -966,7 +973,7 @@ function FormatButton({
       title={label}
       aria-label={label}
       onClick={onClick}
-      className="flex h-7 w-7 items-center justify-center rounded-lg text-ink-3 transition-colors hover:bg-muted hover:text-ink"
+      className="flex h-7 w-7 items-center justify-center rounded-lg text-ink-3 transition-colors hover:bg-muted hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/40"
     >
       {icon}
     </button>

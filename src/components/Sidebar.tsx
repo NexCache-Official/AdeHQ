@@ -39,8 +39,11 @@ import {
   LogOut,
   RotateCcw,
   ChevronUp,
+  Sun,
+  Moon,
 } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
+import { useTheme } from "./ThemeProvider";
 
 const WORKFORCE_NAV = [
   { href: "/workforce", label: "AI Workforce", icon: Bot },
@@ -58,6 +61,7 @@ export function Sidebar() {
   const router = useRouter();
   const { state, actions, backend } = useStore();
   const ui = useShellUI();
+  const { theme, toggleTheme } = useTheme();
   const [profileOpen, setProfileOpen] = useState(false);
 
   const pendingApprovals = state.approvals.filter((a) => a.status === "pending").length;
@@ -92,25 +96,25 @@ export function Sidebar() {
     ) : null;
 
   return (
-    <aside className="hidden w-[240px] shrink-0 flex-col bg-rail lg:flex">
+    <aside className="hidden w-[240px] shrink-0 flex-col border-r border-[var(--rail-edge)] bg-rail lg:flex">
       <div className="flex min-h-0 flex-1 flex-col gap-[3px] overflow-y-auto px-3 py-3.5">
         <WorkspaceSwitcher variant="rail" />
 
         <div className="relative mb-2 mt-1">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-[15px] w-[15px] -translate-y-1/2 text-white/40" />
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-[15px] w-[15px] -translate-y-1/2 text-[var(--rail-ink-3)]" />
           <button
             type="button"
             onClick={ui.openCommand}
-            className="flex w-full items-center justify-between rounded-[11px] border border-white/[0.09] bg-white/[0.03] py-2 pl-9 pr-2.5 text-left text-[12.5px] text-white/50 transition-colors hover:bg-white/[0.06] hover:text-white/70"
+            className="flex w-full items-center justify-between rounded-[11px] border border-[var(--rail-border)] bg-[var(--rail-fill)] py-2 pl-9 pr-2.5 text-left text-[12.5px] text-[var(--rail-ink-2)] transition-colors hover:bg-[var(--rail-hover)] hover:text-[var(--rail-ink)]"
           >
             <span>Search or command</span>
-            <span className="rounded-[5px] border border-white/[0.14] px-1.5 py-px font-mono text-[10px] text-white/35">
+            <span className="rounded-[5px] border border-[var(--rail-border)] px-1.5 py-px font-mono text-[10px] text-[var(--rail-ink-3)]">
               ⌘K
             </span>
           </button>
         </div>
 
-        <p className="px-2.5 pb-1 pt-2 text-[10.5px] font-semibold uppercase tracking-[0.08em] text-white/30">
+        <p className="px-2.5 pb-1 pt-2 text-[10.5px] font-semibold uppercase tracking-[0.08em] text-[var(--rail-ink-3)]">
           Workspace
         </p>
         <Link href="/" className={cn("nav-link", isActive("/", true) && "nav-link-active")}>
@@ -131,14 +135,14 @@ export function Sidebar() {
               type="button"
               onClick={ui.openCreateRoom}
               title="Create room"
-              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-white/35 transition-colors hover:bg-white/[0.06] hover:text-white/80"
+              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-[var(--rail-ink-3)] transition-colors hover:bg-[var(--rail-hover)] hover:text-[var(--rail-ink)]"
             >
               <Plus className="h-3.5 w-3.5" strokeWidth={2.2} />
             </button>
           }
         >
           {rooms.length === 0 ? (
-            <p className="px-2 py-1.5 text-[11px] leading-relaxed text-white/35">No rooms yet</p>
+            <p className="px-2 py-1.5 text-[11px] leading-relaxed text-[var(--rail-ink-3)]">No rooms yet</p>
           ) : (
             rooms.slice(0, MAX_SIDEBAR_ITEMS).map((room) => (
               <SidebarNestedLink
@@ -171,7 +175,7 @@ export function Sidebar() {
           forceOpen={!!onDmRoom}
         >
           {sidebarDmEmployees.length === 0 ? (
-            <p className="px-2 py-1.5 text-[11px] leading-relaxed text-white/35">
+            <p className="px-2 py-1.5 text-[11px] leading-relaxed text-[var(--rail-ink-3)]">
               Maya will appear here once your workspace loads
             </p>
           ) : (
@@ -195,7 +199,7 @@ export function Sidebar() {
                   label={employee.name}
                   badge={
                     isMaya ? (
-                      <span className="ml-auto shrink-0 rounded-full bg-white/10 px-1.5 font-mono text-[9px] text-white/60">
+                      <span className="ml-auto shrink-0 rounded-full bg-[var(--rail-badge-bg)] px-1.5 font-mono text-[9px] text-[var(--rail-badge-ink)]">
                         {MAYA_WORKFORCE_BADGE}
                       </span>
                     ) : dm ? (
@@ -220,7 +224,7 @@ export function Sidebar() {
           <span className="flex-1">Calls</span>
         </Link>
 
-        <p className="px-2.5 pb-1 pt-3.5 text-[10.5px] font-semibold uppercase tracking-[0.08em] text-white/30">
+        <p className="px-2.5 pb-1 pt-3.5 text-[10.5px] font-semibold uppercase tracking-[0.08em] text-[var(--rail-ink-3)]">
           Workforce
         </p>
         {WORKFORCE_NAV.map((item) => {
@@ -241,7 +245,7 @@ export function Sidebar() {
                     "rounded-md px-1.5 py-px font-mono text-[10.5px]",
                     item.badgeKey === "approvals"
                       ? "bg-accent text-white"
-                      : "bg-white/10 text-white/70",
+                      : "bg-[var(--rail-badge-bg)] text-[var(--rail-badge-ink)]",
                   )}
                 >
                   {badge}
@@ -259,8 +263,8 @@ export function Sidebar() {
           className={cn(
             "flex w-full items-center gap-2.5 rounded-xl border p-2 text-left transition-colors",
             profileOpen
-              ? "border-white/[0.14] bg-white/[0.08]"
-              : "border-white/[0.07] hover:bg-white/[0.06]",
+              ? "border-[var(--rail-border)] bg-[var(--rail-hover)]"
+              : "border-[var(--rail-border)] hover:bg-[var(--rail-hover)]",
           )}
           aria-expanded={profileOpen}
           aria-haspopup="menu"
@@ -269,14 +273,14 @@ export function Sidebar() {
             {(state.user?.name ?? "U").slice(0, 2).toUpperCase()}
           </div>
           <div className="min-w-0 flex-1">
-            <div className="truncate text-[12.5px] font-semibold text-white">
+            <div className="truncate text-[12.5px] font-semibold text-[var(--rail-ink)]">
               {state.user?.name ?? "You"}
             </div>
-            <div className="text-[11px] text-white/40">Owner</div>
+            <div className="text-[11px] text-[var(--rail-ink-3)]">Owner</div>
           </div>
           <ChevronUp
             className={cn(
-              "h-4 w-4 shrink-0 text-white/45 transition-transform duration-200",
+              "h-4 w-4 shrink-0 text-[var(--rail-ink-3)] transition-transform duration-200",
               profileOpen && "rotate-180",
             )}
             strokeWidth={2}
@@ -292,20 +296,56 @@ export function Sidebar() {
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: 8, scale: 0.97 }}
                 transition={{ duration: 0.15 }}
-                className="absolute bottom-full left-0 right-0 z-40 mb-2 overflow-hidden rounded-xl border border-white/[0.1] bg-rail-2 shadow-[0_-8px_30px_-8px_rgba(0,0,0,0.45)]"
+                className="absolute bottom-full left-0 right-0 z-40 mb-2 overflow-hidden rounded-xl border border-border bg-surface shadow-lift"
               >
-                <div className="border-b border-white/[0.08] px-3 py-2.5">
-                  <div className="truncate text-sm font-medium text-white">{state.user?.name}</div>
-                  <div className="truncate text-xs text-white/45">{state.user?.email}</div>
+                <div className="border-b border-border-2 px-3 py-2.5">
+                  <div className="truncate text-sm font-medium text-ink">{state.user?.name}</div>
+                  <div className="truncate text-xs text-ink-3">{state.user?.email}</div>
                 </div>
                 <div className="p-1.5">
+                  <div className="flex items-center justify-between gap-2 rounded-lg px-2.5 py-2 text-sm text-ink-2">
+                    <span className="flex items-center gap-2.5">
+                      {theme === "dark" ? (
+                        <Moon className="h-4 w-4" strokeWidth={1.8} />
+                      ) : (
+                        <Sun className="h-4 w-4" strokeWidth={1.8} />
+                      )}
+                      Appearance
+                    </span>
+                    <button
+                      type="button"
+                      onClick={toggleTheme}
+                      role="switch"
+                      aria-checked={theme === "dark"}
+                      aria-label="Toggle dark mode"
+                      className={cn(
+                        "relative inline-flex h-5 w-9 shrink-0 items-center rounded-full border transition-colors",
+                        theme === "dark"
+                          ? "border-accent bg-accent"
+                          : "border-border bg-muted",
+                      )}
+                    >
+                      <span
+                        className={cn(
+                          "inline-flex h-4 w-4 items-center justify-center rounded-full bg-white shadow-sm transition-transform",
+                          theme === "dark" ? "translate-x-4" : "translate-x-0.5",
+                        )}
+                      >
+                        {theme === "dark" ? (
+                          <Moon className="h-2.5 w-2.5 text-accent" strokeWidth={2.4} />
+                        ) : (
+                          <Sun className="h-2.5 w-2.5 text-amber" strokeWidth={2.4} />
+                        )}
+                      </span>
+                    </button>
+                  </div>
                   <button
                     type="button"
                     onClick={() => {
                       setProfileOpen(false);
                       router.push("/settings");
                     }}
-                    className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm text-white/75 transition-colors hover:bg-white/[0.08] hover:text-white"
+                    className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm text-ink-2 transition-colors hover:bg-muted hover:text-ink"
                   >
                     <Settings className="h-4 w-4" strokeWidth={1.8} /> Settings
                   </button>
@@ -322,7 +362,7 @@ export function Sidebar() {
                           setProfileOpen(false);
                         }
                       }}
-                      className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm text-white/75 transition-colors hover:bg-white/[0.08] hover:text-white"
+                      className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm text-ink-2 transition-colors hover:bg-muted hover:text-ink"
                     >
                       <RotateCcw className="h-4 w-4" strokeWidth={1.8} /> Reset demo data
                     </button>
@@ -333,7 +373,7 @@ export function Sidebar() {
                       actions.logout();
                       router.replace("/login");
                     }}
-                    className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm text-[#f0a9a3] transition-colors hover:bg-white/[0.08]"
+                    className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm text-danger transition-colors hover:bg-danger-soft"
                   >
                     <LogOut className="h-4 w-4" strokeWidth={1.8} /> Log out
                   </button>

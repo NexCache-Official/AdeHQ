@@ -32,11 +32,43 @@ export type ParsedFileResult = {
 
 export const WORKSPACE_FILE_BUCKET = "workspace-files";
 export const MAX_FILE_SIZE_BYTES = 25 * 1024 * 1024;
+/** Upper bound on extracted text persisted to the DB, to keep rows and prompt costs sane. */
+export const MAX_STORED_TEXT_CHARS = 200_000;
 const MAX_TABULAR_ROWS = 2000;
 const CSV_ROWS_PER_CHUNK = 80;
 const XLSX_ROWS_PER_CHUNK = 60;
 const TARGET_WORDS = 1100;
 const OVERLAP_WORDS = 120;
+
+/** Turn a raw parser/library error into a clear, non-technical message for users. */
+function friendlyParseError(message: string): string {
+  const lower = message.toLowerCase();
+  if (lower.includes("password") || lower.includes("encrypt")) {
+    return "This file is password-protected or encrypted. Remove the protection and upload it again.";
+  }
+  if (
+    lower.includes("corrupt") ||
+    lower.includes("central directory") ||
+    lower.includes("end of central") ||
+    lower.includes("zip") ||
+    lower.includes("not a valid") ||
+    lower.includes("invalid") ||
+    lower.includes("unexpected end") ||
+    lower.includes("bad")
+  ) {
+    return "This file appears to be corrupted or unreadable. Try re-saving or re-exporting it, then upload again.";
+  }
+  return "We couldn't read this file. Try re-saving or re-exporting it, then upload again.";
+}
+
+/** Cap the extracted text stored in the DB and reflected in the UI preview. */
+function boundStoredText(text: string | null): string | null {
+  if (!text) return text;
+  if (text.length <= MAX_STORED_TEXT_CHARS) return text;
+  return `${text.slice(0, MAX_STORED_TEXT_CHARS).trim()}\n\n[Truncated — file exceeds the ${Math.round(
+    MAX_STORED_TEXT_CHARS / 1000,
+  )}k character limit for stored text.]`;
+}
 
 const MIME_BY_EXTENSION: Record<string, string[]> = {
   pdf: ["application/pdf"],
@@ -236,11 +268,25 @@ function parseText(buffer: Buffer, extension: string): ParsedFileResult {
 
 function parseCsvFile(buffer: Buffer): ParsedFileResult {
   const text = buffer.toString("utf8");
-  const records = parseCsv(text, {
-    bom: true,
-    relaxColumnCount: true,
-    skipEmptyLines: true,
-  }) as unknown[][];
+  let records: unknown[][];
+  try {
+    records = parseCsv(text, {
+      bom: true,
+      relaxColumnCount: true,
+      relaxQuotes: true,
+      skipEmptyLines: true,
+    }) as unknown[][];
+  } catch {
+    return {
+      status: "failed",
+      parseStatus: "failed",
+      extractedText: null,
+      textPreview: null,
+      chunks: [],
+      sourceMetadata: { parser: "csv-parse" },
+      errorMessage: "We couldn't read this CSV. Check the delimiter and encoding, then upload again.",
+    };
+  }
   const headers = (records[0] ?? []).map((cell) => String(cell || ""));
   const rows = records.slice(1, MAX_TABULAR_ROWS + 1);
   const truncated = records.length - 1 > MAX_TABULAR_ROWS;
@@ -320,20 +366,26 @@ function parseXlsx(buffer: Buffer): ParsedFileResult {
 
 export async function parseUploadedFile(buffer: Buffer, extension: string): Promise<ParsedFileResult> {
   try {
+    let result: ParsedFileResult;
     switch (extension) {
       case "pdf":
-        return await parsePdf(buffer);
+        result = await parsePdf(buffer);
+        break;
       case "docx":
       case "doc":
-        return await parseDocx(buffer);
+        result = await parseDocx(buffer);
+        break;
       case "xlsx":
       case "xls":
-        return parseXlsx(buffer);
+        result = parseXlsx(buffer);
+        break;
       case "csv":
-        return parseCsvFile(buffer);
+        result = parseCsvFile(buffer);
+        break;
       case "txt":
       case "md":
-        return parseText(buffer, extension);
+        result = parseText(buffer, extension);
+        break;
       default:
         return {
           status: "failed",
@@ -342,9 +394,14 @@ export async function parseUploadedFile(buffer: Buffer, extension: string): Prom
           textPreview: null,
           chunks: [],
           sourceMetadata: {},
-          errorMessage: "Unsupported file type.",
+          errorMessage: "This file type is not supported yet.",
         };
     }
+    // Keep stored text (and the UI preview it feeds) bounded regardless of source size.
+    return {
+      ...result,
+      extractedText: boundStoredText(result.extractedText),
+    };
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unable to process file.";
     return {
@@ -354,9 +411,7 @@ export async function parseUploadedFile(buffer: Buffer, extension: string): Prom
       textPreview: null,
       chunks: [],
       sourceMetadata: { parserError: message },
-      errorMessage: message.toLowerCase().includes("password")
-        ? "Password-protected files are not supported yet."
-        : message,
+      errorMessage: friendlyParseError(message),
     };
   }
 }

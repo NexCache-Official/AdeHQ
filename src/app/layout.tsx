@@ -3,6 +3,7 @@ import { Schibsted_Grotesk, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { StoreProvider } from "@/lib/demo-store";
 import { AuthConfirmHandler } from "@/components/auth/AuthConfirmHandler";
+import { ThemeProvider, themeInitScript } from "@/components/ThemeProvider";
 
 const sans = Schibsted_Grotesk({
   subsets: ["latin"],
@@ -30,12 +31,17 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={`${sans.variable} ${mono.variable}`}>
+    <html lang="en" className={`${sans.variable} ${mono.variable}`} suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
+      </head>
       <body className="font-sans">
-        <StoreProvider>
-          <AuthConfirmHandler />
-          {children}
-        </StoreProvider>
+        <ThemeProvider>
+          <StoreProvider>
+            <AuthConfirmHandler />
+            {children}
+          </StoreProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

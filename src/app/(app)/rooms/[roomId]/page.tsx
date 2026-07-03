@@ -17,8 +17,17 @@ import { MayaDmHiringLayout } from "@/components/maya/MayaDmHiringWorkspace";
 import { OrchestrationUiProvider } from "@/components/orchestration/OrchestrationUiContext";
 import { roomAssignableEmployees, isMayaEmployee } from "@/lib/maya-employee";
 import { notifyTopicSummaryUpdated } from "@/lib/topic-summary/client";
-import type { AiParticipationMode, TopicPriority, WorkspaceFile, SavedArtifactType } from "@/lib/types";
+import type { AiParticipationMode, TopicPriority, WorkspaceFile, SavedArtifactType, RoomMessage } from "@/lib/types";
 import type { SlashCommandResult } from "@/components/ChatComposer";
+import {
+  artifactSourcesFromMessage,
+  firstArtifactFromMessage,
+  quoteMessageText,
+  taskTitleFromMessage,
+  titleFromMessageContent,
+  type MessageActionHandlers,
+} from "@/lib/message-actions";
+import { saveFileMemorySuggestionClient } from "@/lib/topic-summary/client";
 import {
   ArrowLeft,
   Hash,
@@ -520,6 +529,165 @@ export default function RoomDetailPage() {
     void actions.refreshWorkLogForTopic(selectedTopic.id);
   };
 
+  const messageActions = useMemo<MessageActionHandlers>(
+    () => ({
+      onQuoteReply: (message: RoomMessage) => {
+        setComposerDraft(quoteMessageText(message));
+      },
+      onCreateTaskFromMessage: (message: RoomMessage) => {
+        if (!room || !selectedTopic) return;
+        const title = taskTitleFromMessage(message.content);
+        const description =
+          message.content.trim().length > title.length ? message.content.trim() : undefined;
+        actions.createTask({
+          roomId,
+          topicId: selectedTopic.id,
+          title,
+          description,
+          status: "open",
+          createdFrom: message.id,
+          assigneeType: "human",
+          assigneeId: state.user?.id ?? "user",
+          priority: "medium",
+        });
+        void actions.refreshWorkLogForTopic(selectedTopic.id);
+        setSlashNotice(`Task created: ${title}`);
+        setTimeout(() => setSlashNotice(null), 3500);
+      },
+      onSaveMessageToMemory: async (message: RoomMessage) => {
+        if (!room || !selectedTopic) return;
+        const text = message.content.trim().slice(0, 2000);
+        if (!text) return;
+        const title = titleFromMessageContent(text);
+        const sourceCitation = message.artifacts?.find(
+          (artifact) => artifact.type === "file" && artifact.meta?.fileId,
+        );
+
+        try {
+          if (backend === "supabase") {
+            await saveFileMemorySuggestionClient(selectedTopic.id, {
+              text,
+              reason: `Saved from ${message.senderName}'s message`,
+              sourceFileId: sourceCitation?.meta?.fileId,
+              sourceChunkId: sourceCitation?.meta?.chunkId,
+            });
+          } else {
+            actions.createMemory({
+              roomId,
+              topicId: selectedTopic.id,
+              title,
+              content: text,
+              type: "general",
+              status: "approved",
+              createdByType: "human",
+              createdById: state.user?.id ?? "user",
+            });
+          }
+
+          void actions.refreshWorkLogForTopic(selectedTopic.id);
+          setSlashNotice("Saved to memory.");
+          setTimeout(() => setSlashNotice(null), 3500);
+        } catch (error) {
+          setTopicActionError(
+            error instanceof Error ? error.message : "Unable to save to memory.",
+          );
+        }
+      },
+      onCreateArtifactFromMessage: async (message: RoomMessage) => {
+        if (!room || !selectedTopic) return;
+        const existing = firstArtifactFromMessage(message);
+        if (existing) {
+          window.dispatchEvent(
+            new CustomEvent("adehq:open-artifact", {
+              detail: { artifactId: existing.id, topicId: selectedTopic.id },
+            }),
+          );
+          return;
+        }
+
+        const title = titleFromMessageContent(message.content);
+        const { sourceFileIds, sourceChunkIds, sourceCitations } =
+          artifactSourcesFromMessage(message);
+
+        try {
+          if (backend === "supabase") {
+            const headers = await authHeaders();
+            const response = await fetch("/api/artifacts", {
+              method: "POST",
+              headers,
+              body: JSON.stringify({
+                workspaceId: state.workspace.id,
+                roomId,
+                topicId: selectedTopic.id,
+                title,
+                artifactType: "note",
+                contentMarkdown: message.content,
+                sourceMessageIds: [message.id],
+                sourceFileIds,
+                sourceChunkIds,
+                sourceCitations,
+                status: "draft",
+              }),
+            });
+            const payload = await response.json().catch(() => ({}));
+            if (!response.ok) {
+              throw new Error(payload.error ?? "Unable to create artifact.");
+            }
+            window.dispatchEvent(
+              new CustomEvent("adehq:topic-artifacts-changed", {
+                detail: { topicId: selectedTopic.id },
+              }),
+            );
+            if (payload.artifact?.id) {
+              window.dispatchEvent(
+                new CustomEvent("adehq:open-artifact", {
+                  detail: { artifactId: payload.artifact.id, topicId: selectedTopic.id },
+                }),
+              );
+            }
+          } else {
+            setSlashNotice("Artifacts require Supabase backend.");
+            setTimeout(() => setSlashNotice(null), 3500);
+            return;
+          }
+
+          setSlashNotice(`Artifact created: ${title}`);
+          setTimeout(() => setSlashNotice(null), 3500);
+        } catch (error) {
+          setTopicActionError(
+            error instanceof Error ? error.message : "Unable to create artifact.",
+          );
+        }
+      },
+      onAskFollowUp: (message: RoomMessage) => {
+        const employee = roomEmployees.find((e) => e?.id === message.senderId) ?? roomEmployees[0];
+        const prefix = employee ? `@${employee.name} ` : "";
+        setComposerContextFiles([]);
+        setComposerArtifactIntent(null);
+        setComposerDraft(`${prefix}Can you expand on this with more detail?\n\n`);
+      },
+      onOpenArtifactFromMessage: (message: RoomMessage) => {
+        const artifact = firstArtifactFromMessage(message);
+        if (!artifact || !selectedTopic) return;
+        window.dispatchEvent(
+          new CustomEvent("adehq:open-artifact", {
+            detail: { artifactId: artifact.id, topicId: selectedTopic.id },
+          }),
+        );
+      },
+    }),
+    [
+      actions,
+      backend,
+      room,
+      roomEmployees,
+      roomId,
+      selectedTopic,
+      state.user?.id,
+      state.workspace.id,
+    ],
+  );
+
   if (!room) {
     return (
       <div className="p-10">
@@ -632,6 +800,7 @@ export default function RoomDetailPage() {
                 onSummarize={summarizeTopic}
                 summarizing={summarizing}
                 onAddEmployee={() => setAddEmployeeOpen(true)}
+                messageActions={messageActions}
               />
         </div>
 

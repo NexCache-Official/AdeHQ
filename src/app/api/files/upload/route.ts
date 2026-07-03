@@ -71,6 +71,9 @@ export async function POST(request: NextRequest) {
     if (!(file instanceof File)) {
       return NextResponse.json({ error: "Upload a file." }, { status: 400 });
     }
+    if (file.size === 0) {
+      return NextResponse.json({ error: "This file is empty." }, { status: 400 });
+    }
     if (file.size > MAX_FILE_SIZE_BYTES) {
       return NextResponse.json({ error: "File is too large. Current limit is 25 MB." }, { status: 413 });
     }

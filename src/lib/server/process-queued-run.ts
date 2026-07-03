@@ -186,21 +186,27 @@ export async function processQueuedAgentRun(
 
     let content = options.content ?? (triggerMsg?.content ? String(triggerMsg.content) : "");
 
-    const attachmentFileIds = [
-      ...new Set([
-        ...((runMetadata.attachmentFileIds as string[] | undefined) ?? []),
-        ...((runMetadata.contextFileIds as string[] | undefined) ?? []),
-        ...(await loadAttachmentFileIds(client, workspaceId, triggerMessageId)),
-      ]),
-    ];
-    const artifactIntent =
-      (runMetadata.artifactIntent as { type: import("@/lib/types").SavedArtifactType; instruction?: string } | undefined) ??
-      detectArtifactIntent(content);
+    // Greeting runs never touch files — skip retrieval to save a round-trip and tokens.
+    const attachmentFileIds = isGreetingRun
+      ? []
+      : [
+          ...new Set([
+            ...((runMetadata.attachmentFileIds as string[] | undefined) ?? []),
+            ...((runMetadata.contextFileIds as string[] | undefined) ?? []),
+            ...(await loadAttachmentFileIds(client, workspaceId, triggerMessageId)),
+          ]),
+        ];
+    const artifactIntent = isGreetingRun
+      ? undefined
+      : (runMetadata.artifactIntent as { type: import("@/lib/types").SavedArtifactType; instruction?: string } | undefined) ??
+        detectArtifactIntent(content);
 
-    const fileContextBundle = await retrieveFileContext(client, workspaceId, topicId, {
-      userMessage: content,
-      priorityFileIds: attachmentFileIds,
-    });
+    const fileContextBundle = isGreetingRun
+      ? { chunks: [], files: [], chunkIds: new Set<string>(), fileIds: new Set<string>() }
+      : await retrieveFileContext(client, workspaceId, topicId, {
+          userMessage: content,
+          priorityFileIds: attachmentFileIds,
+        });
     const fileContextPrompt = buildFileContextPrompt(fileContextBundle);
     const usedFileContext = fileContextBundle.chunks.length > 0;
 

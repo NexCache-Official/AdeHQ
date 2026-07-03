@@ -22,6 +22,7 @@ import { authHeaders } from "@/lib/api/auth-client";
 import { isGeneralTopic, mainChatLabel } from "@/lib/topics";
 import { RoomMessageItem } from "./RoomMessageItem";
 import { ChatComposer, type ComposerUploadedFile, type SlashCommandResult } from "./ChatComposer";
+import type { MessageActionHandlers } from "@/lib/message-actions";
 import { EmptyState } from "./States";
 import { Button } from "./ui";
 import { EmployeeAvatar } from "./EmployeeAvatar";
@@ -131,6 +132,7 @@ export function RoomChat({
   onSummarize,
   summarizing = false,
   onAddEmployee,
+  messageActions,
 }: {
   room: ProjectRoom;
   topic?: RoomTopic;
@@ -144,6 +146,7 @@ export function RoomChat({
   onSummarize?: () => void;
   summarizing?: boolean;
   onAddEmployee?: () => void;
+  messageActions?: MessageActionHandlers;
 }) {
   const { state, actions, backend } = useStore();
   const { trace } = useDebugTrace();
@@ -1066,7 +1069,13 @@ export function RoomChat({
                     </span>
                   </div>
                 )}
-                <RoomMessageItem message={message} isDm={isDm} grouped={grouped} />
+                <RoomMessageItem
+                  message={message}
+                  isDm={isDm}
+                  grouped={grouped}
+                  messageActions={messageActions}
+                  actionsDisabled={chatDisabled}
+                />
               </div>
             ))}
             {activeRuns
@@ -1150,6 +1159,7 @@ export function RoomChat({
             employees={roomEmployees}
             onSend={handleSend}
             onUploadFiles={useServerApi ? uploadFiles : undefined}
+            onAddEmployee={onAddEmployee}
             disabled={!topic || chatDisabled}
             placeholder={placeholder}
             draftText={draftText}

@@ -1,12 +1,19 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { RoomMessage } from "@/lib/types";
 import { useStore } from "@/lib/demo-store";
 import { EmployeeAvatar, HumanAvatar } from "./EmployeeAvatar";
 import { cn, formatTime } from "@/lib/utils";
 import { normalizeHumanDelivery } from "@/lib/message-delivery";
 import { saveFileMemorySuggestionClient, saveSuggestedMemoryClient } from "@/lib/topic-summary/client";
+import {
+  collectMessageSources,
+  firstArtifactFromMessage,
+  messageHasSources,
+  type MessageActionHandlers,
+  type MessageSourceRef,
+} from "@/lib/message-actions";
 import { ArtifactCard, FileArtifactCard } from "./ArtifactCard";
 import { MessageMarkdown } from "./MessageMarkdown";
 import {
@@ -84,6 +91,12 @@ function EmailDraftCard({
   );
 }
 
+/** localStorage key so a dismissed/saved memory suggestion doesn't reappear on refresh. */
+function memorySuggestionStorageKey(artifact: import("@/lib/types").MessageArtifact): string {
+  const key = artifact.meta?.suggestionKey ?? artifact.id;
+  return `adehq:mem-suggestion-dismissed:${key}`;
+}
+
 function MemorySuggestionArtifact({
   artifact,
   topicId,
@@ -91,14 +104,35 @@ function MemorySuggestionArtifact({
   artifact: import("@/lib/types").MessageArtifact;
   topicId?: string;
 }) {
+  const storageKey = memorySuggestionStorageKey(artifact);
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
-  const [dismissed, setDismissed] = useState(false);
+  const [dismissed, setDismissed] = useState(() => {
+    if (typeof window === "undefined") return false;
+    try {
+      return window.localStorage.getItem(storageKey) !== null;
+    } catch {
+      return false;
+    }
+  });
 
   if (dismissed || saved || !topicId) return null;
 
   const text = artifact.meta?.memoryText ?? artifact.label;
   const suggestionIndex = artifact.meta?.suggestionIndex;
+
+  const rememberResolved = (reason: "saved" | "dismissed") => {
+    try {
+      window.localStorage.setItem(storageKey, reason);
+    } catch {
+      // storage unavailable — session-only dismissal still applies
+    }
+  };
+
+  const dismiss = () => {
+    rememberResolved("dismissed");
+    setDismissed(true);
+  };
 
   const save = async () => {
     setBusy(true);
@@ -114,6 +148,7 @@ function MemorySuggestionArtifact({
           sourceArtifactId: artifact.meta?.sourceArtifactId,
         });
       }
+      rememberResolved("saved");
       setSaved(true);
     } finally {
       setBusy(false);
@@ -143,7 +178,7 @@ function MemorySuggestionArtifact({
             </Button>
             <button
               type="button"
-              onClick={() => setDismissed(true)}
+              onClick={dismiss}
               className="inline-flex h-7 items-center gap-1 rounded-lg px-2 text-[11px] text-ink-3 hover:bg-muted hover:text-ink"
             >
               <X className="h-3 w-3" />
@@ -236,16 +271,94 @@ function DeliveryStatus({
   );
 }
 
+function SourcesPopover({
+  sources,
+  onClose,
+}: {
+  sources: MessageSourceRef[];
+  onClose: () => void;
+}) {
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const onPointerDown = (event: MouseEvent) => {
+      if (!panelRef.current?.contains(event.target as Node)) onClose();
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    document.addEventListener("mousedown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [onClose]);
+
+  return (
+    <div
+      ref={panelRef}
+      className="absolute right-0 top-full z-30 mt-1 w-[min(18rem,calc(100vw-2rem))] rounded-xl border border-border bg-surface p-2 shadow-panel"
+    >
+      <p className="px-1 pb-1 text-[10px] font-semibold uppercase tracking-wide text-ink-3">
+        Sources ({sources.length})
+      </p>
+      <div className="max-h-48 space-y-1 overflow-y-auto">
+        {sources.map((source) => (
+          <div
+            key={source.id}
+            className="rounded-lg border border-border-2 bg-muted/60 px-2 py-1.5"
+          >
+            <p className="text-[11px] font-semibold text-ink">{source.label}</p>
+            {source.quote && (
+              <p className="mt-0.5 line-clamp-2 text-[10px] leading-snug text-ink-3">
+                {source.quote}
+              </p>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function MessageActions({
   message,
   isHuman,
-  hasSources,
+  handlers,
+  disabled,
 }: {
   message: RoomMessage;
   isHuman: boolean;
-  hasSources: boolean;
+  handlers?: MessageActionHandlers;
+  disabled?: boolean;
 }) {
   const [copied, setCopied] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [sourcesOpen, setSourcesOpen] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
+  const moreRef = useRef<HTMLDivElement>(null);
+
+  const sources = collectMessageSources(message);
+  const hasSources = messageHasSources(message);
+  const linkedArtifact = firstArtifactFromMessage(message);
+  const actionsDisabled = disabled || busy || !handlers;
+
+  useEffect(() => {
+    if (!moreOpen) return;
+    const onPointerDown = (event: MouseEvent) => {
+      if (!moreRef.current?.contains(event.target as Node)) setMoreOpen(false);
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setMoreOpen(false);
+    };
+    document.addEventListener("mousedown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [moreOpen]);
 
   const copy = async () => {
     await navigator.clipboard.writeText(message.content);
@@ -253,14 +366,27 @@ function MessageActions({
     setTimeout(() => setCopied(false), 1600);
   };
 
-  const disabledTitle = "Coming in Phase 3";
+  const run = async (action?: () => void | Promise<void>) => {
+    if (!action || actionsDisabled) return;
+    setBusy(true);
+    try {
+      await action();
+    } finally {
+      setBusy(false);
+      setMoreOpen(false);
+      setSourcesOpen(false);
+    }
+  };
+
+  const actionButtonClass =
+    "flex h-7 w-7 items-center justify-center rounded-full text-ink-3 transition-colors hover:bg-muted hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/40 disabled:cursor-not-allowed disabled:opacity-45";
 
   return (
     <div className="absolute right-0 top-0 z-10 hidden -translate-y-1/2 items-center gap-0.5 rounded-full border border-border bg-surface p-0.5 shadow-md group-hover/msg:flex group-focus-within/msg:flex">
       <button
         type="button"
         onClick={() => void copy()}
-        className="flex h-7 w-7 items-center justify-center rounded-full text-ink-3 transition-colors hover:bg-muted hover:text-ink"
+        className={actionButtonClass}
         aria-label="Copy message"
         title="Copy"
       >
@@ -268,52 +394,127 @@ function MessageActions({
       </button>
       <button
         type="button"
-        disabled
-        title={isHuman ? disabledTitle : "Create artifact from this message in Phase 3"}
-        className="flex h-7 w-7 cursor-not-allowed items-center justify-center rounded-full text-ink-3 opacity-45"
-        aria-label={isHuman ? "Create task from message" : "Create artifact from this"}
+        disabled={
+          actionsDisabled ||
+          (isHuman ? !handlers?.onCreateTaskFromMessage : !handlers?.onCreateArtifactFromMessage)
+        }
+        onClick={() =>
+          void run(() =>
+            isHuman
+              ? handlers?.onCreateTaskFromMessage?.(message)
+              : handlers?.onCreateArtifactFromMessage?.(message),
+          )
+        }
+        className={actionButtonClass}
+        aria-label={isHuman ? "Create task from message" : "Save as artifact"}
+        title={isHuman ? "Create task" : linkedArtifact ? "Open artifact" : "Save as artifact"}
       >
-        {isHuman ? <ListChecks className="h-3.5 w-3.5" /> : <FilePlus2 className="h-3.5 w-3.5" />}
+        {busy ? (
+          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+        ) : isHuman ? (
+          <ListChecks className="h-3.5 w-3.5" />
+        ) : (
+          <FilePlus2 className="h-3.5 w-3.5" />
+        )}
       </button>
       <button
         type="button"
-        disabled
-        title="Save to memory in Phase 3"
-        className="flex h-7 w-7 cursor-not-allowed items-center justify-center rounded-full text-ink-3 opacity-45"
+        disabled={actionsDisabled || !handlers?.onSaveMessageToMemory}
+        onClick={() => void run(() => handlers?.onSaveMessageToMemory?.(message))}
+        className={actionButtonClass}
         aria-label="Save to memory"
+        title="Save to memory"
       >
         <BrainCircuit className="h-3.5 w-3.5" />
       </button>
       {isHuman ? (
         <button
           type="button"
-          disabled
-          title="Quote or reply in Phase 3"
-          className="flex h-7 w-7 cursor-not-allowed items-center justify-center rounded-full text-ink-3 opacity-45"
+          disabled={actionsDisabled || !handlers?.onQuoteReply}
+          onClick={() => handlers?.onQuoteReply?.(message)}
+          className={actionButtonClass}
           aria-label="Quote reply"
+          title="Quote in reply"
         >
           <Quote className="h-3.5 w-3.5" />
         </button>
       ) : (
+        <div className="relative">
+          <button
+            type="button"
+            disabled={!hasSources}
+            onClick={() => setSourcesOpen((open) => !open)}
+            className={actionButtonClass}
+            aria-label="View sources"
+            title={hasSources ? "View sources" : "No sources in this message"}
+            aria-expanded={sourcesOpen}
+          >
+            <Sparkles className="h-3.5 w-3.5" />
+          </button>
+          {sourcesOpen && hasSources && (
+            <SourcesPopover sources={sources} onClose={() => setSourcesOpen(false)} />
+          )}
+        </div>
+      )}
+      <div className="relative" ref={moreRef}>
         <button
           type="button"
-          disabled
-          title={hasSources ? "Source preview arrives with file Q&A" : disabledTitle}
-          className="flex h-7 w-7 cursor-not-allowed items-center justify-center rounded-full text-ink-3 opacity-45"
-          aria-label="View sources"
+          disabled={actionsDisabled}
+          onClick={() => setMoreOpen((open) => !open)}
+          className={actionButtonClass}
+          aria-label="More message actions"
+          title="More actions"
+          aria-expanded={moreOpen}
         >
-          <Sparkles className="h-3.5 w-3.5" />
+          <MoreHorizontal className="h-3.5 w-3.5" />
         </button>
-      )}
-      <button
-        type="button"
-        disabled
-        title={disabledTitle}
-        className="flex h-7 w-7 cursor-not-allowed items-center justify-center rounded-full text-ink-3 opacity-45"
-        aria-label="More message actions"
-      >
-        <MoreHorizontal className="h-3.5 w-3.5" />
-      </button>
+        {moreOpen && handlers && (
+          <div className="absolute right-0 top-full z-30 mt-1 w-44 rounded-xl border border-border bg-surface p-1 shadow-panel">
+            {!isHuman && handlers.onAskFollowUp && (
+              <button
+                type="button"
+                className="flex w-full rounded-lg px-2 py-1.5 text-left text-xs text-ink-2 hover:bg-muted"
+                onClick={() => {
+                  handlers.onAskFollowUp?.(message);
+                  setMoreOpen(false);
+                }}
+              >
+                Ask follow-up
+              </button>
+            )}
+            {linkedArtifact && handlers.onOpenArtifactFromMessage && (
+              <button
+                type="button"
+                className="flex w-full rounded-lg px-2 py-1.5 text-left text-xs text-ink-2 hover:bg-muted"
+                onClick={() => {
+                  handlers.onOpenArtifactFromMessage?.(message);
+                  setMoreOpen(false);
+                }}
+              >
+                Open artifact
+              </button>
+            )}
+            {isHuman && handlers.onCreateArtifactFromMessage && (
+              <button
+                type="button"
+                className="flex w-full rounded-lg px-2 py-1.5 text-left text-xs text-ink-2 hover:bg-muted"
+                onClick={() => void run(() => handlers.onCreateArtifactFromMessage?.(message))}
+              >
+                Save as note
+              </button>
+            )}
+            {!isHuman && handlers.onCreateTaskFromMessage && (
+              <button
+                type="button"
+                className="flex w-full rounded-lg px-2 py-1.5 text-left text-xs text-ink-2 hover:bg-muted"
+                onClick={() => void run(() => handlers.onCreateTaskFromMessage?.(message))}
+              >
+                Create task
+              </button>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -322,10 +523,14 @@ export function RoomMessageItem({
   message,
   isDm = false,
   grouped = false,
+  messageActions,
+  actionsDisabled,
 }: {
   message: RoomMessage;
   isDm?: boolean;
   grouped?: boolean;
+  messageActions?: MessageActionHandlers;
+  actionsDisabled?: boolean;
 }) {
   const { state } = useStore();
   const employee = state.employees.find((e) => e.id === message.senderId);
@@ -368,7 +573,6 @@ export function RoomMessageItem({
         a.type === "approval" ||
         a.type === "work_log"),
   );
-  const hasSources = message.content.includes("[[source:");
 
   return (
     <div
@@ -377,7 +581,12 @@ export function RoomMessageItem({
         grouped ? "py-0.5" : "py-2",
       )}
     >
-      <MessageActions message={message} isHuman={isHuman} hasSources={hasSources} />
+      <MessageActions
+        message={message}
+        isHuman={isHuman}
+        handlers={messageActions}
+        disabled={actionsDisabled}
+      />
       <div className="w-9 shrink-0">
         {grouped ? null : isHuman ? (
           <HumanAvatar name={message.senderName} size="md" />

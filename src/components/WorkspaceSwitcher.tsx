@@ -31,13 +31,13 @@ export function WorkspaceSwitcher({
 
   if (singleWorkspace && isRail) {
     return (
-      <div className="mb-2.5 flex items-center gap-2.5 rounded-[13px] border border-white/[0.08] bg-white/[0.04] px-2.5 py-2">
-        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[9px] bg-gradient-to-br from-accent to-[var(--accent-2)] text-[15px] font-extrabold text-white shadow-[0_2px_8px_-2px_rgba(47,111,237,0.6)]">
+      <div className="mb-2.5 flex items-center gap-2.5 rounded-[13px] border border-[var(--rail-border)] bg-[var(--rail-fill)] px-2.5 py-2">
+        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[9px] bg-gradient-to-br from-accent to-[var(--accent-2)] text-[15px] font-extrabold text-white shadow-[0_2px_8px_-2px_var(--accent-glow)]">
           {state.workspace.name.slice(0, 1).toUpperCase()}
         </div>
         <div className="min-w-0 flex-1">
-          <div className="truncate text-[13.5px] font-semibold text-white">{state.workspace.name}</div>
-          <div className="text-[11px] font-medium text-white/45">Operator workspace</div>
+          <div className="truncate text-[13.5px] font-semibold text-[var(--rail-ink)]">{state.workspace.name}</div>
+          <div className="text-[11px] font-medium text-[var(--rail-ink-3)]">Operator workspace</div>
         </div>
       </div>
     );
@@ -57,7 +57,7 @@ export function WorkspaceSwitcher({
         className={cn(
           "flex w-full items-center gap-2.5 rounded-[13px] border text-left transition-colors",
           isRail
-            ? "border-white/[0.08] bg-white/[0.04] px-2.5 py-2 hover:bg-white/[0.07]"
+            ? "border-[var(--rail-border)] bg-[var(--rail-fill)] px-2.5 py-2 hover:bg-[var(--rail-hover)]"
             : "h-9 border-border bg-surface px-3 text-sm hover:border-accent/40",
         )}
       >
@@ -72,19 +72,19 @@ export function WorkspaceSwitcher({
           <div
             className={cn(
               "truncate font-semibold",
-              isRail ? "text-[13.5px] text-white" : "text-ink",
+              isRail ? "text-[13.5px] text-[var(--rail-ink)]" : "text-ink",
             )}
           >
             {state.workspace.name}
           </div>
-          {isRail && <div className="text-[11px] text-white/45">Operator workspace</div>}
+          {isRail && <div className="text-[11px] text-[var(--rail-ink-3)]">Operator workspace</div>}
         </div>
         {pendingInvites > 0 && (
           <span className="rounded-full bg-amber-soft px-1.5 text-[10px] font-medium text-amber">
             {pendingInvites}
           </span>
         )}
-        <ChevronDown className={cn("h-3.5 w-3.5 shrink-0", isRail ? "text-white/50" : "text-ink-3")} />
+        <ChevronDown className={cn("h-3.5 w-3.5 shrink-0", isRail ? "text-[var(--rail-ink-2)]" : "text-ink-3")} />
       </button>
 
       <AnimatePresence>
