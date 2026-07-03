@@ -1,57 +1,67 @@
 import type { RoomMessage } from "@/lib/types";
+import { stripInternalRefs } from "@/lib/artifacts/intelligence";
 
-const UUID_RE =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const HIDDEN_SENDERS = /^(adehq|workspace|system|app)$/i;
 
-/** Strip raw UUIDs and internal reference lines from user-facing summary text. */
 export function sanitizeSummaryText(text: string): string {
-  return text
-    .split("\n")
-    .filter((line) => {
-      const trimmed = line.trim();
-      if (!trimmed) return true;
-      if (/source topic summary id:/i.test(trimmed)) return false;
-      if (/source (file|chunk|artifact) id:/i.test(trimmed)) return false;
-      if (UUID_RE.test(trimmed)) return false;
-      return true;
-    })
-    .join("\n")
-    .replace(/\bmsg_[a-z0-9_-]+\b/gi, "")
-    .replace(/\s{2,}/g, " ")
-    .trim();
+  return stripInternalRefs(
+    text
+      .split("\n")
+      .filter((line) => {
+        const trimmed = line.trim();
+        if (!trimmed) return true;
+        if (/source topic summary id:/i.test(trimmed)) return false;
+        if (/source (file|chunk|artifact) id:/i.test(trimmed)) return false;
+        return true;
+      })
+      .join("\n"),
+  );
+}
+
+export function sanitizeDisplayText(text: string): string {
+  return stripInternalRefs(text);
+}
+
+function isHiddenSender(name: string): boolean {
+  const first = name.split(/\s+/)[0] ?? name;
+  return HIDDEN_SENDERS.test(first) || HIDDEN_SENDERS.test(name);
 }
 
 export function sourceLabelFromMessage(
   messageId: string | undefined,
   messages: Pick<RoomMessage, "id" | "senderName" | "senderType">[],
+  style: "chip" | "short" = "chip",
 ): string | null {
   if (!messageId) return null;
   const message = messages.find((m) => m.id === messageId);
-  if (!message?.senderName) return null;
+  if (!message?.senderName || isHiddenSender(message.senderName)) return null;
 
   const firstName = message.senderName.split(/\s+/)[0] ?? message.senderName;
   if (message.senderType === "human") {
-    return `From ${firstName}'s request`;
+    return style === "short" ? `${firstName}'s request` : `From ${firstName}'s request`;
   }
-  return `From ${firstName}'s reply`;
+  return style === "short" ? `${firstName}'s reply` : `From ${firstName}'s reply`;
 }
 
 export function memorySuggestionTitle(text: string): string {
-  const line = text.split("\n").find((l) => l.trim())?.trim() ?? text.trim();
+  const line = stripInternalRefs(text.split("\n").find((l) => l.trim())?.trim() ?? text.trim());
   if (line.length <= 72) return line;
   return `${line.slice(0, 69).trim()}…`;
 }
 
-export function memoryScopeLabel(scope: string): string {
+export function memoryScopeLabel(scope: string, topicTitle?: string): string {
   switch (scope) {
     case "workspace":
       return "Workspace";
     case "room":
       return "Room";
     case "topic":
-      return "Topic";
+      return topicTitle ?? "This topic";
     case "employee":
-      return "Employee";
+    case "employee_dm":
+      return "Employee DM";
+    case "employee_profile":
+      return "Employee profile";
     default:
       return scope;
   }

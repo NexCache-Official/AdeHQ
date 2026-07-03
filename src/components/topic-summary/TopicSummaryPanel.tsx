@@ -22,12 +22,14 @@ import { Button } from "@/components/ui";
 import {
   memoryScopeLabel,
   memorySuggestionTitle,
+  sanitizeDisplayText,
   sanitizeSummaryText,
   sourceLabelFromMessage,
 } from "@/lib/topic-summary/source-labels";
-import { Check, Loader2, Sparkles, X } from "lucide-react";
-import { cn } from "@/lib/utils";
 import { jumpToMessage } from "@/lib/navigation/jump-to-source";
+import { normalizeCategory } from "@/lib/memory/categories";
+import { Check, ExternalLink, Loader2, Sparkles, X } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 const DISMISSED_ACTIONS_KEY = "adehq:dismissed-next-actions:";
 
@@ -43,35 +45,6 @@ function readIndexSet(keyPrefix: string, topicId: string): Set<number> {
 
 function writeIndexSet(keyPrefix: string, topicId: string, values: Set<number>) {
   localStorage.setItem(`${keyPrefix}${topicId}`, JSON.stringify(Array.from(values)));
-}
-
-function SourceChip({
-  label,
-  messageId,
-  roomId,
-  topicId,
-}: {
-  label: string;
-  messageId?: string;
-  roomId?: string;
-  topicId?: string;
-}) {
-  if (messageId && roomId) {
-    return (
-      <button
-        type="button"
-        onClick={() => jumpToMessage({ roomId, topicId, messageId })}
-        className="inline-flex items-center rounded-full border border-border-2 bg-surface px-2 py-0.5 text-[10px] font-medium text-accent hover:border-accent/40 hover:bg-accent-soft/30"
-      >
-        {label}
-      </button>
-    );
-  }
-  return (
-    <span className="inline-flex items-center rounded-full border border-border-2 bg-surface px-2 py-0.5 text-[10px] font-medium text-ink-3">
-      {label}
-    </span>
-  );
 }
 
 function OverviewSection({
@@ -179,15 +152,8 @@ export function TopicSummaryPanel({
     ? sanitizeSummaryText(summary.currentDecision)
     : null;
 
-  const sourceChips = useMemo(() => {
-    const ids = summary?.sourceMessageIds ?? [];
-    return ids
-      .map((id) => ({
-        id,
-        label: sourceLabelFromMessage(id, messages),
-      }))
-      .filter((chip): chip is { id: string; label: string } => Boolean(chip.label));
-  }, [summary?.sourceMessageIds, messages]);
+  const sourceCount = summary?.sourceMessageIds?.length ?? 0;
+  const firstSourceMessageId = summary?.sourceMessageIds?.[0];
 
   const employeeName = (id?: string) =>
     employees.find((e) => e.id === id)?.name ?? "Unassigned";
@@ -300,17 +266,23 @@ export function TopicSummaryPanel({
       {briefSummary && (
         <OverviewSection title="Brief summary">
           <p className="whitespace-pre-wrap text-[13px] leading-relaxed text-ink">{briefSummary}</p>
-          {sourceChips.length > 0 && (
-            <div className="mt-2 flex flex-wrap gap-1">
-              {sourceChips.map((chip) => (
-                <SourceChip
-                  key={chip.id}
-                  label={chip.label}
-                  messageId={chip.id}
-                  roomId={roomId}
-                  topicId={topicId}
-                />
-              ))}
+          {sourceCount > 0 && roomId && (
+            <div className="mt-2.5 flex flex-wrap items-center gap-2">
+              {firstSourceMessageId && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    jumpToMessage({ roomId, topicId, messageId: firstSourceMessageId })
+                  }
+                  className="inline-flex items-center gap-1 rounded-lg border border-border bg-surface px-2 py-1 text-[10px] font-medium text-accent hover:bg-accent-soft/30"
+                >
+                  <ExternalLink className="h-3 w-3" />
+                  View source conversation
+                </button>
+              )}
+              <span className="text-[10px] text-ink-3">
+                Based on {sourceCount} message{sourceCount === 1 ? "" : "s"}
+              </span>
             </div>
           )}
         </OverviewSection>
@@ -328,24 +300,30 @@ export function TopicSummaryPanel({
         <OverviewSection title="Open questions">
           <ul className="space-y-2">
             {summary!.openQuestions.map((question, index) => {
-              const source = sourceLabelFromMessage(question.sourceMessageId, messages);
+              const source = sourceLabelFromMessage(question.sourceMessageId, messages, "short");
+              const text = sanitizeDisplayText(question.text);
               return (
                 <li
-                  key={`${question.text}-${index}`}
+                  key={`${text}-${index}`}
                   className="flex items-start gap-2 rounded-lg border border-border-2 bg-surface px-2.5 py-2"
                 >
                   <span className="mt-0.5 h-4 w-4 shrink-0 rounded border border-border bg-muted" />
                   <div className="min-w-0 flex-1">
-                    <p className="text-[13px] text-ink">{question.text}</p>
-                    {source && (
-                      <div className="mt-1">
-                        <SourceChip
-                          label={source}
-                          messageId={question.sourceMessageId}
-                          roomId={roomId}
-                          topicId={topicId}
-                        />
-                      </div>
+                    <p className="text-[13px] text-ink">{text}</p>
+                    {source && question.sourceMessageId && roomId && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          jumpToMessage({
+                            roomId,
+                            topicId,
+                            messageId: question.sourceMessageId!,
+                          })
+                        }
+                        className="mt-1 text-[10px] font-medium text-accent hover:text-accent-d"
+                      >
+                        {source}
+                      </button>
                     )}
                   </div>
                 </li>
@@ -360,28 +338,33 @@ export function TopicSummaryPanel({
           <ul className="space-y-2">
             {summary!.nextActions.map((action, index) => {
               if (dismissedActions.has(index)) return null;
-              const source = sourceLabelFromMessage(action.sourceMessageId, messages);
+              const source = sourceLabelFromMessage(action.sourceMessageId, messages, "short");
               return (
                 <li
                   key={`${action.title}-${index}`}
                   className="rounded-lg border border-border-2 bg-surface px-2.5 py-2"
                 >
-                  <p className="text-[13px] font-medium text-ink">{action.title}</p>
+                  <p className="text-[13px] font-medium text-ink">{sanitizeDisplayText(action.title)}</p>
                   {action.status && (
                     <p className="mt-0.5 text-[10px] font-medium text-ink-3">{action.status}</p>
                   )}
                   <p className="mt-0.5 text-[11px] text-ink-3">
                     Suggested owner: {employeeName(action.ownerEmployeeId)}
                   </p>
-                  {source && (
-                    <div className="mt-1.5">
-                      <SourceChip
-                        label={source}
-                        messageId={action.sourceMessageId}
-                        roomId={roomId}
-                        topicId={topicId}
-                      />
-                    </div>
+                  {source && action.sourceMessageId && roomId && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        jumpToMessage({
+                          roomId,
+                          topicId,
+                          messageId: action.sourceMessageId!,
+                        })
+                      }
+                      className="mt-1 text-[10px] font-medium text-accent hover:text-accent-d"
+                    >
+                      {source}
+                    </button>
                   )}
                   <div className="mt-2 flex flex-wrap gap-1.5">
                     {onCreateTask && (
@@ -417,30 +400,50 @@ export function TopicSummaryPanel({
 
       {visibleMemorySuggestions.length > 0 && (
         <OverviewSection title="Suggested memory">
-          <ul className="space-y-2">
+          <ul className="space-y-3">
             {summary!.suggestedMemory.map((item, index) => {
               const state = suggestionState(index);
               if (shouldHideSuggestion(state)) return null;
               const isSaving = state === "saving" || savingMemoryIndex === index;
               const isSaved = state === "saved" || state === "already_saved";
-              const source = sourceLabelFromMessage(item.sourceMessageId, messages);
+              const title = item.title ?? memorySuggestionTitle(item.text);
+              const content =
+                item.content && item.content.trim() !== title.trim()
+                  ? sanitizeDisplayText(item.content)
+                  : sanitizeDisplayText(item.text);
+              const category = normalizeCategory(item.category ?? "Other");
+              const scopeLabel = memoryScopeLabel(
+                item.scope,
+                topic?.title ?? (isDm ? "Direct Chat" : undefined),
+              );
+              const source = sourceLabelFromMessage(item.sourceMessageId, messages, "short");
               return (
                 <li
                   key={`${item.text}-${index}`}
                   className={cn(
-                    "rounded-lg border border-border-2 bg-surface px-2.5 py-2 transition-opacity",
+                    "rounded-xl border border-border-2 bg-surface p-3 transition-opacity",
                     isSaved && "opacity-60",
                   )}
                 >
-                  <p className="text-[13px] font-medium text-ink">
-                    {item.title ?? memorySuggestionTitle(item.text)}
-                  </p>
-                  <p className="mt-0.5 text-[10px] text-ink-3">
-                    {memoryScopeLabel(item.scope)} · {item.reason}
-                  </p>
-                  <p className="mt-1 line-clamp-2 text-[12px] leading-relaxed text-ink-2">
-                    {item.content ?? item.text}
-                  </p>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className="rounded-md bg-muted px-1.5 py-0.5 text-[10px] font-semibold text-ink-2">
+                      {category}
+                    </span>
+                    <span className="rounded-md border border-border px-1.5 py-0.5 text-[10px] text-ink-3">
+                      {scopeLabel}
+                    </span>
+                  </div>
+                  <p className="mt-2 text-[13px] font-semibold leading-snug text-ink">{title}</p>
+                  <p className="mt-1 line-clamp-3 text-[12px] leading-relaxed text-ink-2">{content}</p>
+                  {item.tags && item.tags.length > 0 && (
+                    <div className="mt-2 flex flex-wrap gap-1">
+                      {item.tags.slice(0, 6).map((tag) => (
+                        <span key={tag} className="rounded-full bg-muted px-2 py-0.5 text-[10px] text-ink-3">
+                          {tag}
+                        </span>
+                      ))}
+                    </div>
+                  )}
                   {state === "failed" && (
                     <p className="mt-1 text-[10px] text-red-600">Could not save. Try again.</p>
                   )}
@@ -448,9 +451,10 @@ export function TopicSummaryPanel({
                     <p className="mt-1 text-[10px] text-ink-3">Already in memory.</p>
                   )}
                   {scopeCtx && !isSaved && (
-                    <div className="mt-2">
+                    <div className="mt-3 min-w-0">
+                      <p className="mb-1 text-[10px] font-medium text-ink-3">Save to</p>
                       <MemoryScopeSelect
-                        compact
+                        compact={false}
                         ctx={{ ...scopeCtx, isDm }}
                         value={
                           memoryScopes[index] ??
@@ -463,21 +467,26 @@ export function TopicSummaryPanel({
                       />
                     </div>
                   )}
-                  {source && (
-                    <div className="mt-1.5">
-                      <SourceChip
-                        label={source}
-                        messageId={item.sourceMessageId}
-                        roomId={roomId}
-                        topicId={topicId}
-                      />
-                    </div>
+                  {source && item.sourceMessageId && roomId && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        jumpToMessage({
+                          roomId,
+                          topicId,
+                          messageId: item.sourceMessageId!,
+                        })
+                      }
+                      className="mt-2 text-[10px] font-medium text-accent hover:text-accent-d"
+                    >
+                      {source}
+                    </button>
                   )}
-                  <div className="mt-2 flex flex-wrap gap-1.5">
+                  <div className="mt-3 flex flex-wrap gap-1.5">
                     <Button
                       variant="secondary"
                       size="sm"
-                      className="h-7 text-[10px]"
+                      className="h-8 text-[11px]"
                       disabled={isSaving || isSaved}
                       onClick={() => void handleSaveMemory(index)}
                     >
@@ -498,7 +507,7 @@ export function TopicSummaryPanel({
                       <button
                         type="button"
                         onClick={() => void handleDismissMemory(index)}
-                        className="inline-flex h-7 items-center gap-1 rounded-lg px-2 text-[10px] text-ink-3 hover:bg-muted hover:text-ink"
+                        className="inline-flex h-8 items-center gap-1 rounded-lg px-2.5 text-[11px] text-ink-3 hover:bg-muted hover:text-ink"
                       >
                         <X className="h-3 w-3" />
                         Dismiss

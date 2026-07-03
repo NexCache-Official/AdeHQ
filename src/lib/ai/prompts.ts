@@ -65,6 +65,8 @@ function artifactTypeInstructions(type: SavedArtifactType): string {
       return `Research summary: key findings, evidence, confidence, and open questions.`;
     case "strategy_memo":
       return `Strategy memo: context, options, recommendation, risks, and next moves.`;
+    case "email_draft":
+      return `Email draft structure: subject line, greeting, body, sign-off. Store structured fields in contentJson.`;
     case "meeting_notes":
       return `Meeting notes: attendees/context, decisions, action items, open questions.`;
     default:
@@ -91,8 +93,9 @@ function fileAwareRules(hasFileContext: boolean, artifactIntent?: PromptContext[
 
   if (artifactIntent) {
     parts.push(`Artifact generation requested (${artifactIntent.type.replace(/_/g, " ")}):
-- Put the full deliverable in effects.artifacts[0] with title, artifactType "${artifactIntent.type}", contentMarkdown, source_file/chunk ids, and sourceCitations.
-- Keep reply short (1–3 sentences) pointing to the generated artifact.
+- Put the full deliverable in effects.artifacts[0] with title, artifactType "${artifactIntent.type}", contentMarkdown, contentJson (structured fields when applicable), source_file/chunk ids, and sourceCitations.
+- For email drafts: contentJson must include subject, body, recipientName, recipientOrganization when known.
+- Keep reply short (1–3 sentences) pointing to the generated artifact. Do NOT paste the full deliverable in reply.
 - ${artifactTypeInstructions(artifactIntent.type)}
 - Include a Sources section in the artifact content when file context was used.`);
   }
@@ -140,12 +143,13 @@ function roleWorkflowRules(roleKey: EmployeeRoleKey): string {
     case "sales":
       return `Sales employee workflow — you create work objects, not just chat:
 - When you learn lead details (name, role, company, referral source), add effects.memory.
-- When drafting outreach, put the full email in effects.emailDrafts (subject + body). Keep reply to 1–3 sentences pointing at the draft.
+- When drafting outreach, put the full email in effects.artifacts as artifactType "email_draft" with contentJson {subject, body, recipientName, recipientOrganization} AND keep reply to 1–3 sentences pointing at the draft.
+- You may also use effects.emailDrafts as a fallback, but prefer effects.artifacts for durable email drafts.
 - After drafting, create effects.tasks for follow-ups (e.g. "Follow up with Neil if no reply by Friday") with assigneeType "ai".
-- Log only meaningful business work in effects.workLog (drafted outreach plan, requested clarification) — not greetings or acknowledgements.
-- Offer 2–3 subject line options in reply when helpful; full email body goes in emailDrafts only.
+- Log only meaningful business work in effects.workLog (e.g. "created_email_draft") — not greetings or acknowledgements.
+- Offer 2–3 subject line options in reply when helpful; full email body goes in the artifact only.
 - For health/supplement businesses, keep copy compliant and avoid treatment/cure claims.
-- Do not claim you are identifying live leads or sending emails unless tools allow it.`;
+- Do not claim you sent the email or that it was delivered. Draft only unless Gmail/send is connected with approval.`;
     case "research":
       return `Research workflow: save findings to effects.memory, create tasks for deeper dives, log meaningful research work only.
 - Do NOT claim live web browsing, lead lists, or retailer checks unless browser/search tools are connected.

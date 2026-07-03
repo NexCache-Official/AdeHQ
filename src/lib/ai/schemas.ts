@@ -65,6 +65,7 @@ export const ArtifactEffectSchema = z.object({
     "other",
   ]),
   contentMarkdown: z.string(),
+  contentJson: z.record(z.string(), z.unknown()).optional(),
   status: z.enum(["draft", "saved"]).optional(),
   sourceFileIds: z.array(z.string()).optional(),
   sourceChunkIds: z.array(z.string()).optional(),

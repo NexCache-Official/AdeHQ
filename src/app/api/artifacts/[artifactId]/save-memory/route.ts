@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { AuthError, requireAuthUser, requireWorkspaceMembership } from "@/lib/supabase/auth-server";
 import { assertCanAccessRoom } from "@/lib/server/room-access";
 import { artifactFromRow } from "@/lib/files/records";
+import { memoryEntryToRow, memoryRowToEntry } from "@/lib/memory/build-entry";
+import { resolveMemoryInsert } from "@/lib/memory/dedupe";
+import { artifactMemoryDraftFromArtifact } from "@/lib/artifacts/intelligence";
+import { categoryToLegacyType, normalizeCategory } from "@/lib/memory/categories";
 import { nowISO, uid } from "@/lib/utils";
 
 export const runtime = "nodejs";
@@ -28,39 +32,99 @@ export async function POST(
       return NextResponse.json({ error: "Artifact is not linked to a room." }, { status: 400 });
     }
 
+    if (artifact.memorySavedAt) {
+      const { data: existing } = await client
+        .from("memory_entries")
+        .select("*")
+        .eq("workspace_id", artifact.workspaceId)
+        .contains("metadata", { sourceArtifactId: artifact.id })
+        .maybeSingle();
+      if (existing) {
+        const memory = memoryRowToEntry(existing as Record<string, unknown>);
+        return NextResponse.json({ memory, memorySavedAt: artifact.memorySavedAt, duplicate: true });
+      }
+    }
+
     const { role } = await requireWorkspaceMembership(client, artifact.workspaceId, user.id);
     await assertCanAccessRoom(client, artifact.workspaceId, artifact.roomId, user.id, role);
 
+    const draft = artifactMemoryDraftFromArtifact({
+      title: artifact.title,
+      artifactType: artifact.artifactType,
+      contentMarkdown: artifact.contentMarkdown,
+      contentJson: artifact.contentJson,
+    });
+
+    const dedupeInput = {
+      workspaceId: artifact.workspaceId,
+      title: draft.title,
+      content: draft.content,
+      scope: "topic" as const,
+      roomId: artifact.roomId,
+      topicId: artifact.topicId ?? null,
+      suggestionKey: `artifact-memory:${artifact.id}`,
+    };
+
+    const { dedupeKey, existing } = await resolveMemoryInsert(
+      client,
+      artifact.workspaceId,
+      dedupeInput,
+    );
+    if (existing) {
+      const savedAt = nowISO();
+      await client
+        .from("artifacts")
+        .update({ memory_saved_at: savedAt })
+        .eq("workspace_id", artifact.workspaceId)
+        .eq("id", artifact.id);
+      return NextResponse.json({ memory: existing, memorySavedAt: savedAt, duplicate: true });
+    }
+
     const memoryId = uid("mem");
-    const content = [
-      `Artifact: ${artifact.title}`,
-      "",
-      artifact.contentMarkdown.slice(0, 4000),
-    ].join("\n");
+    const createdAt = nowISO();
+    const category = normalizeCategory(draft.category);
+    const row = memoryEntryToRow(
+      artifact.workspaceId,
+      memoryId,
+      {
+        title: draft.title,
+        content: draft.content,
+        type: categoryToLegacyType(category),
+        category,
+        scope: "topic",
+        tags: draft.tags,
+        sourceType: "artifact",
+        savedByUserId: user.id,
+        metadata: {
+          sourceArtifactId: artifact.id,
+          sourceRoomId: artifact.roomId,
+          sourceTopicId: artifact.topicId,
+          sourceMessageIds: artifact.sourceMessageIds,
+        },
+      },
+      {
+        roomId: artifact.roomId,
+        topicId: artifact.topicId ?? null,
+        dedupeKey,
+        createdAt,
+      },
+    );
 
     const { data: memoryRow, error: memoryError } = await client
       .from("memory_entries")
-      .insert({
-        workspace_id: artifact.workspaceId,
-        id: memoryId,
-        room_id: artifact.roomId,
-        topic_id: artifact.topicId ?? null,
-        type: "general",
-        title: artifact.title,
-        content,
-        status: "draft",
-        created_by_type: "human",
-        created_by_id: user.id,
-        created_at: nowISO(),
-      })
+      .insert(row)
       .select("*")
       .single();
     if (memoryError) throw memoryError;
 
+    const memory = memoryRowToEntry(memoryRow as Record<string, unknown>);
     const savedAt = nowISO();
     await client
       .from("artifacts")
-      .update({ memory_saved_at: savedAt, status: artifact.status === "draft" ? "saved" : artifact.status })
+      .update({
+        memory_saved_at: savedAt,
+        status: artifact.status === "draft" ? "saved" : artifact.status,
+      })
       .eq("workspace_id", artifact.workspaceId)
       .eq("id", artifact.id);
 
@@ -78,7 +142,11 @@ export async function POST(
       created_at: savedAt,
     });
 
-    return NextResponse.json({ memory: memoryRow, memorySavedAt: savedAt });
+    return NextResponse.json({
+      memory,
+      memorySavedAt: savedAt,
+      duplicate: false,
+    });
   } catch (error) {
     if (error instanceof AuthError) {
       return NextResponse.json({ error: error.message }, { status: error.status });

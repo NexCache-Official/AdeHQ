@@ -30,8 +30,9 @@ import { OrchestrationSidebarStatus } from "@/components/orchestration/Orchestra
 import { MayaTopicOverview } from "@/components/maya/MayaTopicOverview";
 import { isActiveMemory } from "@/lib/memory/active-filter";
 import { useDebugTrace } from "@/components/DebugProvider";
+import { ArtifactViewerModal } from "@/components/artifacts/ArtifactViewerModal";
 import { TopicSummaryPanel } from "@/components/topic-summary/TopicSummaryPanel";
-import { saveTopicSummaryToMemoryClient } from "@/lib/topic-summary/client";
+import { MEMORY_UPDATED_EVENT, saveTopicSummaryToMemoryClient } from "@/lib/topic-summary/client";
 import { useTopicSummary } from "@/components/topic-summary/useTopicSummary";
 import { EmptyState } from "./States";
 import { Button, Modal, ModalHeader } from "./ui";
@@ -367,8 +368,24 @@ export function TopicPanel({
     setArtifactBusyId(artifact.id);
     setArtifactError(null);
     try {
-      await apiJson(`/api/artifacts/${artifact.id}/save-memory`, { method: "POST" });
+      const result = await apiJson<{ memory: MemoryEntry; duplicate?: boolean }>(
+        `/api/artifacts/${artifact.id}/save-memory`,
+        { method: "POST" },
+      );
+      if (result.memory) {
+        actions.mergeMemoryEntry(result.memory);
+        window.dispatchEvent(
+          new CustomEvent(MEMORY_UPDATED_EVENT, {
+            detail: { memoryId: result.memory.id, memory: result.memory },
+          }),
+        );
+      }
       await loadArtifacts();
+      setSelectedArtifact((prev) =>
+        prev?.id === artifact.id
+          ? { ...prev, memorySavedAt: new Date().toISOString(), status: "saved" }
+          : prev,
+      );
       onWorkLogRefresh?.();
     } catch (error) {
       setArtifactError(error instanceof Error ? error.message : "Could not save artifact to memory.");
@@ -1040,30 +1057,20 @@ export function TopicPanel({
         </div>
       </div>
       {selectedArtifact && (
-        <Modal open onClose={() => setSelectedArtifact(null)} size="lg">
-          <ModalHeader
-            title={selectedArtifact.title}
-            subtitle={`${selectedArtifact.artifactType.replace(/_/g, " ")} · ${selectedArtifact.status}`}
-            icon={<FileText className="h-5 w-5" />}
-            onClose={() => setSelectedArtifact(null)}
-          />
-          <div className="max-h-[70vh] overflow-y-auto px-6 py-5">
-            <MessageMarkdown content={selectedArtifact.contentMarkdown || "No artifact content."} />
-            {selectedArtifact.sourceCitations.length > 0 && (
-              <div className="mt-5 rounded-xl border border-border bg-muted p-3">
-                <div className="section-title mb-1">Sources</div>
-                <div className="space-y-2 text-xs text-ink-3">
-                  {selectedArtifact.sourceCitations.slice(0, 4).map((source, index) => (
-                    <p key={index}>
-                      {typeof source.fileName === "string" ? source.fileName : "Source"}
-                      {typeof source.snippet === "string" ? ` — ${source.snippet}` : ""}
-                    </p>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        </Modal>
+        <ArtifactViewerModal
+          artifact={selectedArtifact}
+          createdByName={employees.find((e) => e.id === selectedArtifact.createdById)?.name}
+          onClose={() => setSelectedArtifact(null)}
+          onSave={() => void saveArtifact(selectedArtifact)}
+          onSaveToMemory={() => void saveArtifactToMemory(selectedArtifact)}
+          onCreateTask={
+            onCreateTaskFromSummary
+              ? () => onCreateTaskFromSummary(`Follow up: ${selectedArtifact.title}`)
+              : undefined
+          }
+          busy={artifactBusyId === selectedArtifact.id}
+          memorySaved={Boolean(selectedArtifact.memorySavedAt)}
+        />
       )}
     </div>
   );

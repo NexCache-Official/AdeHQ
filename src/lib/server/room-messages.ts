@@ -29,6 +29,12 @@ import {
   type FileContextBundle,
   validateCitations,
 } from "@/lib/server/file-context";
+import {
+  buildEmailDraftJson,
+  emailMarkdownFromJson,
+  extractArtifactFromMessage,
+  type EmailDraftJson,
+} from "@/lib/artifacts/intelligence";
 import { extractMentions, nowISO, uid } from "@/lib/utils";
 
 type DbRow = Record<string, unknown>;
@@ -620,6 +626,7 @@ export async function persistEmployeeEffects(
       fileName: (item as FileCitationEffect & { fileName?: string }).fileName ?? null,
       locator: (item as FileCitationEffect & { locator?: string }).locator ?? null,
     }));
+    const contentJson = draft.contentJson ?? {};
 
     const { error: artifactError } = await client.from("artifacts").insert({
       workspace_id: workspaceId,
@@ -628,9 +635,9 @@ export async function persistEmployeeEffects(
       topic_id: topicId,
       title: draft.title,
       artifact_type: draft.artifactType,
-      status: draft.status ?? "saved",
+      status: draft.status ?? "draft",
       content_markdown: draft.contentMarkdown,
-      content_json: {},
+      content_json: contentJson,
       created_by_type: "ai",
       created_by_id: employee.id,
       source_file_ids: sourceFileIds,
@@ -644,22 +651,30 @@ export async function persistEmployeeEffects(
       artifact_id: artifactId,
       version_number: 1,
       content_markdown: draft.contentMarkdown,
-      content_json: {},
+      content_json: contentJson,
       source_citations: sourceCitations,
       created_by_type: "ai",
       created_by_id: employee.id,
     });
 
     createdArtifactIds.push(artifactId);
+    const emailJson =
+      draft.artifactType === "email_draft"
+        ? (contentJson as EmailDraftJson)
+        : undefined;
     artifacts.push({
       type: "artifact",
       id: artifactId,
       label: draft.title,
       meta: {
         artifactType: draft.artifactType,
-        artifactStatus: draft.status ?? "saved",
+        artifactStatus: draft.status ?? "draft",
         createdByName: employee.name,
         sourceCount: sourceFileIds.length + sourceChunkIds.length,
+        subject: emailJson?.subject,
+        body: emailJson?.body,
+        recipient: emailJson?.recipientName ?? undefined,
+        company: emailJson?.recipientOrganization ?? undefined,
       },
     });
 
@@ -684,6 +699,10 @@ export async function persistEmployeeEffects(
     }
 
     const action = artifactWorkLogAction(draft.artifactType);
+    const logSummary =
+      draft.artifactType === "email_draft"
+        ? `Drafted ${draft.title}`
+        : `Generated ${draft.artifactType.replace(/_/g, " ")}: ${draft.title}`;
     const { error: artifactLogError } = await client.from("work_log_events").insert({
       workspace_id: workspaceId,
       id: uid("wl"),
@@ -691,7 +710,7 @@ export async function persistEmployeeEffects(
       topic_id: topicId,
       employee_id: employee.id,
       action,
-      summary: `Generated ${draft.artifactType.replace(/_/g, " ")}: ${draft.title}`,
+      summary: logSummary,
       status: "success",
       related_entity_type: "artifact",
       related_entity_id: artifactId,
@@ -821,18 +840,72 @@ export async function persistEmployeeEffects(
   }
 
   for (const draft of effect.emailDrafts ?? []) {
+    if ((effect.artifacts ?? []).some((a) => a.artifactType === "email_draft")) continue;
+    const raw = `Subject: ${draft.subject}\n\n${draft.body}`;
+    const extracted =
+      extractArtifactFromMessage(raw, { preferredType: "email_draft" }) ??
+      ({
+        artifactType: "email_draft" as const,
+        title: draft.company ? `${draft.company} outreach email` : draft.subject.slice(0, 72),
+        contentMarkdown: emailMarkdownFromJson(buildEmailDraftJson(raw)),
+        contentJson: buildEmailDraftJson(raw) as unknown as Record<string, unknown>,
+      });
+    const json = extracted.contentJson as unknown as EmailDraftJson;
+    const artifactId = uid("art");
+    await client.from("artifacts").insert({
+      workspace_id: workspaceId,
+      id: artifactId,
+      room_id: roomId,
+      topic_id: topicId,
+      title: extracted.title,
+      artifact_type: "email_draft",
+      status: "draft",
+      content_markdown: extracted.contentMarkdown,
+      content_json: extracted.contentJson,
+      created_by_type: "ai",
+      created_by_id: employee.id,
+      source_file_ids: [],
+      source_message_ids: triggerMessageId ? [triggerMessageId] : [],
+      source_chunk_ids: [],
+      source_citations: [],
+    });
+    await client.from("artifact_versions").insert({
+      artifact_id: artifactId,
+      version_number: 1,
+      content_markdown: extracted.contentMarkdown,
+      content_json: extracted.contentJson,
+      source_citations: [],
+      created_by_type: "ai",
+      created_by_id: employee.id,
+    });
+    createdArtifactIds.push(artifactId);
     artifacts.push({
-      type: "email_draft",
-      id: uid("draft"),
-      label: draft.recipient
-        ? `Email draft: ${draft.recipient}${draft.company ? ` @ ${draft.company}` : ""}`
-        : `Email draft: ${draft.subject.slice(0, 48)}`,
+      type: "artifact",
+      id: artifactId,
+      label: extracted.title,
       meta: {
-        subject: draft.subject,
-        body: draft.body,
+        artifactType: "email_draft",
+        artifactStatus: "draft",
+        createdByName: employee.name,
+        subject: json.subject,
+        body: json.body,
         recipient: draft.recipient,
         company: draft.company,
       },
+    });
+    await client.from("work_log_events").insert({
+      workspace_id: workspaceId,
+      id: uid("wl"),
+      room_id: roomId,
+      topic_id: topicId,
+      employee_id: employee.id,
+      action: "created_email_draft",
+      summary: `Drafted ${extracted.title}`,
+      status: "success",
+      related_entity_type: "artifact",
+      related_entity_id: artifactId,
+      agent_run_id: agentRunId ?? null,
+      created_at: nowISO(),
     });
   }
 
@@ -913,14 +986,6 @@ export async function persistEmployeeEffects(
       created_at: event.createdAt,
     });
     if (error) throw error;
-  }
-
-  if (workLogCount) {
-    artifacts.push({
-      type: "work_log",
-      id: uid("wl-art"),
-      label: `${workLogCount} work log event${workLogCount === 1 ? "" : "s"}`,
-    });
   }
 
   const aiMessage: RoomMessage = {

@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { FileChunk, SavedArtifactType, WorkspaceFile } from "@/lib/types";
+import { detectUserArtifactIntent } from "@/lib/artifacts/intelligence";
 import { fileChunkFromRow, workspaceFileFromRow } from "@/lib/files/records";
 
 type DbRow = Record<string, unknown>;
@@ -65,6 +66,9 @@ const NATURAL_ARTIFACT_PATTERNS: Array<{ pattern: RegExp; type: SavedArtifactTyp
 
 export function detectArtifactIntent(message: string): ArtifactIntent | null {
   const trimmed = message.trim();
+  const userIntent = detectUserArtifactIntent(trimmed);
+  if (userIntent) return { type: userIntent };
+
   const lower = trimmed.toLowerCase();
 
   const slash = lower.match(/^\/(prd|report|brief|proposal|checklist)\b/);
@@ -335,6 +339,8 @@ export function artifactWorkLogAction(type: SavedArtifactType): string {
       return "created_artifact";
     case "checklist":
       return "created_artifact";
+    case "email_draft":
+      return "created_email_draft";
     case "research_summary":
       return "generated_artifact";
     default:

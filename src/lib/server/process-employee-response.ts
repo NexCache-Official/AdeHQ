@@ -17,6 +17,7 @@ import {
   loadAttachmentFileIds,
   retrieveFileContext,
 } from "@/lib/server/file-context";
+import { inferArtifactsFromReply } from "@/lib/artifacts/intelligence";
 
 export type ProcessEmployeeOptions = {
   mode?: "mock" | "live";
@@ -182,6 +183,19 @@ export async function processEmployeeResponse(
 
   const effect = enforceEmployeePermissions(employee, response.effect);
 
+  const inferred = inferArtifactsFromReply(
+    content,
+    response.reply,
+    effect.artifacts ?? [],
+    effect.emailDrafts ?? [],
+  );
+  const mergedEffect = {
+    ...effect,
+    artifacts: inferred.artifacts,
+    emailDrafts: inferred.emailDrafts,
+  };
+  const finalReply = inferred.reply;
+
   if (runId && effect.memory.length) {
     await appendRunStep(client, {
       workspaceId: ctx.workspaceId,
@@ -228,8 +242,8 @@ export async function processEmployeeResponse(
     ctx.room.id,
     topicId,
     employee,
-    response.reply,
-    effect,
+    finalReply,
+    mergedEffect,
     options.triggerMessageId,
     runId,
     {
@@ -258,7 +272,8 @@ export async function processEmployeeResponse(
 
   return {
     ...response,
-    effect,
+    reply: finalReply,
+    effect: mergedEffect,
     aiMessageId: aiMessage.id,
     aiMode,
     agentRunId: runId,

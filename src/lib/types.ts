@@ -762,6 +762,7 @@ export type ArtifactEffect = {
   title: string;
   artifactType: SavedArtifactType;
   contentMarkdown: string;
+  contentJson?: Record<string, unknown>;
   status?: "draft" | "saved";
   sourceFileIds?: string[];
   sourceChunkIds?: string[];

@@ -25,6 +25,7 @@ import {
   type MessageSourceRef,
 } from "@/lib/message-actions";
 import { ArtifactCard, FileArtifactCard } from "./ArtifactCard";
+import { EmailArtifactInlineCard } from "@/components/artifacts/ArtifactViewerModal";
 import { MessageMarkdown } from "./MessageMarkdown";
 import {
   BrainCircuit,
@@ -754,29 +755,52 @@ export function RoomMessageItem({
           />
         ))}
 
-        {generatedArtifacts.map((artifact) => (
-          <ArtifactCard
-            key={artifact.id}
-            title={artifact.label}
-            type={(artifact.meta?.artifactType as "prd" | "report" | "brief" | "proposal" | "decision" | "note") ?? "note"}
-            createdBy={artifact.meta?.createdByName ?? message.senderName}
-            timestamp={message.createdAt}
-            sourceCount={artifact.meta?.sourceCount ?? 0}
-            status={artifact.meta?.artifactStatus ?? "draft"}
-            onOpen={() => {
-              window.dispatchEvent(
-                new CustomEvent("adehq:open-artifact", {
-                  detail: { artifactId: artifact.id, topicId: message.topicId },
-                }),
-              );
-              window.dispatchEvent(
-                new CustomEvent("adehq:topic-artifacts-changed", {
-                  detail: { topicId: message.topicId },
-                }),
-              );
-            }}
-          />
-        ))}
+        {generatedArtifacts.map((artifact) => {
+          if (artifact.meta?.artifactType === "email_draft") {
+            return (
+              <EmailArtifactInlineCard
+                key={artifact.id}
+                title={artifact.label}
+                subject={artifact.meta?.subject}
+                body={artifact.meta?.body}
+                recipient={artifact.meta?.recipient}
+                company={artifact.meta?.company}
+                createdBy={artifact.meta?.createdByName ?? message.senderName}
+                status={artifact.meta?.artifactStatus ?? "draft"}
+                onOpen={() => {
+                  window.dispatchEvent(
+                    new CustomEvent("adehq:open-artifact", {
+                      detail: { artifactId: artifact.id, topicId: message.topicId },
+                    }),
+                  );
+                }}
+              />
+            );
+          }
+          return (
+            <ArtifactCard
+              key={artifact.id}
+              title={artifact.label}
+              type={(artifact.meta?.artifactType as "prd" | "report" | "brief" | "proposal" | "decision" | "note") ?? "note"}
+              createdBy={artifact.meta?.createdByName ?? message.senderName}
+              timestamp={message.createdAt}
+              sourceCount={artifact.meta?.sourceCount ?? 0}
+              status={artifact.meta?.artifactStatus ?? "draft"}
+              onOpen={() => {
+                window.dispatchEvent(
+                  new CustomEvent("adehq:open-artifact", {
+                    detail: { artifactId: artifact.id, topicId: message.topicId },
+                  }),
+                );
+                window.dispatchEvent(
+                  new CustomEvent("adehq:topic-artifacts-changed", {
+                    detail: { topicId: message.topicId },
+                  }),
+                );
+              }}
+            />
+          );
+        })}
 
         {citationArtifacts.length > 0 && (
           <div className="mt-2 flex flex-wrap gap-1.5">

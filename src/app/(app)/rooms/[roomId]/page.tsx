@@ -36,6 +36,7 @@ import {
   titleFromMessageContent,
   type MessageActionHandlers,
 } from "@/lib/message-actions";
+import { extractArtifactFromMessage } from "@/lib/artifacts/intelligence";
 import { saveFileMemorySuggestionClient } from "@/lib/topic-summary/client";
 import {
   ArrowLeft,
@@ -752,7 +753,13 @@ export default function RoomDetailPage() {
           return;
         }
 
-        const title = titleFromMessageContent(message.content);
+        const extracted =
+          extractArtifactFromMessage(message.content) ?? {
+            artifactType: "note" as const,
+            title: titleFromMessageContent(message.content),
+            contentMarkdown: message.content,
+            contentJson: {},
+          };
         const { sourceFileIds, sourceChunkIds, sourceCitations } =
           artifactSourcesFromMessage(message);
 
@@ -766,9 +773,10 @@ export default function RoomDetailPage() {
                 workspaceId: state.workspace.id,
                 roomId,
                 topicId: selectedTopic.id,
-                title,
-                artifactType: "note",
-                contentMarkdown: message.content,
+                title: extracted.title,
+                artifactType: extracted.artifactType,
+                contentMarkdown: extracted.contentMarkdown,
+                contentJson: extracted.contentJson,
                 sourceMessageIds: [message.id],
                 sourceFileIds,
                 sourceChunkIds,
@@ -798,7 +806,7 @@ export default function RoomDetailPage() {
             return;
           }
 
-          setSlashNotice(`Artifact created: ${title}`);
+          setSlashNotice(`Artifact created: ${extracted.title}`);
           setTimeout(() => setSlashNotice(null), 3500);
         } catch (error) {
           setTopicActionError(
