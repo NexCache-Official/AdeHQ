@@ -1,7 +1,7 @@
 import type { AiEmployeeJobBrief } from "./types";
 import { getRoleByKey } from "./role-library";
 
-const FOCUS_MAP: Record<string, { businessFocus: string; responsibility: string }> = {
+const FOCUS_MAP: Record<string, { businessFocus: string; technicalFocus?: string; responsibility: string }> = {
   competitors: {
     businessFocus: "Competitive intelligence",
     responsibility: "Track competitor moves, positioning, and product changes",
@@ -17,6 +17,51 @@ const FOCUS_MAP: Record<string, { businessFocus: string; responsibility: string 
   pricing: {
     businessFocus: "Pricing analysis",
     responsibility: "Analyze pricing models, packaging, and willingness-to-pay signals",
+  },
+  frontend: {
+    businessFocus: "Frontend product engineering",
+    technicalFocus: "Frontend product engineering",
+    responsibility: "Own frontend product features, UI implementation, and user-facing quality",
+  },
+  "frontend product work": {
+    businessFocus: "Frontend product engineering",
+    technicalFocus: "Frontend product engineering",
+    responsibility: "Own frontend product features, UI implementation, and user-facing quality",
+  },
+  backend: {
+    businessFocus: "Backend systems",
+    technicalFocus: "Backend systems and APIs",
+    responsibility: "Own backend services, APIs, and data workflows",
+  },
+  "backend systems": {
+    businessFocus: "Backend systems",
+    technicalFocus: "Backend systems and APIs",
+    responsibility: "Own backend services, APIs, and data workflows",
+  },
+  "full-stack": {
+    businessFocus: "Full-stack product engineering",
+    technicalFocus: "Full-stack product engineering",
+    responsibility: "Ship features across frontend and backend with end-to-end ownership",
+  },
+  fullstack: {
+    businessFocus: "Full-stack product engineering",
+    technicalFocus: "Full-stack product engineering",
+    responsibility: "Ship features across frontend and backend with end-to-end ownership",
+  },
+  "ai infrastructure": {
+    businessFocus: "AI infrastructure",
+    technicalFocus: "AI infrastructure and performance",
+    responsibility: "Improve AI system performance, reliability, and infrastructure workflows",
+  },
+  qa: {
+    businessFocus: "Quality assurance",
+    technicalFocus: "QA and test engineering",
+    responsibility: "Own test planning, bug triage, and release quality checks",
+  },
+  infra: {
+    businessFocus: "Infrastructure and platform",
+    technicalFocus: "Infrastructure and DevOps",
+    responsibility: "Own deployments, reliability, and platform operations",
   },
 };
 
@@ -63,9 +108,23 @@ export function applyRoleFocusAnswer(
   const chips = role?.questionTemplates.coreWorkChips ?? [];
   const matchedChip =
     chips.find((chip) => matchesChip(trimmed, chip)) ??
-    Object.keys(FOCUS_MAP).find((key) => matchesChip(trimmed, key));
+    Object.keys(FOCUS_MAP).find((key) => matchesChip(trimmed, key)) ??
+    Object.keys(FOCUS_MAP).find((key) => normalizeChip(trimmed).includes(key));
 
-  if (!matchedChip) return null;
+  if (!matchedChip) {
+    const stackMatch =
+      /\b(next\.?js|supabase|react|typescript|api|mobile|internal tools?|general software)\b/i.exec(trimmed);
+    if (stackMatch) {
+      const next = cloneBrief(brief);
+      const label = stackMatch[0].charAt(0).toUpperCase() + stackMatch[0].slice(1);
+      pushUnique(next.technicalFocus, label);
+      if (!next.domain.trim() || next.domain.toLowerCase() === "software engineering") {
+        next.domain = label;
+      }
+      return { brief: next, focusLabel: label };
+    }
+    return null;
+  }
 
   const mapping = FOCUS_MAP[normalizeChip(matchedChip)] ?? {
     businessFocus: matchedChip.charAt(0).toUpperCase() + matchedChip.slice(1),
@@ -74,6 +133,7 @@ export function applyRoleFocusAnswer(
 
   const next = cloneBrief(brief);
   pushUnique(next.businessFocus, mapping.businessFocus);
+  if (mapping.technicalFocus) pushUnique(next.technicalFocus, mapping.technicalFocus);
   pushUnique(next.coreResponsibilities, mapping.responsibility);
   pushUnique(next.assumptions, `Primary focus: ${mapping.businessFocus.toLowerCase()}.`);
   next.openQuestions = next.openQuestions.filter(

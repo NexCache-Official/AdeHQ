@@ -205,14 +205,16 @@ export function RecruiterChat({
                   <button
                     type="button"
                     onClick={() => onInterviewCandidate?.(candidate)}
-                    className="rounded-lg border border-border py-2 text-xs font-medium hover:bg-muted"
+                    disabled={busy}
+                    className="rounded-lg border border-border py-2 text-xs font-medium hover:bg-muted disabled:opacity-50"
                   >
                     Interview
                   </button>
                   <button
                     type="button"
                     onClick={() => onHireCandidate?.(candidate)}
-                    className="rounded-lg bg-ink py-2 text-xs font-medium text-white"
+                    disabled={busy}
+                    className="rounded-lg bg-ink py-2 text-xs font-medium text-white disabled:opacity-50"
                   >
                     Hire {candidate.first}
                   </button>

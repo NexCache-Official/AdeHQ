@@ -46,3 +46,6 @@ next-env.d.ts
 # claude
 .claude/
 .env*
+
+# stray design/export downloads (not source)
+AdeHQ.dc*.html

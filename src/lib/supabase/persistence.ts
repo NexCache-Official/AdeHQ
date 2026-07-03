@@ -841,6 +841,7 @@ function messageFromRow(row: DbRow): RoomMessage {
     triggerMessageId: row.trigger_message_id ?? undefined,
     artifacts: row.artifacts ? jsonArray(row.artifacts) : undefined,
     pending: row.pending === true,
+    clientMessageId: row.client_message_id ? String(row.client_message_id) : undefined,
     createdAt: row.created_at ?? nowISO(),
   });
 }
@@ -996,6 +997,7 @@ function messageRow(workspaceId: string, message: RoomMessage): DbRow {
   return {
     workspace_id: workspaceId,
     id: message.id,
+    client_message_id: message.clientMessageId ?? (message.senderType === "human" ? message.id : null),
     room_id: message.roomId,
     topic_id: message.topicId ?? null,
     sender_type: message.senderType,

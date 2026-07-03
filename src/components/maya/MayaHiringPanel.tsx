@@ -17,17 +17,31 @@ export function MayaHiringPanel() {
     generatingCandidates,
     generateCandidates,
     hireCandidate,
+    visibleCandidates,
     dispatch,
   } = hiring;
 
   const statusLabel =
-    session.candidates.length > 0
-      ? "Candidates ready"
-      : session.briefReady || displayReadiness.ready
-        ? "Brief ready"
-        : session.recruiterMessages.length > 0
-          ? "Drafting brief"
-          : "Waiting to start";
+    session.hiredEmployeeId
+      ? "Hired"
+      : visibleCandidates.length > 0
+        ? "Candidates ready"
+        : session.briefReady || displayReadiness.ready
+          ? "Brief ready"
+          : session.recruiterMessages.length > 0
+            ? "Drafting brief"
+            : "Waiting to start";
+
+  const nextStep =
+    session.hiredEmployeeId
+      ? "Hire complete — open their DM to assign the first task."
+      : visibleCandidates.length > 0
+        ? "Review candidates and hire the best fit."
+        : session.briefReady || displayReadiness.ready
+          ? "Generate candidates when the brief looks good."
+          : session.recruiterMessages.length > 0
+            ? "Answer Maya's questions to complete the brief."
+            : "Tell Maya what role you want to hire.";
 
   const showBrief = Boolean(previewBrief && session.recruiterMessages.length > 0);
 
@@ -39,13 +53,23 @@ export function MayaHiringPanel() {
         </div>
         <div className="mt-1 text-sm font-medium text-ink">{statusLabel}</div>
         {session.recruiterMessages.length > 0 && (
-          <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-muted">
-            <div
-              className="h-full rounded-full bg-accent transition-all duration-500"
-              style={{ width: `${displayReadiness.score}%` }}
-            />
-          </div>
+          <>
+            <div className="mt-2 flex items-center justify-between text-[11px] text-ink-3">
+              <span>Readiness</span>
+              <span>{Math.round(displayReadiness.score)}%</span>
+            </div>
+            <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-muted">
+              <div
+                className="h-full rounded-full bg-accent transition-all duration-500"
+                style={{ width: `${displayReadiness.score}%` }}
+              />
+            </div>
+          </>
         )}
+        <div className="mt-2.5 flex items-start gap-1.5 rounded-lg bg-muted/60 px-2.5 py-2 text-[11px] leading-snug text-ink-2">
+          <span className="font-semibold text-ink-3">Next:</span>
+          <span>{nextStep}</span>
+        </div>
       </div>
 
       {session.error && (
@@ -55,7 +79,7 @@ export function MayaHiringPanel() {
       )}
 
       <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4">
-        {session.briefReady && session.candidates.length === 0 && (
+        {displayReadiness.ready && visibleCandidates.length === 0 && (
           <div className="shrink-0 border-b border-border px-4 py-3">
             <button
               type="button"
@@ -96,13 +120,13 @@ export function MayaHiringPanel() {
           </div>
         )}
 
-        {session.candidates.length > 0 && (
+        {visibleCandidates.length > 0 && (
           <section className="shrink-0">
             <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-3">
               Candidates
             </h3>
             <div className="space-y-3">
-              {session.candidates.map((a: AiEmployeeApplicant) => (
+              {visibleCandidates.map((a: AiEmployeeApplicant) => (
                 <div key={a.id} className="origin-top scale-[0.92]">
                   <ApplicantCard
                     applicant={a}
@@ -110,6 +134,7 @@ export function MayaHiringPanel() {
                     onToggleAdv={() => dispatch({ type: "TOGGLE_ADV", id: a.id })}
                     onInterview={() => {}}
                     onHire={() => void hireCandidate(a)}
+                    hireDisabled={session.busy || !!session.hiredEmployeeId}
                   />
                 </div>
               ))}

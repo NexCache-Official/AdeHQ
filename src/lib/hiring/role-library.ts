@@ -83,8 +83,16 @@ const ROLE_ENTRIES: RoleLibraryEntry[] = [
     seniorityVariants: { assistant: "Junior Software Engineer", specialist: "Software Engineer", advisor: "Senior Software Architect" },
     candidatePersonas: personas("Software Engineer", "Development Assistant", "Senior Software Architect", "engineering", "High-volume coding tasks and first drafts", "Architecture decisions and complex engineering"),
     questionTemplates: {
-      coreWork: "What should they focus on — frontend, backend, full-stack, or a specific product area?",
-      coreWorkChips: ["Frontend features", "Backend APIs", "Full-stack product work", "Bug fixes and maintenance", "Not sure — help me decide"],
+      coreWork:
+        "Good choice. Should this engineer focus on frontend product work, backend systems, full-stack, AI infrastructure, or QA?",
+      coreWorkChips: [
+        "Frontend product work",
+        "Backend systems",
+        "Full-stack",
+        "AI infrastructure",
+        "QA",
+        "Not sure — help me decide",
+      ],
     },
   }),
   defineRole({

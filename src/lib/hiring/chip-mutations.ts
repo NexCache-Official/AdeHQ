@@ -199,5 +199,5 @@ export function recruiterReadyMessage(brief: AiEmployeeJobBrief): string {
     brief.coreResponsibilities[0] ??
     "the work you described";
   const role = brief.roleTitle.toLowerCase();
-  return `Nice — I've got a solid ${role} brief shaping up around ${focus.toLowerCase()}. Take a look when you're ready, or we can keep tuning it before generating candidates.`;
+  return `Nice — I've got a solid ${role} brief shaping up around ${focus.toLowerCase()}. Want to review it or generate candidates?`;
 }

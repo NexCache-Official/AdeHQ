@@ -1,7 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useReducer, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { useStore } from "@/lib/demo-store";
+import type { HiringSessionScope, HiringSessionSource } from "@/lib/hiring/canonical-session";
+import {
+  resolveHiringSurface,
+  type HiringSurface,
+} from "@/lib/hiring/hiring-session-service";
 import {
   claimHireLock,
   finalizeDurableHiringSession,
@@ -19,14 +24,54 @@ import type { HiringSessionState } from "@/lib/hiring/types";
 type UseHiringSessionSyncOptions = {
   mayaRoomId: string;
   mayaTopicId?: string;
+  /** Preferred — resolves scope, source, and dmFirst for a hiring surface */
+  surface?: HiringSurface;
   dmFirst?: boolean;
+  directChat?: boolean;
+  hireRoute?: boolean;
+  source?: HiringSessionSource;
+  topicBootstrap?: { topicId: string; roleTitle: string; roleKey: string | null };
 };
 
 export function useHiringSessionSync({
   mayaRoomId,
   mayaTopicId,
-  dmFirst = false,
+  surface,
+  dmFirst: dmFirstProp,
+  directChat: directChatProp,
+  hireRoute: hireRouteProp,
+  source: sourceProp,
+  topicBootstrap,
 }: UseHiringSessionSyncOptions) {
+  const surfaceConfig = useMemo(() => {
+    if (!surface) return null;
+    return resolveHiringSurface({ surface, mayaRoomId, mayaTopicId });
+  }, [surface, mayaRoomId, mayaTopicId]);
+
+  const dmFirst = surfaceConfig?.dmFirst ?? dmFirstProp ?? false;
+  const source = surfaceConfig?.source ?? sourceProp;
+  const scope = useMemo<HiringSessionScope>(
+    () =>
+      surfaceConfig?.scope ?? {
+        mayaRoomId,
+        mayaTopicId,
+        directChat: directChatProp,
+        hireRoute: hireRouteProp,
+        source: sourceProp,
+      },
+    [surfaceConfig, mayaRoomId, mayaTopicId, directChatProp, hireRouteProp, sourceProp],
+  );
+
+  const sessionScopeKey =
+    surfaceConfig?.sessionScopeKey ??
+    (mayaTopicId && !directChatProp && !hireRouteProp
+      ? mayaTopicId
+      : hireRouteProp
+        ? "hire-route"
+        : directChatProp
+          ? `direct-${mayaRoomId}`
+          : `room-${mayaRoomId}`);
+
   const { state: appState, backend } = useStore();
   const workspaceId = appState.workspace?.id;
   const userId = appState.user?.id;
@@ -37,11 +82,12 @@ export function useHiringSessionSync({
   const [hydrated, setHydrated] = useState(false);
 
   const [session, dispatch] = useReducer(hiringReducer, null, () => {
-    const cached = loadHiringSession({ dmFirst });
+    const cached = loadHiringSession({ dmFirst, scope });
     if (cached) return normalizeRestoredHiringSession(cached, { dmFirst });
     return {
       ...initialHiringSession(),
       ...(dmFirst ? { step: "recruiter" as const } : {}),
+      ...(source ? { sessionSource: source } : {}),
     };
   });
 
@@ -52,7 +98,9 @@ export function useHiringSessionSync({
       workspaceId,
       userId,
       mayaRoomId,
+      scope,
       dmFirst,
+      topicBootstrap,
     }).then((result) => {
       if (cancelled) return;
       sessionIdRef.current = result.sessionId;
@@ -62,7 +110,7 @@ export function useHiringSessionSync({
     return () => {
       cancelled = true;
     };
-  }, [backend, workspaceId, userId, mayaRoomId, dmFirst]);
+  }, [backend, workspaceId, userId, mayaRoomId, scope, dmFirst, topicBootstrap]);
 
   useEffect(() => {
     if (!hydrated) return;
@@ -74,7 +122,7 @@ export function useHiringSessionSync({
         workspaceId,
         userId,
         mayaRoomId,
-        mayaTopicId,
+        scope,
         state: session,
       }).then((id) => {
         if (id) sessionIdRef.current = id;
@@ -83,7 +131,7 @@ export function useHiringSessionSync({
     return () => {
       if (persistTimerRef.current) clearTimeout(persistTimerRef.current);
     };
-  }, [session, hydrated, backend, workspaceId, userId, mayaRoomId, mayaTopicId]);
+  }, [session, hydrated, backend, workspaceId, userId, mayaRoomId, scope]);
 
   const tryClaimHireLock = useCallback(async () => {
     if (hireInFlightRef.current) return false;
@@ -119,24 +167,29 @@ export function useHiringSessionSync({
         hiredEmployeeId: params.hiredEmployeeId,
         dmRoomId: params.dmRoomId,
         candidateId: params.candidateId,
+        scope,
       });
       sessionIdRef.current = null;
       hireInFlightRef.current = false;
     },
-    [backend, workspaceId],
+    [backend, workspaceId, scope],
   );
 
   const resetAfterMayaHire = useCallback(() => {
     dispatch({
       type: "RESTORE",
-      state: { ...initialHiringSession(), step: "recruiter" },
+      state: { ...initialHiringSession(), step: "recruiter", sessionSource: source },
     });
-  }, []);
+  }, [source]);
 
   return {
     session,
     dispatch,
     hydrated,
+    sessionId: sessionIdRef.current,
+    scope,
+    sessionScopeKey,
+    source,
     tryClaimHireLock,
     releaseHireLock,
     completeDurableHire,

@@ -1,6 +1,15 @@
 "use client";
 
 import { supabase } from "@/lib/supabase/client";
+import {
+  ACTIVE_HIRING_STATUSES,
+  bootstrapStateFromTopicRole,
+  deriveSessionStatus,
+  roleSnapshotFromState,
+  type HiringSessionScope,
+  type HiringSessionSource,
+  type HiringSessionStatus,
+} from "./canonical-session";
 import { EMPTY_READINESS } from "./recruiter-brain";
 import { emptyChecklist } from "./recruiter-checklist";
 import { migrateLegacyDepartmentId } from "./role-library";
@@ -22,14 +31,13 @@ type DbRow = Record<string, unknown>;
 
 export type HiringBackendMode = "supabase" | "demo";
 
-export type HiringSessionStatus = "active" | "hiring" | "hired" | "abandoned";
+/** @deprecated use HiringSessionStatus from canonical-session */
+export type HiringSessionStatusLegacy = "active" | "hiring" | "hired" | "abandoned";
 
 type PersistedHiringPayload = Omit<
   HiringSessionState,
   "brief" | "briefPartial" | "candidates" | "busy" | "error" | "regenSpin" | "compareOpen" | "interviewWith"
 >;
-
-const ACTIVE_STATUSES: HiringSessionStatus[] = ["active", "hiring"];
 
 function jsonObject<T extends object>(value: unknown, fallback: T): T {
   return value && typeof value === "object" && !Array.isArray(value)
@@ -45,6 +53,14 @@ function hasMeaningfulHiringProgress(state: HiringSessionState): boolean {
     Boolean(state.briefPartial && Object.keys(state.briefPartial).length > 0) ||
     Boolean(state.roleInput.trim())
   );
+}
+
+function resolveSource(scope: HiringSessionScope, state: HiringSessionState): HiringSessionSource {
+  if (state.sessionSource) return state.sessionSource;
+  if (scope.hireRoute) return "hire_route";
+  if (scope.directChat) return "maya_direct_chat";
+  if (scope.mayaTopicId) return "maya_hiring_topic";
+  return "maya_direct_chat";
 }
 
 function toPersistedPayload(state: HiringSessionState): PersistedHiringPayload {
@@ -75,8 +91,23 @@ function mergePersistedState(
   brief: AiEmployeeJobBrief | null | undefined,
   briefPartial: Partial<AiEmployeeJobBrief> | null | undefined,
   candidates: AiEmployeeApplicant[],
+  row?: DbRow,
 ): HiringSessionState {
   const base = initialHiringSession();
+  const roleSnap = row
+    ? {
+        roleKey: (row.role_key as string | null) ?? payload.roleKey,
+        roleTitle: (row.role_title as string | null) ?? undefined,
+      }
+    : null;
+
+  const filteredCandidates =
+    roleSnap?.roleKey &&
+    candidates.length > 0 &&
+    candidates.some((c) => c.roleKey && c.roleKey !== roleSnap.roleKey)
+      ? []
+      : candidates;
+
   return {
     ...base,
     ...payload,
@@ -87,9 +118,14 @@ function mergePersistedState(
     suggestedRoleKeys: payload.suggestedRoleKeys ?? [],
     advOpen: payload.advOpen ?? {},
     interviewMsgs: payload.interviewMsgs ?? {},
+    roleKey: roleSnap?.roleKey ?? payload.roleKey ?? base.roleKey,
+    roleInput: payload.roleInput ?? (roleSnap?.roleTitle ? roleSnap.roleTitle : base.roleInput),
     brief: brief ?? undefined,
     briefPartial: briefPartial ?? undefined,
-    candidates,
+    candidates: filteredCandidates,
+    sessionSource: (row?.source as HiringSessionSource | undefined) ?? payload.sessionSource,
+    sessionStatus: (row?.status as HiringSessionStatus | undefined) ?? payload.sessionStatus,
+    hiringTopicId: (row?.maya_topic_id as string | null) ?? payload.hiringTopicId,
     busy: false,
     error: null,
     regenSpin: false,
@@ -106,10 +142,13 @@ function rowToState(row: DbRow, candidates: AiEmployeeApplicant[]): HiringSessio
       step: (row.step as HiringStep) ?? payload.step ?? "role",
       hiredEmployeeId: (row.hired_employee_id as string | null) ?? payload.hiredEmployeeId,
       dmRoomId: (row.dm_room_id as string | null) ?? payload.dmRoomId,
+      selectedCandidateId:
+        (row.selected_candidate_id as string | null) ?? payload.selectedCandidateId,
     },
     row.job_brief as AiEmployeeJobBrief | null,
     row.job_brief_partial as Partial<AiEmployeeJobBrief> | null,
     candidates,
+    row,
   );
 
   if (!state.roleKey && state.departmentId) {
@@ -122,29 +161,77 @@ function rowToState(row: DbRow, candidates: AiEmployeeApplicant[]): HiringSessio
 
 async function loadCandidatesForSession(
   sessionId: string,
+  expectedRoleKey?: string | null,
 ): Promise<AiEmployeeApplicant[]> {
   const { data, error } = await supabase
     .from("hiring_candidates")
-    .select("candidate, sort_order")
+    .select("candidate, sort_order, role_key")
     .eq("hiring_session_id", sessionId)
     .order("sort_order", { ascending: true });
 
   if (error) throw error;
-  return (data ?? []).map((row) => row.candidate as AiEmployeeApplicant);
+  const rows = data ?? [];
+  if (
+    expectedRoleKey &&
+    rows.length > 0 &&
+    rows.some((r) => r.role_key && r.role_key !== expectedRoleKey)
+  ) {
+    return [];
+  }
+  return rows.map((row) => row.candidate as AiEmployeeApplicant);
 }
 
 export async function fetchActiveHiringSession(params: {
   workspaceId: string;
   userId: string;
   mayaRoomId: string;
+  scope: HiringSessionScope;
+  sessionId?: string | null;
 }): Promise<{ sessionId: string; state: HiringSessionState; updatedAt: string } | null> {
-  const { data, error } = await supabase
+  if (params.sessionId) {
+    const { data, error } = await supabase
+      .from("hiring_sessions")
+      .select("*")
+      .eq("id", params.sessionId)
+      .eq("workspace_id", params.workspaceId)
+      .eq("user_id", params.userId)
+      .maybeSingle();
+    if (error) throw error;
+    if (!data) return null;
+    const candidates = await loadCandidatesForSession(
+      String(data.id),
+      data.role_key as string | null,
+    );
+    return {
+      sessionId: String(data.id),
+      state: rowToState(data as DbRow, candidates),
+      updatedAt: String(data.updated_at),
+    };
+  }
+
+  let query = supabase
     .from("hiring_sessions")
     .select("*")
     .eq("workspace_id", params.workspaceId)
     .eq("user_id", params.userId)
-    .eq("maya_room_id", params.mayaRoomId)
-    .in("status", ACTIVE_STATUSES)
+    .in("status", ACTIVE_HIRING_STATUSES);
+
+  if (params.scope.mayaTopicId && !params.scope.directChat && !params.scope.hireRoute) {
+    query = query.eq("maya_topic_id", params.scope.mayaTopicId);
+  } else if (params.scope.directChat) {
+    query = query
+      .eq("maya_room_id", params.mayaRoomId)
+      .is("maya_topic_id", null)
+      .eq("source", "maya_direct_chat");
+  } else if (params.scope.hireRoute) {
+    query = query
+      .is("maya_topic_id", null)
+      .in("source", ["hire_route", "onboarding", "top_nav_hire_button"]);
+  } else {
+    return null;
+  }
+
+  const { data, error } = await query
     .order("updated_at", { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -152,7 +239,10 @@ export async function fetchActiveHiringSession(params: {
   if (error) throw error;
   if (!data) return null;
 
-  const candidates = await loadCandidatesForSession(String(data.id));
+  const candidates = await loadCandidatesForSession(
+    String(data.id),
+    data.role_key as string | null,
+  );
   return {
     sessionId: String(data.id),
     state: rowToState(data as DbRow, candidates),
@@ -165,20 +255,37 @@ export async function saveHiringSession(params: {
   workspaceId: string;
   userId: string;
   mayaRoomId: string;
-  mayaTopicId?: string;
+  scope: HiringSessionScope;
   state: HiringSessionState;
 }): Promise<string> {
   const payload = toPersistedPayload(params.state);
+  const roleSnap = roleSnapshotFromState(params.state);
+  const source = resolveSource(params.scope, params.state);
+  const status = deriveSessionStatus(params.state);
+  const topicId =
+    params.scope.directChat || params.scope.hireRoute
+      ? null
+      : params.scope.mayaTopicId ?? null;
+
   const row = {
     workspace_id: params.workspaceId,
     user_id: params.userId,
     maya_room_id: params.mayaRoomId,
-    maya_topic_id: params.mayaTopicId ?? null,
-    status: "active" as const,
+    maya_topic_id: topicId,
+    source,
+    status,
     step: params.state.step,
-    session_state: payload,
+    session_state: { ...payload, sessionSource: source, sessionStatus: status },
     job_brief: params.state.brief ?? null,
     job_brief_partial: params.state.briefPartial ?? null,
+    role_title: roleSnap.roleTitle,
+    role_key: roleSnap.roleKey,
+    department: roleSnap.department,
+    readiness_score: params.state.readiness?.score ?? null,
+    required_questions_answered: params.state.readiness?.missing?.length
+      ? Math.max(0, 8 - params.state.readiness.missing.length)
+      : 0,
+    selected_candidate_id: params.state.selectedCandidateId ?? null,
     hired_employee_id: params.state.hiredEmployeeId ?? null,
     dm_room_id: params.state.dmRoomId ?? null,
   };
@@ -188,13 +295,19 @@ export async function saveHiringSession(params: {
       .from("hiring_sessions")
       .update(row)
       .eq("id", params.sessionId)
-      .in("status", ACTIVE_STATUSES)
+      .in("status", ACTIVE_HIRING_STATUSES)
       .select("id")
       .maybeSingle();
 
     if (error) throw error;
     if (data?.id) {
-      await syncHiringCandidates(params.sessionId, params.workspaceId, params.state.candidates);
+      await syncHiringCandidates(
+        params.sessionId,
+        params.workspaceId,
+        params.state.candidates,
+        roleSnap.roleKey,
+        roleSnap.roleTitle,
+      );
       return String(data.id);
     }
   }
@@ -203,6 +316,7 @@ export async function saveHiringSession(params: {
     workspaceId: params.workspaceId,
     userId: params.userId,
     mayaRoomId: params.mayaRoomId,
+    scope: params.scope,
   });
 
   if (existing) {
@@ -217,7 +331,13 @@ export async function saveHiringSession(params: {
 
   if (error) throw error;
   const sessionId = String(data.id);
-  await syncHiringCandidates(sessionId, params.workspaceId, params.state.candidates);
+  await syncHiringCandidates(
+    sessionId,
+    params.workspaceId,
+    params.state.candidates,
+    roleSnap.roleKey,
+    roleSnap.roleTitle,
+  );
   return sessionId;
 }
 
@@ -225,7 +345,15 @@ export async function syncHiringCandidates(
   sessionId: string,
   workspaceId: string,
   candidates: AiEmployeeApplicant[],
+  roleKey?: string | null,
+  roleTitle?: string | null,
 ): Promise<void> {
+  const { error: deleteError } = await supabase
+    .from("hiring_candidates")
+    .delete()
+    .eq("hiring_session_id", sessionId);
+
+  if (deleteError) throw deleteError;
   if (candidates.length === 0) return;
 
   const rows = candidates.map((candidate, index) => ({
@@ -233,16 +361,16 @@ export async function syncHiringCandidates(
     workspace_id: workspaceId,
     candidate_id: candidate.id,
     sort_order: index,
-    candidate,
+    candidate: {
+      ...candidate,
+      roleKey: candidate.roleKey ?? roleKey ?? undefined,
+      roleTitle: candidate.roleTitle ?? roleTitle ?? undefined,
+      hiringSessionId: sessionId,
+    },
+    role_key: candidate.roleKey ?? roleKey ?? null,
+    role_title: candidate.roleTitle ?? roleTitle ?? null,
     hired: false,
   }));
-
-  const { error: deleteError } = await supabase
-    .from("hiring_candidates")
-    .delete()
-    .eq("hiring_session_id", sessionId);
-
-  if (deleteError) throw deleteError;
 
   const { error: insertError } = await supabase.from("hiring_candidates").insert(rows);
   if (insertError) throw insertError;
@@ -251,9 +379,9 @@ export async function syncHiringCandidates(
 export async function claimHireLock(sessionId: string): Promise<boolean> {
   const { data, error } = await supabase
     .from("hiring_sessions")
-    .update({ status: "hiring" })
+    .update({ status: "active" })
     .eq("id", sessionId)
-    .eq("status", "active")
+    .in("status", ACTIVE_HIRING_STATUSES)
     .select("id")
     .maybeSingle();
 
@@ -274,6 +402,7 @@ export async function markHiringSessionHired(params: {
     hiredEmployeeId: params.hiredEmployeeId,
     dmRoomId: params.dmRoomId,
     step: "success",
+    sessionStatus: "hired",
   });
 
   const { error: sessionError } = await supabase
@@ -286,6 +415,7 @@ export async function markHiringSessionHired(params: {
       job_brief_partial: params.state.briefPartial ?? null,
       hired_employee_id: params.hiredEmployeeId,
       dm_room_id: params.dmRoomId,
+      selected_candidate_id: params.candidateId,
     })
     .eq("id", params.sessionId);
 
@@ -303,14 +433,25 @@ export async function markHiringSessionHired(params: {
   if (candidateError) throw candidateError;
 }
 
+export async function clearHiringSessionCandidates(sessionId: string): Promise<void> {
+  const { error } = await supabase
+    .from("hiring_candidates")
+    .delete()
+    .eq("hiring_session_id", sessionId);
+  if (error) throw error;
+}
+
 export async function loadDurableHiringSession(params: {
   backend: HiringBackendMode;
   workspaceId?: string;
   userId?: string;
   mayaRoomId: string;
+  scope: HiringSessionScope;
   dmFirst?: boolean;
+  sessionId?: string | null;
+  topicBootstrap?: { topicId: string; roleTitle: string; roleKey: string | null };
 }): Promise<{ sessionId: string | null; state: HiringSessionState }> {
-  const cached = loadHiringSession({ dmFirst: params.dmFirst });
+  const cached = loadHiringSession({ dmFirst: params.dmFirst, scope: params.scope });
   const cachedState = cached
     ? normalizeRestoredHiringSession(cached, { dmFirst: params.dmFirst })
     : null;
@@ -336,24 +477,61 @@ export async function loadDurableHiringSession(params: {
       workspaceId: params.workspaceId!,
       userId: params.userId!,
       mayaRoomId: params.mayaRoomId,
+      scope: params.scope,
+      sessionId: params.sessionId,
     });
 
     if (remote) {
+      if (
+        params.topicBootstrap?.roleKey &&
+        remote.state.roleKey &&
+        remote.state.roleKey !== params.topicBootstrap.roleKey
+      ) {
+        const bootstrapped = bootstrapStateFromTopicRole({
+          roleTitle: params.topicBootstrap.roleTitle,
+          roleKey: params.topicBootstrap.roleKey,
+          topicId: params.topicBootstrap.topicId,
+        });
+        clearHiringSession(params.scope);
+        persistHiringSession(bootstrapped, params.scope);
+        return { sessionId: null, state: bootstrapped };
+      }
       const state = normalizeRestoredHiringSession(remote.state, { dmFirst: params.dmFirst });
-      persistHiringSession(state);
+      persistHiringSession(state, params.scope);
       return { sessionId: remote.sessionId, state };
     }
 
     if (cachedState && hasMeaningfulHiringProgress(cachedState)) {
-      const sessionId = await saveHiringSession({
-        sessionId: null,
-        workspaceId: params.workspaceId!,
-        userId: params.userId!,
-        mayaRoomId: params.mayaRoomId,
-        state: cachedState,
+      // Reject cached state if role no longer matches topic metadata
+      if (
+        params.topicBootstrap &&
+        cachedState.roleKey &&
+        params.topicBootstrap.roleKey &&
+        cachedState.roleKey !== params.topicBootstrap.roleKey
+      ) {
+        clearHiringSession(params.scope);
+      } else {
+        const sessionId = await saveHiringSession({
+          sessionId: null,
+          workspaceId: params.workspaceId!,
+          userId: params.userId!,
+          mayaRoomId: params.mayaRoomId,
+          scope: params.scope,
+          state: cachedState,
+        });
+        persistHiringSession(cachedState, params.scope);
+        return { sessionId, state: cachedState };
+      }
+    }
+
+    if (params.topicBootstrap && params.scope.mayaTopicId && !params.scope.directChat) {
+      const bootstrapped = bootstrapStateFromTopicRole({
+        roleTitle: params.topicBootstrap.roleTitle,
+        roleKey: params.topicBootstrap.roleKey,
+        topicId: params.topicBootstrap.topicId,
       });
-      persistHiringSession(cachedState);
-      return { sessionId, state: cachedState };
+      persistHiringSession(bootstrapped, params.scope);
+      return { sessionId: null, state: bootstrapped };
     }
   } catch (error) {
     console.warn("[AdeHQ hiring] Supabase session load failed; using cache.", error);
@@ -377,10 +555,10 @@ export async function persistDurableHiringSession(params: {
   workspaceId?: string;
   userId?: string;
   mayaRoomId: string;
-  mayaTopicId?: string;
+  scope: HiringSessionScope;
   state: HiringSessionState;
 }): Promise<string | null> {
-  persistHiringSession(params.state);
+  persistHiringSession(params.state, params.scope);
 
   if (
     params.backend !== "supabase" ||
@@ -397,7 +575,7 @@ export async function persistDurableHiringSession(params: {
       workspaceId: params.workspaceId,
       userId: params.userId,
       mayaRoomId: params.mayaRoomId,
-      mayaTopicId: params.mayaTopicId,
+      scope: params.scope,
       state: params.state,
     });
   } catch (error) {
@@ -414,8 +592,13 @@ export async function finalizeDurableHiringSession(params: {
   hiredEmployeeId: string;
   dmRoomId: string;
   candidateId: string;
+  scope?: HiringSessionScope;
 }): Promise<void> {
-  clearHiringSession();
+  if (params.scope) {
+    clearHiringSession(params.scope);
+  } else {
+    clearHiringSession();
+  }
 
   if (params.backend !== "supabase" || !params.sessionId || !params.workspaceId) {
     return;

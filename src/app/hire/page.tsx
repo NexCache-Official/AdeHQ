@@ -12,6 +12,10 @@ function HirePageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const onboarding = searchParams.get("onboarding") === "1";
+  const entrySource =
+    searchParams.get("entry") === "top_nav"
+      ? ("top_nav_hire_button" as const)
+      : ("hire_route" as const);
   const emailGate = useConfirmedEmailGate();
 
   useEffect(() => {
@@ -37,7 +41,7 @@ function HirePageInner() {
     return <LoadingState full label="Redirecting…" />;
   }
 
-  return <HireFlow onboarding={onboarding} />;
+  return <HireFlow onboarding={onboarding} entrySource={entrySource} />;
 }
 
 export default function HirePage() {

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { callCandidates, callRecruiter } from "@/lib/hiring/hiring-api";
-import { completeHireFromCandidate, logCandidatesGenerated, maybeLogBriefUpdated } from "@/lib/hiring/hire-completion";
+import { maybeLogBriefUpdated } from "@/lib/hiring/hire-completion";
 import { useStore } from "@/lib/demo-store";
 import {
   synthesizeBriefForHiringContext,
@@ -24,6 +24,14 @@ import {
   hiringBackStep,
 } from "@/lib/hiring/session";
 import { useHiringSessionSync } from "@/lib/hiring/use-hiring-session-sync";
+import { useHiringCandidateIntegrity } from "@/lib/hiring/use-hiring-candidate-integrity";
+import {
+  completeHireFromSession,
+  generateCandidatesForSession,
+  logCandidatesGeneratedForSession,
+  type HiringSurface,
+} from "@/lib/hiring/hiring-session-service";
+import { ActionOnceGuard } from "@/lib/messaging/idempotency";
 import { detectBriefChange, type BriefComposeSection } from "@/lib/hiring/detect-brief-change";
 import {
   INITIAL_BRIEF_UPDATE_STATE,
@@ -68,23 +76,39 @@ import {
   SuccessScreen,
 } from "./HireScreens";
 
-type HireFlowProps = { onboarding?: boolean };
+type HireFlowProps = {
+  onboarding?: boolean;
+  entrySource?: Extract<HiringSurface, "hire_route" | "top_nav_hire_button">;
+};
 
-export function HireFlow({ onboarding = false }: HireFlowProps) {
-  const { state: appState, actions } = useStore();
+export function HireFlow({ onboarding = false, entrySource = "hire_route" }: HireFlowProps) {
+  const { state: appState, actions, backend } = useStore();
   const router = useRouter();
   const mayaRoomId = useMemo(
     () => resolveMayaDmRoomId(appState.rooms),
     [appState.rooms],
   );
+  const hiringSurface: HiringSurface = onboarding ? "onboarding" : entrySource;
   const {
     session,
     dispatch,
+    sessionId,
+    sessionScopeKey,
     tryClaimHireLock,
     releaseHireLock,
     completeDurableHire,
-  } = useHiringSessionSync({ mayaRoomId, dmFirst: false });
+  } = useHiringSessionSync({ mayaRoomId, surface: hiringSurface });
+  const { visibleCandidates, candidateContext } = useHiringCandidateIntegrity({
+    session,
+    sessionId,
+    backend,
+    dispatch,
+    onStaleCleared: (note) => {
+      dispatch({ type: "ADD_MESSAGE", message: { role: "ade", text: note } });
+    },
+  });
   const sucTimer = useRef<ReturnType<typeof setInterval>>();
+  const generateGuardRef = useRef(new ActionOnceGuard());
   const chatEndRef = useRef<HTMLDivElement>(null);
   const prevBriefRef = useRef<Partial<AiEmployeeJobBrief>>();
   const lastBriefLogRef = useRef<string | null>(null);
@@ -133,16 +157,16 @@ export function HireFlow({ onboarding = false }: HireFlowProps) {
   const previewBrief = session.briefPartial ?? session.brief;
   const displayReadiness = useMemo(() => {
     const base = session.readiness;
-    const canReview = session.briefReady || base.ready;
+    const canReview = session.briefReady && base.ready;
     if (!canReview) return base;
     return finalizeReadinessScore(base, previewBrief as AiEmployeeJobBrief, true);
   }, [session.readiness, session.briefReady, previewBrief]);
   const hired =
-    session.candidates.find((c) => c.id === session.selectedCandidateId) ??
-    session.candidates.find((c) => c.recommended) ??
-    session.candidates[1];
+    visibleCandidates.find((c) => c.id === session.selectedCandidateId) ??
+    visibleCandidates.find((c) => c.recommended) ??
+    visibleCandidates[1];
   const ivApplicant = session.interviewWith
-    ? session.candidates.find((c) => c.id === session.interviewWith)
+    ? visibleCandidates.find((c) => c.id === session.interviewWith)
     : null;
 
   const rooms = useMemo(
@@ -192,7 +216,13 @@ export function HireFlow({ onboarding = false }: HireFlowProps) {
         });
       }
       if (res.checklist) dispatch({ type: "SET_CHECKLIST", checklist: res.checklist });
-      if (res.readiness) dispatch({ type: "SET_READINESS", readiness: res.readiness });
+      if (res.readiness) {
+        dispatch({ type: "SET_READINESS", readiness: res.readiness });
+        dispatch({
+          type: "SET_BRIEF_READY",
+          briefReady: Boolean(res.canReviewBrief && res.readiness.ready),
+        });
+      }
       if (res.suggestionChips) {
         dispatch({ type: "SET_SUGGESTION_CHIPS", chips: res.suggestionChips });
       }
@@ -261,7 +291,7 @@ export function HireFlow({ onboarding = false }: HireFlowProps) {
     });
     dispatch({ type: "SET_BRIEF_PARTIAL", briefPartial: localBrief });
     const openingConversation = [{ role: "ade" as const, text: opening }];
-    const localReadiness = assessRecruiterReadiness(openingConversation, localBrief);
+    const localReadiness = assessRecruiterReadiness(openingConversation, localBrief, session.roleKey);
     dispatch({ type: "SET_READINESS", readiness: localReadiness });
     dispatch({
       type: "SET_SUGGESTION_CHIPS",
@@ -452,10 +482,11 @@ export function HireFlow({ onboarding = false }: HireFlowProps) {
       if (res.brief) {
         dispatch({ type: "SET_BRIEF", brief: res.brief });
       }
-      if (res.canReviewBrief || res.briefReady) {
+      if (res.canReviewBrief && res.readiness?.ready) {
         dispatch({ type: "SET_BRIEF_READY", briefReady: true });
         setMayaState("ready_to_review");
-      } else {
+      } else if (!isDraftNow) {
+        dispatch({ type: "SET_BRIEF_READY", briefReady: false });
         setMayaState("idle");
       }
       setBriefUpdateState({
@@ -545,6 +576,11 @@ export function HireFlow({ onboarding = false }: HireFlowProps) {
       });
       return;
     }
+    const genKey = `gen:${sessionScopeKey}:${sessionId ?? "local"}`;
+    if (generateGuardRef.current.isInFlight(genKey)) return;
+    if (!force && visibleCandidates.length > 0) return;
+    if (!generateGuardRef.current.tryBegin(genKey, { allowRetry: force })) return;
+
     const brief = session.brief;
     dispatch({ type: "SET_STEP", step: "generating_applicants" });
     dispatch({ type: "SET_GEN_STEP", genStep: 0 });
@@ -552,14 +588,23 @@ export function HireFlow({ onboarding = false }: HireFlowProps) {
     void (async () => {
       const roleTitle = brief.roleTitle ?? roleSeed;
       try {
-        const { candidates } = await callCandidates(brief, effectiveDepartmentId, session.roleKey);
+        const candidates = await generateCandidatesForSession({
+          brief,
+          departmentId: effectiveDepartmentId,
+          roleKey: session.roleKey,
+          sessionScopeKey,
+          sessionId,
+          roleTitle,
+        });
         dispatch({ type: "SET_CANDIDATES", candidates });
-        logCandidatesGenerated(actions, mayaRoomId, roleTitle);
+        logCandidatesGeneratedForSession(actions, mayaRoomId, roleTitle);
+        generateGuardRef.current.complete(genKey);
       } catch {
-        const { generateDeterministicCandidates } = await import("@/lib/hiring/candidate-engine");
-        const candidates = generateDeterministicCandidates(brief, effectiveDepartmentId, session.roleKey);
-        dispatch({ type: "SET_CANDIDATES", candidates });
-        logCandidatesGenerated(actions, mayaRoomId, roleTitle);
+        generateGuardRef.current.abort(genKey);
+        dispatch({
+          type: "SET_ERROR",
+          error: "Could not generate candidates. Please try again.",
+        });
       }
     })();
   };
@@ -581,82 +626,57 @@ export function HireFlow({ onboarding = false }: HireFlowProps) {
     if (
       session.step === "generating_applicants" &&
       session.genStep >= 6 &&
-      session.candidates.length > 0
+      visibleCandidates.length > 0
     ) {
       dispatch({ type: "SET_STEP", step: "shortlist" });
     }
-  }, [session.step, session.genStep, session.candidates.length]);
+  }, [session.step, session.genStep, visibleCandidates.length]);
 
   const confirmHire = async () => {
     if (!hired || !session.brief || !appState.user || session.busy) return;
-    const employee = candidateToEmployee(hired, session.brief, effectiveDepartmentId, session.roleKey);
-    employee.id = uid("emp");
 
+    dispatch({ type: "SET_BUSY", busy: true });
     try {
-      if (onboarding) {
-        if (!appState.workspace.id) {
-          throw new Error("Workspace not ready. Complete onboarding and open Maya before confirming hire.");
-        }
+      const context = onboarding ? readOnboardingContext() : null;
+      const defaultRoomId =
+        context?.roomId ?? appState.rooms.find((r) => r.kind === "room")?.id;
 
-        const context = readOnboardingContext();
-        const defaultRoomId =
-          context?.roomId ?? appState.rooms.find((r) => r.kind === "room")?.id;
-        if (defaultRoomId) {
-          employee.defaultRoomId = defaultRoomId;
-        }
+      const result = await completeHireFromSession({
+        actions,
+        candidate: hired,
+        session,
+        sessionCandidates: visibleCandidates,
+        ctx: candidateContext,
+        brief: session.brief,
+        departmentId: effectiveDepartmentId,
+        roleKey: session.roleKey,
+        workspaceId: appState.workspace.id || null,
+        userId: appState.user.id,
+        sessionId,
+        existingMemory: appState.memory,
+        userName: appState.user.name,
+        mayaRoomId,
+        tryClaimHireLock,
+        releaseHireLock,
+        completeDurableHire,
+        onboarding: onboarding
+          ? {
+              defaultRoomId,
+              onComplete: () => clearOnboardingDrafts(),
+            }
+          : undefined,
+      });
 
-        actions.hireEmployee(employee);
-
-        const workLog: WorkLogEvent = {
-          id: uid("wl"),
-          roomId: defaultRoomId ?? appState.rooms[0]?.id ?? "",
-          employeeId: employee.id,
-          action: "Employee hired",
-          summary: `Hired ${employee.name} as ${hired.title}.`,
-          status: "success",
-          createdAt: nowISO(),
-        };
-
-        await actions.completeFirstHire({
-          employee,
-          workLog,
-          defaultRoomId,
-        });
-        clearOnboardingDrafts();
-      } else {
-        const locked = await tryClaimHireLock();
-        if (!locked) return;
-        const { employeeId, dmRoomId } = completeHireFromCandidate({
-          actions,
-          userName: appState.user.name,
-          candidate: hired,
-          brief: session.brief,
-          departmentId: effectiveDepartmentId,
-          roleKey: session.roleKey,
-          mayaRoomId,
-        });
-        dispatch({ type: "COMPLETE_HIRE", employeeId, dmRoomId });
-        await completeDurableHire({
-          state: { ...session, brief: session.brief },
-          hiredEmployeeId: employeeId,
-          dmRoomId,
-          candidateId: hired.id,
-        });
-        runSuccessAnimation();
-        setTimeout(() => dispatch({ type: "SET_STEP", step: "assign_optional" }), 2400);
+      if (!result.ok) {
+        dispatch({ type: "SET_ERROR", error: result.message });
         return;
       }
 
-      const dm = actions.openOrCreateDM(employee.id);
-      const firstName = appState.user.name?.split(" ")[0] ?? "there";
-      actions.addMessage(dm.id, {
-        senderType: "ai",
-        senderId: employee.id,
-        senderName: employee.name,
-        content: welcomeMessage(employee.name, hired.title, firstName, session.brief),
+      dispatch({
+        type: "COMPLETE_HIRE",
+        employeeId: result.employeeId,
+        dmRoomId: result.dmRoomId,
       });
-
-      dispatch({ type: "COMPLETE_HIRE", employeeId: employee.id, dmRoomId: dm.id });
       runSuccessAnimation();
       setTimeout(() => dispatch({ type: "SET_STEP", step: "assign_optional" }), 2400);
     } catch (e) {
@@ -665,6 +685,8 @@ export function HireFlow({ onboarding = false }: HireFlowProps) {
         type: "SET_ERROR",
         error: e instanceof Error ? e.message : "Could not complete hire.",
       });
+    } finally {
+      dispatch({ type: "SET_BUSY", busy: false });
     }
   };
 
@@ -737,7 +759,7 @@ export function HireFlow({ onboarding = false }: HireFlowProps) {
               messages={session.recruiterMessages}
               chips={session.suggestionChips}
               readiness={displayReadiness}
-              briefReady={session.briefReady}
+              briefReady={displayReadiness.ready}
               busy={session.busy}
               mayaState={mayaState}
               onSend={sendUserMessage}
@@ -853,7 +875,7 @@ export function HireFlow({ onboarding = false }: HireFlowProps) {
               </div>
             </div>
             <div className="grid grid-cols-[repeat(auto-fit,minmax(320px,1fr))] gap-[18px]">
-              {session.candidates.map((a) => (
+              {visibleCandidates.map((a) => (
                 <ApplicantCard
                   key={a.id}
                   applicant={a}
@@ -870,26 +892,27 @@ export function HireFlow({ onboarding = false }: HireFlowProps) {
                     dispatch({ type: "SET_INTERVIEW", id: a.id });
                   }}
                   onHire={() => dispatch({ type: "SELECT_CANDIDATE", id: a.id })}
+                  hireDisabled={session.busy}
                 />
               ))}
             </div>
-            {session.candidates.find((c) => c.recommended) && (
+            {visibleCandidates.find((c) => c.recommended) && (
               <div className="mt-5 rounded-[14px] bg-gradient-to-b from-ink to-ink/90 p-5 text-white">
                 <div className="mb-2 font-mono text-[10px] uppercase tracking-wider text-accent-soft">
                   Ade&apos;s recommendation
                 </div>
                 <p className="text-[15px] leading-relaxed text-white/85">
                   <b className="text-white">
-                    Recommended: {session.candidates.find((c) => c.recommended)?.name}.
+                    Recommended: {visibleCandidates.find((c) => c.recommended)?.name}.
                   </b>{" "}
-                  {session.candidates.find((c) => c.recommended)?.whyThisCandidate}
+                  {visibleCandidates.find((c) => c.recommended)?.whyThisCandidate}
                 </p>
                 <button
                   type="button"
                   onClick={() =>
                     dispatch({
                       type: "SELECT_CANDIDATE",
-                      id: session.candidates.find((c) => c.recommended)!.id,
+                      id: visibleCandidates.find((c) => c.recommended)!.id,
                     })
                   }
                   className="mt-3 rounded-[10px] bg-white px-5 py-2.5 text-sm font-semibold text-ink"

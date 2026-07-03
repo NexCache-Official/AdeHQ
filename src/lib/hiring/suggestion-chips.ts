@@ -400,6 +400,13 @@ export function generateSuggestionChips(
   }
 
   if (userTurns === 0 && role?.questionTemplates.coreWorkChips.length) {
+    if (isEngineeringBrief(currentBrief) && primary === "technical_focus") {
+      return chipsFromLabels(role.questionTemplates.coreWorkChips);
+    }
+    return chipsFromLabels(role.questionTemplates.coreWorkChips);
+  }
+
+  if (isEngineeringBrief(currentBrief) && primary === "technical_focus" && role?.questionTemplates.coreWorkChips.length) {
     return chipsFromLabels(role.questionTemplates.coreWorkChips);
   }
 

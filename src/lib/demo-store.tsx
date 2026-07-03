@@ -1249,8 +1249,19 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       },
 
       addMessage: (roomId, msg) => {
+        const messageId = msg.id ?? uid("msg");
+        const currentRoom = stateRef.current.rooms.find((room) => room.id === roomId);
+        const clientId =
+          msg.clientMessageId ?? (msg.senderType === "human" ? messageId : undefined);
+        const existing =
+          currentRoom?.messages.find((m) => m.id === messageId) ??
+          (clientId
+            ? currentRoom?.messages.find((m) => m.clientMessageId === clientId)
+            : undefined);
+        if (existing) return existing;
+
         const created: RoomMessage = {
-          id: msg.id ?? uid("msg"),
+          id: messageId,
           roomId,
           topicId: msg.topicId,
           senderType: msg.senderType,
@@ -1263,9 +1274,9 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           agentRunId: msg.agentRunId,
           triggerMessageId: msg.triggerMessageId,
           pending: msg.pending,
+          clientMessageId: msg.clientMessageId ?? (msg.senderType === "human" ? messageId : undefined),
           createdAt: msg.createdAt ?? nowISO(),
         };
-        const currentRoom = stateRef.current.rooms.find((room) => room.id === roomId);
         const updatedRoom = currentRoom
           ? {
               ...currentRoom,
@@ -1287,8 +1298,19 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       },
 
       addLocalMessage: (roomId, msg) => {
+        const messageId = msg.id ?? uid("msg");
+        const currentRoom = stateRef.current.rooms.find((room) => room.id === roomId);
+        const clientId =
+          msg.clientMessageId ?? (msg.senderType === "human" ? messageId : undefined);
+        const existing =
+          currentRoom?.messages.find((m) => m.id === messageId) ??
+          (clientId
+            ? currentRoom?.messages.find((m) => m.clientMessageId === clientId)
+            : undefined);
+        if (existing) return existing;
+
         const created: RoomMessage = {
-          id: msg.id ?? uid("msg"),
+          id: messageId,
           roomId,
           topicId: msg.topicId,
           senderType: msg.senderType,
@@ -1304,9 +1326,9 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           failed: msg.failed,
           deliveryStatus: msg.deliveryStatus,
           deliveredAt: msg.deliveredAt,
+          clientMessageId: msg.clientMessageId ?? (msg.senderType === "human" ? messageId : undefined),
           createdAt: msg.createdAt ?? nowISO(),
         };
-        const currentRoom = stateRef.current.rooms.find((room) => room.id === roomId);
         const updatedRoom = currentRoom
           ? {
               ...currentRoom,
@@ -1442,6 +1464,12 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       },
 
       createMemory: (m) => {
+        const dedupeKey = m.dedupeKey;
+        if (dedupeKey) {
+          const existing = stateRef.current.memory.find((mem) => mem.dedupeKey === dedupeKey);
+          if (existing) return existing;
+        }
+
         const created: MemoryEntry = {
           id: m.id ?? uid("mem"),
           roomId: m.roomId,

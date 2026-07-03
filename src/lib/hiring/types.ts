@@ -1,4 +1,5 @@
 import type { ModelMode } from "@/lib/ai/model-catalog";
+import type { HiringSessionSource, HiringSessionStatus } from "./canonical-session";
 
 export type HiringStep =
   | "role"
@@ -126,6 +127,12 @@ export type AiEmployeeApplicant = {
   badge: string;
   badgeKind: "rec" | "neutral";
   cap: number;
+  /** Snapshot at generation time — used to detect stale cross-role reuse */
+  roleKey?: string;
+  roleTitle?: string;
+  hiringSessionId?: string;
+  /** ISO timestamp when this candidate was generated — used to detect stale candidates */
+  generatedAt?: string;
 };
 
 export type RecruiterApiResponse = {
@@ -182,6 +189,12 @@ export type HiringSessionState = {
   error: string | null;
   briefEditable: boolean;
   regenSpin: boolean;
+  /** Canonical session metadata (source, status) — persisted to hiring_sessions row */
+  sessionSource?: HiringSessionSource;
+  sessionStatus?: HiringSessionStatus;
+  hiringTopicId?: string | null;
+  /** ISO timestamp when the role was last set/refreshed — candidates generated before this are stale */
+  roleSetAt?: string | null;
 };
 
 export type OnboardingRoomDraft = {

@@ -8,6 +8,9 @@ export function buildRecruiterOpeningMessage(opts: {
   departmentId?: string | null;
 }): string {
   const role = getRoleByKey(opts.roleKey ?? undefined);
+  if (role?.roleKey === "software_engineer") {
+    return role.questionTemplates.coreWork;
+  }
   if (role) {
     return `Let's bring on a ${role.title}. ${role.questionTemplates.coreWork}`;
   }

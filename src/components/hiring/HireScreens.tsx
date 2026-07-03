@@ -26,12 +26,14 @@ export function ApplicantCard({
   onToggleAdv,
   onInterview,
   onHire,
+  hireDisabled = false,
 }: {
   applicant: AiEmployeeApplicant;
   advOpen: boolean;
   onToggleAdv: () => void;
   onInterview: () => void;
   onHire: () => void;
+  hireDisabled?: boolean;
 }) {
   return (
     <div
@@ -194,14 +196,16 @@ export function ApplicantCard({
         <button
           type="button"
           onClick={onInterview}
-          className="flex-1 rounded-[10px] border border-border py-2.5 text-sm transition hover:border-ink"
+          disabled={hireDisabled}
+          className="flex-1 rounded-[10px] border border-border py-2.5 text-sm transition hover:border-ink disabled:opacity-50"
         >
           Interview
         </button>
         <button
           type="button"
           onClick={onHire}
-          className="flex-1 rounded-[10px] bg-ink py-2.5 text-sm font-medium text-white transition hover:bg-ink/90"
+          disabled={hireDisabled}
+          className="flex-1 rounded-[10px] bg-ink py-2.5 text-sm font-medium text-white transition hover:bg-ink/90 disabled:opacity-50"
         >
           Hire {a.first}
         </button>

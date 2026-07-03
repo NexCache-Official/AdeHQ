@@ -95,6 +95,7 @@ function messageFromRow(row: DbRow): RoomMessage {
     triggerMessageId: row.trigger_message_id ? String(row.trigger_message_id) : undefined,
     artifacts: row.artifacts ? (jsonArray(row.artifacts) as MessageArtifact[]) : undefined,
     pending: row.pending === true,
+    clientMessageId: row.client_message_id ? String(row.client_message_id) : undefined,
     createdAt: String(row.created_at ?? nowISO()),
   });
 }
@@ -483,8 +484,22 @@ export async function insertHumanMessage(
   const legacyMentions = mentionsJson?.length
     ? mentionsJson.map((m) => m.id)
     : extractMentions(content, []);
+  const id = clientMessageId ?? uid("msg");
+  const clientId = clientMessageId ?? id;
+
+  if (clientId) {
+    const { data: existing, error: lookupError } = await client
+      .from("messages")
+      .select("*")
+      .eq("workspace_id", workspaceId)
+      .eq("client_message_id", clientId)
+      .maybeSingle();
+    if (lookupError) throw lookupError;
+    if (existing) return messageFromRow(existing as DbRow);
+  }
+
   const message: RoomMessage = {
-    id: clientMessageId ?? uid("msg"),
+    id,
     roomId,
     topicId,
     senderType: "human",
@@ -493,12 +508,14 @@ export async function insertHumanMessage(
     content,
     mentions: legacyMentions,
     mentionsJson,
+    clientMessageId: clientId,
     createdAt: nowISO(),
   };
 
   const { error } = await client.from("messages").insert({
     workspace_id: workspaceId,
     id: message.id,
+    client_message_id: clientId,
     room_id: roomId,
     topic_id: topicId,
     sender_type: message.senderType,
@@ -510,6 +527,17 @@ export async function insertHumanMessage(
     pending: false,
     created_at: message.createdAt,
   });
+
+  if (error?.code === "23505" && clientId) {
+    const { data: existing, error: refetchError } = await client
+      .from("messages")
+      .select("*")
+      .eq("workspace_id", workspaceId)
+      .eq("client_message_id", clientId)
+      .maybeSingle();
+    if (refetchError) throw refetchError;
+    if (existing) return messageFromRow(existing as DbRow);
+  }
 
   if (error) throw error;
   void refreshTopicStats(client, topicId).catch((err) => {

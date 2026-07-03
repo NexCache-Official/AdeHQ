@@ -34,7 +34,8 @@ export type MemorySourceType =
   | "artifact"
   | "manual"
   | "ai_suggestion"
-  | "work_log";
+  | "work_log"
+  | "hiring_session";
 
 /** Map legacy MemoryType slug to a display category. */
 export function legacyTypeToCategory(type: string): MemoryCategory {

@@ -8,9 +8,11 @@ import type {
   RecruiterReadiness,
   RecruiterSuggestionChip,
 } from "./types";
+import type { HiringSessionScope } from "./canonical-session";
+import { hiringSessionStorageKey, candidatesMatchRole } from "./canonical-session";
 import { EMPTY_READINESS } from "./recruiter-brain";
 import { emptyChecklist } from "./recruiter-checklist";
-import { migrateLegacyDepartmentId } from "./role-library";
+import { migrateLegacyDepartmentId, legacyDepartmentIdForRole } from "./role-library";
 
 export const HIRING_SESSION_KEY = "adehq-hiring-session";
 
@@ -77,6 +79,13 @@ export type HiringAction =
   | { type: "SET_BRIEF_EDITABLE"; editable: boolean }
   | { type: "SET_REGEN_SPIN"; spin: boolean }
   | { type: "RESET_RECRUITER" }
+  | {
+      type: "RESET_FOR_ROLE";
+      roleKey: string | null;
+      roleTitle: string;
+      roleInput: string;
+      departmentId?: string | null;
+    }
   | { type: "RESTORE"; state: HiringSessionState };
 
 const BACK_MAP: Partial<Record<HiringStep, HiringStep>> = {
@@ -98,13 +107,27 @@ export function hiringReducer(state: HiringSessionState, action: HiringAction): 
       return { ...state, roleInput: action.roleInput };
     case "SET_DEPARTMENT":
       return { ...state, departmentId: action.departmentId };
-    case "SET_ROLE_KEY":
+    case "SET_ROLE_KEY": {
+      const roleChanged =
+        action.roleKey !== state.roleKey && state.roleKey != null && action.roleKey != null;
+      const staleCandidates =
+        roleChanged && !candidatesMatchRole(state.candidates, action.roleKey, state.customRoleTitle);
       return {
         ...state,
         roleKey: action.roleKey,
         departmentGroupId: action.departmentGroupId ?? state.departmentGroupId,
         departmentId: action.roleKey ? state.departmentId : state.departmentId,
+        ...(roleChanged ? { roleSetAt: new Date().toISOString() } : {}),
+        ...(staleCandidates
+          ? {
+              candidates: [],
+              selectedCandidateId: undefined,
+              briefReady: false,
+              step: "recruiter" as const,
+            }
+          : {}),
       };
+    }
     case "SET_DEPARTMENT_GROUP":
       return { ...state, departmentGroupId: action.departmentGroupId };
     case "SET_DISCOVERY":
@@ -131,7 +154,7 @@ export function hiringReducer(state: HiringSessionState, action: HiringAction): 
     case "SET_CHECKLIST":
       return { ...state, checklist: action.checklist };
     case "SET_READINESS":
-      return { ...state, readiness: action.readiness, briefReady: action.readiness.ready };
+      return { ...state, readiness: action.readiness };
     case "SET_SUGGESTION_CHIPS":
       return { ...state, suggestionChips: action.chips };
     case "SET_BRIEF":
@@ -190,7 +213,23 @@ export function hiringReducer(state: HiringSessionState, action: HiringAction): 
         briefPartial: undefined,
         briefReady: false,
         briefEditable: false,
+        candidates: [],
+        selectedCandidateId: undefined,
         discoveryStep: state.discoveryMode ? state.discoveryStep : null,
+      };
+    case "RESET_FOR_ROLE":
+      return {
+        ...initialHiringSession(),
+        step: "recruiter",
+        roleKey: action.roleKey,
+        roleInput: action.roleInput,
+        customRoleTitle: action.roleTitle,
+        departmentId: action.departmentId ?? legacyDepartmentIdForRole(action.roleKey),
+        sessionSource: state.sessionSource,
+        hiringTopicId: state.hiringTopicId,
+        inferenceConfidence: null,
+        suggestedRoleKeys: action.roleKey ? [action.roleKey] : [],
+        roleSetAt: new Date().toISOString(),
       };
     case "RESTORE":
       return action.state;
@@ -199,7 +238,7 @@ export function hiringReducer(state: HiringSessionState, action: HiringAction): 
   }
 }
 
-export function persistHiringSession(state: HiringSessionState) {
+export function persistHiringSession(state: HiringSessionState, scope?: HiringSessionScope) {
   if (typeof window === "undefined") return;
   try {
     const { busy, regenSpin, compareOpen, interviewWith, ...rest } = state;
@@ -207,7 +246,8 @@ export function persistHiringSession(state: HiringSessionState) {
     void regenSpin;
     void compareOpen;
     void interviewWith;
-    sessionStorage.setItem(HIRING_SESSION_KEY, JSON.stringify(rest));
+    const key = scope ? hiringSessionStorageKey(scope) : HIRING_SESSION_KEY;
+    sessionStorage.setItem(key, JSON.stringify(rest));
   } catch {
     /* ignore */
   }
@@ -231,10 +271,14 @@ export function normalizeRestoredHiringSession(
   return next;
 }
 
-export function loadHiringSession(opts?: { dmFirst?: boolean }): HiringSessionState | null {
+export function loadHiringSession(opts?: {
+  dmFirst?: boolean;
+  scope?: HiringSessionScope;
+}): HiringSessionState | null {
   if (typeof window === "undefined") return null;
   try {
-    const raw = sessionStorage.getItem(HIRING_SESSION_KEY);
+    const key = opts?.scope ? hiringSessionStorageKey(opts.scope) : HIRING_SESSION_KEY;
+    const raw = sessionStorage.getItem(key);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as Partial<HiringSessionState>;
     const base = { ...initialHiringSession(), ...parsed };
@@ -250,7 +294,8 @@ export function loadHiringSession(opts?: { dmFirst?: boolean }): HiringSessionSt
   }
 }
 
-export function clearHiringSession() {
+export function clearHiringSession(scope?: HiringSessionScope) {
   if (typeof window === "undefined") return;
-  sessionStorage.removeItem(HIRING_SESSION_KEY);
+  const key = scope ? hiringSessionStorageKey(scope) : HIRING_SESSION_KEY;
+  sessionStorage.removeItem(key);
 }

@@ -8,6 +8,14 @@ import { isHiringSmallTalk } from "./maya-recruiter-state";
 import { acknowledgeUserAnswer } from "./role-focus-answers";
 import { inferDepartmentId, isEngineeringBrief } from "./suggestion-chips";
 import { getRoleByKey } from "./role-library";
+import {
+  approvalOrSkipped,
+  hasEngineeringDiscipline,
+  hasProductContext,
+  hasUserConfirmedSeniority,
+  meaningfulUserTurns,
+  toolsOrSkipped,
+} from "./recruiter-readiness-engineering";
 
 export { generateSuggestionChips, inferDepartmentId, isEngineeringBrief } from "./suggestion-chips";
 
@@ -52,30 +60,85 @@ function isSpecificDomain(domain?: string): boolean {
   return !GENERIC_DOMAINS.has(domain!.toLowerCase().trim());
 }
 
-function meaningfulUserTurns(conversation: RecruiterMessage[]): number {
-  return conversation.filter(
-    (m) => m.role === "user" && !isHiringSmallTalk(m.text) && m.text.trim().length > 3,
-  ).length;
-}
-
-export const EMPTY_READINESS: RecruiterReadiness = {
-  score: 0,
-  ready: false,
-  confidence: "low",
-  missing: ["role_title", "domain", "core_work"],
-  nextBestQuestion: "What kind of AI employee do you want to hire?",
-  reason: "No role context yet.",
-};
-
-export function assessRecruiterReadiness(
+function assessEngineeringReadiness(
   conversation: RecruiterMessage[],
   currentBrief: AiEmployeeJobBrief,
 ): RecruiterReadiness {
   let score = 0;
   const missing: RecruiterMissingField[] = [];
   const userTurns = meaningfulUserTurns(conversation);
-  const engineering = isEngineeringBrief(currentBrief);
-  const minTurns = engineering ? 3 : 2;
+  const minTurns = 3;
+
+  const roleKnown = hasRealValue(currentBrief.roleTitle);
+  const disciplineKnown = hasEngineeringDiscipline(currentBrief, conversation);
+  const productKnown = hasProductContext(currentBrief, conversation);
+  const seniorityKnown = hasUserConfirmedSeniority(conversation);
+  const toolsKnown = toolsOrSkipped(conversation);
+  const approvalKnown = approvalOrSkipped(conversation);
+
+  if (roleKnown) score += 15;
+  else missing.push("role_title");
+
+  if (disciplineKnown) score += 20;
+  else missing.push("technical_focus");
+
+  if (productKnown) score += 20;
+  else missing.push("domain");
+
+  if (seniorityKnown) score += 15;
+  else {
+    missing.push("seniority");
+    missing.push("autonomy");
+  }
+
+  if (toolsKnown) score += 15;
+  else missing.push("tools");
+
+  if (approvalKnown) score += 15;
+  else missing.push("approval_rules");
+
+  const ready =
+    userTurns >= minTurns &&
+    roleKnown &&
+    disciplineKnown &&
+    productKnown &&
+    seniorityKnown &&
+    toolsKnown &&
+    approvalKnown;
+
+  const confidence: RecruiterReadiness["confidence"] =
+    score >= 78 ? "high" : score >= 45 ? "medium" : "low";
+
+  return {
+    score,
+    ready,
+    confidence,
+    missing,
+    nextBestQuestion: chooseNextRecruiterQuestion(
+      { score, ready, confidence, missing, reason: "" },
+      currentBrief,
+      "software_engineer",
+      conversation,
+    ),
+    reason: ready
+      ? "Engineering role, focus, product context, seniority, and workflow guardrails are clear enough to review."
+      : `Still gathering ${missing.slice(0, 3).join(", ").replaceAll("_", " ")}.`,
+  };
+}
+
+export function assessRecruiterReadiness(
+  conversation: RecruiterMessage[],
+  currentBrief: AiEmployeeJobBrief,
+  roleKey?: string | null,
+): RecruiterReadiness {
+  if (isEngineeringBrief(currentBrief) || roleKey === "software_engineer" || roleKey === "full_stack_developer") {
+    return assessEngineeringReadiness(conversation, currentBrief);
+  }
+
+  let score = 0;
+  const missing: RecruiterMissingField[] = [];
+  const userTurns = meaningfulUserTurns(conversation);
+  const minTurns = 2;
 
   const roleKnown = hasRealValue(currentBrief.roleTitle);
   const domainKnown = isSpecificDomain(currentBrief.domain);
@@ -89,12 +152,12 @@ export function assessRecruiterReadiness(
     (currentBrief.technicalFocus.length > 0 || currentBrief.businessFocus.length > 0);
   const qualityKnown = userTurns >= 1 && Boolean(currentBrief.qualityPreference);
   const seniorityKnown =
-    userTurns >= 1 && Boolean(currentBrief.seniorityLevel && currentBrief.autonomyLevel);
+    userTurns >= 1 && hasUserConfirmedSeniority(conversation);
   const communicationKnown =
     userTurns >= 1 &&
     (Boolean(currentBrief.communicationStyle?.trim()) || currentBrief.personalityTraits.length > 0);
   const workflowKnown =
-    userTurns >= 1 && (currentBrief.toolsNeeded.length > 0 || currentBrief.approvalRules.length > 0);
+    userTurns >= 1 && (toolsOrSkipped(conversation) || approvalOrSkipped(conversation));
 
   if (roleKnown) score += 15;
   else missing.push("role_title");
@@ -106,7 +169,7 @@ export function assessRecruiterReadiness(
   else missing.push("core_work");
 
   if (focusKnown) score += 15;
-  else missing.push(engineering ? "technical_focus" : "business_focus");
+  else missing.push(isEngineeringBrief(currentBrief) ? "technical_focus" : "business_focus");
 
   if (qualityKnown) score += 10;
   else missing.push("quality_preference");
@@ -140,7 +203,8 @@ export function assessRecruiterReadiness(
       nextBestQuestion: chooseNextRecruiterQuestion(
         { score, ready, confidence, missing, reason: "" },
         currentBrief,
-        undefined,
+        roleKey,
+        conversation,
       ),
       reason: ready
         ? "The brief has enough role, domain, and work detail to review."
@@ -150,6 +214,15 @@ export function assessRecruiterReadiness(
     ready,
   );
 }
+
+export const EMPTY_READINESS: RecruiterReadiness = {
+  score: 0,
+  ready: false,
+  confidence: "low",
+  missing: ["role_title", "domain", "core_work"],
+  nextBestQuestion: "What kind of AI employee do you want to hire?",
+  reason: "No role context yet.",
+};
 
 /** Align displayed score with review readiness — core brief complete should read 92–100%, not 85%. */
 export function finalizeReadinessScore(
@@ -199,10 +272,19 @@ export function chooseNextRecruiterQuestion(
   const lastAde = [...conversation].reverse().find((m) => m.role === "ade")?.text ?? "";
 
   if (readiness.ready) {
-    return "I have enough to draft a strong job brief. You can review it now, or keep refining the role.";
+    return "I have enough to draft the brief. Want to review it or generate candidates?";
   }
   if (missing.includes("role_title")) {
     return "What kind of role should this AI employee play for your team?";
+  }
+  if (isEngineeringBrief(currentBrief) && missing.includes("technical_focus")) {
+    return "Good choice. Should this engineer focus on frontend product work, backend systems, full-stack, AI infrastructure, or QA?";
+  }
+  if (isEngineeringBrief(currentBrief) && missing.includes("domain")) {
+    return "What stack or product area should they work with first? For example Next.js, Supabase, APIs, mobile, internal tools, or something else.";
+  }
+  if (isEngineeringBrief(currentBrief) && (missing.includes("seniority") || missing.includes("autonomy"))) {
+    return "How senior should they feel: fast implementer, reliable mid-level builder, or senior architect?";
   }
   if (missing.includes("domain")) {
     return `What product or market should they focus on? For example, your core product, a new category, or a specific customer segment.`;
@@ -235,7 +317,7 @@ export function chooseNextRecruiterQuestion(
     return "How should they show up in the team — concise and direct, warm and collaborative, or more formal?";
   }
   if (missing.includes("tools")) {
-    return "Any tools they should plug into from day one, or should we keep it lightweight for now?";
+    return "Any tools or stack they should plug into from day one, or should we keep it lightweight for now?";
   }
   if (missing.includes("approval_rules")) {
     return "Anything they should always run by you first — external messages, spend, publishing, that kind of thing?";

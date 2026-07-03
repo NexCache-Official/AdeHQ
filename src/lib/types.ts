@@ -335,6 +335,8 @@ export type RoomMessage = {
   deliveryStatus?: "sending" | "delivered" | "failed";
   deliveredAt?: string;
   seenBy?: MessageSeenBy[];
+  /** Client idempotency key — matches DB client_message_id when persisted */
+  clientMessageId?: string;
 };
 
 export type WorkspaceFileStatus = "uploaded" | "processing" | "ready" | "failed";
@@ -496,7 +498,8 @@ export type MemorySourceType =
   | "artifact"
   | "manual"
   | "ai_suggestion"
-  | "work_log";
+  | "work_log"
+  | "hiring_session";
 
 export type MemoryScope =
   | "workspace"

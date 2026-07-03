@@ -202,7 +202,7 @@ function buildResponse(input: {
   }
   const changedFields = [...(chipMutation?.changedFields ?? []), ...(roleFocus ? ["businessFocus"] : [])];
 
-  const baseReadiness = assessRecruiterReadiness(input.conversation, brief);
+  const baseReadiness = assessRecruiterReadiness(input.conversation, brief, roleKey);
   const canReviewBrief = input.forceCanReview || baseReadiness.ready;
   const readiness = finalizeReadinessScore(baseReadiness, brief, canReviewBrief);
   let suggestionChips = generateSuggestionChips(readiness, brief, input.conversation, roleKey);

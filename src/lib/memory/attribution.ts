@@ -53,6 +53,7 @@ export function memorySourceLabel(
   ctx: MemoryAttributionContext,
 ): string | null {
   if (entry.sourceType === "topic_summary") return "From topic summary";
+  if (entry.sourceType === "hiring_session") return "From hiring session";
   if (entry.sourceType === "file") return "From file";
   if (entry.sourceType === "artifact") return "From artifact";
   if (entry.sourceMessageId) {
@@ -66,11 +67,14 @@ export function memorySourceLabel(
 
 export function memorySuggestedByLabel(entry: MemoryEntry, ctx: MemoryAttributionContext): string | null {
   const name = resolveActorName(entry.suggestedById, entry.suggestedByType, ctx);
-  if (!name) {
-    if (entry.sourceType === "topic_summary" || entry.sourceType === "ai_suggestion") return "Topic summary";
-    return null;
+  if (name) return name;
+  if (entry.sourceType === "hiring_session" && entry.suggestedByType === "ai") {
+    return "Maya";
   }
-  return name;
+  if (entry.sourceType === "topic_summary" || entry.sourceType === "ai_suggestion") {
+    return "Topic summary";
+  }
+  return null;
 }
 
 export function memorySavedByLabel(entry: MemoryEntry, ctx: MemoryAttributionContext): string {

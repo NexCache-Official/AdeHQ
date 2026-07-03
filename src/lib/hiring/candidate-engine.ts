@@ -157,6 +157,7 @@ export function buildDeterministicApplicant(
   departmentId: string | null,
   roleKey?: string | null,
   copy?: ApplicantCopy,
+  sessionScope?: string,
 ): AiEmployeeApplicant {
   const employeeRoleKey = hiringRoleToEmployeeRoleKey(roleKey, departmentId);
   const modelMode = tierModelMode(tier, employeeRoleKey);
@@ -169,11 +170,13 @@ export function buildDeterministicApplicant(
   const first = name.split(" ")[0] ?? name;
 
   return {
-    id: tier,
+    id: sessionScope ? `${sessionScope}:${tier}` : tier,
     tier,
     name,
     first,
     title,
+    roleKey: roleKey ?? undefined,
+    roleTitle: brief.roleTitle,
     modelMode,
     resolvedModelId,
     engineLabel: TIER_ENGINE[tier],
@@ -249,6 +252,7 @@ export function generateDeterministicCandidates(
   departmentId: string | null,
   roleKey?: string | null,
   copies?: Partial<Record<CandidateTier, ApplicantCopy>>,
+  sessionScope?: string,
 ): AiEmployeeApplicant[] {
   const tiers: CandidateTier[] = ["high_capacity", "recommended", "premium"];
   return tiers.map((tier) =>
@@ -258,6 +262,7 @@ export function generateDeterministicCandidates(
       departmentId,
       roleKey,
       copies?.[tier] ?? personaCopy(tier, roleKey),
+      sessionScope,
     ),
   );
 }

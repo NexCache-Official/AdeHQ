@@ -63,13 +63,29 @@ export function mergeRoomMessages(
   remote: RoomMessage[],
 ): RoomMessage[] {
   const prevById = new Map(previous.map((message) => [message.id, message]));
-  const merged = remote.map((remoteMsg) => {
-    const prevMsg = prevById.get(remoteMsg.id);
-    return prevMsg ? mergeChatMessage(prevMsg, remoteMsg) : normalizeHumanDelivery(remoteMsg);
-  });
+  const seenClientIds = new Set<string>();
+  const merged: RoomMessage[] = [];
+
+  for (const remoteMsg of remote) {
+    const clientId = remoteMsg.clientMessageId;
+    if (clientId) {
+      if (seenClientIds.has(clientId)) continue;
+      seenClientIds.add(clientId);
+    }
+
+    const prevMsg =
+      prevById.get(remoteMsg.id) ??
+      (clientId
+        ? previous.find((m) => m.clientMessageId === clientId)
+        : undefined);
+    merged.push(prevMsg ? mergeChatMessage(prevMsg, remoteMsg) : normalizeHumanDelivery(remoteMsg));
+  }
 
   for (const prevMsg of previous) {
     if (remote.some((message) => message.id === prevMsg.id)) continue;
+    if (prevMsg.clientMessageId && remote.some((m) => m.clientMessageId === prevMsg.clientMessageId)) {
+      continue;
+    }
     if (prevMsg.pending || prevMsg.deliveryStatus === "sending") {
       merged.push(prevMsg);
     }

@@ -217,7 +217,7 @@ export function mergeBriefPartial(
   };
 }
 
-/** Seed brief from role library entry (V19). */
+/** Seed brief from role library entry — discovery-first: no prefilled responsibilities until user answers. */
 export function synthesizeBriefFromRole(
   roleKey: string,
   messages: RecruiterMessage[] = [],
@@ -235,18 +235,14 @@ export function synthesizeBriefFromRole(
     ...base,
     roleTitle: existing?.roleTitle || role.seniorityVariants?.specialist || role.title,
     department: role.departmentLabel,
-    domain: existing?.domain || role.defaultBusinessFocus?.[0] || role.departmentLabel,
-    mission:
-      existing?.mission ||
-      `Help the team succeed as a ${role.title} — ${role.description.toLowerCase()}.`,
-    coreResponsibilities:
-      existing?.coreResponsibilities?.length ? existing.coreResponsibilities : [...role.defaultResponsibilities],
-    technicalFocus: existing?.technicalFocus?.length ? existing.technicalFocus : [...(role.defaultTechnicalFocus ?? [])],
-    businessFocus: existing?.businessFocus?.length ? existing.businessFocus : [...(role.defaultBusinessFocus ?? [])],
-    successMetrics:
-      existing?.successMetrics?.length ? existing.successMetrics : [...role.defaultSuccessMetrics],
-    toolsNeeded: existing?.toolsNeeded?.length ? existing.toolsNeeded : [...role.defaultTools],
-    approvalRules: existing?.approvalRules?.length ? existing.approvalRules : [...role.defaultApprovalRules],
+    domain: existing?.domain ?? "",
+    mission: existing?.mission ?? "",
+    coreResponsibilities: existing?.coreResponsibilities?.length ? existing.coreResponsibilities : [],
+    technicalFocus: existing?.technicalFocus?.length ? existing.technicalFocus : [],
+    businessFocus: existing?.businessFocus?.length ? existing.businessFocus : [],
+    successMetrics: existing?.successMetrics?.length ? existing.successMetrics : [],
+    toolsNeeded: existing?.toolsNeeded?.length ? existing.toolsNeeded : [],
+    approvalRules: existing?.approvalRules?.length ? existing.approvalRules : [],
     assumptions: existing?.assumptions ?? [],
     openQuestions:
       userLines.length === 0
@@ -255,7 +251,12 @@ export function synthesizeBriefFromRole(
   };
 
   if (userLines.length > 0) {
-    let enriched = synthesizeBriefFromConversation(role.title, messages, role.legacyDepartmentId ?? "custom", brief);
+    let enriched = synthesizeBriefFromConversation(
+      role.title,
+      messages,
+      role.legacyDepartmentId ?? "custom",
+      brief,
+    );
     for (const line of userLines) {
       const focus = applyRoleFocusAnswer(line, enriched, roleKey);
       if (focus) enriched = focus.brief;

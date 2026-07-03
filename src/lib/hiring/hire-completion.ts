@@ -8,7 +8,7 @@ import type { ProjectRoom, RoomTopic, WorkLogEvent } from "@/lib/types";
 import { generalTopicForRoom } from "@/lib/topics";
 import { nowISO, uid } from "@/lib/utils";
 
-type HireActions = {
+export type HireActions = {
   hireEmployee: (employee: ReturnType<typeof candidateToEmployee>) => void;
   openOrCreateDM: (employeeId: string) => ProjectRoom;
   addMessage: (
@@ -36,6 +36,9 @@ export function completeHireFromCandidate(params: {
   mayaRoomId?: string;
   mayaTopicId?: string;
   allTopics?: RoomTopic[];
+  defaultRoomId?: string;
+  /** When onboarding persists via completeFirstHire, skip duplicate work-log */
+  skipWorkLog?: boolean;
 }): { employeeId: string; dmRoomId: string } {
   const employee = candidateToEmployee(
     params.candidate,
@@ -44,6 +47,9 @@ export function completeHireFromCandidate(params: {
     params.roleKey,
   );
   employee.id = uid("emp");
+  if (params.defaultRoomId) {
+    employee.defaultRoomId = params.defaultRoomId;
+  }
 
   params.actions.hireEmployee(employee);
 
@@ -61,15 +67,17 @@ export function completeHireFromCandidate(params: {
   });
 
   const logRoomId = params.mayaRoomId ?? dm.id;
-  params.actions.addWorkLog({
-    id: uid("wl"),
-    roomId: logRoomId,
-    employeeId: employee.id,
-    action: "Employee hired",
-    summary: `Hired ${employee.name} as ${params.candidate.title}.`,
-    status: "success",
-    createdAt: nowISO(),
-  });
+  if (!params.skipWorkLog) {
+    params.actions.addWorkLog({
+      id: uid("wl"),
+      roomId: logRoomId,
+      employeeId: employee.id,
+      action: "Employee hired",
+      summary: `Hired ${employee.name} as ${params.candidate.title}.`,
+      status: "success",
+      createdAt: nowISO(),
+    });
+  }
 
   if (params.mayaRoomId) {
     params.actions.addMessage(params.mayaRoomId, {
