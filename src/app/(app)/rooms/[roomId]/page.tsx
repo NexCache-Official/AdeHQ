@@ -12,7 +12,7 @@ import { EmployeeAvatar } from "@/components/EmployeeAvatar";
 import { Button } from "@/components/ui";
 import { EmptyState } from "@/components/States";
 import { authHeaders } from "@/lib/api/auth-client";
-import { generalTopicForRoom, isGeneralTopic, isHiringTopic, topicsForRoom } from "@/lib/topics";
+import { generalTopicForRoom, isGeneralTopic, topicsForRoom } from "@/lib/topics";
 import { MayaDmHiringLayout } from "@/components/maya/MayaDmHiringWorkspace";
 import {
   ParticipantAvatarStack,
@@ -111,9 +111,6 @@ export default function RoomDetailPage() {
   );
   const isMayaDm = Boolean(
     isDm && roomEmployees[0] && isMayaEmployee(roomEmployees[0]),
-  );
-  const isMayaHiringTopic = Boolean(
-    isMayaDm && selectedTopic && isHiringTopic(selectedTopic),
   );
 
   useEffect(() => {
@@ -816,7 +813,7 @@ export default function RoomDetailPage() {
           />
         </div>
 
-        {isMayaHiringTopic ? (
+        {isMayaDm ? (
           <MayaDmHiringLayout
             mayaRoomId={roomId}
             selectedTopic={selectedTopic}
