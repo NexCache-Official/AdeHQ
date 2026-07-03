@@ -11,11 +11,14 @@ import { assertTopicInRoom, ensureGeneralTopic } from "@/lib/server/topic-helper
 import { filterOrchestrationEmployees } from "@/lib/orchestration/collaboration-permissions";
 import { applyRoomGovernanceToPlan } from "@/lib/orchestration/ambient-governance";
 import { orchestrateConversation } from "@/lib/orchestration/conversation-orchestrator";
+import {
+  employeesFromReferenceIds,
+  resolveParticipantReferences,
+} from "@/lib/orchestration/participant-reference-resolver";
 import { orchestrationPlanToLegacyResult } from "@/lib/orchestration/legacy-adapter";
 import {
   attachRunIdsToOrchestration,
   fetchTopicSuggestionGovernance,
-  logOrchestrationWorkLog,
   persistOrchestrationPlan,
   persistTopicSuggestions,
 } from "@/lib/orchestration/persistence";
@@ -131,8 +134,16 @@ export async function POST(
     humanMessageSaved = true;
     humanMessageId = humanMessage.id;
 
+    const orchestrationEmployees = filterOrchestrationEmployees(respondersCtx.employees);
     const mentioned = parseEmployeeMentions(trimmed, respondersCtx.employees, mentionsJson);
-    const mentions = mentioned.map((e) => e.id);
+    const nameRefs = resolveParticipantReferences(trimmed, orchestrationEmployees, {
+      excludeEmployeeIds: mentioned.map((employee) => employee.id),
+    });
+    const mentionedByName = employeesFromReferenceIds(orchestrationEmployees, nameRefs.actionableEmployeeIds);
+    const allMentionedIds = [
+      ...new Set([...mentioned.map((e) => e.id), ...mentionedByName.map((e) => e.id)]),
+    ];
+    const mentions = allMentionedIds;
 
     if (mentions.length && !mentionsJson) {
       void client
@@ -194,8 +205,6 @@ export async function POST(
       if (updateMessageError) throw updateMessageError;
       humanMessage.artifacts = fileArtifacts;
     }
-
-    const orchestrationEmployees = filterOrchestrationEmployees(respondersCtx.employees);
 
     const [recentMessagesResult, topicsResult] = await Promise.all([
       client
@@ -313,20 +322,6 @@ export async function POST(
               createdBy: user.id,
               suggestions: stewardSuggestions,
             });
-
-            const first = stewardSuggestions[0];
-            if (first.confidence >= 0.78) {
-              await logOrchestrationWorkLog(client, {
-                workspaceId,
-                roomId: params.roomId,
-                topicId,
-                employeeId: orchestrationEmployees[0]?.id ?? mentions[0] ?? "system",
-                action: "topic_suggested",
-                summary: `Suggested topic: ${first.type === "move_to_existing_topic" ? first.topicTitle : first.title}`,
-                relatedEntityType: "topic_suggestion",
-                relatedEntityId: String(topicSuggestions[0]?.id ?? ""),
-              });
-            }
           }
         }
       } catch (persistError) {

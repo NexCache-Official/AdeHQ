@@ -255,7 +255,7 @@ export async function maybeLogOrchestrationCompletion(
   const action =
     (params.workLogReason as OrchestrationWorkLogAction | null) ??
     COMPLETION_ACTION_BY_INTENT[params.intent];
-  if (!action || action === "topic_suggested") return false;
+  if (!action || action === "topic_suggested" || action === "orchestration_completed") return false;
 
   const { data: claimed, error: claimError } = await client
     .from("conversation_orchestrations")

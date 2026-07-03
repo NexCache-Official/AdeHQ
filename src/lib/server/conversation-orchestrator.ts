@@ -25,6 +25,10 @@ import {
 } from "@/lib/server/ambient-collaboration";
 import { extractMentionsInOrder, uid } from "@/lib/utils";
 import { filterOrchestrationEmployees } from "@/lib/orchestration/collaboration-permissions";
+import {
+  employeesFromReferenceIds,
+  resolveParticipantReferences,
+} from "@/lib/orchestration/participant-reference-resolver";
 import type { ResponderDecision } from "@/lib/server/decide-responders";
 
 const LEAD_COLLAB_PATTERNS = [
@@ -228,7 +232,15 @@ export function planConversation(
     };
   }
 
-  const mentionedInOrder = resolveMentionedEmployees(content, allowed, mentionsJson);
+  const mentionedByAt = resolveMentionedEmployees(content, allowed, mentionsJson);
+  const nameRefs = resolveParticipantReferences(content, allowed, {
+    excludeEmployeeIds: mentionedByAt.map((employee) => employee.id),
+  });
+  const mentionedByName = employeesFromReferenceIds(allowed, nameRefs.actionableEmployeeIds);
+  const mentionedInOrder = [
+    ...mentionedByAt,
+    ...mentionedByName.filter((employee) => !mentionedByAt.some((m) => m.id === employee.id)),
+  ];
 
   if (mentionedInOrder.length > 0) {
     const mode = classifyConversationMode(content, mentionedInOrder);

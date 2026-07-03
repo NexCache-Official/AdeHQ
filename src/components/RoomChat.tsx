@@ -156,6 +156,8 @@ export function RoomChat({
   const triggerMessageIdRef = useRef<string | null>(null);
   const failedRunIdsRef = useRef(new Set<string>());
   const processingRunIdsRef = useRef(new Set<string>());
+  const sendInFlightRef = useRef(false);
+  const lastSendFingerprintRef = useRef<{ content: string; at: number } | null>(null);
   const [failedSend, setFailedSend] = useState<PendingSend | null>(null);
   const [sendError, setSendError] = useState<string | null>(null);
   const [activeRuns, setActiveRuns] = useState<ActiveRun[]>([]);
@@ -210,6 +212,22 @@ export function RoomChat({
   const roomEmployees = room.aiEmployees
     .map((id) => state.employees.find((e) => e.id === id))
     .filter((e): e is NonNullable<typeof e> => !!e);
+
+  const mentionHumans = useMemo(
+    () =>
+      room.humans
+        .map((id) => {
+          const member = state.workspaceMembers.find((m) => m.userId === id);
+          return {
+            id,
+            name: member?.name ?? member?.email ?? "Teammate",
+            email: member?.email,
+            role: member?.role,
+          };
+        })
+        .filter((h) => h.name),
+    [room.humans, state.workspaceMembers],
+  );
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
@@ -617,6 +635,23 @@ export function RoomChat({
     contextFileIds?: string[],
   ) => {
     if (!topic || topic.status === "archived" || room.status === "archived") return;
+
+    const trimmed = text.trim();
+    if (!trimmed && !(attachmentFileIds?.length)) return;
+
+    const now = Date.now();
+    const fingerprint = `${trimmed}::${attachmentFileIds?.join(",") ?? ""}`;
+    if (
+      sendInFlightRef.current ||
+      (lastSendFingerprintRef.current?.content === fingerprint &&
+        now - lastSendFingerprintRef.current.at < 2500)
+    ) {
+      return;
+    }
+
+    sendInFlightRef.current = true;
+    lastSendFingerprintRef.current = { content: fingerprint, at: now };
+
     setFailedSend(null);
     setSendError(null);
     const messageId = clientMessageId ?? uid("msg");
@@ -788,6 +823,8 @@ export function RoomChat({
       const msg = error instanceof Error ? error.message : "Unable to send message.";
       setSendError(msg);
       trace("message", "error", "Send failed", { error: msg });
+    } finally {
+      sendInFlightRef.current = false;
     }
   };
 
@@ -1157,6 +1194,7 @@ export function RoomChat({
           )}
           <ChatComposer
             employees={roomEmployees}
+            mentionHumans={mentionHumans}
             onSend={handleSend}
             onUploadFiles={useServerApi ? uploadFiles : undefined}
             onAddEmployee={onAddEmployee}
@@ -1172,7 +1210,7 @@ export function RoomChat({
           {!chatDisabled && (
           <p className="px-1.5 pt-[7px] text-[11px] text-ink-3">
             <span>
-              <b className="font-mono text-ink-2">@</b> mention an employee
+              <b className="font-mono text-ink-2">@</b> mention someone
             </span>
             <span className="mx-3.5">
               <b className="font-mono text-ink-2">/</b> run a command

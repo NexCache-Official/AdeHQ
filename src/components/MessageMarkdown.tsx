@@ -3,6 +3,14 @@
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { Check, Copy, FileSearch } from "lucide-react";
+import type { MentionRef } from "@/lib/types";
+import { findMentionSpans, type MentionParticipant } from "@/lib/mentions";
+import { MentionChip } from "./MentionChip";
+
+type MentionRenderContext = {
+  mentionsJson?: MentionRef[];
+  participants?: MentionParticipant[];
+};
 
 type SourceChip = {
   fileName: string;
@@ -42,30 +50,42 @@ function SourceChipView({ source }: { source: SourceChip }) {
   );
 }
 
-function MentionText({ text }: { text: string }) {
-  const parts = text.split(/(@[A-Za-z][A-Za-z0-9 ._-]*?Employee|@Maya|@[A-Za-z][A-Za-z0-9._-]*)(?=\s|$|[,.!?;:])/g);
-  return (
-    <>
-      {parts.map((part, index) =>
-        part.startsWith("@") ? (
-          <span key={`${part}-${index}`} className="font-medium text-accent-d">
-            {part}
-          </span>
-        ) : (
-          <span key={`${part}-${index}`}>{part}</span>
-        ),
-      )}
-    </>
-  );
+function renderTextWithMentions(
+  text: string,
+  keyPrefix: string,
+  ctx: MentionRenderContext,
+): React.ReactNode[] {
+  const spans = findMentionSpans(text, ctx.mentionsJson, ctx.participants);
+  if (spans.length === 0) {
+    return text ? [<span key={keyPrefix}>{text}</span>] : [];
+  }
+
+  const nodes: React.ReactNode[] = [];
+  let cursor = 0;
+  for (const span of spans) {
+    if (span.start > cursor) {
+      nodes.push(
+        <span key={`${keyPrefix}-plain-${cursor}`}>{text.slice(cursor, span.start)}</span>,
+      );
+    }
+    nodes.push(<MentionChip key={`${keyPrefix}-mention-${span.start}`} mention={span.ref} />);
+    cursor = span.end;
+  }
+  if (cursor < text.length) {
+    nodes.push(<span key={`${keyPrefix}-plain-${cursor}`}>{text.slice(cursor)}</span>);
+  }
+  return nodes;
 }
 
-function inlineNodes(text: string, keyPrefix: string): React.ReactNode[] {
+function inlineNodes(text: string, keyPrefix: string, ctx: MentionRenderContext): React.ReactNode[] {
   const nodes: React.ReactNode[] = [];
   let index = 0;
 
   const pushPlain = (value: string) => {
     if (!value) return;
-    nodes.push(<MentionText key={`${keyPrefix}-plain-${nodes.length}`} text={value} />);
+    nodes.push(
+      ...renderTextWithMentions(value, `${keyPrefix}-plain-${nodes.length}`, ctx),
+    );
   };
 
   while (index < text.length) {
@@ -105,7 +125,7 @@ function inlineNodes(text: string, keyPrefix: string): React.ReactNode[] {
       if (end > 2) {
         nodes.push(
           <strong key={`${keyPrefix}-strong-${index}`} className="font-semibold text-ink">
-            {inlineNodes(rest.slice(2, end), `${keyPrefix}-strong-${index}`)}
+            {inlineNodes(rest.slice(2, end), `${keyPrefix}-strong-${index}`, ctx)}
           </strong>,
         );
         index += end + 2;
@@ -118,7 +138,7 @@ function inlineNodes(text: string, keyPrefix: string): React.ReactNode[] {
       if (end > 1) {
         nodes.push(
           <em key={`${keyPrefix}-em-${index}`} className="italic">
-            {inlineNodes(rest.slice(1, end), `${keyPrefix}-em-${index}`)}
+            {inlineNodes(rest.slice(1, end), `${keyPrefix}-em-${index}`, ctx)}
           </em>,
         );
         index += end + 1;
@@ -138,7 +158,7 @@ function inlineNodes(text: string, keyPrefix: string): React.ReactNode[] {
             rel={href.startsWith("http") ? "noreferrer" : undefined}
             className="font-medium text-accent-d underline decoration-accent/30 underline-offset-2 hover:decoration-accent"
           >
-            {inlineNodes(label, `${keyPrefix}-link-label-${index}`)}
+            {inlineNodes(label, `${keyPrefix}-link-label-${index}`, ctx)}
           </a>,
         );
       } else {
@@ -235,7 +255,7 @@ function isSpecialLine(line: string, nextLine?: string): boolean {
   );
 }
 
-function renderList(lines: string[], key: string) {
+function renderList(lines: string[], key: string, ctx: MentionRenderContext) {
   const ordered = /^\s*\d+\./.test(lines[0]);
   const ListTag = ordered ? "ol" : "ul";
 
@@ -262,11 +282,15 @@ function renderList(lines: string[], key: string) {
               >
                 {checked && <Check className="h-2.5 w-2.5" />}
               </span>
-              <span>{inlineNodes(taskMatch[2], `${key}-task-${index}`)}</span>
+              <span>{inlineNodes(taskMatch[2], `${key}-task-${index}`, ctx)}</span>
             </li>
           );
         }
-        return <li key={`${key}-${index}`}>{inlineNodes(normalMatch?.[1] ?? line, `${key}-item-${index}`)}</li>;
+        return (
+          <li key={`${key}-${index}`}>
+            {inlineNodes(normalMatch?.[1] ?? line, `${key}-item-${index}`, ctx)}
+          </li>
+        );
       })}
     </ListTag>
   );
@@ -275,10 +299,15 @@ function renderList(lines: string[], key: string) {
 export function MessageMarkdown({
   content,
   compact = false,
+  mentionsJson,
+  mentionParticipants,
 }: {
   content: string;
   compact?: boolean;
+  mentionsJson?: MentionRef[];
+  mentionParticipants?: MentionParticipant[];
 }) {
+  const mentionCtx: MentionRenderContext = { mentionsJson, participants: mentionParticipants };
   const lines = content.replace(/\r\n/g, "\n").split("\n");
   const blocks: React.ReactNode[] = [];
   let index = 0;
@@ -317,7 +346,7 @@ export function MessageMarkdown({
             compact ? "mb-1 mt-2 text-sm" : level === 1 ? "mb-1.5 mt-3 text-[17px]" : "mb-1 mt-3 text-[15px]",
           )}
         >
-          {inlineNodes(heading[2], `heading-${blocks.length}`)}
+          {inlineNodes(heading[2], `heading-${blocks.length}`, mentionCtx)}
         </Tag>,
       );
       index += 1;
@@ -342,7 +371,7 @@ export function MessageMarkdown({
           className="my-2 border-l-2 border-accent/35 bg-accent-soft/40 px-3 py-2 text-[13.5px] leading-relaxed text-ink-2"
         >
           {quote.map((item, quoteIndex) => (
-            <p key={`quote-${quoteIndex}`}>{inlineNodes(item, `quote-${blocks.length}-${quoteIndex}`)}</p>
+            <p key={`quote-${quoteIndex}`}>{inlineNodes(item, `quote-${blocks.length}-${quoteIndex}`, mentionCtx)}</p>
           ))}
         </blockquote>,
       );
@@ -364,7 +393,7 @@ export function MessageMarkdown({
               <tr>
                 {headers.map((header, cellIndex) => (
                   <th key={`head-${cellIndex}`} className="border-b border-border px-3 py-2 font-semibold">
-                    {inlineNodes(header, `table-head-${blocks.length}-${cellIndex}`)}
+                    {inlineNodes(header, `table-head-${blocks.length}-${cellIndex}`, mentionCtx)}
                   </th>
                 ))}
               </tr>
@@ -374,7 +403,7 @@ export function MessageMarkdown({
                 <tr key={`row-${rowIndex}`} className="border-t border-border-2">
                   {headers.map((_, cellIndex) => (
                     <td key={`cell-${rowIndex}-${cellIndex}`} className="px-3 py-2 text-ink-2">
-                      {inlineNodes(row[cellIndex] ?? "", `table-cell-${blocks.length}-${rowIndex}-${cellIndex}`)}
+                      {inlineNodes(row[cellIndex] ?? "", `table-cell-${blocks.length}-${rowIndex}-${cellIndex}`, mentionCtx)}
                     </td>
                   ))}
                 </tr>
@@ -392,7 +421,7 @@ export function MessageMarkdown({
         listLines.push(lines[index]);
         index += 1;
       }
-      blocks.push(renderList(listLines, `list-${blocks.length}`));
+      blocks.push(renderList(listLines, `list-${blocks.length}`, mentionCtx));
       continue;
     }
 
@@ -410,7 +439,7 @@ export function MessageMarkdown({
         key={`paragraph-${blocks.length}`}
         className={cn("whitespace-pre-wrap text-[14px] leading-[1.6]", compact ? "my-0.5" : "my-2")}
       >
-        {inlineNodes(paragraph.join("\n"), `paragraph-${blocks.length}`)}
+        {inlineNodes(paragraph.join("\n"), `paragraph-${blocks.length}`, mentionCtx)}
       </p>,
     );
   }

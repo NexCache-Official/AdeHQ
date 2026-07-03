@@ -9,6 +9,11 @@ import { extractMentionsInOrder } from "@/lib/utils";
 import { filterOrchestrationEmployees } from "./collaboration-permissions";
 import { rankEmployeesForMessage, topEmployeesForMessage } from "./employee-relevance";
 import { buildResponseOrderFromSelection, maybeEnhanceWithLlm } from "./llm-classifier";
+import {
+  employeesFromReferenceIds,
+  isMultiEmployeeCollaborationRequest,
+  resolveParticipantReferences,
+} from "./participant-reference-resolver";
 import type {
   AIEmployeeProfile,
   OrchestrationIntent,
@@ -207,7 +212,37 @@ export function orchestrateConversationDeterministic(
     });
   }
 
-  const mentioned = resolveMentionedEmployees(text, employees, input.mentionedEmployeeIds);
+  const mentionedByAt = resolveMentionedEmployees(text, employees, input.mentionedEmployeeIds);
+  const nameRefs = resolveParticipantReferences(text, employees, {
+    excludeEmployeeIds: mentionedByAt.map((employee) => employee.id),
+  });
+  const mentionedByName = employeesFromReferenceIds(employees, nameRefs.actionableEmployeeIds);
+  const mentioned = [
+    ...mentionedByAt,
+    ...mentionedByName.filter((employee) => !mentionedByAt.some((m) => m.id === employee.id)),
+  ];
+
+  if (mentioned.length === 0 && isMultiEmployeeCollaborationRequest(text)) {
+    const ranked = topEmployeesForMessage(text, employees, 2);
+    if (ranked.length >= 2 && input.smartAssistEnabled) {
+      const selected = ranked
+        .map((row) => employees.find((employee) => employee.id === row.employeeId))
+        .filter(Boolean) as AIEmployeeProfile[];
+      if (selected.length >= 2) {
+        return planWithEmployees(
+          "lead_collaborator",
+          "Multi-employee collaboration request — lead and collaborator assigned.",
+          selected.slice(0, 2),
+          {
+            confidence: 0.88,
+            lead: selected[0],
+            collaborators: [selected[1]],
+            workLogRequired: false,
+          },
+        );
+      }
+    }
+  }
 
   if (mentioned.length > 0) {
     if (HANDOFF_PATTERNS.some((p) => p.test(text)) && mentioned.length >= 2) {
@@ -219,8 +254,7 @@ export function orchestrateConversationDeterministic(
           confidence: 0.9,
           lead: mentioned[0],
           collaborators: [mentioned[1]],
-          workLogRequired: true,
-          workLogReason: "handoff_completed",
+          workLogRequired: false,
         },
       );
     }
@@ -234,8 +268,7 @@ export function orchestrateConversationDeterministic(
           confidence: 0.9,
           lead: mentioned[0],
           collaborators: mentioned.slice(1),
-          workLogRequired: true,
-          workLogReason: "collaboration_completed",
+          workLogRequired: false,
         },
       );
     }
@@ -243,16 +276,14 @@ export function orchestrateConversationDeterministic(
     if (PANEL_PATTERNS.some((p) => p.test(text)) && mentioned.length >= 2) {
       return planWithEmployees("panel_response", "Panel response requested.", mentioned, {
         confidence: 0.9,
-        workLogRequired: true,
-        workLogReason: "panel_response_completed",
+        workLogRequired: false,
       });
     }
 
     if (mentioned.length === 1) {
       return planWithEmployees("direct_reply", "Direct mention — single employee replies.", mentioned, {
         confidence: 0.95,
-        workLogRequired: !isLowActionMessage(text),
-        workLogReason: "orchestration_completed",
+        workLogRequired: false,
       });
     }
 
@@ -260,7 +291,7 @@ export function orchestrateConversationDeterministic(
       mentioned[0],
     ], {
       confidence: 0.78,
-      workLogRequired: !isLowActionMessage(text),
+      workLogRequired: false,
     });
   }
 
@@ -296,8 +327,7 @@ export function orchestrateConversationDeterministic(
         confidence: 0.82,
         lead: selected[0],
         collaborators: selected.slice(1),
-        workLogRequired: true,
-        workLogReason: selected.length > 1 ? "collaboration_completed" : "orchestration_completed",
+        workLogRequired: false,
       },
     );
   }

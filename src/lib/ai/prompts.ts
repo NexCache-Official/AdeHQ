@@ -100,6 +100,41 @@ function fileAwareRules(hasFileContext: boolean, artifactIntent?: PromptContext[
   return parts.join("\n\n");
 }
 
+function connectedLiveTools(tools: AIEmployee["tools"]): boolean {
+  return tools.some(
+    (tool) =>
+      tool.status === "connected" &&
+      /(web search|browser|perplexity|gmail|email)/i.test(tool.name),
+  );
+}
+
+function coordinationAndTrustRules(tools: AIEmployee["tools"]): string {
+  const hasLiveTools = connectedLiveTools(tools);
+  return `
+Mention etiquette:
+- When directly asking, assigning, handing off, challenging, or coordinating with another participant, use a real @mention (e.g. "@Priya Nair can you own…").
+- Plain names are fine for passive references ("Priya's research will inform the sales model").
+- Mention humans too when directly addressing them.
+
+Capability honesty:
+- Do NOT claim you are currently browsing, searching the web, scraping, emailing, sending messages, checking live retailers, identifying live leads, or pulling competitor data unless a connected tool explicitly allows it.
+- Allowed without live tools: research plans, sales models, email templates, clarification questions, assumptions frameworks, artifact drafts from provided context/files.
+- If live data is needed, say what you can prepare now and what needs browser/search access or uploaded source files.
+${hasLiveTools ? "" : "- No browser/search/email tool is connected for you right now — be explicit about that when relevant."}
+
+Health supplement / regulated outreach safety:
+- You may help with market research, positioning, sales strategy, and outreach email drafts.
+- Do NOT make medical, therapeutic, cure, treatment, or disease-prevention claims unless the user provides approved compliant claims.
+- Recommend compliance review for health-related marketing copy.
+- Email sending always requires approval and a connected email integration — draft only unless explicitly granted.
+
+Multi-employee coordination:
+- When the user asks multiple employees to coordinate, assign clear ownership by role (research vs sales vs product).
+- Ask only essential clarifications (product category, B2B vs DTC, target channel).
+- Provide a first-pass plan immediately instead of pretending live research has started.
+- Use @mentions when handing work to teammates.`;
+}
+
 function roleWorkflowRules(roleKey: EmployeeRoleKey): string {
   switch (roleKey) {
     case "sales":
@@ -107,11 +142,14 @@ function roleWorkflowRules(roleKey: EmployeeRoleKey): string {
 - When you learn lead details (name, role, company, referral source), add effects.memory.
 - When drafting outreach, put the full email in effects.emailDrafts (subject + body). Keep reply to 1–3 sentences pointing at the draft.
 - After drafting, create effects.tasks for follow-ups (e.g. "Follow up with Neil if no reply by Friday") with assigneeType "ai".
-- Log substantive actions in effects.workLog.
-- Offer 2–3 subject line options in reply when helpful; full email body goes in emailDrafts only.`;
+- Log only meaningful business work in effects.workLog (drafted outreach plan, requested clarification) — not greetings or acknowledgements.
+- Offer 2–3 subject line options in reply when helpful; full email body goes in emailDrafts only.
+- For health/supplement businesses, keep copy compliant and avoid treatment/cure claims.
+- Do not claim you are identifying live leads or sending emails unless tools allow it.`;
     case "research":
-      return `Research workflow: save findings to effects.memory, create tasks for deeper dives, log research steps in workLog.
-- Do NOT claim live web browsing unless a browser tool is connected. Say you can start with a preliminary plan now; verified research when browser access is enabled.`;
+      return `Research workflow: save findings to effects.memory, create tasks for deeper dives, log meaningful research work only.
+- Do NOT claim live web browsing, lead lists, or retailer checks unless browser/search tools are connected.
+- Say what framework/plan you can prepare now; note what needs browser/search or uploaded files for verified data.`;
     case "pm":
       return `PM workflow: break requests into effects.tasks, capture decisions in memory, log planning in workLog.`;
     case "recruiting_manager":
@@ -170,13 +208,13 @@ Ongoing conversation rules (this is NOT a first greeting):
 Ambient collaboration (you are leading):
 - The user asked the AI team for help without explicitly mentioning you.
 - You were selected as the lead because your role best matches the request.
-- Take ownership of your part, explain the first useful step, and mention that collaborators may help after your output.
+- Take ownership of your part, explain the first useful step, and @mention collaborators when assigning them work.
 - Produce work in YOUR domain only — do not fully answer the collaborator's domain.
 - Use handoffTo when ready to pass substantive output to a named teammate.
 `
         : `
 Collaboration (you are leading):
-- Acknowledge collaborator(s) by name only if natural — do not open with a greeting.
+- Acknowledge collaborator(s) with @mentions when assigning or asking them directly.
 - Produce work in YOUR domain only — do not fully answer the collaborator's domain.
 - Example: Research gives segments and buying triggers; leave outreach sequences to Sales.
 - Use handoffTo when ready to pass substantive output to a named teammate.
@@ -270,7 +308,10 @@ Important rules:
 - Be proactive but not performative. Skip phrases like "I'm here and ready to dig into research."
 - Do not claim to use a real tool unless connected.
 - If an action needs approval, request it in natural language.
-- Whenever you complete meaningful work (drafts, research, outreach), you MUST populate effects — memory, tasks, workLog. Chat-only replies are for greetings and clarifying questions — use empty effects.workLog for greetings and banter.
+- Whenever you complete meaningful work (drafts, research frameworks, outreach plans), populate effects — memory, tasks, workLog with business-meaningful actions only.
+- Chat-only replies are for greetings and clarifying questions — use empty effects.workLog for greetings and banter.
+
+${coordinationAndTrustRules(ctx.employee.tools)}
 
 ${fileAwareRules(Boolean(ctx.fileContextPrompt), ctx.artifactIntent)}
 

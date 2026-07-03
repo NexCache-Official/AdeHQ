@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { RoomMessage } from "@/lib/types";
 import { useStore } from "@/lib/demo-store";
 import { EmployeeAvatar, HumanAvatar } from "./EmployeeAvatar";
@@ -535,6 +535,22 @@ export function RoomMessageItem({
   const { state } = useStore();
   const employee = state.employees.find((e) => e.id === message.senderId);
 
+  const mentionParticipants = useMemo(
+    () => [
+      ...state.employees.map((e) => ({
+        id: e.id,
+        name: e.name,
+        type: "ai_employee" as const,
+      })),
+      ...state.workspaceMembers.map((m) => ({
+        id: m.userId,
+        name: m.name ?? m.email ?? "Teammate",
+        type: "human" as const,
+      })),
+    ],
+    [state.employees, state.workspaceMembers],
+  );
+
   if (message.senderType === "system") {
     return (
       <div className="flex justify-center py-2">
@@ -622,7 +638,12 @@ export function RoomMessageItem({
                 message.pending ? "text-ink-2" : "text-ink",
               )}
             >
-              <MessageMarkdown content={message.content} compact />
+              <MessageMarkdown
+                content={message.content}
+                compact
+                mentionsJson={message.mentionsJson}
+                mentionParticipants={mentionParticipants}
+              />
             </div>
             <div className="mt-1 flex flex-wrap items-center justify-end gap-2">
               <DeliveryStatus message={message} isDm={isDm} />
@@ -635,7 +656,11 @@ export function RoomMessageItem({
             <span className="typing-dot" />
           </div>
         ) : (
-          <MessageMarkdown content={message.content} />
+          <MessageMarkdown
+            content={message.content}
+            mentionsJson={message.mentionsJson}
+            mentionParticipants={mentionParticipants}
+          />
         )}
 
         {emailDrafts.map((draft) => (

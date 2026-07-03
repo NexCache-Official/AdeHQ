@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { enforceEmployeePermissions } from "@/lib/ai/enforce-permissions";
 import { sanitizeEffects } from "@/lib/ai/sanitize-effects";
+import { applyMentionEtiquette } from "@/lib/ai/mention-etiquette";
 import { routeEmployeeResponse, type LiveCallMetrics } from "@/lib/ai/model-router";
 import { finalizeAiRun } from "@/lib/ai/cost-guard";
 import {
@@ -395,19 +396,34 @@ export async function processQueuedAgentRun(
       stripAllEffects: collaborationOnly && !effect.tasks.length,
     });
 
+    const mentionParticipants = [
+      ...ctx.employees.map((e) => ({
+        id: e.id,
+        name: e.name,
+        type: "ai_employee" as const,
+      })),
+      ...ctx.humanParticipants.map((h) => ({
+        id: h.id,
+        name: h.name,
+        type: "human" as const,
+      })),
+    ];
+    const etiquette = applyMentionEtiquette(response.reply, mentionParticipants);
+
     let { aiMessage, artifacts } = await persistEmployeeEffects(
       client,
       workspaceId,
       roomId,
       topicId,
       employee,
-      response.reply,
+      etiquette.content,
       effect,
       triggerMessageId,
       runId,
       {
         fileContext: fileContextBundle,
         usedFileContext,
+        mentionsJson: etiquette.mentionsJson,
       },
     );
 

@@ -152,8 +152,9 @@ export type ModelMode =
   | "creative";
 
 export type MentionRef = {
-  type: "ai_employee";
+  type: "ai_employee" | "human";
   id: string;
+  /** Full display name — always the canonical @mention label in message text. */
   label: string;
 };
 

@@ -547,9 +547,12 @@ export async function persistEmployeeEffects(
   options?: {
     fileContext?: FileContextBundle | null;
     usedFileContext?: boolean;
+    mentionsJson?: MentionRef[];
   },
 ): Promise<{ aiMessage: RoomMessage; artifacts: MessageArtifact[] }> {
   reply = sanitizeReplyForChat(reply);
+  const mentionsJson = options?.mentionsJson ?? [];
+  const legacyMentions = mentionsJson.map((mention) => mention.id);
   const artifacts: MessageArtifact[] = [];
   const createdTaskIds: string[] = [];
   const createdMemoryIds: string[] = [];
@@ -900,6 +903,8 @@ export async function persistEmployeeEffects(
     senderId: employee.id,
     senderName: employee.name,
     content: reply,
+    mentions: legacyMentions.length ? legacyMentions : undefined,
+    mentionsJson: mentionsJson.length ? mentionsJson : undefined,
     artifacts: artifacts.length ? artifacts : undefined,
     createdAt: nowISO(),
   };
@@ -913,8 +918,8 @@ export async function persistEmployeeEffects(
     sender_id: aiMessage.senderId,
     sender_name: aiMessage.senderName,
     content: aiMessage.content,
-    mentions: [],
-    mentions_json: [],
+    mentions: legacyMentions,
+    mentions_json: mentionsJson,
     artifacts: aiMessage.artifacts ?? null,
     agent_run_id: agentRunId ?? null,
     trigger_message_id: triggerMessageId ?? null,

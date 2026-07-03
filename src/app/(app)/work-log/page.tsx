@@ -7,6 +7,7 @@ import { PageContainer, PageHeader } from "@/components/Page";
 import { WorkLogTimeline } from "@/components/WorkLogTimeline";
 import { Card } from "@/components/ui";
 import { EmptyState } from "@/components/States";
+import { shouldShowWorkLogInUserFeed } from "@/lib/work-log-labels";
 import { ScrollText } from "lucide-react";
 
 export default function WorkLogPage() {
@@ -18,6 +19,7 @@ export default function WorkLogPage() {
   const groupRooms = getGroupRooms(state.rooms);
 
   const events = state.workLog
+    .filter((w) => shouldShowWorkLogInUserFeed(w.action, w.summary))
     .filter((w) => employee === "all" || w.employeeId === employee)
     .filter((w) => room === "all" || w.roomId === room)
     .filter((w) => statusF === "all" || w.status === statusF)

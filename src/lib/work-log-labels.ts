@@ -2,8 +2,14 @@ const ACTION_LABELS: Record<string, string> = {
   draft_cold_email: "drafted cold email",
   reviewed_email_draft: "reviewed email draft",
   reviewed_cold_email_draft: "reviewed cold email draft",
+  coordinated_team_response: "coordinated team response",
+  accepted_research_ownership: "accepted market research ownership",
+  drafted_sales_outreach_plan: "drafted sales outreach plan",
+  requested_market_clarification: "requested market clarification",
+  prepared_research_plan: "prepared research plan",
+  generated_business_brief: "generated business brief",
   panel_response_completed: "completed panel review",
-  collaboration_completed: "completed collaboration",
+  collaboration_completed: "coordinated team response",
   handoff_completed: "completed handoff",
   orchestration_completed: "completed orchestration",
   topic_suggested: "suggested a topic",
@@ -32,7 +38,34 @@ const ACTION_LABELS: Record<string, string> = {
   read_context: "read context",
   model_error: "hit a model error",
   model_fallback: "used fallback response",
+  repeated_message_with_mention: "repeated message with mention after request",
+  acknowledged_instruction: "acknowledged instruction",
 };
+
+/** Internal orchestration / plumbing — hidden from user-facing Work Log. */
+const SYSTEM_WORK_LOG_ACTIONS = new Set([
+  "orchestration_completed",
+  "topic_suggested",
+  "topic_summary_refreshed",
+  "topic_memory_suggested",
+  "next_actions_suggested",
+  "memory_suggested",
+  "read_context",
+  "queued_run",
+  "processed_run",
+  "run_completed",
+  "run_queued",
+  "acknowledged_instruction",
+  "acknowledged_task_assignment",
+  "panel_response_completed",
+]);
+
+/** Debug-only noise — hidden everywhere except debug tooling. */
+const DEBUG_WORK_LOG_ACTIONS = new Set([
+  "model_error",
+  "model_fallback",
+  "repeated_message_with_mention",
+]);
 
 function titleCaseWords(text: string): string {
   return text
@@ -58,26 +91,23 @@ export function formatWorkLogTitle(employeeName: string | undefined, action: str
   return `${name} ${verb}`;
 }
 
-/** System-generated work log actions hidden from DM activity feeds. */
-const DM_HIDDEN_WORK_LOG_ACTIONS = new Set([
-  "orchestration_completed",
-  "panel_response_completed",
-  "collaboration_completed",
-  "handoff_completed",
-  "topic_suggested",
-  "topic_summary_refreshed",
-  "topic_memory_suggested",
-  "next_actions_suggested",
-  "memory_suggested",
-]);
+export type WorkLogVisibility = "user_work_log" | "system_activity" | "debug_run_log";
+
+export function getWorkLogVisibility(action: string, summary?: string): WorkLogVisibility {
+  const key = action.trim().toLowerCase().replace(/\s+/g, "_");
+  if (DEBUG_WORK_LOG_ACTIONS.has(key)) return "debug_run_log";
+  if (SYSTEM_WORK_LOG_ACTIONS.has(key)) return "system_activity";
+  if (/^greet/i.test(summary ?? "") || /^greet/i.test(action)) return "system_activity";
+  if (/^noted\b/i.test(summary ?? "")) return "system_activity";
+  if (/^will do\b/i.test(summary ?? "")) return "system_activity";
+  if (/orchestration/i.test(summary ?? "")) return "system_activity";
+  if (/refreshed topic summary/i.test(summary ?? "")) return "system_activity";
+  return "user_work_log";
+}
 
 /** Skip noisy or non-work entries in compact sidebars. */
 export function shouldShowWorkLogInSidebar(action: string, summary?: string): boolean {
-  const key = action.trim().toLowerCase();
-  if (key === "read_context") return false;
-  if (key === "model fallback" || key === "model error") return false;
-  if (/^greet/i.test(summary ?? "") || /^greet/i.test(action)) return false;
-  return true;
+  return getWorkLogVisibility(action, summary) === "user_work_log";
 }
 
 export function shouldShowWorkLogInTopic(
@@ -85,8 +115,12 @@ export function shouldShowWorkLogInTopic(
   summary?: string,
   opts?: { isDm?: boolean },
 ): boolean {
-  if (!shouldShowWorkLogInSidebar(action, summary)) return false;
+  if (getWorkLogVisibility(action, summary) !== "user_work_log") return false;
   if (!opts?.isDm) return true;
   const key = action.trim().toLowerCase().replace(/\s+/g, "_");
-  return !DM_HIDDEN_WORK_LOG_ACTIONS.has(key);
+  return !SYSTEM_WORK_LOG_ACTIONS.has(key);
+}
+
+export function shouldShowWorkLogInUserFeed(action: string, summary?: string): boolean {
+  return shouldShowWorkLogInSidebar(action, summary);
 }

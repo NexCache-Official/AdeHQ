@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { AIEmployee, MentionRef, SavedArtifactType } from "@/lib/types";
+import { AIEmployee, MentionRef, SavedArtifactType, WorkspaceMemberRole } from "@/lib/types";
 import { STATUS_META } from "@/lib/icons";
 import { cn } from "@/lib/utils";
-import { EmployeeAvatar } from "./EmployeeAvatar";
+import { resolveMessageMentions, type MentionParticipant } from "@/lib/mentions";
+import { EmployeeAvatar, HumanAvatar } from "./EmployeeAvatar";
 import { FileArtifactCard } from "./ArtifactCard";
 import {
   AtSign,
@@ -161,8 +162,27 @@ function extensionFor(fileName: string): string {
   return fileName.split(".").pop()?.toLowerCase() ?? "file";
 }
 
+type MentionHuman = {
+  id: string;
+  name: string;
+  email?: string;
+  role?: WorkspaceMemberRole;
+};
+
+type MentionPickerItem =
+  | { kind: "ai"; employee: AIEmployee }
+  | { kind: "human"; id: string; name: string; email?: string; role?: WorkspaceMemberRole };
+
+const HUMAN_ROLE_LABELS: Record<WorkspaceMemberRole, string> = {
+  owner: "Owner",
+  admin: "Admin",
+  member: "Member",
+  viewer: "Viewer",
+};
+
 export function ChatComposer({
   employees,
+  mentionHumans = [],
   onSend,
   onUploadFiles,
   disabled,
@@ -176,6 +196,7 @@ export function ChatComposer({
   onAddEmployee,
 }: {
   employees: AIEmployee[];
+  mentionHumans?: MentionHuman[];
   onSend: (
     text: string,
     mentionsJson?: MentionRef[],
@@ -204,6 +225,7 @@ export function ChatComposer({
   const [attachments, setAttachments] = useState<ComposerAttachment[]>([]);
   const [dragActive, setDragActive] = useState(false);
   const [sending, setSending] = useState(false);
+  const sendInFlightRef = useRef(false);
   const [activeMentionIndex, setActiveMentionIndex] = useState(0);
   const [activeSlashIndex, setActiveSlashIndex] = useState(0);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -225,14 +247,37 @@ export function ChatComposer({
     input.style.height = `${Math.min(input.scrollHeight, 168)}px`;
   }, [value]);
 
-  const filteredMentions = useMemo(
-    () =>
-      employees.filter((e) => {
-        const query = (mentionQuery ?? "").toLowerCase();
-        return !query || e.name.toLowerCase().includes(query) || e.role.toLowerCase().includes(query);
-      }),
-    [employees, mentionQuery],
+  const mentionParticipants = useMemo(
+    (): MentionParticipant[] => [
+      ...employees.map((e) => ({ id: e.id, name: e.name, type: "ai_employee" as const })),
+      ...mentionHumans.map((h) => ({ id: h.id, name: h.name, type: "human" as const })),
+    ],
+    [employees, mentionHumans],
   );
+
+  const filteredMentionItems = useMemo((): MentionPickerItem[] => {
+    const query = (mentionQuery ?? "").toLowerCase();
+    const items: MentionPickerItem[] = [];
+    for (const employee of employees) {
+      if (
+        !query ||
+        employee.name.toLowerCase().includes(query) ||
+        employee.role.toLowerCase().includes(query)
+      ) {
+        items.push({ kind: "ai", employee });
+      }
+    }
+    for (const human of mentionHumans) {
+      if (
+        !query ||
+        human.name.toLowerCase().includes(query) ||
+        human.email?.toLowerCase().includes(query)
+      ) {
+        items.push({ kind: "human", ...human });
+      }
+    }
+    return items;
+  }, [employees, mentionHumans, mentionQuery]);
 
   const filteredSlash = useMemo(
     () =>
@@ -345,20 +390,23 @@ export function ChatComposer({
     });
   };
 
-  const insertMention = (emp: AIEmployee) => {
+  const insertMention = (item: MentionPickerItem) => {
+    const name = item.kind === "ai" ? item.employee.name : item.name;
+    const id = item.kind === "ai" ? item.employee.id : item.id;
+    const type = item.kind === "ai" ? "ai_employee" : "human";
     const input = inputRef.current;
     const caret = input?.selectionStart ?? value.length;
     const before = value.slice(0, caret);
     const after = value.slice(caret);
     const match = before.match(/@([\w\s.-]*)$/);
     const start = match ? before.length - match[0].length : before.length;
-    const next = `${value.slice(0, start)}@${emp.name} ${after}`;
-    const nextCaret = start + emp.name.length + 2;
+    const next = `${value.slice(0, start)}@${name} ${after}`;
+    const nextCaret = start + name.length + 2;
 
     setValue(next);
     setTrackedMentions((prev) => {
-      if (prev.some((m) => m.id === emp.id)) return prev;
-      return [...prev, { type: "ai_employee", id: emp.id, label: emp.name }];
+      if (prev.some((m) => m.id === id && m.type === type)) return prev;
+      return [...prev, { type, id, label: name }];
     });
     setMentionQuery(null);
     requestAnimationFrame(() => {
@@ -427,7 +475,7 @@ export function ChatComposer({
     );
     const failedFiles = attachments.some((attachment) => attachment.status === "failed");
     const text = value.trim();
-    if ((!text && attachments.length === 0) || disabled || sending) return;
+    if ((!text && attachments.length === 0) || disabled || sending || sendInFlightRef.current) return;
     if (waitingOnFiles) {
       setCommandNotice("Wait for attached files to finish processing before sending.");
       return;
@@ -459,30 +507,49 @@ export function ChatComposer({
       return;
     }
 
+    const sendText =
+      text ||
+      (readyAttachmentIds.length
+        ? `Uploaded ${attachments
+            .filter((attachment) => readyAttachmentIds.includes(attachment.fileId ?? ""))
+            .map((attachment) => attachment.fileName)
+            .join(", ")}`
+        : "");
+    const { content: normalizedContent, mentionsJson } = resolveMessageMentions(
+      sendText,
+      mentionParticipants,
+      trackedMentions,
+    );
+    const mentionsToSend = mentionsJson.length ? mentionsJson : undefined;
+    const contextFileIdsToSend = contextFiles?.length ? contextFiles.map((file) => file.id) : undefined;
+    const attachmentsSnapshot = [...attachments];
+
+    sendInFlightRef.current = true;
     setSending(true);
+    setValue("");
+    setMentionQuery(null);
+    setSlashQuery(null);
+    setTrackedMentions([]);
+    setCommandNotice(null);
+    if (inputRef.current) {
+      inputRef.current.style.height = "0px";
+    }
+
     try {
-      const sendText =
-        text ||
-        (readyAttachmentIds.length
-          ? `Uploaded ${attachments
-              .filter((attachment) => readyAttachmentIds.includes(attachment.fileId ?? ""))
-              .map((attachment) => attachment.fileName)
-              .join(", ")}`
-          : "");
       await onSend(
-        sendText,
-        trackedMentions.length ? trackedMentions : undefined,
+        normalizedContent,
+        mentionsToSend,
         readyAttachmentIds.length ? readyAttachmentIds : undefined,
-        contextFiles?.length ? contextFiles.map((file) => file.id) : undefined,
+        contextFileIdsToSend,
       );
-      setValue("");
-      setMentionQuery(null);
-      setSlashQuery(null);
-      setTrackedMentions([]);
       setAttachments((prev) => prev.filter((attachment) => attachment.status === "failed"));
-      setCommandNotice(null);
       onContextConsumed?.();
+    } catch {
+      setValue(sendText);
+      setTrackedMentions(mentionsToSend ?? []);
+      setAttachments(attachmentsSnapshot);
     } finally {
+      sendInFlightRef.current = false;
       setSending(false);
     }
   };
@@ -490,20 +557,22 @@ export function ChatComposer({
   const canSend = (!!value.trim() || attachments.length > 0) && !disabled && !sending;
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (mentionQuery !== null && filteredMentions.length > 0) {
+    if (mentionQuery !== null && filteredMentionItems.length > 0) {
       if (e.key === "ArrowDown") {
         e.preventDefault();
-        setActiveMentionIndex((index) => (index + 1) % filteredMentions.length);
+        setActiveMentionIndex((index) => (index + 1) % filteredMentionItems.length);
         return;
       }
       if (e.key === "ArrowUp") {
         e.preventDefault();
-        setActiveMentionIndex((index) => (index - 1 + filteredMentions.length) % filteredMentions.length);
+        setActiveMentionIndex(
+          (index) => (index - 1 + filteredMentionItems.length) % filteredMentionItems.length,
+        );
         return;
       }
       if (e.key === "Enter" || e.key === "Tab") {
         e.preventDefault();
-        insertMention(filteredMentions[activeMentionIndex]);
+        insertMention(filteredMentionItems[activeMentionIndex]);
         return;
       }
       if (e.key === "Escape") {
@@ -639,7 +708,7 @@ export function ChatComposer({
           </motion.div>
         )}
 
-        {mentionQuery !== null && filteredMentions.length > 0 && (
+        {mentionQuery !== null && filteredMentionItems.length > 0 && (
           <motion.div
             initial={{ opacity: 0, y: 6 }}
             animate={{ opacity: 1, y: 0 }}
@@ -647,27 +716,51 @@ export function ChatComposer({
             className="absolute bottom-full left-0 z-20 mb-2 w-[min(22rem,calc(100vw-2rem))] overflow-hidden rounded-xl border border-border bg-surface p-1.5 shadow-panel"
           >
             <div className="px-2 py-1 text-[10px] font-medium uppercase tracking-wide text-ink-3">
-              Mention an employee
+              Mention someone
             </div>
-            {filteredMentions.map((employee, index) => (
+            {filteredMentionItems.map((item, index) => (
               <button
                 type="button"
-                key={employee.id}
-                onClick={() => insertMention(employee)}
+                key={item.kind === "ai" ? item.employee.id : item.id}
+                onClick={() => insertMention(item)}
                 className={cn(
                   "flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left transition-colors",
                   index === activeMentionIndex ? "bg-muted" : "hover:bg-muted",
                 )}
               >
-                <EmployeeAvatar employee={employee} size="xs" showStatus={false} />
-                <div className="min-w-0 flex-1">
-                  <div className="truncate text-sm font-medium text-ink">{employee.name}</div>
-                  <div className="truncate text-[11px] text-ink-3">{employee.role}</div>
-                </div>
-                <span className="flex shrink-0 items-center gap-1 text-[10px] text-ink-3">
-                  <span className={cn("h-1.5 w-1.5 rounded-full", STATUS_META[employee.status].dot)} />
-                  {STATUS_META[employee.status].label}
-                </span>
+                {item.kind === "ai" ? (
+                  <>
+                    <EmployeeAvatar employee={item.employee} size="xs" showStatus={false} />
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-sm font-medium text-ink">{item.employee.name}</div>
+                      <div className="truncate text-[11px] text-ink-3">{item.employee.role}</div>
+                    </div>
+                    <span className="flex shrink-0 items-center gap-1 text-[10px] text-ink-3">
+                      <span
+                        className={cn(
+                          "h-1.5 w-1.5 rounded-full",
+                          STATUS_META[item.employee.status].dot,
+                        )}
+                      />
+                      {STATUS_META[item.employee.status].label}
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <HumanAvatar name={item.name} size="xs" />
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-sm font-medium text-ink">{item.name}</div>
+                      <div className="truncate text-[11px] text-ink-3">
+                        {item.email ?? "Workspace member"}
+                      </div>
+                    </div>
+                    {item.role && (
+                      <span className="shrink-0 text-[10px] text-ink-3">
+                        {HUMAN_ROLE_LABELS[item.role]}
+                      </span>
+                    )}
+                  </>
+                )}
               </button>
             ))}
           </motion.div>
