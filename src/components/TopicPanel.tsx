@@ -631,8 +631,9 @@ export function TopicPanel({
                 <div className="rounded-xl border border-border bg-muted/40 p-3">
                   <p className="text-sm text-ink">
                     Clear all messages in <strong>{displayTitle}</strong>? The{" "}
-                    {isMainChat ? "conversation" : "topic"} stays — only chat history is removed.
-                    Tasks, memory, and files are not deleted.
+                    {isMainChat ? "conversation" : "topic"} stays — chat history and the workstream
+                    summary (brief summary, direction, key facts, and open questions) are removed.
+                    Saved memory, tasks, files, and work log are kept.
                   </p>
                   <div className="mt-3 flex flex-wrap gap-2">
                     <Button
@@ -655,8 +656,9 @@ export function TopicPanel({
               {!isArchived && confirmClearRoomChat && onClearRoomChat && (
                 <div className="rounded-xl border border-amber-200 bg-amber-50 p-3">
                   <p className="text-sm text-amber-950">
-                    Clear chat history for <strong>every topic</strong> in this room? Topics, tasks,
-                    memory, and files stay — only messages are permanently removed.
+                    Clear chat history for <strong>every topic</strong> in this room? Topics, saved
+                    memory, tasks, and files stay — messages and workstream summaries are permanently
+                    removed.
                   </p>
                   <div className="mt-3 flex flex-wrap gap-2">
                     <Button

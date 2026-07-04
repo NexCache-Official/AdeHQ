@@ -11,10 +11,15 @@ export type MemorySaveResult = {
   memory?: MemoryEntry;
 };
 
-export function notifyTopicSummaryUpdated(topicId: string) {
+export function notifyTopicSummaryUpdated(
+  topicId: string,
+  options?: { cleared?: boolean },
+) {
   if (typeof window === "undefined") return;
   window.dispatchEvent(
-    new CustomEvent(TOPIC_SUMMARY_UPDATED_EVENT, { detail: { topicId } }),
+    new CustomEvent(TOPIC_SUMMARY_UPDATED_EVENT, {
+      detail: { topicId, cleared: options?.cleared },
+    }),
   );
 }
 

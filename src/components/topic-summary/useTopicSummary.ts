@@ -35,8 +35,10 @@ export function useTopicSummary(topicId: string | undefined) {
   useEffect(() => {
     if (!topicId) return;
     const handler = (event: Event) => {
-      const detail = (event as CustomEvent<{ topicId: string }>).detail;
-      if (detail?.topicId === topicId) void load();
+      const detail = (event as CustomEvent<{ topicId: string; cleared?: boolean }>).detail;
+      if (detail?.topicId !== topicId) return;
+      if (detail.cleared) setSummary(null);
+      void load();
     };
     window.addEventListener(TOPIC_SUMMARY_UPDATED_EVENT, handler);
     return () => window.removeEventListener(TOPIC_SUMMARY_UPDATED_EVENT, handler);

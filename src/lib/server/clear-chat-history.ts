@@ -71,7 +71,7 @@ export async function clearTopicChatHistory(
 
   await client
     .from("topics")
-    .update({ summary: null, updated_at: nowISO() })
+    .update({ summary: null, pinned_summary: null, updated_at: nowISO() })
     .eq("workspace_id", workspaceId)
     .eq("id", topicId);
 

@@ -21,6 +21,7 @@ import {
 import { OrchestrationUiProvider } from "@/components/orchestration/OrchestrationUiContext";
 import { roomAssignableEmployees, isMayaEmployee } from "@/lib/maya-employee";
 import { notifyTopicSummaryUpdated } from "@/lib/topic-summary/client";
+import { clearLocalTopicSummaryUiState } from "@/lib/memory/suggestion-lifecycle";
 import {
   clearRoomChatHistoryClient,
   clearTopicChatHistoryClient,
@@ -416,7 +417,8 @@ export default function RoomDetailPage() {
         await clearTopicChatHistoryClient(selectedTopic.id);
       }
       actions.clearTopicMessages(roomId, selectedTopic.id);
-      notifyTopicSummaryUpdated(selectedTopic.id);
+      clearLocalTopicSummaryUiState(selectedTopic.id);
+      notifyTopicSummaryUpdated(selectedTopic.id, { cleared: true });
       setSlashNotice("Chat history cleared.");
       setTimeout(() => setSlashNotice(null), 4000);
     } catch (e) {
@@ -436,7 +438,8 @@ export default function RoomDetailPage() {
       }
       for (const topic of roomTopics) {
         actions.clearTopicMessages(roomId, topic.id);
-        notifyTopicSummaryUpdated(topic.id);
+        clearLocalTopicSummaryUiState(topic.id);
+        notifyTopicSummaryUpdated(topic.id, { cleared: true });
       }
       setSlashNotice("Room chat history cleared.");
       setTimeout(() => setSlashNotice(null), 4000);

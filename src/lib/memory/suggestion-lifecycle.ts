@@ -56,6 +56,16 @@ export function writeLocalSuggestionLifecycle(
   }
 }
 
+export function clearLocalTopicSummaryUiState(topicId: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.removeItem(`${LOCAL_PREFIX}${topicId}`);
+    localStorage.removeItem(`adehq:dismissed-next-actions:${topicId}`);
+  } catch {
+    // ignore
+  }
+}
+
 export function setLocalSuggestionState(
   topicId: string,
   key: string,

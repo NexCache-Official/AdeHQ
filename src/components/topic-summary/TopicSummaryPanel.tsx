@@ -111,6 +111,18 @@ export function TopicSummaryPanel({
   const [optimisticStates, setOptimisticStates] = useState<Record<string, MemorySuggestionState>>({});
   const [storageVersion, setStorageVersion] = useState(0);
 
+  useEffect(() => {
+    if (summary) return;
+    setSavedKeyFacts(false);
+    setSavedSummary(false);
+    setSavingSummary(false);
+    setSavingKeyFacts(false);
+    setSavingMemoryIndex(null);
+    setMemorySaveError(null);
+    setOptimisticStates({});
+    setStorageVersion((v) => v + 1);
+  }, [summary]);
+
   const localLifecycle = useMemo(
     () => readLocalSuggestionLifecycle(topicId),
     [topicId, storageVersion],
