@@ -42,6 +42,8 @@ type MessageBody = {
   topicId?: string;
   clientMessageId?: string;
   mode?: "mock" | "live";
+  /** Save the human message only — skip orchestration and agent run queue (e.g. Browse mode). */
+  skipAiOrchestration?: boolean;
   mentionsJson?: MentionRef[];
   slashCommand?: string;
   attachmentFileIds?: string[];
@@ -118,21 +120,25 @@ export async function POST(
     const mentionsJson = body.mentionsJson?.length ? body.mentionsJson : undefined;
     const senderName = displayNameFromUser(user);
 
+    const insertPromise = insertHumanMessage(
+      client,
+      workspaceId,
+      params.roomId,
+      { id: user.id, name: senderName },
+      trimmed,
+      topicId,
+      body.clientMessageId,
+      mentionsJson,
+    ).then((message) => {
+      humanMessageSaved = true;
+      humanMessageId = message.id;
+      return message;
+    });
+
     const [respondersCtx, humanMessage] = await Promise.all([
       loadRespondersContext(client, workspaceId, params.roomId),
-      insertHumanMessage(
-        client,
-        workspaceId,
-        params.roomId,
-        { id: user.id, name: senderName },
-        trimmed,
-        topicId,
-        body.clientMessageId,
-        mentionsJson,
-      ),
+      insertPromise,
     ]);
-    humanMessageSaved = true;
-    humanMessageId = humanMessage.id;
 
     const orchestrationEmployees = filterOrchestrationEmployees(respondersCtx.employees);
     const mentioned = parseEmployeeMentions(trimmed, respondersCtx.employees, mentionsJson);
@@ -204,6 +210,15 @@ export async function POST(
         .eq("id", humanMessage.id);
       if (updateMessageError) throw updateMessageError;
       humanMessage.artifacts = fileArtifacts;
+    }
+
+    if (body.skipAiOrchestration) {
+      return NextResponse.json({
+        humanMessage,
+        queuedRuns: [],
+        blockedRuns: [],
+        skippedOrchestration: true,
+      });
     }
 
     const [recentMessagesResult, topicsResult] = await Promise.all([

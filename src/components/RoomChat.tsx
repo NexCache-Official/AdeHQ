@@ -2,9 +2,10 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ProjectRoom, RoomTopic, type ConversationPlan } from "@/lib/types";
+import { ProjectRoom, RoomTopic, type ConversationPlan, type RoomMessage } from "@/lib/types";
 import { useOrchestrationUi } from "@/components/orchestration/OrchestrationUiContext";
 import { fetchTopicOrchestrations } from "@/lib/orchestration/orchestration-client";
+import type { OrchestrationPlan } from "@/lib/orchestration/types";
 import { readDismissedOrchestrationIds } from "@/lib/orchestration/dismissed-orchestrations";
 import { enrichHumanSeenBy } from "@/lib/message-read-receipts";
 import { notifyTopicSummaryUpdated } from "@/lib/topic-summary/client";
@@ -22,6 +23,7 @@ import { useStore } from "@/lib/demo-store";
 import { ENABLE_DEMO_MODE } from "@/lib/config/features";
 import { useResponder } from "@/lib/ai/use-responder";
 import { authHeaders } from "@/lib/api/auth-client";
+import { parseJsonResponse } from "@/lib/api/parse-json-response";
 import { isGeneralTopic, mainChatLabel } from "@/lib/topics";
 import { RoomMessageItem } from "./RoomMessageItem";
 import { ChatComposer, type ComposerUploadedFile, type SlashCommandResult } from "./ChatComposer";
@@ -749,6 +751,7 @@ export function RoomChat({
     mentionsJson?: import("@/lib/types").MentionRef[],
     attachmentFileIds?: string[],
     contextFileIds?: string[],
+    options?: { skipOrchestration?: boolean; throwOnError?: boolean },
   ) => {
     if (!topic || topic.status === "archived" || room.status === "archived") return;
 
@@ -798,7 +801,7 @@ export function RoomChat({
         mentionsJson,
         attachmentFileIds,
         contextFileIds,
-        mode: "live" as const,
+        ...(options?.skipOrchestration ? { skipAiOrchestration: true } : {}),
       };
 
       trace("message", "info", `POST /api/rooms/${room.id}/messages`, body);
@@ -810,7 +813,21 @@ export function RoomChat({
         body: JSON.stringify(body),
       });
 
-      const payload = await response.json().catch(() => ({}));
+      const payload = await parseJsonResponse<{
+        queuedRuns?: QueuedRunClient[];
+        blockedRuns?: Array<{ employeeName?: string; reason: string }>;
+        code?: string;
+        hint?: string;
+        orchestratorDebug?: Record<string, unknown> | null;
+        orchestrationId?: string | null;
+        orchestrationPlan?: OrchestrationPlan | null;
+        collaborationPlan?: ConversationPlan | null;
+        topicSuggestions?: TopicSuggestionPayload[];
+        smartAssistSuggestions?: SuggestedConversationAction[];
+        error?: string;
+        humanMessage?: RoomMessage;
+        skippedOrchestration?: boolean;
+      }>(response);
 
       trace(
         "message",
@@ -843,7 +860,28 @@ export function RoomChat({
           failed: true,
           deliveryStatus: "failed",
         });
-        throw new Error(payload?.error ?? "Unable to send message.");
+        const msg = payload?.error ?? "Unable to send message.";
+        throw new Error(msg);
+      }
+
+      if (options?.skipOrchestration || payload.skippedOrchestration) {
+        const deliveredAt =
+          payload.humanMessage?.createdAt ?? new Date().toISOString();
+        actions.updateMessage(room.id, messageId, {
+          pending: false,
+          deliveryStatus: "delivered",
+          deliveredAt,
+        });
+        if (payload.humanMessage && payload.humanMessage.id !== messageId) {
+          actions.removeLocalMessage(room.id, messageId);
+          actions.addMessage(room.id, {
+            ...payload.humanMessage,
+            topicId: topic.id,
+          });
+        } else if (payload.humanMessage) {
+          actions.updateMessage(room.id, messageId, payload.humanMessage);
+        }
+        return;
       }
 
       const deliveredAt =
@@ -939,6 +977,7 @@ export function RoomChat({
       const msg = error instanceof Error ? error.message : "Unable to send message.";
       setSendError(msg);
       trace("message", "error", "Send failed", { error: msg });
+      if (options?.throwOnError) throw error;
     } finally {
       sendInFlightRef.current = false;
     }
@@ -1062,13 +1101,28 @@ export function RoomChat({
       };
       setBrowserResearchRuns((current) => [pendingRun, ...current.filter((run) => run.id !== "pending")]);
       try {
-        await sendViaServer(trimmed, undefined, mentionsJson, attachmentFileIds, contextFileIds);
+        await sendViaServer(trimmed, undefined, mentionsJson, attachmentFileIds, contextFileIds, {
+          skipOrchestration: true,
+          throwOnError: true,
+        });
+        trace("browser-research", "info", "POST /api/browser-research/runs", {
+          workspaceId: state.workspace.id,
+          employeeId: researchEmployee.id,
+          query: trimmed,
+          roomId: room.id,
+          topicId: topic.id,
+        });
+        const researchStarted = Date.now();
         const { run, config } = await createBrowserResearchRun({
           workspaceId: state.workspace.id,
           employeeId: researchEmployee.id,
           query: trimmed,
           roomId: room.id,
           topicId: topic.id,
+        });
+        trace("browser-research", "success", `Research run ${run.status} (${Date.now() - researchStarted}ms)`, {
+          runId: run.id,
+          provider: run.provider,
         });
         setBrowserResearchRuns((current) => [run, ...current.filter((item) => item.id !== "pending")]);
         if (config) setBrowserResearchConfig(config);

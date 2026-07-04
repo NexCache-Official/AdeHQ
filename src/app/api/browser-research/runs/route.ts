@@ -68,7 +68,8 @@ export async function POST(request: NextRequest) {
     if (message.includes("SERVICE_ROLE")) {
       return NextResponse.json({ error: "Server configuration incomplete." }, { status: 503 });
     }
-    return NextResponse.json({ error: message }, { status: 400 });
+    console.error("[AdeHQ browser research POST]", error);
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
 
