@@ -14,11 +14,14 @@ import { EmptyState } from "@/components/States";
 import { toolIcon, TOOL_STATUS_META } from "@/lib/icons";
 import { cn, timeAgo } from "@/lib/utils";
 import { ENABLE_DEMO_MODE, normalizeLiveProvider } from "@/lib/config/features";
-import { EmployeeStatus, ModelMode } from "@/lib/types";
+import { EmployeeStatus } from "@/lib/types";
+import { EmployeeIntelligencePanel } from "@/components/workforce/EmployeeIntelligencePanel";
+import { BrowserResearchPanel } from "@/components/browser-research/BrowserResearchPanel";
+import { canEmployeeUseBrowserResearch } from "@/lib/ai/browser-research";
 import {
-  defaultModelModeForRole,
-  MODEL_MODE_LABELS,
-} from "@/lib/ai/model-catalog";
+  applyIntelligencePolicyUpdate,
+  formatEmployeeIntelligenceSummary,
+} from "@/lib/ai/intelligence-policy";
 import { isMayaEmployee, isSystemEmployee, effectiveEmployeeStatus } from "@/lib/maya-employee";
 import { MAYA_EMPLOYEE_NAME } from "@/lib/hiring/maya";
 import { storeMayaEmployeeContext } from "@/components/maya/MayaDmEmptyState";
@@ -113,7 +116,7 @@ export default function EmployeeProfilePage() {
                 {employee.provider === "mock" ? "Simulated" : "Live AI"}
               </span>
               <span className="chip">
-                {MODEL_MODE_LABELS[employee.modelMode ?? defaultModelModeForRole(employee.roleKey)]} intelligence
+                {formatEmployeeIntelligenceSummary(employee)}
               </span>
               {room && <span className="chip">{room.name}</span>}
               <span className="text-slate-500">Active {timeAgo(employee.lastActiveAt)}</span>
@@ -186,6 +189,20 @@ export default function EmployeeProfilePage() {
               </div>
             </div>
           </Card>
+
+          {!isMayaEmployee(employee) && (
+            <EmployeeIntelligencePanel
+              employee={employee}
+              editable
+              onSave={(patch) => {
+                actions.updateEmployee(employee.id, patch);
+              }}
+            />
+          )}
+
+          {!isMayaEmployee(employee) && canEmployeeUseBrowserResearch(employee) && (
+            <BrowserResearchPanel employee={employee} roomId={employee.defaultRoomId} />
+          )}
 
           {/* Tool backpack */}
           <Card className="p-5">
@@ -361,6 +378,31 @@ function CompactField({ label, value }: { label: string; value: string }) {
   );
 }
 
+function PolicySelect({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  options: Array<[string, string]>;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <label className="block space-y-1.5">
+      <span className="text-xs font-medium text-slate-500">{label}</span>
+      <select className="input-field" value={value} onChange={(e) => onChange(e.target.value)}>
+        {options.map(([optionValue, optionLabel]) => (
+          <option key={optionValue} value={optionValue}>
+            {optionLabel}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
 function EditEmployeeModal({ open, onClose, employeeId }: { open: boolean; onClose: () => void; employeeId: string }) {
   const { state, actions } = useStore();
   const employee = state.employees.find((e) => e.id === employeeId)!;
@@ -370,11 +412,13 @@ function EditEmployeeModal({ open, onClose, employeeId }: { open: boolean; onClo
   const [statusVal, setStatusVal] = useState<EmployeeStatus>(employee.status);
   const [provider, setProvider] = useState(employee.provider);
   const [model, setModel] = useState(employee.model);
-  const [modelMode, setModelMode] = useState<ModelMode>(
-    employee.modelMode ?? defaultModelModeForRole(employee.roleKey),
+  const [policyDraft, setPolicyDraft] = useState(
+    () => applyIntelligencePolicyUpdate(employee, employee.intelligencePolicy ?? {}).intelligencePolicy,
   );
+  const [showAdvanced, setShowAdvanced] = useState(false);
 
   const save = () => {
+    const patch = applyIntelligencePolicyUpdate(employee, policyDraft);
     actions.updateEmployee(employeeId, {
       name,
       role,
@@ -382,7 +426,7 @@ function EditEmployeeModal({ open, onClose, employeeId }: { open: boolean; onClo
       status: statusVal,
       provider: normalizeLiveProvider(provider),
       model,
-      modelMode,
+      ...patch,
     });
     onClose();
   };
@@ -423,27 +467,71 @@ function EditEmployeeModal({ open, onClose, employeeId }: { open: boolean; onClo
           </select>
         </label>
         {provider !== "mock" && (
-          <label className="block space-y-1.5">
-            <span className="text-xs font-medium text-slate-500">Intelligence level</span>
-            <select
-              className="input-field"
-              value={modelMode}
-              onChange={(e) => setModelMode(e.target.value as ModelMode)}
-            >
-              {(Object.keys(MODEL_MODE_LABELS) as ModelMode[])
-                .filter((m) => m !== "creative")
-                .map((m) => (
-                  <option key={m} value={m}>
-                    {MODEL_MODE_LABELS[m]}
-                  </option>
-                ))}
-            </select>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <PolicySelect
+              label="Default intelligence"
+              value={policyDraft.defaultMode}
+              options={[
+                ["efficient", "Efficient"],
+                ["balanced", "Balanced"],
+                ["strong", "Strong"],
+                ["long_context", "Long context"],
+                ["coding", "Coding"],
+              ]}
+              onChange={(value) => setPolicyDraft((current) => ({ ...current, defaultMode: value }))}
+            />
+            <PolicySelect
+              label="Routing preference"
+              value={policyDraft.routingPreference}
+              options={[
+                ["auto", "Auto"],
+                ["cost_saver", "Cost saver"],
+                ["quality_first", "Quality first"],
+                ["fastest", "Fastest"],
+              ]}
+              onChange={(value) =>
+                setPolicyDraft((current) => ({ ...current, routingPreference: value as typeof current.routingPreference }))
+              }
+            />
+            <PolicySelect
+              label="Work profile"
+              value={policyDraft.workHourProfile}
+              options={[
+                ["light", "Light"],
+                ["moderate", "Moderate"],
+                ["heavy", "Heavy"],
+              ]}
+              onChange={(value) =>
+                setPolicyDraft((current) => ({ ...current, workHourProfile: value as typeof current.workHourProfile }))
+              }
+            />
+            <PolicySelect
+              label="Browser access"
+              value={policyDraft.browserAccess}
+              options={[
+                ["none", "None"],
+                ["research_only", "Research only"],
+                ["full_later", "Full (later)"],
+              ]}
+              onChange={(value) =>
+                setPolicyDraft((current) => ({ ...current, browserAccess: value as typeof current.browserAccess }))
+              }
+            />
+          </div>
+        )}
+        <button
+          type="button"
+          className="text-xs text-slate-500 underline-offset-2 hover:underline"
+          onClick={() => setShowAdvanced((open) => !open)}
+        >
+          {showAdvanced ? "Hide advanced model override" : "Show advanced model override"}
+        </button>
+        {showAdvanced && (
+          <label className="block space-y-1.5 sm:col-span-2">
+            <span className="text-xs font-medium text-slate-500">Model override (optional)</span>
+            <input className="input-field" value={model} onChange={(e) => setModel(e.target.value)} placeholder="Leave blank for role-based default" />
           </label>
         )}
-        <label className="block space-y-1.5 sm:col-span-2">
-          <span className="text-xs font-medium text-slate-500">Model override (optional)</span>
-          <input className="input-field" value={model} onChange={(e) => setModel(e.target.value)} placeholder="Leave blank for role-based default" />
-        </label>
       </div>
       <div className="flex justify-end gap-2 border-t border-slate-200 px-5 py-4">
         <Button variant="ghost" onClick={onClose}>Cancel</Button>

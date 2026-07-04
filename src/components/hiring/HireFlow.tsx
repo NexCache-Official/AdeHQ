@@ -141,6 +141,9 @@ export function HireFlow({ onboarding = false, entrySource = "hire_route" }: Hir
       departmentGroupId: session.departmentGroupId,
       discoveryMode: session.discoveryMode,
       customRoleTitle: session.customRoleTitle,
+      workspaceId: appState.workspace?.id ?? null,
+      hiringSessionId: sessionId ?? null,
+      mayaRoomId,
       ...extra,
     }),
     [
@@ -150,6 +153,9 @@ export function HireFlow({ onboarding = false, entrySource = "hire_route" }: Hir
       session.departmentGroupId,
       session.discoveryMode,
       session.customRoleTitle,
+      appState.workspace?.id,
+      sessionId,
+      mayaRoomId,
     ],
   );
 
@@ -595,6 +601,7 @@ export function HireFlow({ onboarding = false, entrySource = "hire_route" }: Hir
           sessionScopeKey,
           sessionId,
           roleTitle,
+          workspaceId: appState.workspace?.id ?? null,
         });
         dispatch({ type: "SET_CANDIDATES", candidates });
         logCandidatesGeneratedForSession(actions, mayaRoomId, roleTitle);

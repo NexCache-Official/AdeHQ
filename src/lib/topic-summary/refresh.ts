@@ -110,7 +110,13 @@ export async function refreshTopicSummary(
     employees: ctx.employees,
   });
 
-  const generated = await generateTopicSummaryPayload(contextBlock);
+  const generated = await generateTopicSummaryPayload(contextBlock, {
+    workspaceId: params.workspaceId,
+    roomId: params.roomId,
+    topicId: params.topicId,
+    sourceMessageCount: ctx.messages.length,
+    client,
+  });
 
   if (generated.isCasualConversation && !manual) {
     return { summary: existing, refreshed: false, skippedReason: "casual_conversation" };

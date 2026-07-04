@@ -268,6 +268,11 @@ export async function reserveUsage(
     estimatedInputTokens: number;
     estimatedMaxOutputTokens: number;
     estimatedCostUsd: number;
+    workUnitId?: string;
+    capability?: string;
+    providerRoute?: string;
+    providerName?: string;
+    workMinutesEstimated?: number;
   },
 ): Promise<string> {
   const { error } = await client.from("ai_usage_events").insert({
@@ -285,6 +290,11 @@ export async function reserveUsage(
     estimated_input_tokens: params.estimatedInputTokens,
     estimated_max_output_tokens: params.estimatedMaxOutputTokens,
     estimated_cost_usd: params.estimatedCostUsd,
+    work_unit_id: params.workUnitId ?? null,
+    capability: params.capability ?? null,
+    provider_route: params.providerRoute ?? null,
+    provider_name: params.providerName ?? null,
+    work_minutes_estimated: params.workMinutesEstimated ?? null,
     created_at: nowISO(),
   });
   if (error) throw error;
@@ -304,6 +314,14 @@ export async function finalizeUsage(
     fallbackUsed?: boolean;
     errorMessage?: string;
     responseMessageId?: string;
+    workUnitId?: string;
+    capability?: string;
+    providerRoute?: string;
+    providerName?: string;
+    workMinutesEstimated?: number;
+    workMinutesCharged?: number;
+    cacheReadTokens?: number;
+    cacheWriteTokens?: number;
   },
 ): Promise<void> {
   const { error } = await client
@@ -318,6 +336,14 @@ export async function finalizeUsage(
       fallback_used: patch.fallbackUsed ?? false,
       error_message: patch.errorMessage ?? null,
       response_message_id: patch.responseMessageId ?? null,
+      work_unit_id: patch.workUnitId ?? undefined,
+      capability: patch.capability ?? undefined,
+      provider_route: patch.providerRoute ?? undefined,
+      provider_name: patch.providerName ?? undefined,
+      work_minutes_estimated: patch.workMinutesEstimated ?? undefined,
+      work_minutes_charged: patch.workMinutesCharged ?? undefined,
+      cache_read_tokens: patch.cacheReadTokens ?? undefined,
+      cache_write_tokens: patch.cacheWriteTokens ?? undefined,
       finalized_at: nowISO(),
     })
     .eq("id", usageId);
@@ -447,3 +473,21 @@ export function buildRunEstimate(
   const estimate = estimateCostForRun(model, promptLength, maxOutput);
   return { ...estimate, maxOutput, model, tokens: estimate.inputTokens + estimate.outputTokens };
 }
+
+export {
+  cancelAiWorkUnit,
+  completeAiWorkUnit,
+  createAiWorkUnit,
+  failAiWorkUnit,
+  getAiWorkUnit,
+  listAiWorkUnitsForWorkspace,
+  newAiWorkUnitId,
+  startAiWorkUnit,
+} from "./ai-work-units";
+
+export type {
+  AiWorkUnit,
+  AiWorkUnitPriority,
+  AiWorkUnitStatus,
+  EmployeeIntelligencePolicy,
+} from "./ai-work-units";

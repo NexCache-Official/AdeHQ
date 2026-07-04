@@ -2,7 +2,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { enforceEmployeePermissions } from "@/lib/ai/enforce-permissions";
 import { sanitizeEffects } from "@/lib/ai/sanitize-effects";
 import { applyMentionEtiquette } from "@/lib/ai/mention-etiquette";
-import { routeEmployeeResponse, type LiveCallMetrics } from "@/lib/ai/model-router";
+import { type LiveCallMetrics } from "@/lib/ai/model-router";
+import { dispatchEmployeeQueuedResponse } from "@/lib/ai/runtime/employee-queued-runtime";
 import { finalizeAiRun } from "@/lib/ai/cost-guard";
 import {
   getOutputTokenCap,
@@ -45,6 +46,11 @@ import {
   retrieveFileContext,
 } from "@/lib/server/file-context";
 import { nowISO } from "@/lib/utils";
+import {
+  planEmployeeReplyShadowRun,
+  recordEmployeeReplyShadowResult,
+  resolveEmployeeShadowOldModel,
+} from "@/lib/ai/runtime/hot-path-shadow";
 
 async function persistRunOrchestrationPhase(
   client: SupabaseClient,
@@ -343,52 +349,144 @@ export async function processQueuedAgentRun(
       status: "running",
     });
 
-    const { response, aiMode, metrics, failed, errorMessage } = await routeEmployeeResponse(
-      {
-        employee,
-        room: roomWithMessages,
-        topic: ctx.topic,
-        topicSummary: ctx.topicSummary,
-        message: content,
-        allEmployees: ctx.employees,
-        recentMemory: ctx.recentMemory,
-        topicTasks: ctx.openTasks,
-        topicApprovals: ctx.topicApprovals,
-        topicWorkLogs: ctx.topicWorkLogs,
-        workspaceName: ctx.workspaceName,
-        openTasks: ctx.openTasks.map((t) => ({
-          id: t.id,
-          title: t.title,
-          status: t.status,
-          priority: t.priority,
-        })),
-        humanParticipants: ctx.humanParticipants,
-        fileContextPrompt: fileContextPrompt || undefined,
-        artifactIntent,
+    const { oldProvider, oldModel, oldModelMode } = resolveEmployeeShadowOldModel({
+      provider: employee.provider,
+      modelMode,
+      explicitModel: employee.model,
+    });
+    const collaborationId =
+      typeof runMetadata.collaborationId === "string"
+        ? runMetadata.collaborationId
+        : undefined;
+    const dmId = ctx.room.kind === "dm" ? ctx.room.dmEmployeeId : undefined;
+
+    const shadowPlan = await planEmployeeReplyShadowRun({
+      client,
+      workspaceId,
+      employeeId: employee.id,
+      employeeName: employee.name,
+      roleKey: employee.roleKey,
+      roomId,
+      topicId,
+      dmId,
+      messageId: triggerMessageId,
+      userMessage: content,
+      oldProvider,
+      oldModel,
+      oldModelMode,
+      resolvedRunModelMode: modelMode,
+      conversationMode,
+      isGreetingRun,
+      artifactIntent: artifactIntent ?? undefined,
+      runId,
+      usageId,
+      collaborationId,
+      collaborationRole,
+      source: "employee_queued_response_shadow",
+    });
+
+    const queuedMeta = {
+      runId,
+      usageId,
+      messageId: triggerMessageId,
+      conversationMode,
+      collaborationId,
+      collaborationRole,
+      resolvedRunModelMode: modelMode,
+      oldProvider,
+      oldModel,
+      oldModelMode,
+    };
+
+    const routeInput = {
+      employee,
+      room: roomWithMessages,
+      topic: ctx.topic,
+      topicSummary: ctx.topicSummary,
+      message: content,
+      allEmployees: ctx.employees,
+      recentMemory: ctx.recentMemory,
+      topicTasks: ctx.openTasks,
+      topicApprovals: ctx.topicApprovals,
+      topicWorkLogs: ctx.topicWorkLogs,
+      workspaceName: ctx.workspaceName,
+      openTasks: ctx.openTasks.map((t) => ({
+        id: t.id,
+        title: t.title,
+        status: t.status,
+        priority: t.priority,
+      })),
+      humanParticipants: ctx.humanParticipants,
+      fileContextPrompt: fileContextPrompt || undefined,
+      artifactIntent,
+    };
+    const routeOptions = {
+      mode: options.mode,
+      provider: employee.provider,
+      modelMode,
+      maxOutputTokens: outputCap,
+      timeoutMs: getTimeoutMs(modelMode),
+      isGreetingRun,
+      collaborationRole,
+      leadEmployeeName,
+      leadReply,
+      conversationMode:
+        typeof runMetadata.conversationMode === "string"
+          ? runMetadata.conversationMode
+          : undefined,
+      context: {
+        workspaceId,
+        roomId,
+        topicId,
+        agentRunId: runId,
+        client,
       },
-      {
-        mode: options.mode,
-        provider: employee.provider,
-        modelMode,
-        maxOutputTokens: outputCap,
-        timeoutMs: getTimeoutMs(modelMode),
-        isGreetingRun,
-        collaborationRole,
-        leadEmployeeName,
-        leadReply,
-        conversationMode:
-          typeof runMetadata.conversationMode === "string"
-            ? runMetadata.conversationMode
-            : undefined,
-        context: {
-          workspaceId,
-          roomId,
-          topicId,
-          agentRunId: runId,
-          client,
-        },
-      },
-    );
+    };
+
+    const {
+      response,
+      aiMode,
+      metrics,
+      failed,
+      errorMessage,
+      usedRuntime,
+    } = await dispatchEmployeeQueuedResponse(routeInput, routeOptions, queuedMeta);
+
+    await recordEmployeeReplyShadowResult({
+      client,
+      workspaceId,
+      employeeId: employee.id,
+      employeeName: employee.name,
+      roleKey: employee.roleKey,
+      roomId,
+      topicId,
+      dmId,
+      messageId: triggerMessageId,
+      userMessage: content,
+      oldProvider,
+      oldModel,
+      oldModelMode,
+      resolvedRunModelMode: modelMode,
+      conversationMode,
+      isGreetingRun,
+      artifactIntent: artifactIntent ?? undefined,
+      runId,
+      usageId,
+      collaborationId,
+      collaborationRole,
+      workUnitId: shadowPlan?.workUnitId,
+      routing: shadowPlan?.routing,
+      actualProvider: metrics ? (usedRuntime ? "runtime-v2" : oldProvider) : undefined,
+      actualModel: metrics?.model,
+      actualModelMode: modelMode,
+      actualCostUsd: metrics?.estimatedCostUsd,
+      inputTokens: metrics?.inputTokens,
+      outputTokens: metrics?.outputTokens,
+      durationMs: metrics?.durationMs,
+      aiMode,
+      failed: failed || aiMode === "error",
+      source: "employee_queued_response_shadow",
+    });
 
     let effect = enforceEmployeePermissions(employee, response.effect);
     effect = sanitizeEffects(effect, {

@@ -44,6 +44,7 @@ import {
   UserPlus,
 } from "lucide-react";
 import { EmployeeStatusDot } from "./EmployeeStatusBadge";
+import { formatEmployeeIntelligenceSummary } from "@/lib/ai/intelligence-policy";
 import { STATUS_META } from "@/lib/icons";
 import { effectiveEmployeeStatus, isMayaEmployee } from "@/lib/maya-employee";
 import { MAYA_EMPLOYEE_SUBTITLE } from "@/lib/hiring/maya";
@@ -1074,7 +1075,7 @@ export function RoomChat({
                 ) : dmEmployee ? (
                   <>
                     <EmployeeStatusDot status={dmEmployee.status} />
-                    {STATUS_META[dmEmployee.status].label} · {dmEmployee.provider} · {dmEmployee.model}
+                    {STATUS_META[dmEmployee.status].label} · {formatEmployeeIntelligenceSummary(dmEmployee)}
                   </>
                 ) : null}
               </div>

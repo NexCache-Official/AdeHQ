@@ -1,11 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { generateObject } from "ai";
 import { z } from "zod";
 import { AuthError, requireAuthUser } from "@/lib/supabase/auth-server";
-import { siliconFlowChatModel, siliconFlowProviderOptions } from "@/lib/ai/siliconflow-client";
-import { resolveModel } from "@/lib/ai/model-catalog";
 import { isSiliconFlowConfigured } from "@/lib/config/features";
-import { briefSchema, recruiterResponseSchema } from "@/lib/hiring/brief-schema";
+import { briefSchema } from "@/lib/hiring/brief-schema";
 import {
   departmentLabel,
   mergeBriefPartial,
@@ -27,6 +24,11 @@ import {
   inferDepartmentId,
   isEngineeringBrief,
 } from "@/lib/hiring/recruiter-brain";
+import {
+  generateRecruiterResponse,
+  getRecruiterRuntimeDispatch,
+} from "@/lib/hiring/recruiter-llm";
+import { resolveHiringWorkspaceContext } from "@/lib/server/hiring-workspace-context";
 import {
   MAYA_EMPLOYEE_NAME,
   MAYA_EMPLOYEE_SYSTEM_PROMPT,
@@ -62,6 +64,10 @@ type RecruiterBody = {
   refineInstruction?: string;
   refineMode?: RefineMode;
   refineSection?: string;
+  workspaceId?: string | null;
+  hiringSessionId?: string | null;
+  topicId?: string | null;
+  mayaRoomId?: string | null;
 };
 
 function normalizeBrief(raw: z.infer<typeof briefSchema>): AiEmployeeJobBrief {
@@ -292,7 +298,7 @@ Respond ONLY as JSON matching the schema.`;
 
 export async function POST(request: NextRequest) {
   try {
-    await requireAuthUser(request);
+    const { user, client } = await requireAuthUser(request);
     const body = (await request.json()) as RecruiterBody;
 
     const { conversation, departmentId, roleKey, action } = normalizeBody(body);
@@ -331,7 +337,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (!isSiliconFlowConfigured()) {
+    if (!isSiliconFlowConfigured() && getRecruiterRuntimeDispatch() === "old") {
       const brief = refinedBrief;
       return NextResponse.json(
         buildResponse({
@@ -348,26 +354,38 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const modelId = resolveModel("siliconflow", "cheap");
-    const model = siliconFlowChatModel(modelId);
     const history = conversation
       .map((m) => `${m.role === "ade" ? "Ade" : "User"}: ${m.text}`)
       .join("\n");
+    const llmPrompt = [
+      `Conversation:\n${history || "(starting)"}`,
+      body.currentBrief ? `Current brief:\n${JSON.stringify(body.currentBrief)}` : "",
+    ]
+      .filter(Boolean)
+      .join("\n\n");
 
     try {
-      const { object } = await generateObject({
-        model,
-        schema: recruiterResponseSchema,
-        system: systemPrompt(body),
-        prompt: [
-          `Conversation:\n${history || "(starting)"}`,
-          body.currentBrief ? `Current brief:\n${JSON.stringify(body.currentBrief)}` : "",
-        ]
-          .filter(Boolean)
-          .join("\n\n"),
-        maxOutputTokens: 1400,
-        providerOptions: siliconFlowProviderOptions(modelId),
+      const hiringContext = await resolveHiringWorkspaceContext(client, user.id, {
+        workspaceId: body.workspaceId,
+        hiringSessionId: body.hiringSessionId,
+        topicId: body.topicId,
+        mayaRoomId: body.mayaRoomId,
       });
+
+      const object = await generateRecruiterResponse(
+        {
+          body,
+          conversation,
+          system: systemPrompt(body),
+          prompt: llmPrompt,
+        },
+        {
+          client,
+          userId: user.id,
+          workspaceId: hiringContext.workspaceId,
+          hiringSessionId: hiringContext.hiringSessionId,
+        },
+      );
 
       let brief = object.brief ? normalizeBrief(object.brief) : undefined;
       const briefPartial = object.briefPartial

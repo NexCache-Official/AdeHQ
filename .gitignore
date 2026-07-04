@@ -21,6 +21,7 @@
 # misc
 .DS_Store
 *.pem
+.cache/stagehand/
 
 # debug
 npm-debug.log*

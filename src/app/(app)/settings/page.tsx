@@ -6,6 +6,7 @@ import { useStore } from "@/lib/demo-store";
 import { ENABLE_DEMO_MODE } from "@/lib/config/features";
 import { authHeaders } from "@/lib/api/auth-client";
 import { AiRuntimePanel } from "@/components/AiRuntimePanel";
+import { WorkHoursShadowPanel } from "@/components/work-hours/WorkHoursShadowPanel";
 import { AccountDangerZone } from "@/components/AccountDangerZone";
 import { PageContainer, PageHeader } from "@/components/Page";
 import { Card, Button, Toggle } from "@/components/ui";
@@ -215,6 +216,15 @@ export default function SettingsPage() {
         )}
 
         <AiRuntimePanel />
+
+        {backend === "supabase" && canAdmin && (
+          <WorkHoursShadowPanel
+            workspaceId={state.workspace.id}
+            employeeNames={Object.fromEntries(
+              state.employees.map((employee) => [employee.id, employee.name]),
+            )}
+          />
+        )}
 
         {backend === "supabase" && canAdmin && (
           <WorkspaceCostControls workspaceId={state.workspace.id} />

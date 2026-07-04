@@ -7,11 +7,14 @@ import {
 } from "@/lib/config/features";
 import { recordAiRuntime } from "@/lib/ai/runtime-log";
 import { callSiliconFlowEmployee } from "@/lib/ai/siliconflow-call";
+import { sanitizeReplyForChat } from "@/lib/ai/normalize-model-response";
 import {
-  inferOutputTokenCap,
-  inferTemperature,
-  sanitizeReplyForChat,
-} from "@/lib/ai/normalize-model-response";
+  buildEmployeePrompts,
+  resolveRouteGenerationParams,
+  toEmployeeResponseFromReplyAndEffect,
+  type EmployeeRouteInput,
+  type LiveCallMetrics,
+} from "@/lib/ai/employee-response-contract";
 import {
   estimateCost,
   normalizeModelMode,
@@ -20,7 +23,6 @@ import {
 } from "@/lib/ai/model-catalog";
 import { appendRunStep } from "@/lib/supabase/ai-runtime";
 import { sendMessageToEmployee } from "./employee-engine";
-import { buildEmployeeSystemPrompt, buildEmployeeUserPrompt } from "./prompts";
 import type { EmployeeResponse, SendMessageInput } from "./types";
 
 type RouteContext = {
@@ -45,37 +47,7 @@ export type RouteOptions = {
   context?: RouteContext;
 };
 
-function normalizeHandoff(value: unknown): string[] | undefined {
-  if (Array.isArray(value)) return value.filter((v) => typeof v === "string");
-  if (typeof value === "string" && value.trim()) return [value];
-  return undefined;
-}
-
-function toEmployeeResponse(
-  employeeId: string,
-  employeeName: string,
-  reply: string,
-  effects: EmployeeResponse["effect"],
-): EmployeeResponse {
-  return {
-    employeeId,
-    employeeName,
-    reply,
-    effect: {
-      workLog: effects.workLog ?? [],
-      tasks: effects.tasks ?? [],
-      memory: effects.memory ?? [],
-      approvals: effects.approvals ?? [],
-      emailDrafts: effects.emailDrafts ?? [],
-      statusChange: effects.statusChange,
-    handoffTo: normalizeHandoff(effects.handoffTo),
-    currentTask: effects.currentTask,
-    citations: effects.citations ?? [],
-    artifacts: effects.artifacts ?? [],
-    memorySuggestions: effects.memorySuggestions ?? [],
-  },
-};
-}
+export type { LiveCallMetrics };
 
 function errorResponse(
   input: SendMessageInput,
@@ -155,23 +127,12 @@ async function scriptedFallback(
   return { response: resolved, aiMode: "fallback" };
 }
 
-export type LiveCallMetrics = {
-  model: string;
-  inputTokens: number;
-  outputTokens: number;
-  cachedTokens?: number;
-  fallbackTier?: number;
-  fallbackUsed: boolean;
-  estimatedCostUsd: number;
-  durationMs: number;
-};
-
+/**
+ * Legacy employee reply route — SiliconFlow / mock / scripted fallback.
+ * Runtime V2 hot paths fall back here when gated execution fails or is disabled.
+ */
 export async function routeEmployeeResponse(
-  input: SendMessageInput & {
-    workspaceName: string;
-    openTasks: { id: string; title: string; status: string; priority: string }[];
-    humanParticipants: { id: string; name: string }[];
-  },
+  input: EmployeeRouteInput,
   options: RouteOptions = {},
 ): Promise<{
   response: EmployeeResponse;
@@ -188,26 +149,10 @@ export async function routeEmployeeResponse(
     options.modelMode ?? input.employee.modelMode,
   );
   const model = resolveModel(provider, modelMode, input.employee.model);
-  const baseMaxTokens = options.maxOutputTokens ?? 2000;
-  const maxOutputTokens = inferOutputTokenCap(input.message, baseMaxTokens);
-  const temperature = inferTemperature(input.message);
-  const timeoutMs = options.timeoutMs ?? 45_000;
-
-  const promptContext = {
-    employee: input.employee,
-    workspace: { id: "", name: input.workspaceName, plan: "founder", workspaceMode: "real" as const },
-    room: input.room,
-    topic: input.topic,
-    topicSummary: input.topicSummary,
-    recentMessages: input.room.messages,
-    recentMemory: input.recentMemory,
-    openTasks: input.openTasks,
-    roomEmployees: input.allEmployees.map((e) => ({ id: e.id, name: e.name, role: e.role })),
-    humanParticipants: input.humanParticipants,
-    userMessage: input.message,
-    fileContextPrompt: input.fileContextPrompt,
-    artifactIntent: input.artifactIntent,
-  };
+  const { maxOutputTokens, temperature, timeoutMs } = resolveRouteGenerationParams(
+    input.message,
+    options,
+  );
 
   if (provider === "mock" || options.mode === "mock") {
     const response = await sendMessageToEmployee(input);
@@ -237,14 +182,7 @@ export async function routeEmployeeResponse(
 
   const started = Date.now();
   try {
-    const system = buildEmployeeSystemPrompt(promptContext, {
-      isGreetingRun: options.isGreetingRun,
-      collaborationRole: options.collaborationRole,
-      leadEmployeeName: options.leadEmployeeName,
-      leadReply: options.leadReply,
-      conversationMode: options.conversationMode,
-    });
-    const prompt = buildEmployeeUserPrompt(promptContext);
+    const { system, prompt } = buildEmployeePrompts(input, options);
 
     if (ctx.client && ctx.agentRunId && ctx.workspaceId && ctx.roomId) {
       await appendRunStep(ctx.client, {
@@ -305,7 +243,7 @@ export async function routeEmployeeResponse(
     }
 
     return {
-      response: toEmployeeResponse(
+      response: toEmployeeResponseFromReplyAndEffect(
         input.employee.id,
         input.employee.name,
         sanitizeReplyForChat(result.response.reply),

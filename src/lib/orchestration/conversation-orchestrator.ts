@@ -9,6 +9,7 @@ import { extractMentionsInOrder } from "@/lib/utils";
 import { filterOrchestrationEmployees } from "./collaboration-permissions";
 import { rankEmployeesForMessage, topEmployeesForMessage } from "./employee-relevance";
 import { buildResponseOrderFromSelection, maybeEnhanceWithLlm } from "./llm-classifier";
+import type { ClassifierGenerationOptions } from "./llm-classifier";
 import {
   employeesFromReferenceIds,
   isMultiEmployeeCollaborationRequest,
@@ -360,8 +361,14 @@ export function orchestrateConversationDeterministic(
   return emptyPlan("silent_note", "No clear orchestration signal.", 0.85);
 }
 
+export type OrchestrateConversationOptions = Pick<
+  ClassifierGenerationOptions,
+  "client" | "sourceMessageCount"
+>;
+
 export async function orchestrateConversation(
   input: OrchestratorInput,
+  options: OrchestrateConversationOptions = {},
 ): Promise<OrchestrationPlan> {
   const employees = filterOrchestrationEmployees(
     input.topicEmployees.length ? input.topicEmployees : input.roomEmployees,
@@ -370,7 +377,7 @@ export async function orchestrateConversation(
   if (deterministic.confidence >= 0.75 || !employees.length) {
     return deterministic;
   }
-  return maybeEnhanceWithLlm(input, employees, deterministic);
+  return maybeEnhanceWithLlm(input, employees, deterministic, options);
 }
 
 export { rankEmployeesForMessage };

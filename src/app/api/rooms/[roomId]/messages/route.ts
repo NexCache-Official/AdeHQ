@@ -270,7 +270,7 @@ export async function POST(
       isMayaHiringSession: isMayaDm && isHiringTopic(topic),
     };
 
-    let orchestrationPlan = await orchestrateConversation(orchestratorInput);
+    let orchestrationPlan = await orchestrateConversation(orchestratorInput, { client });
 
     const governance = await loadRoomGovernanceContext(
       client,

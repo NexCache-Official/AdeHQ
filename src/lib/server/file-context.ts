@@ -1,9 +1,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { FileChunk, SavedArtifactType, WorkspaceFile } from "@/lib/types";
 import { detectUserArtifactIntent } from "@/lib/artifacts/intelligence";
-import { isSiliconFlowConfigured } from "@/lib/config/features";
 import { fileChunkFromRow, workspaceFileFromRow } from "@/lib/files/records";
-import { embedQueryText } from "@/lib/server/file-embeddings";
+import { embedQueryText, isFileEmbeddingAvailable } from "@/lib/server/file-embeddings";
 
 type DbRow = Record<string, unknown>;
 
@@ -159,9 +158,14 @@ async function vectorSearchChunks(
   priorityFileIds: Set<string>,
   maxChunks: number,
 ): Promise<VectorMatch[]> {
-  if (!isSiliconFlowConfigured()) return [];
+  if (!isFileEmbeddingAvailable()) return [];
 
-  const embedding = await embedQueryText(userMessage);
+  const embedding = await embedQueryText(userMessage, {
+    workspaceId,
+    topicId,
+    workType: "query_embedding",
+    source: "file_embeddings",
+  });
   if (!embedding?.length) return [];
 
   const { data, error } = await client.rpc("match_file_chunks", {

@@ -5,6 +5,9 @@ const nextConfig = {
     // Keep the demo build green on stylistic lint; TypeScript checks still run.
     ignoreDuringBuilds: true,
   },
+  experimental: {
+    serverComponentsExternalPackages: ["@browserbasehq/stagehand"],
+  },
 };
 
 export default nextConfig;

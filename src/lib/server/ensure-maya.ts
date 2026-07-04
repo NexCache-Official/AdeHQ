@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { buildIntelligencePolicyForHire } from "@/lib/ai/intelligence-policy";
 import { DEFAULT_SILICONFLOW_MODEL } from "@/lib/config/features";
 import {
   MAYA_EMPLOYEE_ID,
@@ -48,6 +49,11 @@ function mayaEmployeeRow(workspaceId: string, timestamp: string): DbRow {
     is_system_employee: true,
     system_employee_key: MAYA_SYSTEM_EMPLOYEE_KEY,
     metadata: maya.metadata ?? {},
+    intelligence_policy: buildIntelligencePolicyForHire({
+      modelMode: maya.modelMode ?? "balanced",
+      roleKey: maya.roleKey,
+      browserAccess: "research_only",
+    }),
     last_active_at: timestamp,
     created_at: timestamp,
     updated_at: timestamp,

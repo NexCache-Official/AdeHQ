@@ -201,6 +201,10 @@ export function useMayaDmHiring({
       departmentGroupId: session.departmentGroupId,
       discoveryMode: session.discoveryMode,
       customRoleTitle: session.customRoleTitle,
+      workspaceId: appState.workspace?.id ?? null,
+      hiringSessionId: sessionId ?? null,
+      topicId: mayaTopicId ?? null,
+      mayaRoomId,
       ...extra,
     }),
     [
@@ -210,6 +214,10 @@ export function useMayaDmHiring({
       session.departmentGroupId,
       session.discoveryMode,
       session.customRoleTitle,
+      appState.workspace?.id,
+      sessionId,
+      mayaTopicId,
+      mayaRoomId,
     ],
   );
 
@@ -461,6 +469,9 @@ export function useMayaDmHiring({
         sessionScopeKey,
         sessionId,
         roleTitle: brief.roleTitle ?? roleSeed,
+        workspaceId: appState.workspace?.id ?? null,
+        topicId: mayaTopicId ?? null,
+        mayaRoomId,
       });
       dispatch({ type: "SET_CANDIDATES", candidates });
       dispatch({ type: "SET_STEP", step: "shortlist" });

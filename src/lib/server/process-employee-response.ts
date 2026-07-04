@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { enforceEmployeePermissions } from "@/lib/ai/enforce-permissions";
-import { routeEmployeeResponse } from "@/lib/ai/model-router";
+import { dispatchEmployeeDirectResponse } from "@/lib/ai/runtime/employee-direct-runtime";
 import { beginAiRun, finalizeAiRun } from "@/lib/ai/cost-guard";
 import {
   defaultModelModeForRole,
@@ -18,6 +18,12 @@ import {
   retrieveFileContext,
 } from "@/lib/server/file-context";
 import { inferArtifactsFromReply } from "@/lib/artifacts/intelligence";
+import { resolveRunModelMode } from "@/lib/ai/resolve-run-model-mode";
+import {
+  planEmployeeReplyShadowRun,
+  recordEmployeeReplyShadowResult,
+  resolveEmployeeShadowOldModel,
+} from "@/lib/ai/runtime/hot-path-shadow";
 
 export type ProcessEmployeeOptions = {
   mode?: "mock" | "live";
@@ -143,43 +149,113 @@ export async function processEmployeeResponse(
     });
   }
 
-  const { response, aiMode, metrics, failed, errorMessage } = await routeEmployeeResponse(
-    {
-      employee,
-      room: roomWithMessages,
-      topic: ctx.topic,
-      message: content,
-      allEmployees: ctx.employees,
-      recentMemory: ctx.recentMemory,
-      topicTasks: ctx.openTasks,
-      topicApprovals: ctx.topicApprovals,
-      topicWorkLogs: ctx.topicWorkLogs,
-      workspaceName: ctx.workspaceName,
-      openTasks: ctx.openTasks.map((t) => ({
-        id: t.id,
-        title: t.title,
-        status: t.status,
-        priority: t.priority,
-      })),
-      humanParticipants: ctx.humanParticipants,
-      fileContextPrompt: fileContextPrompt || undefined,
-      artifactIntent,
+  const { oldProvider, oldModel, oldModelMode } = resolveEmployeeShadowOldModel({
+    provider: employee.provider,
+    modelMode,
+    explicitModel: employee.model,
+  });
+  const shadowResolvedModelMode = resolveRunModelMode({
+    roleKey: employee.roleKey,
+    employeeModelMode: employee.modelMode,
+    userMessage: content,
+  });
+  const dmId = ctx.room.kind === "dm" ? ctx.room.dmEmployeeId : undefined;
+
+  const shadowPlan = await planEmployeeReplyShadowRun({
+    client,
+    workspaceId: ctx.workspaceId,
+    employeeId: employee.id,
+    employeeName: employee.name,
+    roleKey: employee.roleKey,
+    roomId: ctx.room.id,
+    topicId,
+    dmId,
+    messageId: options.triggerMessageId,
+    userMessage: content,
+    oldProvider,
+    oldModel,
+    oldModelMode,
+    resolvedRunModelMode: shadowResolvedModelMode,
+    artifactIntent: artifactIntent ?? undefined,
+    agentRunId: runId,
+    source: "employee_direct_response_shadow",
+  });
+
+  const routeInput = {
+    employee,
+    room: roomWithMessages,
+    topic: ctx.topic,
+    message: content,
+    allEmployees: ctx.employees,
+    recentMemory: ctx.recentMemory,
+    topicTasks: ctx.openTasks,
+    topicApprovals: ctx.topicApprovals,
+    topicWorkLogs: ctx.topicWorkLogs,
+    workspaceName: ctx.workspaceName,
+    openTasks: ctx.openTasks.map((t) => ({
+      id: t.id,
+      title: t.title,
+      status: t.status,
+      priority: t.priority,
+    })),
+    humanParticipants: ctx.humanParticipants,
+    fileContextPrompt: fileContextPrompt || undefined,
+    artifactIntent,
+  };
+  const routeOptions = {
+    mode: options.mode,
+    provider: employee.provider,
+    modelMode,
+    maxOutputTokens: maxOutputTokens ?? getOutputTokenCap(modelMode),
+    timeoutMs: getTimeoutMs(modelMode),
+    context: {
+      workspaceId: ctx.workspaceId,
+      roomId: ctx.room.id,
+      topicId,
+      agentRunId: runId,
+      client,
     },
-    {
-      mode: options.mode,
-      provider: employee.provider,
-      modelMode,
-      maxOutputTokens: maxOutputTokens ?? getOutputTokenCap(modelMode),
-      timeoutMs: getTimeoutMs(modelMode),
-      context: {
-        workspaceId: ctx.workspaceId,
-        roomId: ctx.room.id,
-        topicId,
-        agentRunId: runId,
-        client,
-      },
-    },
-  );
+  };
+
+  const {
+    response,
+    aiMode,
+    metrics,
+    failed,
+    errorMessage,
+    usedRuntime,
+  } = await dispatchEmployeeDirectResponse(routeInput, routeOptions);
+
+  await recordEmployeeReplyShadowResult({
+    client,
+    workspaceId: ctx.workspaceId,
+    employeeId: employee.id,
+    employeeName: employee.name,
+    roleKey: employee.roleKey,
+    roomId: ctx.room.id,
+    topicId,
+    dmId,
+    messageId: options.triggerMessageId,
+    userMessage: content,
+    oldProvider,
+    oldModel,
+    oldModelMode,
+    resolvedRunModelMode: shadowResolvedModelMode,
+    artifactIntent: artifactIntent ?? undefined,
+    agentRunId: runId,
+    workUnitId: shadowPlan?.workUnitId,
+    routing: shadowPlan?.routing,
+    actualProvider: metrics ? (usedRuntime ? "runtime-v2" : oldProvider) : undefined,
+    actualModel: metrics?.model,
+    actualModelMode: modelMode,
+    actualCostUsd: metrics?.estimatedCostUsd,
+    inputTokens: metrics?.inputTokens,
+    outputTokens: metrics?.outputTokens,
+    durationMs: metrics?.durationMs,
+    aiMode,
+    failed: failed || aiMode === "error",
+    source: "employee_direct_response_shadow",
+  });
 
   const effect = enforceEmployeePermissions(employee, response.effect);
 

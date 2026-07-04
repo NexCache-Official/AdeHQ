@@ -13,10 +13,22 @@ import { Activity, Bot, Sparkles, Zap } from "lucide-react";
 
 type RuntimeSnapshot = {
   siliconflowConfigured?: boolean;
+  gatewayAvailable?: boolean;
   defaultProvider?: string;
   defaultSiliconflowModel?: string;
   environment: string;
   demoModeEnabled: boolean;
+  runtimeV2Mode?: string;
+  providerPref?: string;
+  employeeDirectExecution?: boolean;
+  employeeQueuedExecution?: boolean;
+  routingPreview?: Array<{
+    capability: string;
+    providerRoute: string;
+    runtimeMode: string;
+    estimatedWorkMinutes: number;
+    fallbackCandidates: string[];
+  }>;
   last?: {
     at: string;
     provider: string;
@@ -203,9 +215,18 @@ export function AiRuntimePanel() {
         <p className="text-sm text-slate-500">Loading runtime status…</p>
       ) : (
         <dl className="grid gap-2 text-sm sm:grid-cols-2">
-          <Stat label="SiliconFlow configured" value={snapshot?.siliconflowConfigured ? "Yes" : "No"} />
-          <Stat label="Default provider" value={snapshot?.defaultProvider ?? "siliconflow"} />
-          <Stat label="Default model" value={snapshot?.defaultSiliconflowModel ?? DEFAULT_SILICONFLOW_MODEL} />
+          <Stat label="Runtime mode" value={snapshot?.runtimeV2Mode ?? "off"} />
+          <Stat label="Provider preference" value={snapshot?.providerPref ?? "auto"} />
+          <Stat label="SiliconFlow available" value={snapshot?.siliconflowConfigured ? "Yes" : "No"} />
+          <Stat label="Gateway available" value={snapshot?.gatewayAvailable ? "Yes" : "No"} />
+          <Stat
+            label="Hot path direct execution"
+            value={snapshot?.employeeDirectExecution ? "Enabled" : "Disabled"}
+          />
+          <Stat
+            label="Hot path queued execution"
+            value={snapshot?.employeeQueuedExecution ? "Enabled" : "Disabled"}
+          />
           <Stat label="Environment" value={snapshot?.environment ?? "unknown"} />
           <Stat label="Demo mode enabled" value={ENABLE_DEMO_MODE ? "Yes" : "No"} />
           <Stat
@@ -227,6 +248,27 @@ export function AiRuntimePanel() {
           )}
           {snapshot?.last?.error && <Stat label="Last error" value={snapshot.last.error} />}
         </dl>
+      )}
+
+      {snapshot?.routingPreview && snapshot.routingPreview.length > 0 && (
+        <div className="mt-4">
+          <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
+            Routing preview (admin)
+          </h3>
+          <div className="space-y-2 rounded-xl border border-slate-200 bg-slate-50 p-3">
+            {snapshot.routingPreview.map((row) => (
+              <div key={row.capability} className="text-xs text-slate-600">
+                <span className="font-medium text-slate-800">{row.capability}</span>
+                {" · "}
+                route {row.providerRoute} · mode {row.runtimeMode} · ~
+                {row.estimatedWorkMinutes} shadow min
+                {row.fallbackCandidates.length
+                  ? ` · fallbacks ${row.fallbackCandidates.join(", ")}`
+                  : ""}
+              </div>
+            ))}
+          </div>
+        </div>
       )}
 
       {snapshot?.recent && snapshot.recent.length > 0 && (

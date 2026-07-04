@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { AIEmployee } from "@/lib/types";
+import { formatEmployeeIntelligenceSummary } from "@/lib/ai/intelligence-policy";
 import { effectiveEmployeeStatus, isSystemEmployee } from "@/lib/maya-employee";
 import { EmployeeAvatar } from "./EmployeeAvatar";
 import { EmployeeStatusBadge } from "./EmployeeStatusBadge";
@@ -76,7 +77,7 @@ export function EmployeeCard({
           <>
             <Sparkles className="h-3.5 w-3.5 shrink-0" strokeWidth={1.9} />
             <span className="truncate">
-              {employee.provider} · {employee.model}
+              {formatEmployeeIntelligenceSummary(employee)}
             </span>
           </>
         )}

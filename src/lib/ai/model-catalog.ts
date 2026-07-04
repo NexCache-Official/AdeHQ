@@ -65,6 +65,8 @@ const PRICING_PER_MILLION: Record<string, { input: number; output: number }> = {
   [SILICONFLOW_STRONG_MODEL]: { input: 0.8, output: 1.6 },
   [SILICONFLOW_CODER_MODEL]: { input: 0.5, output: 1.0 },
   [SILICONFLOW_LONG_CONTEXT_MODEL]: { input: 0.4, output: 0.8 },
+  "openai/gpt-4o-mini": { input: 0.15, output: 0.6 },
+  "anthropic/claude-sonnet-4": { input: 3.0, output: 15.0 },
 };
 
 const DEFAULT_PRICING = { input: 0.5, output: 1.0 };

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   AIEmployee,
   AiParticipationMode,
@@ -32,6 +32,8 @@ import { isActiveMemory } from "@/lib/memory/active-filter";
 import { useDebugTrace } from "@/components/DebugProvider";
 import { ArtifactViewerModal } from "@/components/artifacts/ArtifactViewerModal";
 import { TopicSummaryPanel } from "@/components/topic-summary/TopicSummaryPanel";
+import { BrowserResearchPanel } from "@/components/browser-research/BrowserResearchPanel";
+import { canEmployeeUseBrowserResearch } from "@/lib/ai/browser-research";
 import { MEMORY_UPDATED_EVENT, saveTopicSummaryToMemoryClient } from "@/lib/topic-summary/client";
 import { useTopicSummary } from "@/components/topic-summary/useTopicSummary";
 import { EmptyState } from "./States";
@@ -399,6 +401,24 @@ export function TopicPanel({
     .map((m) => employees.find((e) => e.id === m.memberId))
     .filter((e): e is AIEmployee => !!e);
 
+  const researchEmployees = useMemo(
+    () => topicEmployees.filter(canEmployeeUseBrowserResearch),
+    [topicEmployees],
+  );
+  const [researchEmployeeId, setResearchEmployeeId] = useState("");
+  useEffect(() => {
+    if (researchEmployees.length === 0) {
+      setResearchEmployeeId("");
+      return;
+    }
+    setResearchEmployeeId((current) =>
+      current && researchEmployees.some((employee) => employee.id === current)
+        ? current
+        : researchEmployees[0]!.id,
+    );
+  }, [researchEmployees]);
+  const selectedResearchEmployee = researchEmployees.find((employee) => employee.id === researchEmployeeId);
+
   const topicTasks = tasks.filter((t) => t.topicId === topic.id);
   const topicMemory = memory.filter(
     (m) =>
@@ -721,6 +741,32 @@ export function TopicPanel({
                 onMemorySaved={handleMemorySaved}
                 compactActions
               />
+              {selectedResearchEmployee && (
+                <div className="space-y-2">
+                  {researchEmployees.length > 1 && (
+                    <label className="flex items-center gap-2 text-[11px] text-ink-3">
+                      <span>Research employee</span>
+                      <select
+                        className="input-field h-7 text-[12px]"
+                        value={researchEmployeeId}
+                        onChange={(e) => setResearchEmployeeId(e.target.value)}
+                      >
+                        {researchEmployees.map((employee) => (
+                          <option key={employee.id} value={employee.id}>
+                            {employee.name}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  )}
+                  <BrowserResearchPanel
+                    employee={selectedResearchEmployee}
+                    roomId={room.id}
+                    topicId={topic.id}
+                    compact
+                  />
+                </div>
+              )}
             </div>
           )}
 

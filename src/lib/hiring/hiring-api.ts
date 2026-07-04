@@ -5,14 +5,32 @@ import type {
   RecruiterApiResponse,
 } from "@/lib/hiring/types";
 
+export type HiringApiContext = {
+  workspaceId?: string | null;
+  hiringSessionId?: string | null;
+  topicId?: string | null;
+  mayaRoomId?: string | null;
+};
+
+function hiringContextPayload(context?: HiringApiContext): Record<string, unknown> {
+  if (!context) return {};
+  return {
+    ...(context.workspaceId ? { workspaceId: context.workspaceId } : {}),
+    ...(context.hiringSessionId ? { hiringSessionId: context.hiringSessionId } : {}),
+    ...(context.topicId ? { topicId: context.topicId } : {}),
+    ...(context.mayaRoomId ? { mayaRoomId: context.mayaRoomId } : {}),
+  };
+}
+
 export async function callRecruiter(
   payload: Record<string, unknown>,
+  context?: HiringApiContext,
 ): Promise<RecruiterApiResponse> {
   const headers = await authHeaders();
   const res = await fetch("/api/hiring/recruiter", {
     method: "POST",
     headers,
-    body: JSON.stringify(payload),
+    body: JSON.stringify({ ...payload, ...hiringContextPayload(context) }),
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
@@ -25,12 +43,18 @@ export async function callCandidates(
   brief: AiEmployeeJobBrief,
   departmentId: string | null,
   roleKey?: string | null,
+  context?: HiringApiContext,
 ): Promise<CandidatesApiResponse> {
   const headers = await authHeaders();
   const res = await fetch("/api/hiring/candidates", {
     method: "POST",
     headers,
-    body: JSON.stringify({ brief, departmentId, roleKey }),
+    body: JSON.stringify({
+      brief,
+      departmentId,
+      roleKey,
+      ...hiringContextPayload(context),
+    }),
   });
   if (!res.ok) throw new Error("Could not generate candidates");
   return res.json();

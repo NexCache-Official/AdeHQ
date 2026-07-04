@@ -1,8 +1,17 @@
 import { generateObject } from "ai";
 import { z } from "zod";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { siliconFlowChatModel } from "@/lib/ai/siliconflow-client";
+import { recordAiRuntime } from "@/lib/ai/runtime-log";
 import { resolveModel } from "@/lib/ai/model-catalog";
+import { getRuntimeFlags } from "@/lib/ai/runtime/flags";
+import { generateObject as runtimeGenerateObject, planRoute } from "@/lib/ai/runtime";
+import { siliconFlowChatModel } from "@/lib/ai/siliconflow-client";
+import {
+  completeAiWorkUnit,
+  createAiWorkUnit,
+  failAiWorkUnit,
+  startAiWorkUnit,
+} from "@/lib/supabase/ai-work-units";
 import type { TopicSummary } from "./types";
 
 const summarySchema = z.object({
@@ -48,6 +57,68 @@ const summarySchema = z.object({
 });
 
 export type GeneratedTopicSummaryPayload = z.infer<typeof summarySchema>;
+
+export const topicSummarySchema = summarySchema;
+
+const TOPIC_SUMMARY_SYSTEM = `You maintain durable workstream summaries for AdeHQ topics.
+Return JSON only matching the schema.
+
+Rules:
+- Be concise and factual. Do not invent facts.
+- CRITICAL: Distinguish PLANNED work from COMPLETED work. Never describe proposals, intentions, or future plans as finished outcomes.
+- Do not write "Alex will identify leads" as if it already happened. Use honest phrasing: "Alex proposed…", "Planned:", or "Still requires…".
+- nextActions are proposals — default status "Planned". Use "Completed" only when work logs or messages show the work was done.
+- Use status on nextActions: Planned | In progress | Completed | Waiting for clarification.
+- Do not claim live external research, web searches, lead lists, market sizing, or competitor data unless work logs reference browser/search/file tools or uploaded sources were used.
+- If employees discussed research or outreach but no tools ran, say what was proposed and note that live execution still requires browser/search access or uploaded data.
+- For health supplements, regulated products, or medical claims: include a brief compliance caveat in summary or keyFacts when relevant (not medical/legal advice; verify regulations).
+- Use "No decision yet" as currentDecision only when no decision was made; otherwise use null when unclear.
+- openQuestions, keyFacts, nextActions, and suggestedMemory should be short bullet-quality items.
+- NEVER include raw message IDs, UUIDs, or [msg_...] references inside text fields — use sourceMessageId only.
+- Preserve sourceMessageId from message IDs in brackets when an item came from a specific message.
+- suggestedMemory is a suggestion only — never imply it was saved.
+- For suggestedMemory: provide a short clean title (max ~8 words), 1–2 sentence content, category from: Company Context, Product / Service, Market Research, Sales, Customer / Client, Marketing, Operations, Decision, Preference, People / Workforce, Process / Playbook, File Finding, Topic Summary, Employee-Specific Context, Other.
+- Include 2–6 lowercase tags for retrieval. Prefer topic or room scope unless truly workspace-wide.
+- suggestedByEmployeeId: employee id when an AI message inspired the suggestion.
+- Set isCasualConversation true when the thread is only greetings, thanks, or small talk with no work substance.
+- If casual, keep summary minimal and leave lists mostly empty.
+- whatHappened should describe what was actually discussed or completed in the thread, not promises about future work.
+- ownerEmployeeId must be an employee id from the context when assigning next actions.`;
+
+const TOPIC_SUMMARY_MAX_TOKENS = 1400;
+
+export type TopicSummaryTestHooks = {
+  /** When set, generateTopicSummaryPayloadRuntime throws before calling runtime. */
+  forceRuntimeFailure?: boolean | Error;
+  /** When set, generateTopicSummaryPayloadOld returns this payload (test only). */
+  stubOldPayload?: GeneratedTopicSummaryPayload;
+  /** Called when on-mode runtime fails and fallback begins. */
+  onRuntimeFallback?: (info: { error: string; workUnitFailed: boolean }) => void;
+};
+
+let topicSummaryTestHooks: TopicSummaryTestHooks | null = null;
+
+/** @internal Test-only hook — do not use in production callers. */
+export function setTopicSummaryTestHooks(hooks: TopicSummaryTestHooks | null): void {
+  topicSummaryTestHooks = hooks;
+}
+
+export type TopicSummaryGenerationOptions = {
+  workspaceId?: string;
+  roomId?: string;
+  topicId?: string;
+  sourceMessageCount?: number;
+  client?: SupabaseClient;
+};
+
+export type TopicSummaryRuntimeDispatch = "old" | "shadow" | "runtime-on";
+
+export function getTopicSummaryRuntimeDispatch(): TopicSummaryRuntimeDispatch {
+  const { mode } = getRuntimeFlags();
+  if (mode === "on") return "runtime-on";
+  if (mode === "shadow") return "shadow";
+  return "old";
+}
 
 type BuildContextParams = {
   topicTitle: string;
@@ -95,43 +166,241 @@ export function buildTopicSummaryContextBlock(params: BuildContextParams): strin
   return lines.filter((line) => line !== undefined).join("\n");
 }
 
-export async function generateTopicSummaryPayload(
+/** Direct SiliconFlow path — unchanged from pre-Runtime V2 behavior. */
+export async function generateTopicSummaryPayloadOld(
   contextBlock: string,
 ): Promise<GeneratedTopicSummaryPayload> {
+  if (topicSummaryTestHooks?.stubOldPayload) {
+    return topicSummaryTestHooks.stubOldPayload;
+  }
+
   const model = siliconFlowChatModel(resolveModel("siliconflow", "balanced"));
 
   const { object } = await generateObject({
     model,
     schema: summarySchema,
-    system: `You maintain durable workstream summaries for AdeHQ topics.
-Return JSON only matching the schema.
-
-Rules:
-- Be concise and factual. Do not invent facts.
-- CRITICAL: Distinguish PLANNED work from COMPLETED work. Never describe proposals, intentions, or future plans as finished outcomes.
-- Do not write "Alex will identify leads" as if it already happened. Use honest phrasing: "Alex proposed…", "Planned:", or "Still requires…".
-- nextActions are proposals — default status "Planned". Use "Completed" only when work logs or messages show the work was done.
-- Use status on nextActions: Planned | In progress | Completed | Waiting for clarification.
-- Do not claim live external research, web searches, lead lists, market sizing, or competitor data unless work logs reference browser/search/file tools or uploaded sources were used.
-- If employees discussed research or outreach but no tools ran, say what was proposed and note that live execution still requires browser/search access or uploaded data.
-- For health supplements, regulated products, or medical claims: include a brief compliance caveat in summary or keyFacts when relevant (not medical/legal advice; verify regulations).
-- Use "No decision yet" as currentDecision only when no decision was made; otherwise use null when unclear.
-- openQuestions, keyFacts, nextActions, and suggestedMemory should be short bullet-quality items.
-- NEVER include raw message IDs, UUIDs, or [msg_...] references inside text fields — use sourceMessageId only.
-- Preserve sourceMessageId from message IDs in brackets when an item came from a specific message.
-- suggestedMemory is a suggestion only — never imply it was saved.
-- For suggestedMemory: provide a short clean title (max ~8 words), 1–2 sentence content, category from: Company Context, Product / Service, Market Research, Sales, Customer / Client, Marketing, Operations, Decision, Preference, People / Workforce, Process / Playbook, File Finding, Topic Summary, Employee-Specific Context, Other.
-- Include 2–6 lowercase tags for retrieval. Prefer topic or room scope unless truly workspace-wide.
-- suggestedByEmployeeId: employee id when an AI message inspired the suggestion.
-- Set isCasualConversation true when the thread is only greetings, thanks, or small talk with no work substance.
-- If casual, keep summary minimal and leave lists mostly empty.
-- whatHappened should describe what was actually discussed or completed in the thread, not promises about future work.
-- ownerEmployeeId must be an employee id from the context when assigning next actions.`,
+    system: TOPIC_SUMMARY_SYSTEM,
     prompt: contextBlock,
-    maxOutputTokens: 1400,
+    maxOutputTokens: TOPIC_SUMMARY_MAX_TOKENS,
   });
 
   return object;
+}
+
+async function recordShadowPlanning(
+  contextBlock: string,
+  options: TopicSummaryGenerationOptions,
+): Promise<void> {
+  try {
+    const routing = planRoute(
+      {
+        capability: "summarization",
+        message: contextBlock.slice(0, 500),
+        workspaceId: options.workspaceId,
+      },
+      { forceMode: "shadow" },
+    );
+
+    recordAiRuntime({
+      provider: routing.providerName,
+      model: routing.modelId,
+      mode: "fallback",
+      fallbackReason: "topic_summary_shadow_plan",
+      workspaceId: options.workspaceId,
+      roomId: options.roomId,
+      estimatedCostUsd: routing.estimatedCostUsd,
+    });
+
+    if (options.client && options.workspaceId) {
+      await createAiWorkUnit(options.client, {
+        workspaceId: options.workspaceId,
+        roomId: options.roomId,
+        topicId: options.topicId,
+        workType: "topic_summary",
+        capability: "summarization",
+        objective: "Shadow plan for topic summary",
+        status: "planned",
+        runtimeMode: routing.runtimeMode,
+        providerRoute: routing.providerRoute,
+        providerName: routing.providerName,
+        modelId: routing.modelId,
+        estimatedCostUsd: routing.estimatedCostUsd,
+        estimatedWorkMinutes: routing.estimatedWorkMinutes,
+        metadata: {
+          shadow: true,
+          topicId: options.topicId,
+          roomId: options.roomId,
+          sourceMessageCount: options.sourceMessageCount,
+        },
+      });
+    }
+  } catch (error) {
+    console.warn("[AdeHQ topic summary shadow]", error);
+  }
+}
+
+/** Runtime V2 path — used when AI_RUNTIME_V2_MODE=on. */
+export async function generateTopicSummaryPayloadRuntime(
+  contextBlock: string,
+  options: TopicSummaryGenerationOptions = {},
+): Promise<GeneratedTopicSummaryPayload> {
+  if (topicSummaryTestHooks?.forceRuntimeFailure) {
+    throw topicSummaryTestHooks.forceRuntimeFailure instanceof Error
+      ? topicSummaryTestHooks.forceRuntimeFailure
+      : new Error("Forced topic summary runtime failure (test hook)");
+  }
+
+  let workUnitId: string | undefined;
+
+  if (options.client && options.workspaceId) {
+    try {
+      const created = await createAiWorkUnit(options.client, {
+        workspaceId: options.workspaceId,
+        roomId: options.roomId,
+        topicId: options.topicId,
+        workType: "topic_summary",
+        capability: "summarization",
+        objective: "Generate topic summary",
+        runtimeMode: "balanced",
+        metadata: {
+          topicId: options.topicId,
+          roomId: options.roomId,
+          workspaceId: options.workspaceId,
+          sourceMessageCount: options.sourceMessageCount,
+        },
+      });
+      workUnitId = created.id;
+      await startAiWorkUnit(options.client, options.workspaceId, workUnitId, {
+        runtimeMode: "balanced",
+        reasoningProfile: "low",
+      });
+    } catch (error) {
+      console.warn("[AdeHQ topic summary work unit]", error);
+    }
+  }
+
+  const result = await runtimeGenerateObject(
+    {
+      workspaceId: options.workspaceId,
+      workUnitId,
+      capability: "summarization",
+      runtimeMode: "balanced",
+      reasoningProfile: "low",
+      schema: summarySchema,
+      system: TOPIC_SUMMARY_SYSTEM,
+      prompt: contextBlock,
+      maxTokens: TOPIC_SUMMARY_MAX_TOKENS,
+      preferJsonMode: true,
+      metadata: {
+        topicId: options.topicId,
+        roomId: options.roomId,
+        workspaceId: options.workspaceId,
+        sourceMessageCount: options.sourceMessageCount,
+      },
+    },
+    { forceMode: "on" },
+  );
+
+  const parsed = summarySchema.safeParse(result.object);
+  if (!parsed.success) {
+    throw new Error("Runtime topic summary output failed schema validation.");
+  }
+
+  if (options.client && options.workspaceId && workUnitId) {
+    try {
+      await completeAiWorkUnit(options.client, options.workspaceId, workUnitId, {
+        actualCostUsd: result.usage.totalCostUsd,
+        actualWorkMinutes: result.workMinutesEstimated,
+        metadata: {
+          providerRoute: result.usage.providerRoute,
+          modelId: result.usage.modelId,
+          inputTokens: result.usage.inputTokens,
+          outputTokens: result.usage.outputTokens,
+        },
+      });
+    } catch (error) {
+      console.warn("[AdeHQ topic summary work unit complete]", error);
+    }
+  }
+
+  recordAiRuntime({
+    provider: result.usage.providerName,
+    model: result.usage.modelId,
+    mode: "live",
+    workspaceId: options.workspaceId,
+    roomId: options.roomId,
+    inputTokens: result.usage.inputTokens,
+    outputTokens: result.usage.outputTokens,
+    estimatedCostUsd: result.usage.totalCostUsd,
+    durationMs: result.usage.latencyMs,
+    agentRunId: workUnitId,
+  });
+
+  return parsed.data;
+}
+
+/**
+ * Generate topic summary payload.
+ * Dispatches by AI_RUNTIME_V2_MODE: off → old, shadow → old + shadow plan, on → runtime with fallback.
+ */
+export async function generateTopicSummaryPayload(
+  contextBlock: string,
+  options: TopicSummaryGenerationOptions = {},
+): Promise<GeneratedTopicSummaryPayload> {
+  const dispatch = getTopicSummaryRuntimeDispatch();
+
+  if (dispatch === "runtime-on") {
+    try {
+      return await generateTopicSummaryPayloadRuntime(contextBlock, options);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      recordAiRuntime({
+        provider: "siliconflow",
+        model: resolveModel("siliconflow", "balanced"),
+        mode: "fallback",
+        fallbackReason: "topic_summary_runtime_failed",
+        workspaceId: options.workspaceId,
+        roomId: options.roomId,
+        error: message,
+      });
+
+      let workUnitFailed = false;
+      if (options.client && options.workspaceId) {
+        try {
+          const failed = await createAiWorkUnit(options.client, {
+            workspaceId: options.workspaceId,
+            roomId: options.roomId,
+            topicId: options.topicId,
+            workType: "topic_summary",
+            capability: "summarization",
+            objective: "Runtime topic summary failed — fell back to legacy path",
+            status: "failed",
+            metadata: { fallback: true, error: message },
+          });
+          await failAiWorkUnit(
+            options.client,
+            options.workspaceId,
+            failed.id,
+            message,
+          );
+          workUnitFailed = true;
+        } catch {
+          // debug only
+        }
+      }
+
+      topicSummaryTestHooks?.onRuntimeFallback?.({ error: message, workUnitFailed });
+
+      return generateTopicSummaryPayloadOld(contextBlock);
+    }
+  }
+
+  if (dispatch === "shadow") {
+    void recordShadowPlanning(contextBlock, options);
+    return generateTopicSummaryPayloadOld(contextBlock);
+  }
+
+  return generateTopicSummaryPayloadOld(contextBlock);
 }
 
 export async function loadTopicSummaryGenerationContext(

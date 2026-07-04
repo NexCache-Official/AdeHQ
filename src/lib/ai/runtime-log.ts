@@ -3,6 +3,10 @@ import {
   DEFAULT_SILICONFLOW_MODEL,
   isSiliconFlowConfigured,
 } from "@/lib/config/features";
+import { routeCapability } from "@/lib/ai/runtime/capability-router";
+import { getRuntimeFlags } from "@/lib/ai/runtime/flags";
+import { isVercelGatewayConfigured } from "@/lib/ai/runtime/adapters/vercel-models";
+import type { AiCapability } from "@/lib/ai/runtime/types";
 
 export type AiRuntimeLogEntry = {
   id: string;
@@ -63,13 +67,41 @@ export function recordAiRuntime(entry: Omit<AiRuntimeLogEntry, "id" | "at">) {
   });
 }
 
+function buildRoutingPreview() {
+  const flags = getRuntimeFlags();
+  const capabilities: AiCapability[] = [
+    "structured_chat",
+    "summarization",
+    "embedding",
+    "classification",
+  ];
+
+  return capabilities.map((capability) => {
+    const route = routeCapability({ capability }, flags.providerPref);
+    return {
+      capability,
+      providerRoute: route.providerRoute,
+      runtimeMode: route.runtimeMode,
+      estimatedWorkMinutes: route.estimatedWorkMinutes,
+      fallbackCandidates: route.fallbackCandidates.map((candidate) => candidate.providerRoute),
+    };
+  });
+}
+
 export function getAiRuntimeSnapshot() {
+  const flags = getRuntimeFlags();
   return {
     siliconflowConfigured: isSiliconFlowConfigured(),
+    gatewayAvailable: isVercelGatewayConfigured(),
     defaultProvider: DEFAULT_PROVIDER,
     defaultSiliconflowModel: DEFAULT_SILICONFLOW_MODEL,
     environment: process.env.NODE_ENV ?? "development",
     demoModeEnabled: process.env.NEXT_PUBLIC_ENABLE_DEMO_MODE === "true",
+    runtimeV2Mode: flags.mode,
+    providerPref: flags.providerPref,
+    employeeDirectExecution: flags.employeeDirectExecution,
+    employeeQueuedExecution: flags.employeeQueuedExecution,
+    routingPreview: buildRoutingPreview(),
     last: lastEntry,
     recent: entries.slice(0, 12),
   };

@@ -11,6 +11,11 @@ import {
   intelligenceLabel,
   RUNTIME_MODE_LABELS,
 } from "@/lib/hiring/intelligence-labels";
+import {
+  buildIntelligencePolicyForHire,
+  formatIntelligencePolicyLines,
+} from "@/lib/ai/intelligence-policy";
+import { MAYA_INTELLIGENCE_ROUTING_COPY } from "@/lib/hiring/maya";
 import { AdeOrb, MetricDots } from "./HireChrome";
 
 export function initials(name: string) {
@@ -100,6 +105,21 @@ export function ApplicantCard({
         </div>
       )}
       <div className="mb-3.5 rounded-xl border border-border bg-muted/40 p-3.5">
+        <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-ink-3">
+          Intelligence policy
+        </div>
+        <div className="space-y-1.5">
+          {formatIntelligencePolicyLines(
+            buildIntelligencePolicyForHire({ modelMode: a.modelMode }),
+          ).map((line) => (
+            <div key={line.label} className="flex justify-between gap-3 text-[12.5px]">
+              <span className="text-ink-3">{line.label}</span>
+              <span className="text-right text-ink-2">{line.value}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+      <div className="mb-3.5 rounded-xl border border-border bg-muted/40 p-3.5">
         <div className="mb-2 flex items-baseline justify-between">
           <span className="font-mono text-[10px] uppercase tracking-wider text-ink-3">
             Weekly AI Work Hours
@@ -173,18 +193,22 @@ export function ApplicantCard({
       {advOpen && (
         <div className="mt-2.5 rounded-[10px] bg-ink p-3.5 font-mono text-xs">
           <div className="flex justify-between py-1 text-white/55">
-            <span>Intelligence</span>
-            <span className="text-white">{intelligenceLabel(a.modelMode)}</span>
+            <span>Last resolved model</span>
+            <span className="max-w-[55%] truncate text-right text-white/80">
+              {displayEngineModel(a.resolvedModelId)}
+            </span>
+          </div>
+          <div className="flex justify-between py-1 text-white/55">
+            <span>Provider route</span>
+            <span className="text-white/80">Auto (shadow estimate)</span>
           </div>
           <div className="flex justify-between py-1 text-white/55">
             <span>Runtime mode</span>
             <span className="text-accent-soft">{RUNTIME_MODE_LABELS[a.modelMode]}</span>
           </div>
           <div className="flex justify-between py-1 text-white/55">
-            <span>Engine model</span>
-            <span className="max-w-[55%] truncate text-right text-white/80">
-              {displayEngineModel(a.resolvedModelId)}
-            </span>
+            <span>Fallback candidate</span>
+            <span className="text-white/80">Balanced upgrade path</span>
           </div>
           <div className="flex justify-between py-1 text-white/55">
             <span>Context profile</span>
@@ -389,12 +413,14 @@ export function OfferScreen({
             label: "Weekly AI Work Capacity",
             value: `${a.weeklyWorkHours} AI Work Hours estimated`,
           },
+          ...formatIntelligencePolicyLines(
+            buildIntelligencePolicyForHire({ modelMode: a.modelMode }),
+          ).map((line) => ({ label: line.label, value: line.value })),
           { label: "Approval rules", value: brief.approvalRules.join(" · ") || "Ask before high-risk actions" },
           { label: "Start location", value: "Direct Message (default)" },
           {
-            label: "Intelligence",
-            value: intelligenceLabel(a.modelMode),
-            mono: true,
+            label: "Maya note",
+            value: MAYA_INTELLIGENCE_ROUTING_COPY,
           },
         ].map((r) => (
           <div key={r.label} className="border-b border-border/60 py-4 last:border-none">
@@ -404,8 +430,7 @@ export function OfferScreen({
             <p
               className={cn(
                 "text-[14.5px] leading-relaxed",
-                r.serif && "font-serif text-base italic",
-                r.mono && "font-mono text-[13px]",
+                "serif" in r && r.serif && "font-serif text-base italic",
               )}
             >
               {r.value}

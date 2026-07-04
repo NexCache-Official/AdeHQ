@@ -254,12 +254,20 @@ export async function generateCandidatesForSession(params: {
   sessionScopeKey: string;
   sessionId?: string | null;
   roleTitle?: string;
+  workspaceId?: string | null;
+  topicId?: string | null;
+  mayaRoomId?: string | null;
 }): Promise<AiEmployeeApplicant[]> {
   const roleTitle = params.roleTitle ?? params.brief.roleTitle;
   let candidates: AiEmployeeApplicant[];
 
   try {
-    const res = await callCandidates(params.brief, params.departmentId, params.roleKey);
+    const res = await callCandidates(params.brief, params.departmentId, params.roleKey, {
+      workspaceId: params.workspaceId,
+      hiringSessionId: params.sessionId,
+      topicId: params.topicId,
+      mayaRoomId: params.mayaRoomId,
+    });
     candidates = res.candidates;
   } catch {
     const { generateDeterministicCandidates } = await import("./candidate-engine");

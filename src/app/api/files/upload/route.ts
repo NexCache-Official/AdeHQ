@@ -236,6 +236,7 @@ export async function POST(request: NextRequest) {
             id: String(row.id),
             content: String(row.content),
           })),
+          { roomId: roomId ?? undefined, topicId: topicId ?? undefined },
         ).catch((error) => console.warn("[AdeHQ files upload] embedding failed", error));
       }
     }

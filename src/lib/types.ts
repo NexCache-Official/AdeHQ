@@ -90,6 +90,28 @@ export type EmployeePermissions = {
   approvalBeforeBilling: boolean;
 };
 
+export type EmployeeIntelligencePolicy = {
+  defaultMode:
+    | "efficient"
+    | "balanced"
+    | "strong"
+    | "long_context"
+    | "coding"
+    | (string & {});
+  allowedModes: string[];
+  workHourProfile: "light" | "moderate" | "heavy" | "low" | "high";
+  browserAccess: "none" | "research_only" | "full_later" | "approved";
+  routingPreference:
+    | "auto"
+    | "cost_saver"
+    | "quality_first"
+    | "fastest"
+    | "siliconflow"
+    | "vercel"
+    | "mock";
+  notes?: string;
+};
+
 export type SystemEmployeeMetadata = {
   dmOnly?: boolean;
   canBeArchived?: boolean;
@@ -127,6 +149,8 @@ export type AIEmployee = {
   isSystemEmployee?: boolean;
   systemEmployeeKey?: string | null;
   metadata?: SystemEmployeeMetadata;
+  intelligencePolicy?: EmployeeIntelligencePolicy;
+  routingPolicyId?: string;
   lastActiveAt: string;
   createdAt: string;
 };

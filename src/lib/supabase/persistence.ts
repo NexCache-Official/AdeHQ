@@ -2,6 +2,7 @@
 
 import type { User } from "@supabase/supabase-js";
 import { buildDemoState, TOOL_CATALOG } from "@/lib/demo";
+import { normalizeIntelligencePolicy } from "@/lib/ai/intelligence-policy";
 import type {
   AIEmployee,
   Approval,
@@ -794,6 +795,25 @@ function employeeFromRow(row: DbRow, tools: ToolAccess[]): AIEmployee {
     isSystemEmployee: Boolean(row.is_system_employee),
     systemEmployeeKey: row.system_employee_key ?? undefined,
     metadata: jsonObject<SystemEmployeeMetadata>(row.metadata, {}),
+    intelligencePolicy: normalizeIntelligencePolicy(
+      row.intelligence_policy
+        ? jsonObject<import("@/lib/types").EmployeeIntelligencePolicy>(
+            row.intelligence_policy,
+            {
+              defaultMode: "balanced",
+              allowedModes: ["efficient", "balanced", "strong"],
+              workHourProfile: "moderate",
+              browserAccess: "none",
+              routingPreference: "auto",
+            },
+          )
+        : undefined,
+      {
+        modelMode: row.model_mode as import("@/lib/types").ModelMode | undefined,
+        roleKey: row.role_key as import("@/lib/types").EmployeeRoleKey,
+      },
+    ),
+    routingPolicyId: row.routing_policy_id ? String(row.routing_policy_id) : undefined,
     lastActiveAt: row.last_active_at ?? row.updated_at ?? nowISO(),
     createdAt: row.created_at ?? nowISO(),
   };
@@ -943,6 +963,8 @@ function employeeRow(workspaceId: string, employee: AIEmployee): DbRow {
     is_system_employee: employee.isSystemEmployee ?? false,
     system_employee_key: employee.systemEmployeeKey ?? null,
     metadata: employee.metadata ?? {},
+    intelligence_policy: employee.intelligencePolicy ?? null,
+    routing_policy_id: employee.routingPolicyId ?? null,
     last_active_at: employee.lastActiveAt,
     created_at: employee.createdAt,
   };

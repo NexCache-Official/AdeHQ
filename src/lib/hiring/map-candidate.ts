@@ -1,6 +1,7 @@
 import { ROLE_TEMPLATES, TOOL_CATALOG, defaultPermissions } from "@/lib/demo";
 import type { AiEmployeeApplicant, AiEmployeeJobBrief } from "./types";
 import type { AIEmployee, EmployeeRoleKey } from "@/lib/types";
+import { buildIntelligencePolicyForHire } from "@/lib/ai/intelligence-policy";
 import { briefToInstructions } from "./build-brief";
 import { getRoleByKey, legacyDepartmentIdForRole } from "./role-library";
 import { nowISO, uid } from "@/lib/utils";
@@ -93,6 +94,16 @@ export function candidateToEmployee(
     trustScore: candidate.qualityLevel >= 3 ? 92 : candidate.qualityLevel >= 2 ? 84 : 76,
     accent: CANDIDATE_ACCENT[candidate.tier] ?? template.accent,
     defaultRoomId: undefined,
+    intelligencePolicy: buildIntelligencePolicyForHire({
+      modelMode: candidate.modelMode,
+      roleKey: employeeRoleKey,
+      workHourProfile:
+        candidate.quality === "premium"
+          ? "heavy"
+          : candidate.quality === "high"
+            ? "moderate"
+            : "light",
+    }),
     lastActiveAt: timestamp,
     createdAt: timestamp,
   };
