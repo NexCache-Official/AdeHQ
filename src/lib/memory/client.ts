@@ -35,12 +35,13 @@ export async function archiveMemoryClient(memoryId: string): Promise<MemoryEntry
   return patchMemoryClient(memoryId, { status: "archived" });
 }
 
-export async function deleteMemoryClient(memoryId: string): Promise<MemoryEntry> {
+export async function deleteMemoryClient(memoryId: string): Promise<{ deleted: true; memoryId: string }> {
   const headers = await authHeaders();
   const res = await fetch(`/api/memory/${memoryId}`, { method: "DELETE", headers });
-  const memory = await parseMemoryResponse(res);
-  notifyMemoryUpdated({ memoryId: memory.id, memory });
-  return memory;
+  const payload = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(payload.error ?? "Memory request failed.");
+  notifyMemoryUpdated({ memoryId, deleted: true });
+  return { deleted: true, memoryId };
 }
 
 export { MEMORY_UPDATED_EVENT };

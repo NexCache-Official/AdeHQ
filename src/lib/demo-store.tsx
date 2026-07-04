@@ -181,6 +181,7 @@ type StoreActions = {
   upsertTopic: (topic: import("@/lib/types").RoomTopic) => void;
   setTopicSummary: (topicId: string, summary: string) => void;
   removeTopicPermanently: (roomId: string, topicId: string) => void;
+  clearTopicMessages: (roomId: string, topicId: string) => void;
 
   // tasks
   createTask: (task: Partial<Task> & { title: string; roomId: string }) => Task;
@@ -190,6 +191,7 @@ type StoreActions = {
   createMemory: (m: Partial<MemoryEntry> & { title: string; content: string; roomId: string }) => MemoryEntry;
   updateMemory: (id: string, patch: Partial<MemoryEntry>) => void;
   mergeMemoryEntry: (entry: MemoryEntry) => void;
+  removeMemoryEntry: (memoryId: string) => void;
 
   // approvals
   createApproval: (a: Partial<Approval> & { title: string; roomId: string; requestedBy: string }) => Approval;
@@ -1424,6 +1426,24 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         }));
       },
 
+      clearTopicMessages: (roomId, topicId) => {
+        set((s) => ({
+          ...s,
+          topics: s.topics.map((t) =>
+            t.id === topicId ? { ...t, summary: undefined, updatedAt: nowISO() } : t,
+          ),
+          rooms: s.rooms.map((room) =>
+            room.id === roomId
+              ? {
+                  ...room,
+                  messages: room.messages.filter((message) => message.topicId !== topicId),
+                  updatedAt: nowISO(),
+                }
+              : room,
+          ),
+        }));
+      },
+
       createTask: (task) => {
         const timestamp = nowISO();
         const created: Task = {
@@ -1528,6 +1548,17 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           return { ...s, memory, rooms };
         });
         runRemote((workspaceId) => persistMemory(workspaceId, entry));
+      },
+
+      removeMemoryEntry: (memoryId) => {
+        set((s) => ({
+          ...s,
+          memory: s.memory.filter((m) => m.id !== memoryId),
+          rooms: s.rooms.map((room) => ({
+            ...room,
+            memory: room.memory.filter((id) => id !== memoryId),
+          })),
+        }));
       },
 
       createApproval: (a) => {

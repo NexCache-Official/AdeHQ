@@ -23,6 +23,7 @@ export function notifyMemoryUpdated(detail: {
   memoryId: string;
   topicId?: string;
   duplicate?: boolean;
+  deleted?: boolean;
 }) {
   if (typeof window === "undefined") return;
   window.dispatchEvent(new CustomEvent(MEMORY_UPDATED_EVENT, { detail }));

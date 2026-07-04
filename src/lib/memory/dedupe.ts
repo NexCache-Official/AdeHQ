@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { MemoryEntry } from "@/lib/types";
+import { isActiveMemory } from "./active-filter";
 import { buildMemoryDedupeKey, type MemoryDedupeInput } from "./fingerprint";
 import { memoryRowToEntry } from "./build-entry";
 
@@ -13,9 +14,11 @@ export async function findMemoryByDedupeKey(
     .select("*")
     .eq("workspace_id", workspaceId)
     .eq("dedupe_key", dedupeKey)
+    .is("deleted_at", null)
     .maybeSingle();
   if (error) throw error;
-  return data ? memoryRowToEntry(data as Record<string, unknown>) : null;
+  const entry = data ? memoryRowToEntry(data as Record<string, unknown>) : null;
+  return entry && isActiveMemory(entry) ? entry : null;
 }
 
 export async function resolveMemoryInsert(

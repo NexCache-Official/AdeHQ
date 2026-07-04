@@ -7,6 +7,7 @@ import {
   loadTopicSummaryGenerationContext,
 } from "./generate";
 import { fetchTopicSummary, upsertTopicSummary } from "./persistence";
+import { reconcileTopicSummarySuggestionLifecycle } from "./reconcile-suggestion-lifecycle";
 import {
   TOPIC_SUMMARY_AUTO_COOLDOWN_MS,
   type TopicSummary,
@@ -143,12 +144,20 @@ export async function refreshTopicSummary(
     memorySuggestionLifecycle: existing?.memorySuggestionLifecycle ?? {},
   };
 
-  const changed = summariesMeaningfullyChanged(existing, nextSummary);
+  const reconciledSummary = await reconcileTopicSummarySuggestionLifecycle(client, {
+    workspaceId: params.workspaceId,
+    roomId: params.roomId,
+    topicId: params.topicId,
+    userId: params.employeeId ?? "system",
+    summary: nextSummary,
+  });
+
+  const changed = summariesMeaningfullyChanged(existing, reconciledSummary);
   if (!manual && !changed) {
     return { summary: existing, refreshed: false, skippedReason: "no_meaningful_change" };
   }
 
-  const saved = await upsertTopicSummary(client, nextSummary);
+  const saved = await upsertTopicSummary(client, reconciledSummary);
 
   const employeeId = params.employeeId ?? "system";
 

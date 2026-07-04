@@ -129,14 +129,10 @@ export function MemoryCard({
     setError(null);
     try {
       if (backend === "supabase") {
-        const updated = await deleteMemoryClient(memory.id);
-        applyUpdate(updated);
+        await deleteMemoryClient(memory.id);
+        actions.removeMemoryEntry(memory.id);
       } else {
-        actions.updateMemory(memory.id, {
-          status: "archived",
-          deletedAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        });
+        actions.removeMemoryEntry(memory.id);
       }
       onArchived?.(memory.id);
       setConfirmDelete(false);
@@ -264,7 +260,9 @@ export function MemoryCard({
         {error && <p className="mt-2 text-[10px] text-red-600">{error}</p>}
         {confirmDelete && (
           <div className="mt-2 rounded-lg border border-red-200 bg-red-50 p-2">
-            <p className="text-[11px] text-red-800">Delete this memory? This soft-deletes it from active lists.</p>
+            <p className="text-[11px] text-red-800">
+              Permanently delete this memory? This cannot be undone.
+            </p>
             <div className="mt-2 flex gap-2">
               <Button variant="danger" size="sm" disabled={busy} onClick={() => void remove()}>Delete</Button>
               <Button variant="ghost" size="sm" onClick={() => setConfirmDelete(false)}>Cancel</Button>

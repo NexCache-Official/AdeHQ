@@ -144,6 +144,8 @@ export function TopicPanel({
   onArchive,
   onUnarchive,
   onDeletePermanently,
+  onClearTopicChat,
+  onClearRoomChat,
   onSaveSummaryToMemory,
   onWorkLogRefresh,
   onCreateTaskFromSummary,
@@ -172,6 +174,8 @@ export function TopicPanel({
   onArchive: () => void;
   onUnarchive?: () => void;
   onDeletePermanently?: () => void;
+  onClearTopicChat?: () => void | Promise<void>;
+  onClearRoomChat?: () => void | Promise<void>;
   onSaveSummaryToMemory: () => void;
   onWorkLogRefresh?: () => void;
   onCreateTaskFromSummary?: (title: string, ownerEmployeeId?: string) => void;
@@ -187,6 +191,8 @@ export function TopicPanel({
   const { enabled: debugEnabled } = useDebugTrace();
   const [tab, setTab] = useState<(typeof TABS)[number]["id"]>("overview");
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [confirmClearChat, setConfirmClearChat] = useState(false);
+  const [confirmClearRoomChat, setConfirmClearRoomChat] = useState(false);
   const [topicFiles, setTopicFiles] = useState<WorkspaceFile[]>([]);
   const [topicArtifacts, setTopicArtifacts] = useState<SavedArtifact[]>([]);
   const [filesLoading, setFilesLoading] = useState(false);
@@ -601,6 +607,75 @@ export function TopicPanel({
                     )}
                   </div>
                 ))}
+              {!isArchived && onClearTopicChat && !confirmClearChat && (
+                <button
+                  type="button"
+                  onClick={() => setConfirmClearChat(true)}
+                  disabled={topicActionBusy}
+                  className="text-xs text-ink-3 underline-offset-2 hover:text-ink hover:underline"
+                >
+                  Clear chat history…
+                </button>
+              )}
+              {!isArchived && onClearRoomChat && !isDm && !confirmClearRoomChat && (
+                <button
+                  type="button"
+                  onClick={() => setConfirmClearRoomChat(true)}
+                  disabled={topicActionBusy}
+                  className="text-xs text-ink-3 underline-offset-2 hover:text-amber-700 hover:underline"
+                >
+                  Clear all chat in this room…
+                </button>
+              )}
+              {!isArchived && confirmClearChat && onClearTopicChat && (
+                <div className="rounded-xl border border-border bg-muted/40 p-3">
+                  <p className="text-sm text-ink">
+                    Clear all messages in <strong>{displayTitle}</strong>? The{" "}
+                    {isMainChat ? "conversation" : "topic"} stays — only chat history is removed.
+                    Tasks, memory, and files are not deleted.
+                  </p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <Button
+                      variant="danger"
+                      size="sm"
+                      disabled={topicActionBusy}
+                      onClick={() => {
+                        void onClearTopicChat();
+                        setConfirmClearChat(false);
+                      }}
+                    >
+                      Clear chat history
+                    </Button>
+                    <Button variant="ghost" size="sm" onClick={() => setConfirmClearChat(false)}>
+                      Cancel
+                    </Button>
+                  </div>
+                </div>
+              )}
+              {!isArchived && confirmClearRoomChat && onClearRoomChat && (
+                <div className="rounded-xl border border-amber-200 bg-amber-50 p-3">
+                  <p className="text-sm text-amber-950">
+                    Clear chat history for <strong>every topic</strong> in this room? Topics, tasks,
+                    memory, and files stay — only messages are permanently removed.
+                  </p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <Button
+                      variant="danger"
+                      size="sm"
+                      disabled={topicActionBusy}
+                      onClick={() => {
+                        void onClearRoomChat();
+                        setConfirmClearRoomChat(false);
+                      }}
+                    >
+                      Clear entire room chat
+                    </Button>
+                    <Button variant="ghost" size="sm" onClick={() => setConfirmClearRoomChat(false)}>
+                      Cancel
+                    </Button>
+                  </div>
+                </div>
+              )}
               {!isMainChat && isArchived && confirmDelete && onDeletePermanently && (
                 <div className="rounded-xl border border-red-200 bg-red-50 p-3">
                   <p className="text-sm text-red-800">

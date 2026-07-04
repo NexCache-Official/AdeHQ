@@ -22,6 +22,10 @@ import { OrchestrationUiProvider } from "@/components/orchestration/Orchestratio
 import { roomAssignableEmployees, isMayaEmployee } from "@/lib/maya-employee";
 import { notifyTopicSummaryUpdated } from "@/lib/topic-summary/client";
 import {
+  clearRoomChatHistoryClient,
+  clearTopicChatHistoryClient,
+} from "@/lib/chat/clear-history-client";
+import {
   JUMP_TO_SOURCE_EVENT,
   requestScrollToMessage,
   type JumpSource,
@@ -402,6 +406,51 @@ export default function RoomDetailPage() {
       setTopicActionBusy(false);
     }
   };
+
+  const clearTopicChat = async () => {
+    if (!selectedTopic) return;
+    setTopicActionError(null);
+    setTopicActionBusy(true);
+    try {
+      if (backend === "supabase") {
+        await clearTopicChatHistoryClient(selectedTopic.id);
+      }
+      actions.clearTopicMessages(roomId, selectedTopic.id);
+      notifyTopicSummaryUpdated(selectedTopic.id);
+      setSlashNotice("Chat history cleared.");
+      setTimeout(() => setSlashNotice(null), 4000);
+    } catch (e) {
+      setTopicActionError(e instanceof Error ? e.message : "Failed to clear chat history");
+    } finally {
+      setTopicActionBusy(false);
+    }
+  };
+
+  const clearRoomChat = async () => {
+    if (!state.workspace?.id) return;
+    setTopicActionError(null);
+    setTopicActionBusy(true);
+    try {
+      if (backend === "supabase") {
+        await clearRoomChatHistoryClient(roomId, state.workspace.id);
+      }
+      for (const topic of roomTopics) {
+        actions.clearTopicMessages(roomId, topic.id);
+        notifyTopicSummaryUpdated(topic.id);
+      }
+      setSlashNotice("Room chat history cleared.");
+      setTimeout(() => setSlashNotice(null), 4000);
+    } catch (e) {
+      setTopicActionError(e instanceof Error ? e.message : "Failed to clear room chat history");
+    } finally {
+      setTopicActionBusy(false);
+    }
+  };
+
+  const isWorkspaceAdmin = useMemo(() => {
+    const member = state.workspaceMembers.find((m) => m.userId === state.user?.id);
+    return member?.role === "owner" || member?.role === "admin";
+  }, [state.workspaceMembers, state.user?.id]);
 
   const renameTopicById = async (topic: RoomTopic, newTitle: string) => {
     if (!newTitle.trim() || isGeneralTopic(topic)) return;
@@ -978,6 +1027,8 @@ export default function RoomDetailPage() {
                     onArchive={archiveTopic}
                     onUnarchive={unarchiveTopic}
                     onDeletePermanently={deleteTopicPermanently}
+                    onClearTopicChat={clearTopicChat}
+                    onClearRoomChat={!isDm && isWorkspaceAdmin ? clearRoomChat : undefined}
                     onSaveSummaryToMemory={saveSummaryToMemory}
                     onWorkLogRefresh={saveSummaryToMemory}
                     onCreateTaskFromSummary={createTaskFromSummary}
@@ -1045,6 +1096,8 @@ export default function RoomDetailPage() {
               onArchive={archiveTopic}
               onUnarchive={unarchiveTopic}
               onDeletePermanently={deleteTopicPermanently}
+              onClearTopicChat={clearTopicChat}
+              onClearRoomChat={!isDm && isWorkspaceAdmin ? clearRoomChat : undefined}
               onSaveSummaryToMemory={saveSummaryToMemory}
               onWorkLogRefresh={saveSummaryToMemory}
               onCreateTaskFromSummary={createTaskFromSummary}

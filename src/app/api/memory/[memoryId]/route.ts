@@ -110,21 +110,14 @@ export async function DELETE(
       return NextResponse.json({ error: "You cannot delete this memory." }, { status: 403 });
     }
 
-    const deletedAt = nowISO();
-    const { data, error } = await client
+    const { error } = await client
       .from("memory_entries")
-      .update({
-        deleted_at: deletedAt,
-        status: "archived",
-        updated_at: deletedAt,
-      })
+      .delete()
       .eq("workspace_id", workspaceId)
-      .eq("id", params.memoryId)
-      .select("*")
-      .single();
+      .eq("id", params.memoryId);
 
     if (error) throw error;
-    return NextResponse.json({ memory: memoryRowToEntry(data as Record<string, unknown>) });
+    return NextResponse.json({ deleted: true, memoryId: params.memoryId });
   } catch (error) {
     if (error instanceof AuthError) {
       return NextResponse.json({ error: error.message }, { status: error.status });

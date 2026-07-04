@@ -53,8 +53,16 @@ export default function MemoryPage() {
 
   useEffect(() => {
     const onMemoryUpdated = (event: Event) => {
-      const detail = (event as CustomEvent<{ memory?: MemoryEntry }>).detail;
-      if (detail?.memory) actions.mergeMemoryEntry(detail.memory);
+      const detail = (event as CustomEvent<{
+        memory?: MemoryEntry;
+        memoryId?: string;
+        deleted?: boolean;
+      }>).detail;
+      if (detail?.deleted && detail.memoryId) {
+        actions.removeMemoryEntry(detail.memoryId);
+      } else if (detail?.memory) {
+        actions.mergeMemoryEntry(detail.memory);
+      }
       setRefreshKey((k) => k + 1);
     };
     window.addEventListener(MEMORY_UPDATED_EVENT, onMemoryUpdated);
