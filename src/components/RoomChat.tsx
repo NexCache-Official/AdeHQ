@@ -54,6 +54,7 @@ import {
 import {
   createBrowserResearchRun,
   fetchBrowserResearchRuns,
+  sortBrowserResearchRuns,
   type BrowserResearchProviderConfig,
 } from "@/lib/ai/browser-research/client-api";
 import { BrowserResearchMessageCard } from "@/components/browser-research/BrowserResearchMessageCard";
@@ -276,6 +277,27 @@ export function RoomChat({
     [displayMessages],
   );
 
+  const sortedBrowserResearchRuns = useMemo(
+    () => sortBrowserResearchRuns(browserResearchRuns),
+    [browserResearchRuns],
+  );
+
+  type ChatTimelineItem =
+    | { kind: "message"; row: (typeof messageRows)[number] }
+    | { kind: "research"; run: BrowserResearchRun };
+
+  const chatTimelineItems = useMemo(() => {
+    const items: ChatTimelineItem[] = [
+      ...messageRows.map((row) => ({ kind: "message" as const, row })),
+      ...sortedBrowserResearchRuns.map((run) => ({ kind: "research" as const, run })),
+    ];
+    return items.sort((a, b) => {
+      const aTime = a.kind === "message" ? a.row.message.createdAt : a.run.createdAt;
+      const bTime = b.kind === "message" ? b.row.message.createdAt : b.run.createdAt;
+      return aTime.localeCompare(bTime);
+    });
+  }, [messageRows, sortedBrowserResearchRuns]);
+
   const roomEmployees = room.aiEmployees
     .map((id) => state.employees.find((e) => e.id === id))
     .filter((e): e is NonNullable<typeof e> => !!e);
@@ -401,7 +423,7 @@ export function RoomChat({
           topicId: topic.id,
         });
         if (cancelled) return;
-        setBrowserResearchRuns(runs.slice(0, 5));
+        setBrowserResearchRuns(sortBrowserResearchRuns(runs.slice(0, 5)));
         if (config) setBrowserResearchConfig(config);
       } catch {
         // non-blocking — browse mode still usable
@@ -1101,7 +1123,9 @@ export function RoomChat({
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };
-      setBrowserResearchRuns((current) => [pendingRun, ...current.filter((run) => run.id !== "pending")]);
+      setBrowserResearchRuns((current) =>
+        sortBrowserResearchRuns([...current.filter((run) => run.id !== "pending"), pendingRun]),
+      );
 
       const messageId = uid("msg");
       const mentions = extractMentions(
@@ -1149,7 +1173,7 @@ export function RoomChat({
           topicId: topic.id,
         });
         const researchStarted = Date.now();
-        const { run, config } = await createBrowserResearchRun({
+        const { run, chatReply, config } = await createBrowserResearchRun({
           workspaceId: state.workspace.id,
           employeeId: researchEmployee.id,
           query: trimmed,
@@ -1160,7 +1184,12 @@ export function RoomChat({
           runId: run.id,
           provider: run.provider,
         });
-        setBrowserResearchRuns((current) => [run, ...current.filter((item) => item.id !== "pending")]);
+        setBrowserResearchRuns((current) =>
+          sortBrowserResearchRuns([...current.filter((item) => item.id !== "pending"), run]),
+        );
+        if (chatReply) {
+          actions.addMessage(room.id, { ...chatReply, topicId: topic.id });
+        }
         if (config) setBrowserResearchConfig(config);
         void actions.refreshWorkLogForTopic(topic.id);
       } catch (error) {
@@ -1396,24 +1425,40 @@ export function RoomChat({
           )
         ) : (
           <div className="mx-auto max-w-[760px]">
-            {messageRows.map(({ message, grouped, showDaySeparator }) => (
-              <div key={message.id}>
-                {showDaySeparator && (
-                  <div className="mb-[18px] mt-1.5 text-center">
-                    <span className="rounded-full bg-muted px-3 py-0.5 text-[11px] text-ink-3">
-                      {daySeparatorLabel(message.createdAt)}
-                    </span>
-                  </div>
-                )}
-                <RoomMessageItem
-                  message={message}
-                  isDm={isDm}
-                  grouped={grouped}
-                  messageActions={messageActions}
-                  actionsDisabled={chatDisabled}
-                />
-              </div>
-            ))}
+            {chatTimelineItems.map((item) =>
+              item.kind === "message" ? (
+                <div key={item.row.message.id}>
+                  {item.row.showDaySeparator && (
+                    <div className="mb-[18px] mt-1.5 text-center">
+                      <span className="rounded-full bg-muted px-3 py-0.5 text-[11px] text-ink-3">
+                        {daySeparatorLabel(item.row.message.createdAt)}
+                      </span>
+                    </div>
+                  )}
+                  <RoomMessageItem
+                    message={item.row.message}
+                    isDm={isDm}
+                    grouped={item.row.grouped}
+                    messageActions={messageActions}
+                    actionsDisabled={chatDisabled}
+                  />
+                </div>
+              ) : state.workspace?.id ? (
+                <div key={item.run.id} className="mx-auto mb-3 max-w-3xl">
+                  <BrowserResearchMessageCard
+                    run={item.run}
+                    workspaceId={state.workspace.id}
+                    topicId={topic.id}
+                    employeeName={researchEmployee?.name}
+                    pending={
+                      item.run.id === "pending" ||
+                      item.run.status === "running" ||
+                      item.run.status === "planning"
+                    }
+                  />
+                </div>
+              ) : null,
+            )}
             {activeRuns
               .filter((run) => ["reading", "thinking", "typing", "queued"].includes(run.phase))
               .map((run) => {
@@ -1475,20 +1520,6 @@ export function RoomChat({
               </div>
             )}
             {isMayaHiringMode && <MayaHiringInlineCards />}
-            {browserResearchRuns.length > 0 && state.workspace?.id && (
-              <div className="mx-auto flex max-w-3xl flex-col gap-3">
-                {browserResearchRuns.map((run) => (
-                  <BrowserResearchMessageCard
-                    key={run.id}
-                    run={run}
-                    workspaceId={state.workspace!.id}
-                    topicId={topic.id}
-                    employeeName={researchEmployee?.name}
-                    pending={run.id === "pending" || run.status === "running" || run.status === "planning"}
-                  />
-                ))}
-              </div>
-            )}
             <div ref={bottomRef} />
           </div>
         )}
@@ -1567,6 +1598,8 @@ export function RoomChat({
             browserResearchAvailable={browserResearchAvailable}
             browserResearchEnabled={browserResearchEnabled}
             onBrowserResearchEnabledChange={setBrowserResearchEnabled}
+            browserResearchEffectiveProvider={browserResearchConfig?.effectiveProvider}
+            browserResearchTavilyConfigured={browserResearchConfig?.tavilyConfigured ?? false}
             browserResearchLiveReady={browserResearchConfig?.liveReady ?? false}
             browserResearchBusy={browserResearchBusy}
           />

@@ -81,6 +81,8 @@ export const BROWSER_RESEARCH_UI_COPY = {
   agentModeLabel: "Browse",
   agentModeOnHint: "Live web research — send your question in chat",
   agentModeOffHint: "Toggle to browse the web with this employee",
+  fastSearchBadge: "Fast web search",
+  previewModeBadge: "Preview mode — live research not configured",
 } as const;
 
 export function browserResearchRunLabel(provider: BrowserResearchProvider): string {

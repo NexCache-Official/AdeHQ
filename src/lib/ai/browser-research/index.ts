@@ -34,6 +34,8 @@ export {
   isBrowserbaseConfigured,
   isTavilyConfigured,
   resolveBrowserResearchProvider,
+  resolveBrowserResearchProviderForQuery,
+  isFastSearchQuery,
 } from "./provider-config";
 
 export type { BrowserResearchProviderResult } from "./provider-result";

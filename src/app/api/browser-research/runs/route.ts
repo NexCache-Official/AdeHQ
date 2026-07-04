@@ -43,7 +43,7 @@ export async function POST(request: NextRequest) {
     await requireWorkspaceMembership(client, workspaceId, user.id);
 
     const serviceClient = createServiceRoleClient();
-    const run = await createAndRunBrowserResearch(serviceClient, {
+    const { run, chatReply } = await createAndRunBrowserResearch(serviceClient, {
       workspaceId,
       roomId: body.roomId?.trim() || undefined,
       topicId: body.topicId?.trim() || undefined,
@@ -54,6 +54,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       run,
+      chatReply,
       message: browserResearchCompletedMessage(run.provider),
       config: getBrowserResearchProviderConfig(),
     });

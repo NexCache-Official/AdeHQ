@@ -8,13 +8,14 @@ import {
   BrowserResearchPermissionError,
 } from "./permissions";
 import { runMockBrowserResearchProvider } from "./mock-provider";
+import { persistBrowserResearchChatReply } from "./chat-reply";
 import { createResearchReportArtifactFromRun } from "./report-artifact";
 import {
   getBrowserbaseSessionCostUsd,
   getBrowserResearchMaxPages,
   getTavilySearchCostUsd,
   isBrowserResearchLiveReady,
-  resolveBrowserResearchProvider,
+  resolveBrowserResearchProviderForQuery,
 } from "./provider-config";
 import type { BrowserResearchProviderResult } from "./provider-result";
 import {
@@ -30,7 +31,13 @@ import {
   type BrowserResearchRun,
   type BrowserResearchRunStatus,
 } from "./types";
-import type { AIEmployee, EmployeeIntelligencePolicy, EmployeeRoleKey, ModelMode } from "@/lib/types";
+import type {
+  AIEmployee,
+  EmployeeIntelligencePolicy,
+  EmployeeRoleKey,
+  ModelMode,
+  RoomMessage,
+} from "@/lib/types";
 import {
   cancelAiWorkUnit,
   completeAiWorkUnit,
@@ -361,7 +368,7 @@ export async function createBrowserResearchRun(
 
   const resolved = params.provider
     ? { provider: params.provider }
-    : resolveBrowserResearchProvider();
+    : resolveBrowserResearchProviderForQuery(query);
   const provider = resolved.provider;
   const preEstimateMinutes = estimateWorkMinutesForProvider(provider);
 
@@ -436,6 +443,7 @@ export async function createBrowserResearchRun(
       liveBrowsing: provider === "browserbase" && isBrowserResearchLiveReady(),
       searchProvider: provider,
       providerFallbackReason: "fallbackReason" in resolved ? resolved.fallbackReason : undefined,
+      providerRouteReason: "routeReason" in resolved ? resolved.routeReason : undefined,
       routingPreview: {
         providerRoute: routing.providerRoute,
         runtimeMode: routing.runtimeMode,
@@ -468,7 +476,7 @@ export async function runBrowserResearchRun(
   client: SupabaseClient,
   workspaceId: string,
   runId: string,
-): Promise<BrowserResearchRun> {
+): Promise<{ run: BrowserResearchRun; chatReply: RoomMessage | null }> {
   const existing = await getBrowserResearchRun(client, workspaceId, runId);
   if (!existing) {
     throw new Error(`Browser research run not found: ${runId}`);
@@ -477,7 +485,7 @@ export async function runBrowserResearchRun(
     throw new Error("This research run was cancelled.");
   }
   if (existing.status === "completed") {
-    return existing;
+    return { run: existing, chatReply: null };
   }
 
   const workUnitId = existing.workUnitId;
@@ -630,7 +638,7 @@ export async function runBrowserResearchRun(
       metadata: completionMetadata,
     });
 
-    return patchRun(client, workspaceId, runId, {
+    const completedRun = await patchRun(client, workspaceId, runId, {
       status: "completed",
       provider: completedResult.provider,
       planned_steps: completedResult.plannedSteps,
@@ -644,6 +652,25 @@ export async function runBrowserResearchRun(
       },
       completed_at: nowISO(),
     });
+
+    let chatReply: RoomMessage | null = null;
+    if (existing.roomId && existing.topicId) {
+      try {
+        const employee = await loadWorkspaceEmployee(client, workspaceId, existing.employeeId);
+        if (employee) {
+          chatReply = await persistBrowserResearchChatReply(
+            client,
+            completedRun,
+            completedResult,
+            employee,
+          );
+        }
+      } catch (error) {
+        console.warn("[AdeHQ browser research] chat reply failed", error);
+      }
+    }
+
+    return { run: completedRun, chatReply };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     const fallbackMinutes =
@@ -673,13 +700,14 @@ export async function runBrowserResearchMock(
   workspaceId: string,
   runId: string,
 ): Promise<BrowserResearchRun> {
-  return runBrowserResearchRun(client, workspaceId, runId);
+  const { run } = await runBrowserResearchRun(client, workspaceId, runId);
+  return run;
 }
 
 export async function createAndRunBrowserResearch(
   client: SupabaseClient,
   params: CreateBrowserResearchRunParams,
-): Promise<BrowserResearchRun> {
+): Promise<{ run: BrowserResearchRun; chatReply: RoomMessage | null }> {
   const created = await createBrowserResearchRun(client, params);
   return runBrowserResearchRun(client, params.workspaceId, created.id);
 }
@@ -689,7 +717,8 @@ export async function createAndRunBrowserResearchMock(
   client: SupabaseClient,
   params: CreateBrowserResearchRunParams,
 ): Promise<BrowserResearchRun> {
-  return createAndRunBrowserResearch(client, params);
+  const { run } = await createAndRunBrowserResearch(client, params);
+  return run;
 }
 
 export async function cancelBrowserResearchRun(

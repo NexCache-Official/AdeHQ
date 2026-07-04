@@ -1,5 +1,6 @@
 import { authHeaders } from "@/lib/api/auth-client";
 import { parseJsonResponse } from "@/lib/api/parse-json-response";
+import type { RoomMessage } from "@/lib/types";
 import type { BrowserResearchProvider, BrowserResearchRun } from "./types";
 
 export type BrowserResearchProviderConfig = {
@@ -43,7 +44,12 @@ export async function createBrowserResearchRun(params: {
   query: string;
   roomId?: string;
   topicId?: string;
-}): Promise<{ run: BrowserResearchRun; message?: string; config: BrowserResearchProviderConfig | null }> {
+}): Promise<{
+  run: BrowserResearchRun;
+  chatReply: RoomMessage | null;
+  message?: string;
+  config: BrowserResearchProviderConfig | null;
+}> {
   const res = await fetch("/api/browser-research/runs", {
     method: "POST",
     headers: await authHeaders(),
@@ -57,6 +63,7 @@ export async function createBrowserResearchRun(params: {
   });
   const data = await parseJsonResponse<{
     run?: BrowserResearchRun;
+    chatReply?: RoomMessage | null;
     message?: string;
     config?: BrowserResearchProviderConfig;
     error?: string;
@@ -67,5 +74,14 @@ export async function createBrowserResearchRun(params: {
   if (!data.run) {
     throw new Error("Browser research completed without a run payload.");
   }
-  return { run: data.run, message: data.message, config: data.config ?? null };
+  return {
+    run: data.run,
+    chatReply: data.chatReply ?? null,
+    message: data.message,
+    config: data.config ?? null,
+  };
+}
+
+export function sortBrowserResearchRuns(runs: BrowserResearchRun[]): BrowserResearchRun[] {
+  return [...runs].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
 }

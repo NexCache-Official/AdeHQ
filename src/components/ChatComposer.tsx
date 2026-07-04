@@ -199,6 +199,8 @@ export function ChatComposer({
   browserResearchAvailable = false,
   browserResearchEnabled = false,
   onBrowserResearchEnabledChange,
+  browserResearchEffectiveProvider,
+  browserResearchTavilyConfigured = false,
   browserResearchLiveReady = false,
   browserResearchBusy = false,
 }: {
@@ -223,6 +225,8 @@ export function ChatComposer({
   browserResearchAvailable?: boolean;
   browserResearchEnabled?: boolean;
   onBrowserResearchEnabledChange?: (enabled: boolean) => void;
+  browserResearchEffectiveProvider?: import("@/lib/ai/browser-research").BrowserResearchProvider;
+  browserResearchTavilyConfigured?: boolean;
   browserResearchLiveReady?: boolean;
   browserResearchBusy?: boolean;
 }) {
@@ -904,11 +908,22 @@ export function ChatComposer({
         {(contextFiles?.length || artifactIntent || browserResearchEnabled) && (
           <div className="mb-1 flex flex-wrap gap-1.5 px-1">
             {browserResearchEnabled && (
-              <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-800">
+              <span
+                className={cn(
+                  "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium",
+                  browserResearchLiveReady
+                    ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                    : browserResearchEffectiveProvider === "tavily" || browserResearchTavilyConfigured
+                      ? "border-sky-200 bg-sky-50 text-sky-800"
+                      : "border-amber-200 bg-amber-50 text-amber-800",
+                )}
+              >
                 <Globe className="h-3 w-3" />
                 {browserResearchLiveReady
                   ? BROWSER_RESEARCH_UI_COPY.liveBadge
-                  : BROWSER_RESEARCH_UI_COPY.agentModeLabel}
+                  : browserResearchEffectiveProvider === "tavily" || browserResearchTavilyConfigured
+                    ? BROWSER_RESEARCH_UI_COPY.fastSearchBadge
+                    : BROWSER_RESEARCH_UI_COPY.previewModeBadge}
               </span>
             )}
             {artifactIntent && (

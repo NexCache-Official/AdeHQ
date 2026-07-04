@@ -122,6 +122,8 @@ for (const [key, value] of Object.entries(liveUpdates)) {
 }
 
 const vercelKeys = [
+  "SUPABASE_SECRET_KEY",
+  "SUPABASE_SERVICE_ROLE_KEY",
   "AI_GATEWAY_API_KEY",
   "AI_RUNTIME_V2_MODE",
   "AI_RUNTIME_V2_PROVIDER_PREF",
@@ -149,9 +151,11 @@ writeFileSync(localPath, serializeEnv(original, localMap, orderedInserts), "utf8
 console.log("Updated .env.local with live integration flags.");
 
 const checks = [
-  ["SUPABASE_SERVICE_ROLE_KEY", "Supabase server writes"],
+  ["SUPABASE_SECRET_KEY", "Supabase server writes (preferred)"],
+  ["SUPABASE_SERVICE_ROLE_KEY", "Supabase server writes (legacy alias)"],
   ["AI_GATEWAY_API_KEY", "Stagehand LLM fallback (Vercel gateway)"],
   ["BROWSERBASE_API_KEY", "Live browser research"],
+  ["TAVILY_API_KEY", "Fast web search fallback"],
 ];
 for (const [key, label] of checks) {
   const val = localMap.get(key)?.trim() ?? "";
@@ -160,7 +164,7 @@ for (const [key, label] of checks) {
 }
 
 if (!localMap.get("TAVILY_API_KEY")?.trim()) {
-  console.log("  INFO  TAVILY_API_KEY unset — live runs use DuckDuckGo for URL discovery");
+  console.log("  INFO  TAVILY_API_KEY unset — factual queries may fall back to mock or Browserbase only");
 }
 
 if (pushVercel) {

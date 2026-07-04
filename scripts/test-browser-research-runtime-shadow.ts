@@ -351,7 +351,7 @@ async function main() {
     await withEnv({ AI_RUNTIME_V2_MODE: "shadow" }, async () => {
       const employee = baseEmployee();
       const { client, workUnits } = createShadowMockClient(employee);
-      const created = await createAndRunBrowserResearch(client, {
+      const { run: created } = await createAndRunBrowserResearch(client, {
         workspaceId: "ws_test",
         employeeId: employee.id,
         createdBy: "user_test",
@@ -375,7 +375,7 @@ async function main() {
       try {
         const employee = baseEmployee();
         const { client } = createShadowMockClient(employee);
-        const created = await createAndRunBrowserResearch(client, {
+        const { run: created } = await createAndRunBrowserResearch(client, {
           workspaceId: "ws_test",
           employeeId: employee.id,
           createdBy: "user_test",

@@ -72,6 +72,18 @@ export function getBrowserResearchMaxSeconds(): number {
   return BROWSER_RESEARCH_MAX_SECONDS_DEFAULT;
 }
 
+const FAST_SEARCH_PATTERNS = [
+  /\b(how much|raised|funding|series [a-d]|valuation|investors?|latest news|when did|who is|what is|tell me about|find out|look up|search for)\b/i,
+  /\b(recently|just raised|latest round|amount raised)\b/i,
+];
+
+/** Factual lookup queries that Tavily can answer faster than live browsing. */
+export function isFastSearchQuery(query: string): boolean {
+  const trimmed = query.trim();
+  if (trimmed.length > 240) return false;
+  return FAST_SEARCH_PATTERNS.some((pattern) => pattern.test(trimmed));
+}
+
 export function resolveBrowserResearchProvider(): {
   provider: BrowserResearchProvider;
   fallbackReason?: string;
@@ -122,6 +134,25 @@ function resolveBrowserResearchProviderFallback(
     return { provider: "tavily", fallbackReason: reason };
   }
   return { provider: "mock", fallbackReason: reason };
+}
+
+/** Prefer Tavily for fast factual lookups even when browserbase is the workspace default. */
+export function resolveBrowserResearchProviderForQuery(query: string): {
+  provider: BrowserResearchProvider;
+  fallbackReason?: string;
+  routeReason?: string;
+} {
+  const base = resolveBrowserResearchProvider();
+
+  if (
+    base.provider === "browserbase" &&
+    isFastSearchQuery(query) &&
+    isTavilyConfigured()
+  ) {
+    return { provider: "tavily", routeReason: "fast_search" };
+  }
+
+  return base;
 }
 
 export function getBrowserResearchProviderConfig() {
