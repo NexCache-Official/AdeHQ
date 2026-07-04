@@ -4,6 +4,11 @@ export async function parseJsonResponse<T = Record<string, unknown>>(
 ): Promise<T> {
   const text = await response.text();
   if (!text.trim()) {
+    if (!response.ok) {
+      throw new Error(
+        `Request failed (${response.status}) with an empty response body. The server may have crashed before returning JSON.`,
+      );
+    }
     return {} as T;
   }
   try {

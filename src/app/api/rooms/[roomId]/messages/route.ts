@@ -30,7 +30,7 @@ import { queueAgentRuns } from "@/lib/server/queue-agent-runs";
 import { isAiQueueingBlocked } from "@/lib/topic-ai-control";
 import { getAiParticipationMode, isHiringTopic, isSmartAssistMode } from "@/lib/topics";
 import { isMayaEmployee } from "@/lib/maya-employee";
-import { messageError } from "@/lib/server/message-errors";
+import { messageError, serializeUnknownError, debugErrorPayload } from "@/lib/server/message-errors";
 import { detectArtifactIntent } from "@/lib/server/file-context";
 import type { MentionRef, MessageArtifact } from "@/lib/types";
 
@@ -482,12 +482,21 @@ export async function POST(
           error: "AI processing could not be queued, but your message was saved.",
           code: "ai_runtime_failed_but_message_saved",
           humanMessageId,
+          ...(request.headers.get("X-AdeHQ-Debug") === "true"
+            ? { debug: debugErrorPayload(error) }
+            : {}),
         },
         { status: 207 },
       );
     }
     console.error("[AdeHQ messages route]", error);
-    const detail = error instanceof Error ? error.message : "Unknown error";
-    return messageError("send_failed", `Unable to send message: ${detail}`, 500);
+    const detail = serializeUnknownError(error);
+    const debug = request.headers.get("X-AdeHQ-Debug") === "true";
+    return messageError(
+      "send_failed",
+      `Unable to send message: ${detail}`,
+      500,
+      debug ? { debug: debugErrorPayload(error) } : undefined,
+    );
   }
 }

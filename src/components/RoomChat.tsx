@@ -840,6 +840,8 @@ export function RoomChat({
           hint: payload.hint,
           orchestratorDebug: payload.orchestratorDebug,
           error: payload.error,
+          debug: (payload as { debug?: unknown }).debug,
+          skippedOrchestration: payload.skippedOrchestration,
         },
       );
 
@@ -1100,11 +1102,45 @@ export function RoomChat({
         updatedAt: new Date().toISOString(),
       };
       setBrowserResearchRuns((current) => [pendingRun, ...current.filter((run) => run.id !== "pending")]);
+
+      const messageId = uid("msg");
+      const mentions = extractMentions(
+        trimmed,
+        roomEmployees.map((e) => ({ id: e.id, name: e.name })),
+      );
+      actions.addLocalMessage(room.id, {
+        id: messageId,
+        topicId: topic.id,
+        senderType: "human",
+        senderId: state.user?.id ?? "unknown",
+        senderName: state.user?.name ?? "You",
+        content: trimmed,
+        mentions,
+        pending: false,
+        deliveryStatus: "delivered",
+        deliveredAt: new Date().toISOString(),
+      });
+
+      // Persist in background — Browse must not depend on the full messages orchestrator.
+      void (async () => {
+        try {
+          const headers = await withDebugHeaders();
+          await fetch(`/api/rooms/${room.id}/messages/save`, {
+            method: "POST",
+            headers,
+            body: JSON.stringify({
+              content: trimmed,
+              topicId: topic.id,
+              clientMessageId: messageId,
+              mentionsJson,
+            }),
+          });
+        } catch {
+          // non-blocking
+        }
+      })();
+
       try {
-        await sendViaServer(trimmed, undefined, mentionsJson, attachmentFileIds, contextFileIds, {
-          skipOrchestration: true,
-          throwOnError: true,
-        });
         trace("browser-research", "info", "POST /api/browser-research/runs", {
           workspaceId: state.workspace.id,
           employeeId: researchEmployee.id,

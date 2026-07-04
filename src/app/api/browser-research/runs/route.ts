@@ -65,8 +65,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 403 });
     }
     const message = error instanceof Error ? error.message : "Failed to create research run.";
-    if (message.includes("SERVICE_ROLE")) {
-      return NextResponse.json({ error: "Server configuration incomplete." }, { status: 503 });
+    if (message.includes("SERVICE_ROLE") || message.includes("secret key")) {
+      return NextResponse.json(
+        {
+          error:
+            "Server configuration incomplete. Set SUPABASE_SECRET_KEY (or SUPABASE_SERVICE_ROLE_KEY) in Vercel environment variables.",
+        },
+        { status: 503 },
+      );
     }
     console.error("[AdeHQ browser research POST]", error);
     return NextResponse.json({ error: message }, { status: 500 });

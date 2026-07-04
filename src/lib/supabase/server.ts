@@ -1,14 +1,25 @@
 import { createClient } from "@supabase/supabase-js";
 import { SUPABASE_PROJECT_URL } from "./config";
 
-export function createServiceRoleClient() {
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+/** Server-only Supabase secret key (bypasses RLS). Supports legacy and new env names. */
+export function resolveSupabaseSecretKey(): string | undefined {
+  const candidates = [
+    process.env.SUPABASE_SECRET_KEY?.trim(),
+    process.env.SUPABASE_SERVICE_ROLE_KEY?.trim(),
+  ];
+  return candidates.find((key) => key && key.length > 20);
+}
 
-  if (!serviceRoleKey) {
-    throw new Error("SUPABASE_SERVICE_ROLE_KEY is not configured.");
+export function createServiceRoleClient() {
+  const secretKey = resolveSupabaseSecretKey();
+
+  if (!secretKey) {
+    throw new Error(
+      "Supabase secret key is not configured. Set SUPABASE_SECRET_KEY (preferred) or SUPABASE_SERVICE_ROLE_KEY on the server.",
+    );
   }
 
-  return createClient(SUPABASE_PROJECT_URL, serviceRoleKey, {
+  return createClient(SUPABASE_PROJECT_URL, secretKey, {
     auth: {
       autoRefreshToken: false,
       persistSession: false,
