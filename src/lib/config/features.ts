@@ -25,6 +25,12 @@ export const SILICONFLOW_LONG_CONTEXT_MODEL =
 export const SILICONFLOW_STRONG_MODEL =
   process.env.ADEHQ_SILICONFLOW_STRONG_MODEL ?? "deepseek-ai/DeepSeek-V4-Pro";
 
+/** English embedding model — OpenAI-compatible /v1/embeddings on SiliconFlow. */
+export const DEFAULT_EMBEDDING_MODEL =
+  process.env.ADEHQ_EMBEDDING_MODEL ?? "BAAI/bge-large-en-v1.5";
+
+export const EMBEDDING_DIMENSIONS = 1024;
+
 export const DEFAULT_PROVIDER =
   (process.env.ADEHQ_DEFAULT_PROVIDER ?? "siliconflow").toLowerCase();
 

@@ -2,7 +2,8 @@ import { randomUUID } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { AuthError, requireAuthUser, requireWorkspaceMembership } from "@/lib/supabase/auth-server";
 import { assertCanAccessRoom } from "@/lib/server/room-access";
-import { assertTopicInRoom } from "@/lib/server/topic-helpers";
+import { assertTopicInRoom, ensureGeneralTopic } from "@/lib/server/topic-helpers";
+import { embedFileChunks } from "@/lib/server/file-embeddings";
 import { workspaceFileFromRow } from "@/lib/files/records";
 import {
   fileChecksum,
@@ -63,13 +64,16 @@ export async function POST(request: NextRequest) {
     const file = form.get("file");
     const workspaceId = String(form.get("workspaceId") ?? "");
     const roomId = form.get("roomId") ? String(form.get("roomId")) : null;
-    const topicId = form.get("topicId") ? String(form.get("topicId")) : null;
+    let topicId = form.get("topicId") ? String(form.get("topicId")) : null;
 
     if (!workspaceId) {
       return NextResponse.json({ error: "workspaceId is required." }, { status: 400 });
     }
     if (!(file instanceof File)) {
       return NextResponse.json({ error: "Upload a file." }, { status: 400 });
+    }
+    if (!roomId) {
+      return NextResponse.json({ error: "roomId is required to upload a file." }, { status: 400 });
     }
     if (file.size === 0) {
       return NextResponse.json({ error: "This file is empty." }, { status: 400 });
@@ -79,10 +83,12 @@ export async function POST(request: NextRequest) {
     }
 
     const { role } = await requireWorkspaceMembership(client, workspaceId, user.id);
-    if (roomId) {
-      await assertCanAccessRoom(client, workspaceId, roomId, user.id, role);
-    }
-    if (topicId && roomId) {
+    await assertCanAccessRoom(client, workspaceId, roomId, user.id, role);
+
+    if (!topicId) {
+      const general = await ensureGeneralTopic(client, workspaceId, roomId);
+      topicId = general.id;
+    } else {
       await assertTopicInRoom(client, workspaceId, roomId, topicId);
     }
 
@@ -164,7 +170,7 @@ export async function POST(request: NextRequest) {
     if (updateError) throw updateError;
 
     if (parsed.chunks.length) {
-      const { error: chunkError } = await client.from("file_chunks").insert(
+      const { data: insertedChunks, error: chunkError } = await client.from("file_chunks").insert(
         parsed.chunks.map((chunk) => ({
           workspace_id: workspaceId,
           file_id: fileId,
@@ -181,8 +187,20 @@ export async function POST(request: NextRequest) {
           token_estimate: chunk.tokenEstimate,
           metadata: chunk.metadata ?? {},
         })),
-      );
+      ).select("id, content");
       if (chunkError) throw chunkError;
+
+      if (parsed.status === "ready" && insertedChunks?.length) {
+        await embedFileChunks(
+          client,
+          workspaceId,
+          fileId,
+          (insertedChunks as Array<{ id: string; content: string }>).map((row) => ({
+            id: String(row.id),
+            content: String(row.content),
+          })),
+        ).catch((error) => console.warn("[AdeHQ files upload] embedding failed", error));
+      }
     }
 
     await logFileWork(client, {

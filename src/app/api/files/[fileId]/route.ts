@@ -71,14 +71,35 @@ export async function DELETE(
       return NextResponse.json({ error: "Only the uploader or a workspace admin can remove this file." }, { status: 403 });
     }
 
-    const { error } = await client
+    const { error: storageError } = await client.storage
+      .from(file.storageBucket)
+      .remove([file.storagePath]);
+    if (storageError) {
+      console.warn("[AdeHQ file DELETE] storage remove failed", storageError);
+    }
+
+    await client
+      .from("message_attachments")
+      .delete()
+      .eq("workspace_id", file.workspaceId)
+      .eq("file_id", file.id);
+
+    await client
+      .from("work_graph_edges")
+      .delete()
+      .eq("workspace_id", file.workspaceId)
+      .or(
+        `and(from_object_type.eq.file,from_object_id.eq.${file.id}),and(to_object_type.eq.file,to_object_id.eq.${file.id})`,
+      );
+
+    const { error: deleteError } = await client
       .from("workspace_files")
-      .update({ status: "failed", error_message: "Removed by user" })
+      .delete()
       .eq("workspace_id", file.workspaceId)
       .eq("id", file.id);
-    if (error) throw error;
+    if (deleteError) throw deleteError;
 
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({ ok: true, deleted: true });
   } catch (error) {
     if (error instanceof AuthError) {
       return NextResponse.json({ error: error.message }, { status: error.status });

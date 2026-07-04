@@ -1,7 +1,9 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { FileChunk, SavedArtifactType, WorkspaceFile } from "@/lib/types";
 import { detectUserArtifactIntent } from "@/lib/artifacts/intelligence";
+import { isSiliconFlowConfigured } from "@/lib/config/features";
 import { fileChunkFromRow, workspaceFileFromRow } from "@/lib/files/records";
+import { embedQueryText } from "@/lib/server/file-embeddings";
 
 type DbRow = Record<string, unknown>;
 
@@ -147,6 +149,73 @@ function scoreChunk(
   return score;
 }
 
+type VectorMatch = { chunkId: string; fileId: string; similarity: number };
+
+async function vectorSearchChunks(
+  client: SupabaseClient,
+  workspaceId: string,
+  topicId: string,
+  userMessage: string,
+  priorityFileIds: Set<string>,
+  maxChunks: number,
+): Promise<VectorMatch[]> {
+  if (!isSiliconFlowConfigured()) return [];
+
+  const embedding = await embedQueryText(userMessage);
+  if (!embedding?.length) return [];
+
+  const { data, error } = await client.rpc("match_file_chunks", {
+    p_workspace_id: workspaceId,
+    p_topic_id: topicId,
+    p_query_embedding: `[${embedding.join(",")}]`,
+    p_match_count: maxChunks * 2,
+    p_file_ids: priorityFileIds.size ? [...priorityFileIds] : null,
+  });
+  if (error) {
+    console.warn("[AdeHQ file context] vector search failed", error);
+    return [];
+  }
+
+  return ((data ?? []) as Array<Record<string, unknown>>).map((row) => ({
+    chunkId: String(row.chunk_id),
+    fileId: String(row.file_id),
+    similarity: Number(row.similarity ?? 0),
+  }));
+}
+
+function mergeRetrievalScores(
+  keywordScored: RetrievedFileChunk[],
+  vectorMatches: VectorMatch[],
+  priorityFileIds: Set<string>,
+  maxChunks: number,
+): RetrievedFileChunk[] {
+  const byChunkId = new Map<string, RetrievedFileChunk>();
+
+  for (const item of keywordScored) {
+    byChunkId.set(item.chunk.id, item);
+  }
+
+  for (const match of vectorMatches) {
+    const existing = byChunkId.get(match.chunkId);
+    if (!existing) continue;
+    const vectorScore = match.similarity * 100 + (priorityFileIds.has(match.fileId) ? 20 : 0);
+    byChunkId.set(match.chunkId, {
+      ...existing,
+      score: Math.max(existing.score, vectorScore) + match.similarity * 40,
+    });
+  }
+
+  const merged = [...byChunkId.values()].sort(
+    (a, b) => b.score - a.score || a.chunk.chunkIndex - b.chunk.chunkIndex,
+  );
+
+  if (vectorMatches.length) {
+    return merged.slice(0, maxChunks);
+  }
+
+  return keywordScored;
+}
+
 export async function retrieveFileContext(
   client: SupabaseClient,
   workspaceId: string,
@@ -223,12 +292,23 @@ export async function retrieveFileContext(
     .filter((item): item is RetrievedFileChunk => item !== null)
     .sort((a, b) => b.score - a.score || a.chunk.chunkIndex - b.chunk.chunkIndex);
 
+  const vectorMatches = await vectorSearchChunks(
+    client,
+    workspaceId,
+    topicId,
+    options.userMessage,
+    priorityFileIds,
+    maxChunks,
+  );
+
+  const merged = mergeRetrievalScores(scored, vectorMatches, priorityFileIds, maxChunks);
+
   const selected =
-    priorityFileIds.size && !keywords.length
-      ? scored.slice(0, maxChunks)
-      : scored.filter((item) => item.score > 0).slice(0, maxChunks).length
-        ? scored.filter((item) => item.score > 0).slice(0, maxChunks)
-        : scored.slice(0, maxChunks);
+    priorityFileIds.size && !keywords.length && !vectorMatches.length
+      ? merged.slice(0, maxChunks)
+      : merged.filter((item) => item.score > 0).slice(0, maxChunks).length
+        ? merged.filter((item) => item.score > 0).slice(0, maxChunks)
+        : merged.slice(0, maxChunks);
 
   const chunkIds = new Set(selected.map((item) => item.chunk.id));
   const fileIds = new Set(selected.map((item) => item.file.id));

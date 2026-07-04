@@ -5,6 +5,7 @@ import type { AIEmployee, MemoryEntry, MemoryScope, ProjectRoom, RoomMessage, Ro
 import type { TopicSummary } from "@/lib/topic-summary/types";
 import {
   dismissMemorySuggestionClient,
+  saveFileMemorySuggestionClient,
   saveSuggestedMemoryClient,
   saveTopicSummaryToMemoryClient,
 } from "@/lib/topic-summary/client";
@@ -101,6 +102,8 @@ export function TopicSummaryPanel({
   compactActions = false,
 }: TopicSummaryPanelProps) {
   const [savingSummary, setSavingSummary] = useState(false);
+  const [savingKeyFacts, setSavingKeyFacts] = useState(false);
+  const [savedKeyFacts, setSavedKeyFacts] = useState(false);
   const [savingMemoryIndex, setSavingMemoryIndex] = useState<number | null>(null);
   const [memorySaveError, setMemorySaveError] = useState<string | null>(null);
   const [savedSummary, setSavedSummary] = useState(false);
@@ -194,6 +197,27 @@ export function TopicSummaryPanel({
     }
   };
 
+  const handleSaveKeyFacts = async () => {
+    const facts = summary?.keyFacts ?? [];
+    if (!facts.length) return;
+    setSavingKeyFacts(true);
+    setMemorySaveError(null);
+    try {
+      const text = facts.map((f) => sanitizeDisplayText(f.text)).join("\n");
+      const result = await saveFileMemorySuggestionClient(topicId, {
+        text,
+        reason: "Key facts from topic workstream",
+        scope: "topic",
+      });
+      setSavedKeyFacts(true);
+      onMemorySaved?.(result.memory, result.duplicate);
+    } catch (err) {
+      setMemorySaveError(err instanceof Error ? err.message : "Could not save key facts.");
+    } finally {
+      setSavingKeyFacts(false);
+    }
+  };
+
   const handleSaveSummary = async () => {
     setSavingSummary(true);
     setMemorySaveError(null);
@@ -208,9 +232,12 @@ export function TopicSummaryPanel({
     }
   };
 
+  const keyFacts = (summary?.keyFacts ?? []).filter((f) => sanitizeDisplayText(f.text));
+
   const hasContent = Boolean(
     briefSummary ||
       direction ||
+      keyFacts.length > 0 ||
       (summary?.openQuestions.length ?? 0) > 0 ||
       visibleNextActions.length > 0 ||
       visibleMemorySuggestions.length > 0,
@@ -295,6 +322,52 @@ export function TopicSummaryPanel({
           <p className="text-[13px] text-ink-3">No decision yet.</p>
         )}
       </OverviewSection>
+
+      {keyFacts.length > 0 && (
+        <OverviewSection title="Key facts">
+          <ul className="space-y-2">
+            {keyFacts.map((fact, index) => {
+              const text = sanitizeDisplayText(fact.text);
+              const source = sourceLabelFromMessage(fact.sourceMessageId, messages, "short");
+              return (
+                <li
+                  key={`${text}-${index}`}
+                  className="rounded-lg border border-border-2 bg-surface px-2.5 py-2"
+                >
+                  <p className="text-[13px] text-ink">{text}</p>
+                  {source && fact.sourceMessageId && roomId && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        jumpToMessage({
+                          roomId,
+                          topicId,
+                          messageId: fact.sourceMessageId!,
+                        })
+                      }
+                      className="mt-1 text-[10px] font-medium text-accent hover:text-accent-d"
+                    >
+                      {source}
+                    </button>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+          <div className="mt-2.5">
+            <Button
+              variant="secondary"
+              size="sm"
+              className="h-8 text-[11px]"
+              disabled={savingKeyFacts || savedKeyFacts}
+              onClick={() => void handleSaveKeyFacts()}
+            >
+              {savingKeyFacts ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
+              {savedKeyFacts ? "Key facts saved" : `Save ${keyFacts.length} key fact${keyFacts.length === 1 ? "" : "s"} to memory`}
+            </Button>
+          </div>
+        </OverviewSection>
+      )}
 
       {(summary?.openQuestions.length ?? 0) > 0 && (
         <OverviewSection title="Open questions">
