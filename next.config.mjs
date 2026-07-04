@@ -6,7 +6,7 @@ const nextConfig = {
     ignoreDuringBuilds: true,
   },
   experimental: {
-    serverComponentsExternalPackages: ["@browserbasehq/stagehand"],
+    serverComponentsExternalPackages: ["@browserbasehq/stagehand", "pdf-parse", "pdfjs-dist"],
   },
 };
 

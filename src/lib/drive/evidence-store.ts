@@ -4,7 +4,7 @@ import { DRIVE_BUCKETS } from "@/lib/drive/constants";
 import { checkUploadQuota, recordStorageUsage } from "@/lib/drive/quota";
 import { evidenceStoragePath } from "@/lib/drive/storage-sync";
 import { browserEvidenceFromRow } from "@/lib/server/drive-list";
-import { sanitizeFileName } from "@/lib/server/file-processing";
+import { sanitizeFileName } from "@/lib/files/sanitize-file-name";
 import type { BrowserEvidence } from "@/lib/types";
 
 export type PersistBrowserEvidenceParams = {

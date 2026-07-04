@@ -1,8 +1,10 @@
 import { createHash } from "node:crypto";
 import { parse as parseCsv } from "csv-parse/sync";
 import mammoth from "mammoth";
-import { PDFParse } from "pdf-parse";
 import * as XLSX from "xlsx";
+import { fileExtension, sanitizeFileName } from "@/lib/files/sanitize-file-name";
+
+export { sanitizeFileName, fileExtension };
 
 export type FileChunkDraft = {
   chunkIndex: number;
@@ -87,19 +89,6 @@ export function fileChecksum(buffer: Buffer): string {
   return createHash("sha256").update(buffer).digest("hex");
 }
 
-export function sanitizeFileName(fileName: string): string {
-  const cleaned = fileName
-    .normalize("NFKD")
-    .replace(/[^\w.\- ]+/g, "")
-    .replace(/\s+/g, " ")
-    .trim();
-  return cleaned.slice(0, 160) || "file";
-}
-
-export function fileExtension(fileName: string): string {
-  return sanitizeFileName(fileName).split(".").pop()?.toLowerCase() ?? "";
-}
-
 export function validateUploadType(fileName: string, mimeType: string): {
   ok: true;
   extension: string;
@@ -173,6 +162,7 @@ function markdownTable(headers: string[], rows: unknown[][]): string {
 }
 
 async function parsePdf(buffer: Buffer): Promise<ParsedFileResult> {
+  const { PDFParse } = await import("pdf-parse");
   const parser = new PDFParse({ data: buffer });
   try {
     const result = await parser.getText({ pageJoiner: "\n\n" });

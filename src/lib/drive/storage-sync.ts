@@ -3,7 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { SavedArtifact } from "@/lib/types";
 import { DRIVE_BUCKETS } from "@/lib/drive/constants";
 import { recordStorageUsage } from "@/lib/drive/quota";
-import { sanitizeFileName } from "@/lib/server/file-processing";
+import { sanitizeFileName } from "@/lib/files/sanitize-file-name";
 
 export function artifactStoragePath(workspaceId: string, artifactId: string, title: string): string {
   const safe = sanitizeFileName(title).replace(/\.md$/i, "") || "artifact";
