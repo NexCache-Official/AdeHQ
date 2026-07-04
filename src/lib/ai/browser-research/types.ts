@@ -78,6 +78,9 @@ export const BROWSER_RESEARCH_UI_COPY = {
   browserbaseCompletedMessage: "Live browser research run completed.",
   viewReport: "View report",
   evidenceSection: "Browser evidence",
+  agentModeLabel: "Browse",
+  agentModeOnHint: "Live web research — send your question in chat",
+  agentModeOffHint: "Toggle to browse the web with this employee",
 } as const;
 
 export function browserResearchRunLabel(provider: BrowserResearchProvider): string {

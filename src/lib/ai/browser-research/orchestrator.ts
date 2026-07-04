@@ -8,10 +8,6 @@ import {
   BrowserResearchPermissionError,
 } from "./permissions";
 import { runMockBrowserResearchProvider } from "./mock-provider";
-import {
-  closeBrowserbaseSessionForRun,
-  runBrowserbaseBrowserResearchProvider,
-} from "./browserbase-provider";
 import { createResearchReportArtifactFromRun } from "./report-artifact";
 import {
   getBrowserbaseSessionCostUsd,
@@ -281,6 +277,7 @@ async function executeBrowserResearchProvider(
 ): Promise<BrowserResearchProviderResult & { fallbackReason?: string }> {
   if (provider === "browserbase" && isBrowserResearchLiveReady()) {
     try {
+      const { runBrowserbaseBrowserResearchProvider } = await import("./browserbase-provider");
       const result = await runBrowserbaseBrowserResearchProvider(query, {
         runId: context?.runId ?? newBrowserResearchRunId(),
         workspaceId: context?.workspaceId,
@@ -710,7 +707,9 @@ export async function cancelBrowserResearchRun(
     return existing;
   }
 
-  await closeBrowserbaseSessionForRun(runId);
+  await import("./browserbase-provider").then(({ closeBrowserbaseSessionForRun }) =>
+    closeBrowserbaseSessionForRun(runId),
+  );
 
   if (existing.workUnitId) {
     await cancelAiWorkUnit(

@@ -4,6 +4,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { AIEmployee, MentionRef, SavedArtifactType, WorkspaceMemberRole } from "@/lib/types";
 import { STATUS_META } from "@/lib/icons";
 import { cn } from "@/lib/utils";
+import { BROWSER_RESEARCH_UI_COPY } from "@/lib/ai/browser-research";
 import { resolveMessageMentions, type MentionParticipant } from "@/lib/mentions";
 import { EmployeeAvatar, HumanAvatar } from "./EmployeeAvatar";
 import { FileArtifactCard } from "./ArtifactCard";
@@ -30,6 +31,7 @@ import {
   Sparkles,
   Type,
   X,
+  Globe,
 } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
 
@@ -194,6 +196,11 @@ export function ChatComposer({
   artifactIntent,
   onContextConsumed,
   onAddEmployee,
+  browserResearchAvailable = false,
+  browserResearchEnabled = false,
+  onBrowserResearchEnabledChange,
+  browserResearchLiveReady = false,
+  browserResearchBusy = false,
 }: {
   employees: AIEmployee[];
   mentionHumans?: MentionHuman[];
@@ -213,6 +220,11 @@ export function ChatComposer({
   contextFiles?: Array<{ id: string; displayName: string }>;
   artifactIntent?: { type: SavedArtifactType; label: string } | null;
   onContextConsumed?: () => void;
+  browserResearchAvailable?: boolean;
+  browserResearchEnabled?: boolean;
+  onBrowserResearchEnabledChange?: (enabled: boolean) => void;
+  browserResearchLiveReady?: boolean;
+  browserResearchBusy?: boolean;
 }) {
   const [value, setValue] = useState("");
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
@@ -889,8 +901,16 @@ export function ChatComposer({
           </div>
         )}
 
-        {(contextFiles?.length || artifactIntent) && (
+        {(contextFiles?.length || artifactIntent || browserResearchEnabled) && (
           <div className="mb-1 flex flex-wrap gap-1.5 px-1">
+            {browserResearchEnabled && (
+              <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-800">
+                <Globe className="h-3 w-3" />
+                {browserResearchLiveReady
+                  ? BROWSER_RESEARCH_UI_COPY.liveBadge
+                  : BROWSER_RESEARCH_UI_COPY.agentModeLabel}
+              </span>
+            )}
             {artifactIntent && (
               <span className="inline-flex items-center gap-1 rounded-full border border-violet-200 bg-violet-50 px-2 py-0.5 text-[11px] font-medium text-violet-700">
                 <FileText className="h-3 w-3" />
@@ -1014,6 +1034,29 @@ export function ChatComposer({
             >
               /
             </button>
+            {browserResearchAvailable && (
+              <button
+                type="button"
+                disabled={disabled || browserResearchBusy}
+                onClick={() => onBrowserResearchEnabledChange?.(!browserResearchEnabled)}
+                className={cn(
+                  "flex h-[34px] items-center gap-1 rounded-[10px] px-2 text-[11px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/40",
+                  browserResearchEnabled
+                    ? "bg-emerald-600 text-white hover:bg-emerald-700"
+                    : "text-ink-3 hover:bg-muted hover:text-ink-2",
+                )}
+                title={
+                  browserResearchEnabled
+                    ? BROWSER_RESEARCH_UI_COPY.agentModeOnHint
+                    : BROWSER_RESEARCH_UI_COPY.agentModeOffHint
+                }
+                aria-pressed={browserResearchEnabled}
+                aria-label="Toggle browser research mode"
+              >
+                <Globe className="h-3.5 w-3.5" />
+                {BROWSER_RESEARCH_UI_COPY.agentModeLabel}
+              </button>
+            )}
             <button
               type="button"
               onClick={() => void send()}

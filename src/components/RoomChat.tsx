@@ -45,6 +45,16 @@ import {
 } from "lucide-react";
 import { EmployeeStatusDot } from "./EmployeeStatusBadge";
 import { formatEmployeeIntelligenceSummary } from "@/lib/ai/intelligence-policy";
+import {
+  canEmployeeUseBrowserResearch,
+  type BrowserResearchRun,
+} from "@/lib/ai/browser-research";
+import {
+  createBrowserResearchRun,
+  fetchBrowserResearchRuns,
+  type BrowserResearchProviderConfig,
+} from "@/lib/ai/browser-research/client-api";
+import { BrowserResearchMessageCard } from "@/components/browser-research/BrowserResearchMessageCard";
 import { STATUS_META } from "@/lib/icons";
 import { effectiveEmployeeStatus, isMayaEmployee } from "@/lib/maya-employee";
 import { MAYA_EMPLOYEE_SUBTITLE } from "@/lib/hiring/maya";
@@ -182,6 +192,11 @@ export function RoomChat({
   const [topicSuggestions, setTopicSuggestions] = useState<TopicSuggestionPayload[]>([]);
   const [smartAssistSuggestions, setSmartAssistSuggestions] = useState<SuggestedConversationAction[]>([]);
   const [messageLimit, setMessageLimit] = useState(MESSAGE_PAGE);
+  const [browserResearchEnabled, setBrowserResearchEnabled] = useState(false);
+  const [browserResearchConfig, setBrowserResearchConfig] =
+    useState<BrowserResearchProviderConfig | null>(null);
+  const [browserResearchRuns, setBrowserResearchRuns] = useState<BrowserResearchRun[]>([]);
+  const [browserResearchBusy, setBrowserResearchBusy] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   const allTopicMessages = topic
@@ -281,7 +296,7 @@ export function RoomChat({
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-  }, [topicMessages.length, activeRuns.length]);
+  }, [topicMessages.length, activeRuns.length, browserResearchRuns.length]);
 
   useEffect(() => {
     if (!topic || backend !== "supabase" || isDm) return;
@@ -365,6 +380,35 @@ export function RoomChat({
   });
 
   const useServerApi = backend === "supabase";
+
+  const researchEmployee = useMemo(() => {
+    if (dmEmployee && canEmployeeUseBrowserResearch(dmEmployee)) return dmEmployee;
+    return roomEmployees.find(canEmployeeUseBrowserResearch);
+  }, [dmEmployee, roomEmployees]);
+
+  const browserResearchAvailable = Boolean(researchEmployee && useServerApi && !isMayaHiringMode);
+
+  useEffect(() => {
+    if (!browserResearchAvailable || !topic || !state.workspace?.id || !researchEmployee) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const { runs, config } = await fetchBrowserResearchRuns({
+          workspaceId: state.workspace!.id,
+          employeeId: researchEmployee.id,
+          topicId: topic.id,
+        });
+        if (cancelled) return;
+        setBrowserResearchRuns(runs.slice(0, 5));
+        if (config) setBrowserResearchConfig(config);
+      } catch {
+        // non-blocking — browse mode still usable
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [browserResearchAvailable, researchEmployee, state.workspace?.id, topic?.id]);
 
   const withDebugHeaders = async () => {
     const headers = (await authHeaders()) as Record<string, string>;
@@ -988,6 +1032,56 @@ export function RoomChat({
       return;
     }
 
+    if (
+      browserResearchEnabled &&
+      browserResearchAvailable &&
+      researchEmployee &&
+      useServerApi &&
+      state.workspace?.id
+    ) {
+      const trimmed = text.trim();
+      if (!trimmed) return;
+      setBrowserResearchBusy(true);
+      setSendError(null);
+      const pendingRun: BrowserResearchRun = {
+        id: "pending",
+        workspaceId: state.workspace.id,
+        roomId: room.id,
+        topicId: topic.id,
+        employeeId: researchEmployee.id,
+        createdBy: state.user?.id ?? "",
+        query: trimmed,
+        status: "running",
+        provider: browserResearchConfig?.effectiveProvider ?? "mock",
+        plannedSteps: [],
+        mockSources: [],
+        findings: [],
+        metadata: {},
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      setBrowserResearchRuns((current) => [pendingRun, ...current.filter((run) => run.id !== "pending")]);
+      try {
+        await sendViaServer(trimmed, undefined, mentionsJson, attachmentFileIds, contextFileIds);
+        const { run, config } = await createBrowserResearchRun({
+          workspaceId: state.workspace.id,
+          employeeId: researchEmployee.id,
+          query: trimmed,
+          roomId: room.id,
+          topicId: topic.id,
+        });
+        setBrowserResearchRuns((current) => [run, ...current.filter((item) => item.id !== "pending")]);
+        if (config) setBrowserResearchConfig(config);
+        void actions.refreshWorkLogForTopic(topic.id);
+      } catch (error) {
+        setBrowserResearchRuns((current) => current.filter((run) => run.id !== "pending"));
+        setSendError(error instanceof Error ? error.message : "Browser research failed.");
+      } finally {
+        setBrowserResearchBusy(false);
+      }
+      return;
+    }
+
     if (useServerApi) {
       await sendViaServer(text, undefined, mentionsJson, attachmentFileIds, contextFileIds);
       if (isMayaGeneralChat && topic.id) {
@@ -1038,15 +1132,17 @@ export function RoomChat({
     ? isRoomArchived
       ? "This room is archived — restore it from the Rooms page to send messages"
       : "This topic is archived — restore it to send messages"
-    : isMayaDmEmployee && isMainChat
-      ? "Ask Maya about hiring, your workforce, or AdeHQ…"
-      : isMayaHiringMode
-        ? "What job do you need done? e.g. sales outreach, market research…"
-    : isDm && dmEmployee
-    ? `Message ${dmEmployee.name}… ask for a draft, summary, or artifact`
-    : isMainChat
-      ? `Message ${mainChatLabel(isDm)}…`
-      : `Ask the ${topic.title} topic… mention an employee or start with /`;
+    : browserResearchEnabled && browserResearchAvailable
+      ? `Research the web with ${researchEmployee?.name ?? "this employee"}…`
+      : isMayaDmEmployee && isMainChat
+        ? "Ask Maya about hiring, your workforce, or AdeHQ…"
+        : isMayaHiringMode
+          ? "What job do you need done? e.g. sales outreach, market research…"
+          : isDm && dmEmployee
+            ? `Message ${dmEmployee.name}… ask for a draft, summary, or artifact`
+            : isMainChat
+              ? `Message ${mainChatLabel(isDm)}…`
+              : `Ask the ${topic.title} topic… mention an employee or start with /`;
 
   return (
     <div className="flex h-full flex-col bg-canvas">
@@ -1289,6 +1385,20 @@ export function RoomChat({
               </div>
             )}
             {isMayaHiringMode && <MayaHiringInlineCards />}
+            {browserResearchRuns.length > 0 && state.workspace?.id && (
+              <div className="mx-auto flex max-w-3xl flex-col gap-3">
+                {browserResearchRuns.map((run) => (
+                  <BrowserResearchMessageCard
+                    key={run.id}
+                    run={run}
+                    workspaceId={state.workspace!.id}
+                    topicId={topic.id}
+                    employeeName={researchEmployee?.name}
+                    pending={run.id === "pending" || run.status === "running" || run.status === "planning"}
+                  />
+                ))}
+              </div>
+            )}
             <div ref={bottomRef} />
           </div>
         )}
@@ -1345,6 +1455,11 @@ export function RoomChat({
                 : "This topic is archived. Messaging and AI responses are paused until you restore it."}
             </div>
           )}
+          {sendError && !failedSend && (
+            <div className="mb-2 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-800">
+              {sendError}
+            </div>
+          )}
           <ChatComposer
             employees={roomEmployees}
             mentionHumans={mentionHumans}
@@ -1359,6 +1474,11 @@ export function RoomChat({
             contextFiles={contextFiles}
             artifactIntent={artifactIntent}
             onContextConsumed={onContextConsumed}
+            browserResearchAvailable={browserResearchAvailable}
+            browserResearchEnabled={browserResearchEnabled}
+            onBrowserResearchEnabledChange={setBrowserResearchEnabled}
+            browserResearchLiveReady={browserResearchConfig?.liveReady ?? false}
+            browserResearchBusy={browserResearchBusy}
           />
           {!chatDisabled && (
           <p className="px-1.5 pt-[7px] text-[11px] text-ink-3">

@@ -16,8 +16,6 @@ import { cn, timeAgo } from "@/lib/utils";
 import { ENABLE_DEMO_MODE, normalizeLiveProvider } from "@/lib/config/features";
 import { EmployeeStatus } from "@/lib/types";
 import { EmployeeIntelligencePanel } from "@/components/workforce/EmployeeIntelligencePanel";
-import { BrowserResearchPanel } from "@/components/browser-research/BrowserResearchPanel";
-import { canEmployeeUseBrowserResearch } from "@/lib/ai/browser-research";
 import {
   applyIntelligencePolicyUpdate,
   formatEmployeeIntelligenceSummary,
@@ -198,10 +196,6 @@ export default function EmployeeProfilePage() {
                 actions.updateEmployee(employee.id, patch);
               }}
             />
-          )}
-
-          {!isMayaEmployee(employee) && canEmployeeUseBrowserResearch(employee) && (
-            <BrowserResearchPanel employee={employee} roomId={employee.defaultRoomId} />
           )}
 
           {/* Tool backpack */}
