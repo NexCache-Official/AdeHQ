@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { AuthError, requireAuthUser, requireWorkspaceMembership } from "@/lib/supabase/auth-server";
 import { assertCanAccessRoom } from "@/lib/server/room-access";
+import { recordStorageUsage } from "@/lib/drive/quota";
 import { fileChunkFromRow, workspaceFileFromRow } from "@/lib/files/records";
 
 export const runtime = "nodejs";
@@ -91,6 +92,18 @@ export async function DELETE(
       .or(
         `and(from_object_type.eq.file,from_object_id.eq.${file.id}),and(to_object_type.eq.file,to_object_id.eq.${file.id})`,
       );
+
+    await recordStorageUsage(client, {
+      workspaceId: file.workspaceId,
+      userId: user.id,
+      eventType: "delete",
+      bucket: file.storageBucket,
+      objectPath: file.storagePath,
+      sizeBytes: file.sizeBytes,
+      deltaBytes: -file.sizeBytes,
+      entityType: "file",
+      entityId: file.id,
+    }).catch((error) => console.warn("[AdeHQ file DELETE] quota ledger failed", error));
 
     const { error: deleteError } = await client
       .from("workspace_files")

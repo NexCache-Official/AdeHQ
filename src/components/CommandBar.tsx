@@ -16,6 +16,7 @@ import {
   Phone,
   Settings,
   Home,
+  HardDrive,
   MessagesSquare,
   Search,
   UserPlus,
@@ -66,6 +67,7 @@ export function CommandBar({
     };
     const nav: Item[] = [
       { id: "n-home", label: "Home", icon: Home, run: go("/") },
+      { id: "n-drive", label: "AdeHQ Drive", icon: HardDrive, run: go("/drive") },
       { id: "n-rooms", label: "Rooms", icon: MessagesSquare, run: go("/rooms") },
       { id: "n-dm", label: "Direct messages", icon: MessagesSquare, run: go("/dm") },
       { id: "n-workforce", label: "AI Workforce", icon: Bot, run: go("/workforce") },

@@ -13,7 +13,6 @@ import {
   validateUploadType,
   WORKSPACE_FILE_BUCKET,
 } from "@/lib/server/file-processing";
-import { nowISO, uid } from "@/lib/utils";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -28,35 +27,6 @@ function displayNameFromUser(user: { email?: string; user_metadata?: Record<stri
   );
 }
 
-async function logFileWork(
-  client: Awaited<ReturnType<typeof requireAuthUser>>["client"],
-  payload: {
-    workspaceId: string;
-    roomId?: string | null;
-    topicId?: string | null;
-    employeeId: string;
-    action: string;
-    summary: string;
-    status?: "success" | "pending" | "failed";
-    fileId: string;
-  },
-) {
-  if (!payload.roomId) return;
-  await client.from("work_log_events").insert({
-    workspace_id: payload.workspaceId,
-    id: uid("log"),
-    room_id: payload.roomId,
-    topic_id: payload.topicId ?? null,
-    employee_id: payload.employeeId,
-    action: payload.action,
-    summary: payload.summary,
-    status: payload.status ?? "success",
-    related_entity_type: "file",
-    related_entity_id: payload.fileId,
-    created_at: nowISO(),
-  });
-}
-
 export async function POST(request: NextRequest) {
   try {
     const { user, client } = await requireAuthUser(request);
@@ -65,8 +35,7 @@ export async function POST(request: NextRequest) {
     const workspaceId = String(form.get("workspaceId") ?? "");
     const roomId = form.get("roomId") ? String(form.get("roomId")) : null;
     let topicId = form.get("topicId") ? String(form.get("topicId")) : null;
-
-    const driveFolderId = form.get("driveFolderId") ? String(form.get("driveFolderId")) : null;
+    const folderId = form.get("folderId") ? String(form.get("folderId")) : null;
 
     if (!workspaceId) {
       return NextResponse.json({ error: "workspaceId is required." }, { status: 400 });
@@ -74,44 +43,40 @@ export async function POST(request: NextRequest) {
     if (!(file instanceof File)) {
       return NextResponse.json({ error: "Upload a file." }, { status: 400 });
     }
-    if (!roomId) {
-      return NextResponse.json({ error: "roomId is required to upload a file." }, { status: 400 });
-    }
     if (file.size === 0) {
       return NextResponse.json({ error: "This file is empty." }, { status: 400 });
     }
 
     const { role } = await requireWorkspaceMembership(client, workspaceId, user.id);
-    await assertCanAccessRoom(client, workspaceId, roomId, user.id, role);
 
     const quotaCheck = await checkUploadQuota(client, workspaceId, file.size);
     if (!quotaCheck.ok) {
       return NextResponse.json({ error: quotaCheck.error }, { status: 413 });
     }
-    if (file.size > quotaCheck.quota.maxFileBytes) {
-      return NextResponse.json(
-        { error: `File is too large. Your plan allows up to ${Math.round(quotaCheck.quota.maxFileBytes / (1024 * 1024))} MB per file.` },
-        { status: 413 },
-      );
+
+    if (roomId) {
+      await assertCanAccessRoom(client, workspaceId, roomId, user.id, role);
+      if (!topicId) {
+        const general = await ensureGeneralTopic(client, workspaceId, roomId);
+        topicId = general.id;
+      } else {
+        await assertTopicInRoom(client, workspaceId, roomId, topicId);
+      }
     }
 
-    if (!topicId) {
-      const general = await ensureGeneralTopic(client, workspaceId, roomId);
-      topicId = general.id;
-    } else {
-      await assertTopicInRoom(client, workspaceId, roomId, topicId);
-    }
-
-    if (driveFolderId) {
+    if (folderId) {
       const { data: folder, error: folderError } = await client
         .from("drive_folders")
-        .select("id")
+        .select("id, section")
         .eq("workspace_id", workspaceId)
-        .eq("id", driveFolderId)
+        .eq("id", folderId)
         .maybeSingle();
       if (folderError) throw folderError;
       if (!folder) {
-        return NextResponse.json({ error: "Drive folder not found." }, { status: 404 });
+        return NextResponse.json({ error: "Folder not found." }, { status: 404 });
+      }
+      if (String(folder.section) !== "files") {
+        return NextResponse.json({ error: "Upload files into a Files folder." }, { status: 400 });
       }
     }
 
@@ -141,7 +106,7 @@ export async function POST(request: NextRequest) {
         workspace_id: workspaceId,
         room_id: roomId,
         topic_id: topicId,
-        drive_folder_id: driveFolderId,
+        drive_folder_id: folderId,
         drive_section: "files",
         uploaded_by_user_id: user.id,
         original_name: file.name,
@@ -154,7 +119,7 @@ export async function POST(request: NextRequest) {
         status: "processing",
         parse_status: "processing",
         checksum,
-        source_metadata: { uploadedByName: displayNameFromUser(user) },
+        source_metadata: { uploadedByName: displayNameFromUser(user), source: "adehq_drive" },
       })
       .select("*")
       .single();
@@ -170,17 +135,7 @@ export async function POST(request: NextRequest) {
       deltaBytes: file.size,
       entityType: "file",
       entityId: fileId,
-    }).catch((error) => console.warn("[AdeHQ files upload] quota ledger failed", error));
-
-    await logFileWork(client, {
-      workspaceId,
-      roomId,
-      topicId,
-      employeeId: user.id,
-      action: "uploaded_file",
-      summary: `Uploaded ${displayName}`,
-      fileId,
-    }).catch((error) => console.warn("[AdeHQ files upload] work log failed", error));
+    }).catch((error) => console.warn("[AdeHQ drive upload] quota ledger failed", error));
 
     const parsed = await parseUploadedFile(buffer, validation.extension);
 
@@ -207,24 +162,27 @@ export async function POST(request: NextRequest) {
     if (updateError) throw updateError;
 
     if (parsed.chunks.length) {
-      const { data: insertedChunks, error: chunkError } = await client.from("file_chunks").insert(
-        parsed.chunks.map((chunk) => ({
-          workspace_id: workspaceId,
-          file_id: fileId,
-          room_id: roomId,
-          topic_id: topicId,
-          chunk_index: chunk.chunkIndex,
-          content: chunk.content,
-          content_preview: chunk.contentPreview,
-          page_start: chunk.pageStart ?? null,
-          page_end: chunk.pageEnd ?? null,
-          sheet_name: chunk.sheetName ?? null,
-          row_start: chunk.rowStart ?? null,
-          row_end: chunk.rowEnd ?? null,
-          token_estimate: chunk.tokenEstimate,
-          metadata: chunk.metadata ?? {},
-        })),
-      ).select("id, content");
+      const { data: insertedChunks, error: chunkError } = await client
+        .from("file_chunks")
+        .insert(
+          parsed.chunks.map((chunk) => ({
+            workspace_id: workspaceId,
+            file_id: fileId,
+            room_id: roomId,
+            topic_id: topicId,
+            chunk_index: chunk.chunkIndex,
+            content: chunk.content,
+            content_preview: chunk.contentPreview,
+            page_start: chunk.pageStart ?? null,
+            page_end: chunk.pageEnd ?? null,
+            sheet_name: chunk.sheetName ?? null,
+            row_start: chunk.rowStart ?? null,
+            row_end: chunk.rowEnd ?? null,
+            token_estimate: chunk.tokenEstimate,
+            metadata: chunk.metadata ?? {},
+          })),
+        )
+        .select("id, content");
       if (chunkError) throw chunkError;
 
       if (parsed.status === "ready" && insertedChunks?.length) {
@@ -236,25 +194,9 @@ export async function POST(request: NextRequest) {
             id: String(row.id),
             content: String(row.content),
           })),
-        ).catch((error) => console.warn("[AdeHQ files upload] embedding failed", error));
+        ).catch((error) => console.warn("[AdeHQ drive upload] embedding failed", error));
       }
     }
-
-    await logFileWork(client, {
-      workspaceId,
-      roomId,
-      topicId,
-      employeeId: user.id,
-      action: parsed.status === "ready" ? "processed_file" : "file_processing_failed",
-      summary:
-        parsed.parseStatus === "no_text"
-          ? `${displayName}: No extractable text found.`
-          : parsed.status === "ready"
-            ? `Processed ${displayName}`
-            : `Could not process ${displayName}: ${parsed.errorMessage ?? "Unknown error"}`,
-      status: parsed.status === "ready" ? "success" : "failed",
-      fileId,
-    }).catch((error) => console.warn("[AdeHQ files upload] process work log failed", error));
 
     return NextResponse.json({
       file: workspaceFileFromRow(updated as Record<string, unknown>),
@@ -264,7 +206,7 @@ export async function POST(request: NextRequest) {
     if (error instanceof AuthError) {
       return NextResponse.json({ error: error.message }, { status: error.status });
     }
-    console.error("[AdeHQ files upload]", error);
+    console.error("[AdeHQ drive upload]", error);
     return NextResponse.json({ error: "Unable to upload file." }, { status: 500 });
   }
 }

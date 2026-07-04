@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { AuthError, requireAuthUser, requireWorkspaceMembership } from "@/lib/supabase/auth-server";
 import { assertCanAccessRoom } from "@/lib/server/room-access";
 import { artifactFromRow } from "@/lib/files/records";
+import { syncArtifactToStorage } from "@/lib/drive/storage-sync";
 import type { SavedArtifactStatus, SavedArtifactType } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -105,6 +106,10 @@ export async function PATCH(
       created_by_id: user.id,
     });
     if (versionError) throw versionError;
+
+    await syncArtifactToStorage(client, updated, user.id).catch((err) =>
+      console.warn("[AdeHQ artifact PATCH] storage sync failed", err),
+    );
 
     return NextResponse.json({ artifact: updated });
   } catch (error) {

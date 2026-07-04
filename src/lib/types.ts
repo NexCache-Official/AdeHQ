@@ -348,6 +348,8 @@ export type WorkspaceFile = {
   workspaceId: string;
   roomId?: string | null;
   topicId?: string | null;
+  driveFolderId?: string | null;
+  driveSection?: DriveSection | null;
   uploadedByUserId?: string | null;
   originalName: string;
   displayName: string;
@@ -406,11 +408,79 @@ export type SavedArtifactType =
 
 export type SavedArtifactStatus = "draft" | "saved" | "archived";
 
+export type DriveSection = "files" | "artifacts" | "evidence" | "exports";
+
+export type DriveFolder = {
+  id: string;
+  workspaceId: string;
+  parentId?: string | null;
+  name: string;
+  section: DriveSection;
+  createdByUserId?: string | null;
+  metadata: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type BrowserEvidence = {
+  id: string;
+  workspaceId: string;
+  roomId?: string | null;
+  topicId?: string | null;
+  driveFolderId?: string | null;
+  title: string;
+  description?: string | null;
+  storageBucket: string;
+  storagePath: string;
+  mimeType: string;
+  sizeBytes: number;
+  sourceUrl?: string | null;
+  capturedAt?: string | null;
+  metadata: Record<string, unknown>;
+  createdByUserId?: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type DriveExport = {
+  id: string;
+  workspaceId: string;
+  roomId?: string | null;
+  topicId?: string | null;
+  driveFolderId?: string | null;
+  title: string;
+  exportType: "report" | "summary" | "memory" | "artifact_bundle" | "other";
+  storageBucket: string;
+  storagePath: string;
+  mimeType: string;
+  sizeBytes: number;
+  sourceArtifactIds: string[];
+  sourceFileIds: string[];
+  metadata: Record<string, unknown>;
+  createdByUserId?: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type StoragePlanTier = "free" | "pro" | "team" | "enterprise";
+
+export type WorkspaceStorageQuota = {
+  workspaceId: string;
+  planTier: StoragePlanTier;
+  maxWorkspaceBytes: number;
+  maxFileBytes: number;
+  usedBytes: number;
+  metadata: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type SavedArtifact = {
   id: string;
   workspaceId: string;
   roomId?: string | null;
   topicId?: string | null;
+  driveFolderId?: string | null;
   title: string;
   artifactType: SavedArtifactType;
   status: SavedArtifactStatus;

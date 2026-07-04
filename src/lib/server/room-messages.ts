@@ -29,6 +29,7 @@ import {
   type FileContextBundle,
   validateCitations,
 } from "@/lib/server/file-context";
+import { syncArtifactToStorage } from "@/lib/drive/storage-sync";
 import {
   buildEmailDraftJson,
   emailMarkdownFromJson,
@@ -647,6 +648,19 @@ export async function persistEmployeeEffects(
     });
     if (artifactError) throw artifactError;
 
+    await syncArtifactToStorage(
+      client,
+      {
+        id: artifactId,
+        workspaceId,
+        title: draft.title,
+        contentMarkdown: draft.contentMarkdown,
+        metadata: {},
+        driveFolderId: null,
+      },
+      employee.id,
+    ).catch((err) => console.warn("[AdeHQ room-messages] artifact storage sync failed", err));
+
     await client.from("artifact_versions").insert({
       artifact_id: artifactId,
       version_number: 1,
@@ -869,6 +883,18 @@ export async function persistEmployeeEffects(
       source_chunk_ids: [],
       source_citations: [],
     });
+    await syncArtifactToStorage(
+      client,
+      {
+        id: artifactId,
+        workspaceId,
+        title: extracted.title,
+        contentMarkdown: extracted.contentMarkdown,
+        metadata: {},
+        driveFolderId: null,
+      },
+      employee.id,
+    ).catch((err) => console.warn("[AdeHQ room-messages] email artifact storage sync failed", err));
     await client.from("artifact_versions").insert({
       artifact_id: artifactId,
       version_number: 1,

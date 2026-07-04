@@ -32,6 +32,7 @@ import {
   Phone,
   Home,
   Hash,
+  HardDrive,
   MessageSquare,
   Plus,
   Search,
@@ -120,6 +121,11 @@ export function Sidebar() {
         <Link href="/" className={cn("nav-link", isActive("/", true) && "nav-link-active")}>
           <Home className="h-[17px] w-[17px]" strokeWidth={1.8} />
           <span className="flex-1">Home</span>
+        </Link>
+
+        <Link href="/drive" className={cn("nav-link", isActive("/drive") && "nav-link-active")}>
+          <HardDrive className="h-[17px] w-[17px]" strokeWidth={1.8} />
+          <span className="flex-1">AdeHQ Drive</span>
         </Link>
 
         <SidebarCollapsibleSection

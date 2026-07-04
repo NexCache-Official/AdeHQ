@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { AuthError, requireAuthUser, requireWorkspaceMembership } from "@/lib/supabase/auth-server";
 import { assertCanAccessRoom } from "@/lib/server/room-access";
 import { artifactFromRow } from "@/lib/files/records";
+import { exportArtifactToDrive, syncArtifactToStorage } from "@/lib/drive/storage-sync";
 import { nowISO, uid } from "@/lib/utils";
 import type { SavedArtifactType } from "@/lib/types";
 
@@ -108,6 +109,10 @@ export async function POST(request: NextRequest) {
     if (error) throw error;
 
     const artifact = artifactFromRow(artifactRow as Record<string, unknown>);
+
+    await syncArtifactToStorage(client, artifact, user.id).catch((err) =>
+      console.warn("[AdeHQ artifacts POST] storage sync failed", err),
+    );
 
     const { error: versionError } = await client.from("artifact_versions").insert({
       artifact_id: artifact.id,

@@ -30,8 +30,10 @@ export type ParsedFileResult = {
   errorMessage?: string | null;
 };
 
-export const WORKSPACE_FILE_BUCKET = "workspace-files";
-export const MAX_FILE_SIZE_BYTES = 25 * 1024 * 1024;
+export const WORKSPACE_FILE_BUCKET = "adehq-files";
+/** Legacy uploads before AdeHQ Drive may still use this bucket. */
+export const LEGACY_WORKSPACE_FILE_BUCKET = "workspace-files";
+export const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024;
 /** Upper bound on extracted text persisted to the DB, to keep rows and prompt costs sane. */
 export const MAX_STORED_TEXT_CHARS = 200_000;
 const MAX_TABULAR_ROWS = 2000;

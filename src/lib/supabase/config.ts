@@ -91,6 +91,11 @@ export const SUPABASE_WORKSPACE_TABLES = [
   "file_chunks",
   "artifacts",
   "artifact_versions",
+  "drive_folders",
+  "browser_evidence",
+  "drive_exports",
+  "workspace_storage_quotas",
+  "storage_usage_events",
   "message_attachments",
   "work_graph_edges",
 ] as const;

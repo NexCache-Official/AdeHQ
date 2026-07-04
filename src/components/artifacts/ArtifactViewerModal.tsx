@@ -44,8 +44,10 @@ export function ArtifactViewerModal({
   onSave,
   onSaveToMemory,
   onCreateTask,
+  onExportToDrive,
   busy,
   memorySaved,
+  exportBusy,
 }: {
   artifact: SavedArtifact;
   createdByName?: string;
@@ -53,8 +55,10 @@ export function ArtifactViewerModal({
   onSave?: () => void;
   onSaveToMemory?: () => void;
   onCreateTask?: () => void;
+  onExportToDrive?: () => void;
   busy?: boolean;
   memorySaved?: boolean;
+  exportBusy?: boolean;
 }) {
   const [copied, setCopied] = useState(false);
   const email = useMemo(() => emailJsonFromArtifact(artifact), [artifact]);
@@ -173,6 +177,11 @@ export function ArtifactViewerModal({
           <Download className="h-3.5 w-3.5" />
           Download .md
         </Button>
+        {onExportToDrive && (
+          <Button variant="secondary" size="sm" disabled={exportBusy} onClick={onExportToDrive}>
+            {exportBusy ? "Exporting…" : "Save to Drive exports"}
+          </Button>
+        )}
         <Button variant="ghost" size="sm" onClick={exportPdf}>
           <Printer className="h-3.5 w-3.5" />
           Export PDF

@@ -1,0 +1,127 @@
+import type { DriveListResponse } from "@/lib/drive/client";
+import type { WorkspaceStorageQuota } from "@/lib/types";
+
+export function demoDriveList(): DriveListResponse {
+  const now = new Date().toISOString();
+  return {
+    section: "all",
+    folderId: null,
+    folders: [
+      {
+        id: "demo-folder-1",
+        workspaceId: "demo",
+        parentId: null,
+        name: "Research",
+        section: "files",
+        createdByUserId: null,
+        metadata: {},
+        createdAt: now,
+        updatedAt: now,
+      },
+    ],
+    files: [
+      {
+        id: "demo-file-1",
+        workspaceId: "demo",
+        roomId: "room-forgefield",
+        topicId: "topic-research",
+        driveFolderId: null,
+        driveSection: "files",
+        uploadedByUserId: null,
+        originalName: "competitor-notes.pdf",
+        displayName: "competitor-notes.pdf",
+        mimeType: "application/pdf",
+        extension: "pdf",
+        sizeBytes: 245_760,
+        storageBucket: "adehq-files",
+        storagePath: "demo/competitor-notes.pdf",
+        status: "ready",
+        parseStatus: "parsed",
+        textPreview: "Competitor landscape summary for AI-native game engines…",
+        sourceMetadata: {},
+        createdAt: now,
+        updatedAt: now,
+      },
+    ],
+    artifacts: [
+      {
+        id: "demo-art-1",
+        workspaceId: "demo",
+        roomId: "room-forgefield",
+        topicId: "topic-research",
+        driveFolderId: null,
+        title: "Competitor landscape report",
+        artifactType: "research_summary",
+        status: "saved",
+        contentMarkdown: "# Competitor landscape\n\nSample demo artifact content.",
+        contentJson: {},
+        createdByType: "ai",
+        createdById: "emp-research",
+        sourceFileIds: ["demo-file-1"],
+        sourceMessageIds: [],
+        sourceChunkIds: [],
+        sourceCitations: [],
+        metadata: { storageSyncedAt: now },
+        createdAt: now,
+        updatedAt: now,
+      },
+    ],
+    evidence: [
+      {
+        id: "demo-ev-1",
+        workspaceId: "demo",
+        roomId: null,
+        topicId: null,
+        driveFolderId: null,
+        title: "Pricing page screenshot",
+        description: "Captured for competitive analysis",
+        storageBucket: "adehq-browser-evidence",
+        storagePath: "demo/evidence/pricing.png",
+        mimeType: "image/png",
+        sizeBytes: 512_000,
+        sourceUrl: "https://example.com/pricing",
+        capturedAt: now,
+        metadata: {},
+        createdByUserId: null,
+        createdAt: now,
+        updatedAt: now,
+      },
+    ],
+    exports: [
+      {
+        id: "demo-exp-1",
+        workspaceId: "demo",
+        roomId: null,
+        topicId: null,
+        driveFolderId: null,
+        title: "Competitor landscape report (export)",
+        exportType: "report",
+        storageBucket: "adehq-exports",
+        storagePath: "demo/exports/competitor-report.md",
+        mimeType: "text/markdown",
+        sizeBytes: 12_400,
+        sourceArtifactIds: ["demo-art-1"],
+        sourceFileIds: ["demo-file-1"],
+        metadata: {},
+        createdByUserId: null,
+        createdAt: now,
+        updatedAt: now,
+      },
+    ],
+    breadcrumb: [],
+  };
+}
+
+export function demoDriveQuota(workspaceId: string): WorkspaceStorageQuota {
+  const now = new Date().toISOString();
+  return {
+    workspaceId,
+    planTier: "free",
+    maxWorkspaceBytes: 100 * 1024 * 1024,
+    maxFileBytes: 10 * 1024 * 1024,
+    usedBytes: 770_160,
+    metadata: {},
+    createdAt: now,
+    updatedAt: now,
+  };
+}
