@@ -50,3 +50,4 @@ next-env.d.ts
 
 # stray design/export downloads (not source)
 AdeHQ.dc*.html
+index.mjs
