@@ -70,10 +70,11 @@ export async function generateCandidateCopiesOld(
   const { object } = await generateObject({
     model: siliconFlowChatModel(modelId),
     schema: copyOnlySchema,
-    system: `Generate ONLY applicant copy (names, titles, personality tags, strengths, watch-outs, bestFor, whyThisCandidate).
+    system: `Generate ONLY applicant copy (names, titles, personality tags, strengths, watch-outs, bestFor, whyThisCandidate, candidatePitch, howIWork).
 Do NOT change model modes, hours, quality, speed, or cost — those are set by the system.
 Create 3 distinct personas for tiers: high_capacity (fast/cheap), recommended (balanced), premium (senior/deep).
-Match the job brief domain and role.`,
+Match the job brief domain and role.
+Keep copy scannable: candidatePitch max 18 words; bestFor one short sentence; strengths max 3 items; watchOuts max 2; howIWork max 3 short bullets; whyThisCandidate max 14 words.`,
     prompt: JSON.stringify(brief),
     maxOutputTokens: 1500,
     providerOptions: siliconFlowProviderOptions(modelId),
@@ -146,10 +147,11 @@ export async function generateCandidateCopiesRuntime(
   }
 
   let workUnitId: string | undefined;
-  const systemPrompt = `Generate ONLY applicant copy (names, titles, personality tags, strengths, watch-outs, bestFor, whyThisCandidate).
+  const systemPrompt = `Generate ONLY applicant copy (names, titles, personality tags, strengths, watch-outs, bestFor, whyThisCandidate, candidatePitch, howIWork).
 Do NOT change model modes, hours, quality, speed, or cost — those are set by the system.
 Create 3 distinct personas for tiers: high_capacity (fast/cheap), recommended (balanced), premium (senior/deep).
-Match the job brief domain and role.`;
+Match the job brief domain and role.
+Keep copy scannable: candidatePitch max 18 words; bestFor one short sentence; strengths max 3 items; watchOuts max 2; howIWork max 3 short bullets; whyThisCandidate max 14 words.`;
 
   if (options.client && options.workspaceId) {
     try {

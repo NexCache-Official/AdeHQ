@@ -15,6 +15,7 @@ import type {
   RecruiterReadiness,
   RecruiterSuggestionChip,
 } from "@/lib/hiring/types";
+import { candidateOneLineSummary } from "@/lib/hiring/candidate-display";
 import { AdeOrb } from "@/components/hiring/HireChrome";
 import { TypewriterText } from "@/components/hiring/BriefSections";
 import { Sparkles, FileText } from "lucide-react";
@@ -199,12 +200,15 @@ export function RecruiterChat({
                   </div>
                 </div>
                 {candidate.recommended && (
-                  <span className="mb-2 w-fit rounded-full bg-accent-soft px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-accent-700">
-                    Recommended
+                  <span className="mb-2 w-fit rounded-full bg-accent-soft px-2 py-0.5 text-[10px] font-semibold text-accent-700">
+                    {candidate.badge}
                   </span>
                 )}
-                <p className="mb-3 line-clamp-3 text-xs leading-relaxed text-ink-2">
-                  {candidate.strengths[0] ?? candidate.engineLabel}
+                <p className="mb-1 line-clamp-2 text-xs leading-snug text-ink-2">
+                  {candidateOneLineSummary(candidate)}
+                </p>
+                <p className="mb-3 line-clamp-1 text-[11px] text-ink-3">
+                  Best for · {candidate.bestFor}
                 </p>
                 <div className="mt-auto flex flex-col gap-2">
                   <button

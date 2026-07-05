@@ -6,9 +6,12 @@ import { cn } from "@/lib/utils";
 import type { AiEmployeeApplicant, AiEmployeeJobBrief, RecruiterMessage } from "@/lib/hiring/types";
 import { GEN_STEPS, INTERVIEW_QUESTIONS, MATCH_BARS } from "@/lib/hiring/data";
 import {
+  candidateOneLineSummary,
+  limitBullets,
+} from "@/lib/hiring/candidate-display";
+import {
   CONTEXT_PROFILE_LABELS,
   displayEngineModel,
-  intelligenceLabel,
   RUNTIME_MODE_LABELS,
 } from "@/lib/hiring/intelligence-labels";
 import {
@@ -40,10 +43,20 @@ export function ApplicantCard({
   onHire: () => void;
   hireDisabled?: boolean;
 }) {
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const summary = candidateOneLineSummary(a);
+  const workStyle = limitBullets(a.howIWork ?? [], 3);
+  const strengths = limitBullets(a.strengths, 3);
+  const watchOuts = limitBullets(a.watchOuts, 2);
+  const traits = limitBullets(a.personalityTags, 4);
+  const aiSetup = formatIntelligencePolicyLines(
+    buildIntelligencePolicyForHire({ modelMode: a.modelMode }),
+  );
+
   return (
     <div
       className={cn(
-        "relative rounded-[18px] border bg-surface p-5 transition hover:-translate-y-1 hover:shadow-xl",
+        "relative flex flex-col rounded-[18px] border bg-surface p-5 transition hover:-translate-y-1 hover:shadow-xl",
         a.recommended
           ? "border-accent/40 shadow-[0_20px_44px_-28px_rgba(47,111,237,0.35)]"
           : "border-border",
@@ -52,17 +65,17 @@ export function ApplicantCard({
       {a.recommended && (
         <div className="absolute inset-x-0 top-0 h-[3px] bg-gradient-to-r from-accent to-amber" />
       )}
-      <div className="mb-3.5 flex items-start justify-between gap-2">
+      <div className="mb-3 flex items-start justify-between gap-2">
         <div className="flex items-center gap-3">
           <AdeOrb grad={a.grad} size={46} initials={initials(a.name)} />
-          <div>
+          <div className="min-w-0">
             <div className="text-[17px] font-semibold tracking-tight">{a.name}</div>
             <div className="text-[13px] text-ink-2">{a.title}</div>
           </div>
         </div>
         <span
           className={cn(
-            "whitespace-nowrap rounded-full px-2.5 py-1 text-[11px] font-semibold",
+            "shrink-0 whitespace-nowrap rounded-full px-2.5 py-1 text-[11px] font-semibold",
             a.badgeKind === "rec"
               ? "bg-gradient-to-br from-accent to-amber text-white"
               : "bg-muted text-ink-2",
@@ -71,73 +84,18 @@ export function ApplicantCard({
           {a.badge}
         </span>
       </div>
-      {a.recommended && (
-        <p className="mb-3 rounded-lg bg-accent-soft/50 px-3 py-2 text-[12.5px] leading-relaxed text-ink">
-          {a.whyThisCandidate}
-        </p>
-      )}
+
+      <p className="mb-3 text-[13.5px] leading-snug text-ink-2">{summary}</p>
+
       <div className="mb-4 flex flex-wrap gap-1.5">
-        {a.personalityTags.map((t) => (
+        {traits.map((t) => (
           <span key={t} className="rounded-full bg-muted px-2.5 py-1 text-[11.5px] capitalize text-ink-2">
             {t}
           </span>
         ))}
       </div>
-      {a.candidatePitch && (
-        <div className="mb-4 rounded-xl border border-border bg-muted/30 p-3.5">
-          <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-ink-3">
-            Why I&apos;d be a good fit
-          </div>
-          <p className="text-[13px] leading-relaxed italic text-ink-2">&ldquo;{a.candidatePitch}&rdquo;</p>
-        </div>
-      )}
-      {a.howIWork && a.howIWork.length > 0 && (
-        <div className="mb-4">
-          <div className="mb-1.5 text-[11.5px] font-semibold text-ink-3">How I work</div>
-          <ul className="space-y-1">
-            {a.howIWork.map((line) => (
-              <li key={line} className="flex gap-2 text-[13px] leading-snug text-ink-2">
-                <span className="text-accent">•</span>
-                {line}
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-      <div className="mb-3.5 rounded-xl border border-border bg-muted/40 p-3.5">
-        <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-ink-3">
-          Intelligence policy
-        </div>
-        <div className="space-y-1.5">
-          {formatIntelligencePolicyLines(
-            buildIntelligencePolicyForHire({ modelMode: a.modelMode }),
-          ).map((line) => (
-            <div key={line.label} className="flex justify-between gap-3 text-[12.5px]">
-              <span className="text-ink-3">{line.label}</span>
-              <span className="text-right text-ink-2">{line.value}</span>
-            </div>
-          ))}
-        </div>
-      </div>
-      <div className="mb-3.5 rounded-xl border border-border bg-muted/40 p-3.5">
-        <div className="mb-2 flex items-baseline justify-between">
-          <span className="font-mono text-[10px] uppercase tracking-wider text-ink-3">
-            Weekly AI Work Hours
-          </span>
-          <span className="text-[13px] text-ink-2">{a.engineLabel}</span>
-        </div>
-        <div className="mb-2 flex items-baseline gap-1.5">
-          <span className="text-[26px] font-semibold tracking-tight">{a.weeklyWorkHours}</span>
-          <span className="text-[13px] text-ink-2">hrs / week estimated</span>
-        </div>
-        <div className="h-[7px] overflow-hidden rounded-full bg-ink/10">
-          <div
-            className="h-full rounded-full bg-gradient-to-r from-ink to-ink/60"
-            style={{ width: `${Math.round(a.cap * 100)}%` }}
-          />
-        </div>
-      </div>
-      <div className="mb-4 space-y-2.5">
+
+      <div className="mb-3.5 space-y-2">
         {(
           [
             ["Quality", a.qualityLevel, a.quality],
@@ -152,42 +110,109 @@ export function ApplicantCard({
           </div>
         ))}
       </div>
-      <div className="mb-3">
-        <div className="mb-1.5 text-[11.5px] font-semibold text-ink-3">Strengths</div>
-        <ul className="space-y-1">
-          {a.strengths.map((s) => (
-            <li key={s} className="flex gap-2 text-[13px] leading-snug">
-              <span className="text-green">+</span>
-              {s}
-            </li>
-          ))}
-        </ul>
+
+      <div className="mb-3.5 rounded-xl border border-border bg-muted/40 px-3.5 py-3">
+        <div className="mb-1.5 flex items-baseline justify-between gap-2">
+          <span className="text-[11px] font-semibold uppercase tracking-wide text-ink-3">
+            Weekly capacity
+          </span>
+          <span className="text-[12.5px] text-ink-2">{a.engineLabel}</span>
+        </div>
+        <div className="flex items-baseline gap-1.5">
+          <span className="text-[22px] font-semibold tracking-tight">{a.weeklyWorkHours}</span>
+          <span className="text-[12.5px] text-ink-2">hrs / week</span>
+        </div>
+        <div className="mt-2 h-[6px] overflow-hidden rounded-full bg-ink/10">
+          <div
+            className="h-full rounded-full bg-gradient-to-r from-ink to-ink/60"
+            style={{ width: `${Math.round(a.cap * 100)}%` }}
+          />
+        </div>
       </div>
-      <div className="mb-3.5">
-        <div className="mb-1.5 text-[11.5px] font-semibold text-ink-3">Watch-outs</div>
-        <ul className="space-y-1">
-          {a.watchOuts.map((w) => (
-            <li key={w} className="flex gap-2 text-[13px] leading-snug text-ink-2">
-              <span className="text-ink/30">–</span>
-              {w}
-            </li>
-          ))}
-        </ul>
-      </div>
-      <div className="mb-3 rounded-[10px] bg-muted/50 px-3 py-2 text-[12.5px] text-ink-2">
-        <span className="text-ink-3">Best for</span> · {a.bestFor}
-      </div>
-      {a.recommended && a.whyThisCandidate && (
-        <div className="mb-3 rounded-[10px] border border-accent/20 bg-accent-soft/20 px-3 py-2 text-[12.5px] leading-relaxed text-ink-2">
-          <span className="font-medium text-ink">Why recommended</span> · {a.whyThisCandidate}
+
+      <p className="mb-3.5 text-[12.5px] leading-snug text-ink-2">
+        <span className="font-medium text-ink-3">Best for</span> · {a.bestFor}
+      </p>
+
+      <button
+        type="button"
+        onClick={() => setDetailsOpen((open) => !open)}
+        className="flex w-full items-center justify-between border-t border-border pt-3 text-[12.5px] font-medium text-ink-2"
+      >
+        <span>More details</span>
+        <span className={cn("text-ink-3 transition", detailsOpen && "rotate-180")}>⌄</span>
+      </button>
+      {detailsOpen && (
+        <div className="mt-3 space-y-3.5 border-b border-border pb-3.5">
+          {workStyle.length > 0 && (
+            <div>
+              <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-ink-3">
+                Work style
+              </div>
+              <ul className="space-y-1">
+                {workStyle.map((line) => (
+                  <li key={line} className="flex gap-2 text-[13px] leading-snug text-ink-2">
+                    <span className="text-accent">•</span>
+                    {line}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {strengths.length > 0 && (
+            <div>
+              <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-ink-3">
+                Strengths
+              </div>
+              <ul className="space-y-1">
+                {strengths.map((s) => (
+                  <li key={s} className="flex gap-2 text-[13px] leading-snug text-ink-2">
+                    <span className="text-green">+</span>
+                    {s}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {watchOuts.length > 0 && (
+            <div>
+              <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-ink-3">
+                Watch-outs
+              </div>
+              <ul className="space-y-1">
+                {watchOuts.map((w) => (
+                  <li key={w} className="flex gap-2 text-[13px] leading-snug text-ink-2">
+                    <span className="text-ink/30">–</span>
+                    {w}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {aiSetup.length > 0 && (
+            <div className="rounded-[10px] bg-muted/40 p-3">
+              <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-ink-3">
+                AI setup
+              </div>
+              <div className="space-y-1.5">
+                {aiSetup.map((line) => (
+                  <div key={line.label} className="flex justify-between gap-3 text-[12.5px]">
+                    <span className="text-ink-3">{line.label}</span>
+                    <span className="text-right text-ink-2">{line.value}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
+
       <button
         type="button"
         onClick={onToggleAdv}
-        className="flex w-full items-center justify-between border-t border-border pt-3 text-[12.5px] text-ink-3"
+        className="flex w-full items-center justify-between pt-3 text-[12.5px] text-ink-3"
       >
-        <span>Advanced engine details</span>
+        <span>Advanced details</span>
         <span className={cn("transition", advOpen && "rotate-180")}>⌄</span>
       </button>
       {advOpen && (
@@ -445,8 +470,8 @@ export function OfferScreen({
               .join(" · "),
           },
           {
-            label: "Weekly AI Work Capacity",
-            value: `${a.weeklyWorkHours} AI Work Hours estimated`,
+            label: "Weekly capacity",
+            value: `${a.weeklyWorkHours} hrs / week estimated`,
           },
           ...formatIntelligencePolicyLines(
             buildIntelligencePolicyForHire({ modelMode: a.modelMode }),

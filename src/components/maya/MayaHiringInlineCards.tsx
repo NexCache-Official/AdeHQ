@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { BriefDocumentPreview } from "@/components/hiring/BriefDocumentPreview";
 import { AdeOrb } from "@/components/hiring/HireChrome";
+import { candidateOneLineSummary } from "@/lib/hiring/candidate-display";
 import { useOptionalMayaDmHiringContext } from "@/components/maya/MayaDmHiringContext";
 import type { AiEmployeeApplicant } from "@/lib/hiring/types";
 import { initials } from "@/components/hiring/HireScreens";
@@ -161,8 +162,18 @@ function CandidateSetCard({
           >
             <AdeOrb grad={c.grad} size={36} initials={initials(c.name)} />
             <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-medium text-ink">{c.name}</p>
+              <div className="flex flex-wrap items-center gap-1.5">
+                <p className="truncate text-sm font-medium text-ink">{c.name}</p>
+                {c.recommended && (
+                  <span className="rounded-full bg-accent-soft px-1.5 py-0.5 text-[10px] font-semibold text-accent-700">
+                    {c.badge}
+                  </span>
+                )}
+              </div>
               <p className="truncate text-xs text-ink-2">{c.title}</p>
+              <p className="mt-0.5 line-clamp-2 text-[11px] leading-snug text-ink-3">
+                {candidateOneLineSummary(c)}
+              </p>
             </div>
             <div className="flex shrink-0 gap-1.5">
               {onInterview && (

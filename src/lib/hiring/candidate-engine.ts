@@ -4,6 +4,7 @@ import {
   type ModelMode,
 } from "@/lib/ai/model-catalog";
 import type { EmployeeRoleKey } from "@/lib/types";
+import { tierBadgeLabel } from "./candidate-display";
 import type { AiEmployeeApplicant, AiEmployeeJobBrief, CandidateTier } from "./types";
 import { getRoleByKey } from "./role-library";
 import { hiringRoleToEmployeeRoleKey } from "./map-candidate";
@@ -87,27 +88,27 @@ function defaultNames(brief: AiEmployeeJobBrief, tier: CandidateTier): { name: s
 
 function defaultWhy(tier: CandidateTier, brief: AiEmployeeJobBrief): string {
   if (tier === "high_capacity") {
-    return `High capacity for quick first-pass work on ${brief.domain.toLowerCase()} — great for routine checks and fast drafts.`;
+    return `Fast first-pass work on ${brief.domain.toLowerCase()} — great for drafts and routine checks.`;
   }
   if (tier === "premium") {
-    return `Premium tier for complex ${brief.domain.toLowerCase()} decisions — deeper reasoning with lower weekly capacity.`;
+    return `Deep reasoning for complex ${brief.domain.toLowerCase()} decisions with lower weekly capacity.`;
   }
-  return `Recommended because this role needs balanced technical reasoning, enough weekly capacity, and reliable structured planning.`;
+  return `Balanced quality, capacity, and planning for day-to-day ${brief.roleTitle.toLowerCase()} work.`;
 }
 
 function defaultStrengths(tier: CandidateTier, brief: AiEmployeeJobBrief): string[] {
   if (brief.technicalFocus.length > 0) {
     if (tier === "high_capacity")
-      return ["Quick performance scans", "Fast optimization drafts", "Routine latency checks", "High-volume analysis"];
+      return ["Quick performance scans", "Fast optimization drafts", "Routine latency checks"];
     if (tier === "premium")
-      return ["Complex architecture tradeoffs", "Deep performance strategy", "Executive-grade technical reasoning", "Risk-aware optimization"];
-    return ["Practical optimization planning", "Technical reasoning", "Balanced recommendations", "Structured follow-through"];
+      return ["Complex architecture tradeoffs", "Deep performance strategy", "Executive-grade reasoning"];
+    return ["Practical optimization planning", "Technical reasoning", "Structured follow-through"];
   }
   if (tier === "high_capacity")
-    return ["High-volume output", "Fast follow-ups", "Quick first drafts", "Energetic execution"];
+    return ["High-volume output", "Fast follow-ups", "Quick first drafts"];
   if (tier === "premium")
-    return ["Strategic depth", "Senior stakeholder messaging", "Complex problem framing", "High-risk review"];
-  return ["Balanced quality and capacity", "Professional communication", "Reliable day-to-day output", "Clear next steps"];
+    return ["Strategic depth", "Senior stakeholder messaging", "Complex problem framing"];
+  return ["Balanced quality and capacity", "Clear communication", "Reliable day-to-day output"];
 }
 
 function defaultWatchOuts(tier: CandidateTier): string[] {
@@ -209,29 +210,28 @@ export function buildDeterministicApplicant(
     candidatePitch:
       copy?.candidatePitch ??
       (tier === "high_capacity"
-        ? `I'm best for fast execution on ${brief.roleTitle.toLowerCase()} work. Give me a clear goal and I'll move quickly, keep you updated, and stay practical.`
+        ? `Best for fast ${brief.roleTitle.toLowerCase()} work — clear goals, quick updates, practical delivery.`
         : tier === "premium"
-          ? `I'm strongest when ${brief.domain.toLowerCase()} work needs senior judgment. I'll frame tradeoffs clearly and help you avoid expensive mistakes.`
-          : `I'm a strong fit for day-to-day ${brief.roleTitle.toLowerCase()} work. Give me a clear product goal and I'll break it down, ship reliably, and keep you updated without overcomplicating things.`),
+          ? `Strongest when ${brief.domain.toLowerCase()} work needs senior judgment and careful tradeoffs.`
+          : `Strong fit for day-to-day ${brief.roleTitle.toLowerCase()} work — reliable delivery without overcomplicating things.`),
     howIWork:
       copy?.howIWork ??
       (tier === "high_capacity"
         ? [
-            "Works in short implementation loops",
-            "Prioritizes speed with lightweight updates",
-            "Asks before risky production changes",
+            "Short implementation loops",
+            "Lightweight status updates",
+            "Asks before risky changes",
           ]
         : tier === "premium"
           ? [
               "Frames decisions before deep execution",
-              "Summarizes tradeoffs for stakeholders",
+              "Summarizes tradeoffs clearly",
               "Prefers fewer, higher-quality tasks",
             ]
           : [
-              "Works in short implementation loops",
-              "Asks before risky production changes",
+              "Short implementation loops",
+              "Asks before risky changes",
               "Summarizes decisions clearly",
-              "Prefers practical delivery over theory",
             ]),
     communicationStyle:
       copy?.communicationStyle ??
@@ -240,8 +240,7 @@ export function buildDeterministicApplicant(
       copy?.autonomyLevel ?? (tier === "premium" ? "high" : tier === "high_capacity" ? "balanced" : "balanced"),
     proactivityLevel: copy?.proactivityLevel ?? (tier === "high_capacity" ? "high" : "balanced"),
     grad: TIER_GRADS[tier],
-    badge:
-      tier === "recommended" ? "Recommended" : tier === "high_capacity" ? "High capacity" : "Premium quality",
+    badge: tierBadgeLabel(tier),
     badgeKind: tier === "recommended" ? "rec" : "neutral",
     cap: TIER_CAP[tier],
   };

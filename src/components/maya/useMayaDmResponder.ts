@@ -203,8 +203,16 @@ export function useMayaDmResponder({
 
         if (intent === "hire_employee") {
           const proposal = inferProposal(trimmed);
-          setPendingProposal(proposal);
           setEmployeePickerRoster([]);
+          if (onContinueHiringHere) {
+            setPendingProposal(null);
+            await runLifecycleReply(
+              `Great — let's define the **${proposal.roleTitle}** role together. I'll ask a few questions and draft a job brief.`,
+            );
+            await onContinueHiringHere(proposal);
+            return;
+          }
+          setPendingProposal(proposal);
           await runLifecycleReply(mayaHiringProposalMessage(proposal.roleTitle));
           return;
         }
@@ -272,6 +280,7 @@ export function useMayaDmResponder({
       employeePickerRoster.length,
       firstName,
       inferProposal,
+      onContinueHiringHere,
       runLifecycleReply,
       state.employees,
       state.rooms,

@@ -70,6 +70,7 @@ import { effectiveEmployeeStatus, isMayaEmployee } from "@/lib/maya-employee";
 import { MAYA_EMPLOYEE_SUBTITLE } from "@/lib/hiring/maya";
 import { MayaDmEmptyState } from "@/components/maya/MayaDmEmptyState";
 import { MayaHiringInlineCards } from "@/components/maya/MayaHiringInlineCards";
+import { MayaHiringSuggestionChips } from "@/components/maya/MayaHiringSuggestionChips";
 import { MayaHiringTopicSuggestionCard } from "@/components/maya/MayaHiringTopicSuggestionCard";
 import { MayaEmployeePickerCard } from "@/components/maya/MayaArtifactCard";
 import { useMayaRoomCoordinator } from "@/components/maya/MayaRoomCoordinator";
@@ -1481,7 +1482,20 @@ export function RoomChat({
         </div>
       </div>
 
+      {isMayaHiringMode && mayaHiring?.session.error && (
+        <div className="shrink-0 border-b border-rose-200 bg-rose-50 px-4 py-2 text-center text-xs text-rose-800">
+          {mayaHiring.session.error}
+        </div>
+      )}
+
       <div className="flex-1 overflow-y-auto px-[26px] pb-2 pt-[18px]">
+        {isMayaHiringMode && !mayaHiring ? (
+          <div className="flex h-full min-h-[200px] items-center justify-center gap-2 text-sm text-ink-3">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            Starting hiring session…
+          </div>
+        ) : (
+        <>
         {hasOlder && (
           <div className={cn("mx-auto mb-3", ROOM_CHAT_WIDE_MAX_WIDTH, "text-center")}>
             <Button
@@ -1494,7 +1508,7 @@ export function RoomChat({
           </div>
         )}
         {topicMessages.length === 0 && contextImports.length === 0 ? (
-          isDm && dmEmployee && isMayaEmployee(dmEmployee) && isMainChat && !chatDisabled ? (
+          isDm && dmEmployee && isMayaEmployee(dmEmployee) && isMainChat && !chatDisabled && !isMayaHiringMode ? (
             <MayaDmEmptyState
               firstName={state.user?.name?.split(" ")[0] ?? "there"}
               onSendMessage={(text) => {
@@ -1656,9 +1670,34 @@ export function RoomChat({
                 />
               </div>
             )}
+            {isMayaHiringMode && mayaHiring && (mayaHiring.session.busy || mayaHiring.generatingCandidates) && dmEmployee && (
+              <div className="group/msg relative flex gap-3 rounded-[10px] px-0 py-1">
+                <div className="shrink-0">
+                  <EmployeeAvatar employee={dmEmployee} size="md" showStatus={false} />
+                </div>
+                <div className="flex w-fit items-center gap-1.5 rounded-[13px] border border-border bg-surface px-3.5 py-2.5">
+                  <span className="text-[12.7px] text-ink-3">
+                    {mayaHiring.generatingCandidates
+                      ? "Preparing candidates…"
+                      : mayaHiring.mayaState === "acknowledging"
+                        ? "Reviewing the role…"
+                        : mayaHiring.mayaState === "updating_brief"
+                          ? "Updating the brief…"
+                          : mayaHiring.mayaState === "thinking"
+                            ? "Thinking…"
+                            : "Typing…"}
+                  </span>
+                  <span className="typing-dot" />
+                  <span className="typing-dot" />
+                  <span className="typing-dot" />
+                </div>
+              </div>
+            )}
             {isMayaHiringMode && <MayaHiringInlineCards />}
             <div ref={bottomRef} />
           </div>
+        )}
+        </>
         )}
       </div>
 
@@ -1723,6 +1762,7 @@ export function RoomChat({
               {sendError}
             </div>
           )}
+          {isMayaHiringMode && <MayaHiringSuggestionChips />}
           <ChatComposer
             employees={roomEmployees}
             mentionHumans={mentionHumans}

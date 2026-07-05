@@ -74,6 +74,7 @@ import type { ProjectRoom, WorkLogEvent } from "@/lib/types";
 import { getGroupRooms } from "@/lib/rooms";
 import { resolveUniqueRoomName } from "@/lib/room-naming";
 import { resolveMayaDmRoomId } from "@/lib/maya-employee";
+import { RecommendationBanner } from "@/components/hiring/RecommendationBanner";
 import { cn, nowISO, uid } from "@/lib/utils";
 import { BriefDocumentPreview } from "./BriefDocumentPreview";
 import { BriefEditor } from "./BriefEditor";
@@ -1015,9 +1016,9 @@ export function HireFlow({ onboarding = false, entrySource = "hire_route" }: Hir
           <div className="w-full">
             <div className="mb-5 flex flex-wrap items-end justify-between gap-4">
               <div>
-                <h1 className="text-[32px] font-semibold tracking-tight">3 strong candidates are ready</h1>
+                <h1 className="text-[32px] font-semibold tracking-tight">3 candidates are ready</h1>
                 <p className="max-w-[560px] text-[15px] text-ink-2">
-                  Each balances quality, speed, cost, and weekly AI work capacity differently.
+                  Compare quality, speed, cost, and weekly capacity.
                 </p>
               </div>
             </div>
@@ -1040,29 +1041,16 @@ export function HireFlow({ onboarding = false, entrySource = "hire_route" }: Hir
               ))}
             </div>
             {visibleCandidates.find((c) => c.recommended) && (
-              <div className="mt-5 rounded-[14px] bg-gradient-to-b from-ink to-ink/90 p-5 text-white">
-                <div className="mb-2 font-mono text-[10px] uppercase tracking-wider text-accent-soft">
-                  Ade&apos;s recommendation
-                </div>
-                <p className="text-[15px] leading-relaxed text-white/85">
-                  <b className="text-white">
-                    Recommended: {visibleCandidates.find((c) => c.recommended)?.name}.
-                  </b>{" "}
-                  {visibleCandidates.find((c) => c.recommended)?.whyThisCandidate}
-                </p>
-                <button
-                  type="button"
-                  onClick={() =>
-                    dispatch({
-                      type: "SELECT_CANDIDATE",
-                      id: visibleCandidates.find((c) => c.recommended)!.id,
-                    })
-                  }
-                  className="mt-3 rounded-[10px] bg-white px-5 py-2.5 text-sm font-semibold text-ink"
-                >
-                  Hire recommended candidate →
-                </button>
-              </div>
+              <RecommendationBanner
+                candidate={visibleCandidates.find((c) => c.recommended)!}
+                hireDisabled={session.busy}
+                onHire={() =>
+                  dispatch({
+                    type: "SELECT_CANDIDATE",
+                    id: visibleCandidates.find((c) => c.recommended)!.id,
+                  })
+                }
+              />
             )}
           </div>
         )}
