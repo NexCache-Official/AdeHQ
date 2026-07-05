@@ -36,7 +36,10 @@ export function notifyMemoryUpdated(detail: {
 
 export async function fetchTopicSummaryClient(topicId: string): Promise<TopicSummary | null> {
   const headers = await authHeaders();
-  const res = await fetch(`/api/topics/${topicId}/summary`, { headers });
+  const res = await fetch(`/api/topics/${topicId}/summary`, {
+    headers,
+    cache: "no-store",
+  });
   if (!res.ok) return null;
   const payload = await res.json();
   return (payload.summary as TopicSummary | null) ?? null;
@@ -123,6 +126,7 @@ export async function dismissMemorySuggestionClient(
     const payload = await res.json().catch(() => ({}));
     throw new Error(payload.error ?? "Unable to dismiss memory suggestion.");
   }
+  notifyTopicSummaryUpdated(topicId);
 }
 
 export async function saveFileMemorySuggestionClient(

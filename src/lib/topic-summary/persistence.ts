@@ -1,5 +1,9 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { nowISO } from "@/lib/utils";
+import {
+  isTerminalSuggestionState,
+  type MemorySuggestionState,
+} from "@/lib/memory/suggestion-lifecycle";
 import type {
   TopicSummary,
   TopicSummaryFact,
@@ -7,9 +11,10 @@ import type {
   TopicSummaryNextAction,
   TopicSummaryQuestion,
 } from "./types";
-import type { MemorySuggestionState } from "@/lib/memory/suggestion-lifecycle";
 
 type DbRow = Record<string, unknown>;
+
+const LIFECYCLE_METADATA_KEY = "memorySuggestionLifecycle";
 
 function parseJsonArray<T>(value: unknown): T[] {
   return Array.isArray(value) ? (value as T[]) : [];
@@ -44,20 +49,102 @@ function parseLifecycle(value: unknown): Record<string, MemorySuggestionState> {
   return value as Record<string, MemorySuggestionState>;
 }
 
+function mergeLifecycleSources(
+  ...sources: Array<Record<string, MemorySuggestionState> | undefined>
+): Record<string, MemorySuggestionState> {
+  const merged: Record<string, MemorySuggestionState> = {};
+  for (const source of sources) {
+    if (!source) continue;
+    for (const [key, state] of Object.entries(source)) {
+      const existing = merged[key];
+      if (!existing || isTerminalSuggestionState(state)) {
+        merged[key] = state;
+      } else if (!isTerminalSuggestionState(existing)) {
+        merged[key] = state;
+      }
+    }
+  }
+  return merged;
+}
+
+async function fetchTopicMetadataRecord(
+  client: SupabaseClient,
+  workspaceId: string,
+  topicId: string,
+): Promise<Record<string, unknown>> {
+  const { data, error } = await client
+    .from("topics")
+    .select("metadata")
+    .eq("workspace_id", workspaceId)
+    .eq("id", topicId)
+    .maybeSingle();
+  if (error) throw error;
+  return (data?.metadata as Record<string, unknown>) ?? {};
+}
+
+async function writeTopicMetadataLifecycle(
+  client: SupabaseClient,
+  workspaceId: string,
+  topicId: string,
+  lifecycle: Record<string, MemorySuggestionState>,
+): Promise<void> {
+  const metadata = await fetchTopicMetadataRecord(client, workspaceId, topicId);
+  const { error } = await client
+    .from("topics")
+    .update({
+      metadata: { ...metadata, [LIFECYCLE_METADATA_KEY]: lifecycle },
+      updated_at: nowISO(),
+    })
+    .eq("workspace_id", workspaceId)
+    .eq("id", topicId);
+  if (error) throw error;
+}
+
+/** Clear durable suggestion lifecycle stored on the topic (survives summary row deletion). */
+export async function clearTopicMemorySuggestionLifecycle(
+  client: SupabaseClient,
+  workspaceId: string,
+  topicId: string,
+): Promise<void> {
+  const metadata = await fetchTopicMetadataRecord(client, workspaceId, topicId);
+  if (!(LIFECYCLE_METADATA_KEY in metadata)) return;
+  const next = { ...metadata };
+  delete next[LIFECYCLE_METADATA_KEY];
+  const { error } = await client
+    .from("topics")
+    .update({ metadata: next, updated_at: nowISO() })
+    .eq("workspace_id", workspaceId)
+    .eq("id", topicId);
+  if (error) throw error;
+}
+
 export async function fetchTopicSummary(
   client: SupabaseClient,
   workspaceId: string,
   topicId: string,
 ): Promise<TopicSummary | null> {
-  const { data, error } = await client
-    .from("topic_summaries")
-    .select("*")
-    .eq("workspace_id", workspaceId)
-    .eq("topic_id", topicId)
-    .maybeSingle();
+  const [summaryResult, metadata] = await Promise.all([
+    client
+      .from("topic_summaries")
+      .select("*")
+      .eq("workspace_id", workspaceId)
+      .eq("topic_id", topicId)
+      .maybeSingle(),
+    fetchTopicMetadataRecord(client, workspaceId, topicId),
+  ]);
 
-  if (error || !data) return null;
-  return topicSummaryFromRow(data as DbRow);
+  if (summaryResult.error) throw summaryResult.error;
+  if (!summaryResult.data) return null;
+
+  const summary = topicSummaryFromRow(summaryResult.data as DbRow);
+  const metadataLifecycle = parseLifecycle(metadata[LIFECYCLE_METADATA_KEY]);
+  return {
+    ...summary,
+    memorySuggestionLifecycle: mergeLifecycleSources(
+      metadataLifecycle,
+      summary.memorySuggestionLifecycle,
+    ),
+  };
 }
 
 export async function upsertTopicSummary(
@@ -65,6 +152,17 @@ export async function upsertTopicSummary(
   summary: TopicSummary,
 ): Promise<TopicSummary> {
   const timestamp = nowISO();
+  const metadata = await fetchTopicMetadataRecord(
+    client,
+    summary.workspaceId,
+    summary.topicId,
+  );
+  const metadataLifecycle = parseLifecycle(metadata[LIFECYCLE_METADATA_KEY]);
+  const mergedLifecycle = mergeLifecycleSources(
+    metadataLifecycle,
+    summary.memorySuggestionLifecycle ?? {},
+  );
+
   const row = {
     workspace_id: summary.workspaceId,
     room_id: summary.roomId,
@@ -79,7 +177,7 @@ export async function upsertTopicSummary(
     source_message_ids: summary.sourceMessageIds,
     source_work_log_ids: summary.sourceWorkLogIds,
     last_refreshed_at: summary.lastRefreshedAt ?? timestamp,
-    memory_suggestion_lifecycle: summary.memorySuggestionLifecycle ?? {},
+    memory_suggestion_lifecycle: mergedLifecycle,
     updated_at: timestamp,
   };
 
@@ -91,13 +189,26 @@ export async function upsertTopicSummary(
 
   if (error) throw error;
 
+  await writeTopicMetadataLifecycle(
+    client,
+    summary.workspaceId,
+    summary.topicId,
+    mergedLifecycle,
+  );
+
   await client
     .from("topics")
     .update({
       summary: summary.summary,
       updated_at: timestamp,
     })
-  return topicSummaryFromRow(data as DbRow);
+    .eq("workspace_id", summary.workspaceId)
+    .eq("id", summary.topicId);
+
+  return {
+    ...topicSummaryFromRow(data as DbRow),
+    memorySuggestionLifecycle: mergedLifecycle,
+  };
 }
 
 export async function updateMemorySuggestionLifecycle(
@@ -109,21 +220,47 @@ export async function updateMemorySuggestionLifecycle(
     state: MemorySuggestionState;
   },
 ): Promise<Record<string, MemorySuggestionState>> {
-  const existing = await fetchTopicSummary(client, params.workspaceId, params.topicId);
-  const lifecycle = {
-    ...(existing?.memorySuggestionLifecycle ?? {}),
-    [params.suggestionKey]: params.state,
-  };
+  const metadata = await fetchTopicMetadataRecord(
+    client,
+    params.workspaceId,
+    params.topicId,
+  );
+  const metadataLifecycle = mergeLifecycleSources(
+    parseLifecycle(metadata[LIFECYCLE_METADATA_KEY]),
+    { [params.suggestionKey]: params.state },
+  );
 
-  const { error } = await client
+  await writeTopicMetadataLifecycle(
+    client,
+    params.workspaceId,
+    params.topicId,
+    metadataLifecycle,
+  );
+
+  const { data: summaryRow, error: summaryLookupError } = await client
     .from("topic_summaries")
-    .update({
-      memory_suggestion_lifecycle: lifecycle,
-      updated_at: nowISO(),
-    })
+    .select("memory_suggestion_lifecycle")
     .eq("workspace_id", params.workspaceId)
-    .eq("topic_id", params.topicId);
+    .eq("topic_id", params.topicId)
+    .maybeSingle();
+  if (summaryLookupError) throw summaryLookupError;
 
-  if (error) throw error;
-  return lifecycle;
+  if (summaryRow) {
+    const summaryLifecycle = mergeLifecycleSources(
+      parseLifecycle(summaryRow.memory_suggestion_lifecycle),
+      { [params.suggestionKey]: params.state },
+    );
+    const { error } = await client
+      .from("topic_summaries")
+      .update({
+        memory_suggestion_lifecycle: summaryLifecycle,
+        updated_at: nowISO(),
+      })
+      .eq("workspace_id", params.workspaceId)
+      .eq("topic_id", params.topicId);
+    if (error) throw error;
+    return mergeLifecycleSources(metadataLifecycle, summaryLifecycle);
+  }
+
+  return metadataLifecycle;
 }

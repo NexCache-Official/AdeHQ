@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { refreshTopicStats } from "@/lib/server/topic-stats";
+import { clearTopicMemorySuggestionLifecycle } from "@/lib/topic-summary/persistence";
 import { nowISO } from "@/lib/utils";
 
 function isMissingRelationError(error: unknown): boolean {
@@ -74,6 +75,8 @@ export async function clearTopicChatHistory(
     .update({ summary: null, pinned_summary: null, updated_at: nowISO() })
     .eq("workspace_id", workspaceId)
     .eq("id", topicId);
+
+  await clearTopicMemorySuggestionLifecycle(client, workspaceId, topicId);
 
   await refreshTopicStats(client, topicId);
 

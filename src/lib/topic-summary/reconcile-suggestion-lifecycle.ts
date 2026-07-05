@@ -1,67 +1,15 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { isActiveMemory } from "@/lib/memory/active-filter";
+import { findExistingMemoryForSuggestion } from "@/lib/memory/find-existing";
 import { suggestionKeyForTopicSummary } from "@/lib/memory/fingerprint";
 import {
+  isSuggestionTerminalInLifecycle,
   isTerminalSuggestionState,
+  resolveSuggestionStateForSuggestion,
   type MemorySuggestionState,
 } from "@/lib/memory/suggestion-lifecycle";
-import { buildMemoryEntryFields } from "@/lib/memory/build-entry";
-import { resolveMemoryInsert } from "@/lib/memory/dedupe";
-import { normalizeMemoryScope, scopeUsesTopicId } from "@/lib/memory/scope-rules";
-import { memoryCuratorContext } from "./save-memory";
+import { normalizeMemoryScope } from "@/lib/memory/scope-rules";
 import type { TopicSummary } from "./types";
 import { fetchTopicSummary, updateMemorySuggestionLifecycle } from "./persistence";
-
-async function suggestionAlreadySavedAsMemory(
-  client: SupabaseClient,
-  workspaceId: string,
-  roomId: string,
-  topicId: string,
-  userId: string,
-  suggestion: TopicSummary["suggestedMemory"][number],
-  suggestionIndex: number,
-): Promise<boolean> {
-  const scope = normalizeMemoryScope(suggestion.scope);
-  const topicScoped = scopeUsesTopicId(scope);
-  const fields = buildMemoryEntryFields({
-    workspaceId,
-    roomId,
-    topicId: topicScoped ? topicId : null,
-    userId,
-    suggestion,
-    suggestionIndex,
-    scopeOverride: scope,
-    dedupeKey: "",
-    curatorContext: memoryCuratorContext({
-      workspaceId,
-      roomId,
-      topicId: topicScoped ? topicId : null,
-      userId,
-      sourceMessageId: suggestion.sourceMessageId,
-      sourceEmployeeId: suggestion.suggestedByEmployeeId,
-    }),
-  });
-
-  const suggestionKey = suggestionKeyForTopicSummary(topicId, {
-    title: suggestion.title,
-    content: suggestion.content,
-    text: suggestion.text,
-    sourceMessageId: suggestion.sourceMessageId,
-  });
-
-  const { existing } = await resolveMemoryInsert(client, workspaceId, {
-    workspaceId,
-    title: fields.title,
-    content: fields.content,
-    scope,
-    roomId,
-    topicId: topicScoped ? topicId : null,
-    sourceMessageId: suggestion.sourceMessageId,
-    suggestionKey,
-  });
-
-  return Boolean(existing && isActiveMemory(existing));
-}
 
 /** Mark suggestions as already_saved when matching active memory exists. Persists lifecycle updates. */
 export async function reconcileTopicSummarySuggestionLifecycle(
@@ -80,25 +28,41 @@ export async function reconcileTopicSummarySuggestionLifecycle(
   };
   let changed = false;
 
-  for (const [index, suggestion] of params.summary.suggestedMemory.entries()) {
-    const key = suggestionKeyForTopicSummary(params.topicId, {
+  for (const suggestion of params.summary.suggestedMemory) {
+    const suggestionInput = {
       title: suggestion.title,
       content: suggestion.content,
       text: suggestion.text,
       sourceMessageId: suggestion.sourceMessageId,
-    });
-    if (isTerminalSuggestionState(lifecycle[key])) continue;
+    };
+    const key = suggestionKeyForTopicSummary(params.topicId, suggestionInput);
 
-    const alreadySaved = await suggestionAlreadySavedAsMemory(
-      client,
-      params.workspaceId,
-      params.roomId,
-      params.topicId,
-      params.userId,
-      suggestion,
-      index,
-    );
-    if (alreadySaved) {
+    if (isSuggestionTerminalInLifecycle(params.topicId, suggestionInput, lifecycle)) {
+      const resolved = resolveSuggestionStateForSuggestion(
+        params.topicId,
+        suggestionInput,
+        lifecycle,
+      );
+      if (isTerminalSuggestionState(resolved) && lifecycle[key] !== resolved) {
+        lifecycle[key] = resolved;
+        changed = true;
+      }
+      continue;
+    }
+
+    const scope = normalizeMemoryScope(suggestion.scope);
+    const existing = await findExistingMemoryForSuggestion(client, {
+      workspaceId: params.workspaceId,
+      roomId: params.roomId,
+      topicId: params.topicId,
+      title: suggestion.title ?? suggestion.text ?? "Memory",
+      content: suggestion.content ?? suggestion.text ?? "",
+      scope,
+      sourceMessageId: suggestion.sourceMessageId,
+      suggestionKey: key,
+    });
+
+    if (existing) {
       lifecycle[key] = "already_saved";
       changed = true;
     }
@@ -110,7 +74,10 @@ export async function reconcileTopicSummarySuggestionLifecycle(
 
   if (params.persist !== false) {
     for (const [key, state] of Object.entries(lifecycle)) {
-      if (state === "already_saved" && params.summary.memorySuggestionLifecycle?.[key] !== "already_saved") {
+      if (
+        isTerminalSuggestionState(state) &&
+        params.summary.memorySuggestionLifecycle?.[key] !== state
+      ) {
         await updateMemorySuggestionLifecycle(client, {
           workspaceId: params.workspaceId,
           topicId: params.topicId,

@@ -37,7 +37,10 @@ export function useTopicSummary(topicId: string | undefined) {
     const handler = (event: Event) => {
       const detail = (event as CustomEvent<{ topicId: string; cleared?: boolean }>).detail;
       if (detail?.topicId !== topicId) return;
-      if (detail.cleared) setSummary(null);
+      if (detail.cleared) {
+        setSummary(null);
+        return;
+      }
       void load();
     };
     window.addEventListener(TOPIC_SUMMARY_UPDATED_EVENT, handler);

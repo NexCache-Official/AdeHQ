@@ -11,7 +11,7 @@ import {
 } from "@/lib/topic-summary/client";
 import {
   readLocalSuggestionLifecycle,
-  resolveSuggestionState,
+  resolveSuggestionStateForSuggestion,
   setLocalSuggestionState,
   shouldHideSuggestion,
   topicSummarySuggestionKey,
@@ -132,9 +132,11 @@ export function TopicSummaryPanel({
     topicSummarySuggestionKey(topicId, summary?.suggestedMemory[index] ?? { text: String(index) });
 
   const suggestionState = (index: number): MemorySuggestionState => {
-    const key = keyForIndex(index);
-    return resolveSuggestionState(
-      key,
+    const suggestion = summary?.suggestedMemory[index] ?? { text: String(index) };
+    const key = topicSummarySuggestionKey(topicId, suggestion);
+    return resolveSuggestionStateForSuggestion(
+      topicId,
+      suggestion,
       summary?.memorySuggestionLifecycle,
       localLifecycle,
       optimisticStates[key],

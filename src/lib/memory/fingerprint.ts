@@ -86,6 +86,15 @@ export type TopicSummarySuggestionKeyInput = {
   sourceMessageId?: string;
 };
 
+export function suggestionContentFingerprint(
+  topicId: string,
+  suggestion: TopicSummarySuggestionKeyInput,
+): string {
+  return normalizeText(
+    `${suggestion.title ?? ""} ${suggestion.content ?? suggestion.text ?? ""}`,
+  ).slice(0, 140);
+}
+
 /**
  * Content/source-based stable key for a topic-summary memory suggestion.
  * Intentionally independent of the summary refresh timestamp and list index so
@@ -98,8 +107,5 @@ export function suggestionKeyForTopicSummary(
   if (suggestion.sourceMessageId?.trim()) {
     return `topic-summary:${topicId}:msg:${suggestion.sourceMessageId.trim()}`;
   }
-  const basis = normalizeText(
-    `${suggestion.title ?? ""} ${suggestion.content ?? suggestion.text ?? ""}`,
-  ).slice(0, 140);
-  return `topic-summary:${topicId}:${basis}`;
+  return `topic-summary:${topicId}:${suggestionContentFingerprint(topicId, suggestion)}`;
 }

@@ -1,4 +1,5 @@
 import {
+  suggestionContentFingerprint,
   suggestionKeyForTopicSummary,
   type TopicSummarySuggestionKeyInput,
 } from "./fingerprint";
@@ -18,6 +19,50 @@ export function topicSummarySuggestionKey(
   suggestion: TopicSummarySuggestionKeyInput,
 ): string {
   return suggestionKeyForTopicSummary(topicId, suggestion);
+}
+
+function terminalLifecycleMatch(
+  key: string,
+  topicId: string,
+  suggestion: TopicSummarySuggestionKeyInput | undefined,
+  lifecycle?: Record<string, MemorySuggestionState>,
+): MemorySuggestionState | undefined {
+  if (!lifecycle) return undefined;
+  const direct = lifecycle[key];
+  if (direct && isTerminalSuggestionState(direct)) return direct;
+  if (!suggestion) return undefined;
+  const fingerprint = suggestionContentFingerprint(topicId, suggestion);
+  for (const [storedKey, state] of Object.entries(lifecycle)) {
+    if (!isTerminalSuggestionState(state)) continue;
+    if (storedKey === key || storedKey.includes(fingerprint)) return state;
+  }
+  return undefined;
+}
+
+/** Resolve lifecycle for a suggestion, matching stable keys across summary regenerations. */
+export function resolveSuggestionStateForSuggestion(
+  topicId: string,
+  suggestion: TopicSummarySuggestionKeyInput,
+  serverLifecycle?: Record<string, MemorySuggestionState>,
+  localLifecycle?: Record<string, MemorySuggestionState>,
+  optimistic?: MemorySuggestionState,
+): MemorySuggestionState {
+  const key = topicSummarySuggestionKey(topicId, suggestion);
+  return (
+    terminalLifecycleMatch(key, topicId, suggestion, serverLifecycle) ??
+    terminalLifecycleMatch(key, topicId, suggestion, localLifecycle) ??
+    resolveSuggestionState(key, serverLifecycle, localLifecycle, optimistic)
+  );
+}
+
+export function isSuggestionTerminalInLifecycle(
+  topicId: string,
+  suggestion: TopicSummarySuggestionKeyInput,
+  lifecycle?: Record<string, MemorySuggestionState>,
+): boolean {
+  return isTerminalSuggestionState(
+    resolveSuggestionStateForSuggestion(topicId, suggestion, lifecycle),
+  );
 }
 
 export function isTerminalSuggestionState(state?: MemorySuggestionState): boolean {

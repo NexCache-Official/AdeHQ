@@ -36,7 +36,10 @@ export async function GET(
       user.id,
     );
 
-    return NextResponse.json({ summary, topic });
+    return NextResponse.json(
+      { summary, topic },
+      { headers: { "Cache-Control": "no-store, max-age=0" } },
+    );
   } catch (error) {
     if (error instanceof AuthError) {
       return NextResponse.json({ error: error.message }, { status: error.status });

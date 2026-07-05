@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { AuthError, requireAuthUser, requireWorkspaceMembership } from "@/lib/supabase/auth-server";
+import { createServiceRoleClient } from "@/lib/supabase/server";
 import { assertCanAccessRoom } from "@/lib/server/room-access";
 import { isGeneralTopic } from "@/lib/topics";
 import { clearTopicChatHistory } from "@/lib/server/clear-chat-history";
@@ -37,13 +38,13 @@ export async function POST(
     }
 
     const result = await clearTopicChatHistory(
-      client,
+      createServiceRoleClient(),
       topic.workspaceId,
       topic.roomId,
       topic.id,
     );
 
-    return NextResponse.json(result);
+    return NextResponse.json({ ...result, cleared: true });
   } catch (error) {
     if (error instanceof AuthError) {
       return NextResponse.json({ error: error.message }, { status: error.status });
