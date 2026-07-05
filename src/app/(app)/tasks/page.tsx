@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useStore } from "@/lib/demo-store";
 import { getGroupRooms } from "@/lib/rooms";
+import { deleteTaskClient } from "@/lib/tasks/client";
 import { PageContainer, PageHeader } from "@/components/Page";
 import { TaskCard } from "@/components/TaskCard";
 import { Button, Modal, ModalHeader } from "@/components/ui";
@@ -14,7 +15,7 @@ import { TASK_STATUS_META } from "@/lib/icons";
 import { Task, TaskStatus } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useResponder } from "@/lib/ai/use-responder";
-import { CheckSquare, Columns3, List, Plus, Sparkles } from "lucide-react";
+import { CheckSquare, Columns3, List, Plus, Sparkles, Trash2 } from "lucide-react";
 
 const COLUMNS: TaskStatus[] = ["open", "in_progress", "waiting_approval", "blocked", "done"];
 
@@ -103,9 +104,12 @@ export default function TasksPage() {
 }
 
 function TaskDetailModal({ task, onClose }: { task: Task; onClose: () => void }) {
-  const { state, actions } = useStore();
+  const { state, actions, backend } = useStore();
   const router = useRouter();
   const respond = useResponder();
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const current = state.tasks.find((t) => t.id === task.id) ?? task;
   const assignee = state.employees.find((e) => e.id === current.assigneeId);
   const room = state.rooms.find((r) => r.id === current.roomId);
@@ -117,6 +121,23 @@ function TaskDetailModal({ task, onClose }: { task: Task; onClose: () => void })
     onClose();
     router.push(`/rooms/${room.id}`);
     setTimeout(() => respond(room.id, assignee.id, `@${assignee.name} please work on: ${current.title}`), 400);
+  };
+
+  const removeTask = async () => {
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      if (backend === "supabase") {
+        await deleteTaskClient(current.id);
+      }
+      actions.removeTask(current.id);
+      onClose();
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : "Could not delete task.");
+    } finally {
+      setDeleting(false);
+      setConfirmDelete(false);
+    }
   };
 
   return (
@@ -156,8 +177,13 @@ function TaskDetailModal({ task, onClose }: { task: Task; onClose: () => void })
           )}
         </div>
       </div>
-      <div className="flex flex-wrap justify-between gap-2 border-t border-slate-200 px-5 py-4">
-        <div className="flex gap-2">
+      {deleteError && (
+        <div className="border-t border-rose-200 bg-rose-50 px-5 py-2 text-xs text-rose-800">
+          {deleteError}
+        </div>
+      )}
+      <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-200 px-5 py-4">
+        <div className="flex flex-wrap gap-2">
           {current.status !== "done" ? (
             <Button size="sm" variant="secondary" onClick={() => actions.updateTask(current.id, { status: "done" })}>
               Mark complete
@@ -167,13 +193,34 @@ function TaskDetailModal({ task, onClose }: { task: Task; onClose: () => void })
               Reopen
             </Button>
           )}
-          {room && <Button size="sm" variant="ghost" onClick={() => { onClose(); router.push(`/rooms/${room.id}`); }}>Open room</Button>}
+          {room && (
+            <Button size="sm" variant="ghost" onClick={() => { onClose(); router.push(`/rooms/${room.id}`); }}>
+              Open room
+            </Button>
+          )}
         </div>
-        {assignee && current.assigneeType === "ai" && (
-          <Button size="sm" onClick={askToWork}>
-            <Sparkles className="h-4 w-4" /> Ask {assignee.name.split(" ")[0]} to work on it
-          </Button>
-        )}
+        <div className="flex flex-wrap items-center gap-2">
+          {assignee && current.assigneeType === "ai" && (
+            <Button size="sm" onClick={askToWork}>
+              <Sparkles className="h-4 w-4" /> Ask {assignee.name.split(" ")[0]} to work on it
+            </Button>
+          )}
+          {confirmDelete ? (
+            <>
+              <span className="text-xs text-slate-500">Delete this task permanently?</span>
+              <Button size="sm" variant="ghost" onClick={() => setConfirmDelete(false)} disabled={deleting}>
+                Cancel
+              </Button>
+              <Button size="sm" variant="danger" onClick={() => void removeTask()} disabled={deleting}>
+                {deleting ? "Deleting…" : "Confirm delete"}
+              </Button>
+            </>
+          ) : (
+            <Button size="sm" variant="ghost" onClick={() => setConfirmDelete(true)} className="text-rose-600 hover:text-rose-700">
+              <Trash2 className="h-4 w-4" /> Delete
+            </Button>
+          )}
+        </div>
       </div>
     </Modal>
   );

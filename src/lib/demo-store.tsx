@@ -66,6 +66,7 @@ import {
   persistRoomMetadata,
   persistRoomMember,
   persistTask,
+  deleteTaskRecord,
   persistWorkLog,
   persistWorkspace,
   persistWorkspaceToolStatus,
@@ -186,6 +187,7 @@ type StoreActions = {
   // tasks
   createTask: (task: Partial<Task> & { title: string; roomId: string }) => Task;
   updateTask: (id: string, patch: Partial<Task>) => void;
+  removeTask: (id: string) => void;
 
   // memory
   createMemory: (m: Partial<MemoryEntry> & { title: string; content: string; roomId: string }) => MemoryEntry;
@@ -1490,6 +1492,19 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           tasks: s.tasks.map((t) => (t.id === id ? updated : t)),
         }));
         runRemote((workspaceId) => persistTask(workspaceId, updated));
+      },
+
+      removeTask: (id) => {
+        const task = stateRef.current.tasks.find((t) => t.id === id);
+        if (!task) return;
+        set((s) => ({
+          ...s,
+          tasks: s.tasks.filter((t) => t.id !== id),
+          rooms: s.rooms.map((r) =>
+            r.id === task.roomId ? { ...r, tasks: r.tasks.filter((taskId) => taskId !== id) } : r,
+          ),
+        }));
+        runRemote((workspaceId) => deleteTaskRecord(workspaceId, id));
       },
 
       createMemory: (m) => {

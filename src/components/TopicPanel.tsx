@@ -842,7 +842,7 @@ export function TopicPanel({
                 ) : (
                   <div className="space-y-2">
                     {topicTasks.map((t) => (
-                      <TaskCard key={t.id} task={t} compact />
+                      <TaskCard key={t.id} task={t} compact deletable={!isArchived} />
                     ))}
                   </div>
                 )}

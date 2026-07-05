@@ -1390,6 +1390,15 @@ export async function persistTask(workspaceId: string, task: Task) {
   await upsertRows("tasks", [taskRow(workspaceId, task)], "workspace_id,id");
 }
 
+export async function deleteTaskRecord(workspaceId: string, taskId: string) {
+  const { error } = await supabase
+    .from("tasks")
+    .delete()
+    .eq("workspace_id", workspaceId)
+    .eq("id", taskId);
+  if (error) throw error;
+}
+
 export async function persistMemory(workspaceId: string, entry: MemoryEntry) {
   await upsertRows("memory_entries", [memoryRow(workspaceId, entry)], "workspace_id,id");
 }
