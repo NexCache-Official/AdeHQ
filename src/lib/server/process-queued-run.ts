@@ -51,6 +51,12 @@ import {
   recordEmployeeReplyShadowResult,
   resolveEmployeeShadowOldModel,
 } from "@/lib/ai/runtime/hot-path-shadow";
+import { canEmployeeUseBrowserResearch } from "@/lib/ai/browser-research/permissions";
+import {
+  executePlannedResearch,
+  planResearch,
+} from "@/lib/ai/research";
+import { createServiceRoleClient } from "@/lib/supabase/server";
 
 async function persistRunOrchestrationPhase(
   client: SupabaseClient,
@@ -125,6 +131,8 @@ export async function processQueuedAgentRun(
   employeeId: string;
   employeeName: string;
   artifacts?: import("@/lib/types").MessageArtifact[];
+  researchRun?: import("@/lib/ai/browser-research/types").BrowserResearchRun;
+  pendingResearch?: boolean;
   metrics?: LiveCallMetrics & {
     provider: string;
     modelMode: string;
@@ -335,6 +343,207 @@ export async function processQueuedAgentRun(
           agentRunId: runId,
         },
       };
+    }
+
+    const preferTavily = Boolean(runMetadata.preferTavily ?? runMetadata.preferResearch);
+    const preferAgentMode = Boolean(runMetadata.preferAgentMode ?? runMetadata.preferBrowserbase);
+
+    if (
+      !isGreetingRun &&
+      !collaborationOnly &&
+      !artifactIntent &&
+      canEmployeeUseBrowserResearch(employee)
+    ) {
+      const researchPlan = planResearch({
+        messages: roomWithMessages.messages,
+        userMessage: content,
+        employee,
+        preferTavily,
+        preferAgentMode,
+        excludeMessageId: triggerMessageId,
+      });
+
+      if (researchPlan.action === "search" || researchPlan.action === "browse") {
+        await appendRunStep(client, {
+          workspaceId,
+          agentRunId: runId,
+          roomId,
+          topicId,
+          employeeId,
+          stepType: "tool_call",
+          title: researchPlan.action === "browse" ? "Live browser research" : "Searching the web",
+          summary: researchPlan.reasoning,
+          status: "running",
+        });
+
+        const { data: triggerSender } = await client
+          .from("messages")
+          .select("sender_id")
+          .eq("workspace_id", workspaceId)
+          .eq("id", triggerMessageId)
+          .maybeSingle();
+        const createdBy = triggerSender?.sender_id ? String(triggerSender.sender_id) : "unknown";
+
+        try {
+          const serviceClient = createServiceRoleClient();
+          const researchResult = await executePlannedResearch(serviceClient, {
+            workspaceId,
+            roomId,
+            topicId,
+            employeeId,
+            createdBy,
+            plan: researchPlan,
+            triggerMessageId,
+            agentRunId: runId,
+          });
+
+          if (researchResult.async) {
+            await appendRunStep(client, {
+              workspaceId,
+              agentRunId: runId,
+              roomId,
+              topicId,
+              employeeId,
+              stepType: "tool_call",
+              title: "Live session started",
+              summary: researchPlan.resolved.query.slice(0, 120),
+              status: "running",
+            });
+
+            await persistRunOrchestrationPhase(
+              client,
+              workspaceId,
+              runMetadata,
+              employeeId,
+              "completed",
+              { runId },
+            );
+
+            await finalizeAiRun({
+              client,
+              workspaceId,
+              runId,
+              usageId,
+              actualCostUsd: researchResult.run.estimatedCostUsd ?? 0,
+              failed: false,
+            });
+
+            return {
+              reply: "",
+              aiMessageId: "",
+              aiMode: "research_async",
+              employeeId,
+              employeeName: employee.name,
+              researchRun: researchResult.run,
+              pendingResearch: true,
+              metrics: {
+                provider: researchResult.run.provider,
+                model: researchResult.run.provider,
+                modelMode,
+                inputTokens: 0,
+                outputTokens: 0,
+                fallbackUsed: false,
+                estimatedCostUsd: researchResult.run.estimatedCostUsd ?? 0,
+                durationMs: 0,
+                usageId,
+                agentRunId: runId,
+              },
+            };
+          }
+
+          if (researchResult.chatReply) {
+            await client
+              .from("messages")
+              .update({ agent_run_id: runId })
+              .eq("workspace_id", workspaceId)
+              .eq("id", researchResult.chatReply.id);
+
+            await appendRunStep(client, {
+              workspaceId,
+              agentRunId: runId,
+              roomId,
+              topicId,
+              employeeId,
+              stepType: "tool_call",
+              title: "Research complete",
+              summary: `${researchResult.run.provider} · ${researchPlan.resolved.query.slice(0, 120)}`,
+              status: "success",
+            });
+
+            await persistRunOrchestrationPhase(
+              client,
+              workspaceId,
+              runMetadata,
+              employeeId,
+              "completed",
+              { runId },
+            );
+
+            await finalizeAiRun({
+              client,
+              workspaceId,
+              runId,
+              usageId,
+              responseMessageId: researchResult.chatReply.id,
+              actualCostUsd: researchResult.run.estimatedCostUsd ?? 0,
+              failed: false,
+            });
+
+            await client
+              .from("ai_employees")
+              .update({ status: "idle", last_active_at: nowISO() })
+              .eq("workspace_id", workspaceId)
+              .eq("id", employeeId);
+
+            if (!isGreetingRun) {
+              scheduleTopicSummaryRefresh(client, {
+                workspaceId,
+                roomId,
+                topicId,
+                topicTitle: ctx.topic.title,
+                topicDescription: ctx.topic.description,
+                trigger: "meaningful_ai_reply",
+                employeeId,
+              });
+            }
+
+            return {
+              reply: researchResult.chatReply.content,
+              aiMessageId: researchResult.chatReply.id,
+              aiMode: "research",
+              employeeId,
+              employeeName: employee.name,
+              researchRun: researchResult.run,
+              metrics: {
+                provider: researchResult.run.provider,
+                model: researchResult.run.provider,
+                modelMode,
+                inputTokens: 0,
+                outputTokens: 0,
+                fallbackUsed: false,
+                estimatedCostUsd: researchResult.run.estimatedCostUsd ?? 0,
+                durationMs: 0,
+                usageId,
+                agentRunId: runId,
+              },
+            };
+          }
+        } catch (researchError) {
+          console.warn("[AdeHQ research planner]", researchError);
+          await appendRunStep(client, {
+            workspaceId,
+            agentRunId: runId,
+            roomId,
+            topicId,
+            employeeId,
+            stepType: "error",
+            title: "Research failed",
+            summary:
+              researchError instanceof Error ? researchError.message : "Research failed",
+            status: "failed",
+          }).catch(() => undefined);
+        }
+      }
     }
 
     await appendRunStep(client, {

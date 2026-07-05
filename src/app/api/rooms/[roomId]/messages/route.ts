@@ -44,6 +44,14 @@ type MessageBody = {
   mode?: "mock" | "live";
   /** Save the human message only — skip orchestration and agent run queue (e.g. Browse mode). */
   skipAiOrchestration?: boolean;
+  /** @deprecated Use preferTavily */
+  preferResearch?: boolean;
+  /** Browse toggle — prefer Tavily fast search. */
+  preferTavily?: boolean;
+  /** @deprecated Use preferAgentMode */
+  preferBrowserbase?: boolean;
+  /** Agent mode toggle — prefer Browserbase live browse. */
+  preferAgentMode?: boolean;
   mentionsJson?: MentionRef[];
   slashCommand?: string;
   attachmentFileIds?: string[];
@@ -371,6 +379,12 @@ export async function POST(
         );
 
     const { plan: conversationPlan, decisions: rawDecisions } = legacyResult;
+    const researchSignals = {
+      preferTavily: Boolean(body.preferTavily ?? body.preferResearch),
+      preferAgentMode: Boolean(body.preferAgentMode ?? body.preferBrowserbase),
+      preferResearch: Boolean(body.preferTavily ?? body.preferResearch),
+      preferBrowserbase: Boolean(body.preferAgentMode ?? body.preferBrowserbase),
+    };
     const decisions = orchestrationId
       ? rawDecisions.map((d) => ({
           ...d,
@@ -380,6 +394,7 @@ export async function POST(
             attachmentFileIds: priorityFileIds,
             contextFileIds,
             artifactIntent: artifactIntent ?? undefined,
+            ...researchSignals,
           },
         }))
       : rawDecisions.map((d) => ({
@@ -389,6 +404,7 @@ export async function POST(
             attachmentFileIds: priorityFileIds,
             contextFileIds,
             artifactIntent: artifactIntent ?? undefined,
+            ...researchSignals,
           },
         }));
     const orchestratorDebug =

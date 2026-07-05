@@ -199,6 +199,8 @@ export function ChatComposer({
   browserResearchAvailable = false,
   browserResearchEnabled = false,
   onBrowserResearchEnabledChange,
+  agentModeEnabled = false,
+  onAgentModeEnabledChange,
   browserResearchEffectiveProvider,
   browserResearchTavilyConfigured = false,
   browserResearchLiveReady = false,
@@ -225,6 +227,8 @@ export function ChatComposer({
   browserResearchAvailable?: boolean;
   browserResearchEnabled?: boolean;
   onBrowserResearchEnabledChange?: (enabled: boolean) => void;
+  agentModeEnabled?: boolean;
+  onAgentModeEnabledChange?: (enabled: boolean) => void;
   browserResearchEffectiveProvider?: import("@/lib/ai/browser-research").BrowserResearchProvider;
   browserResearchTavilyConfigured?: boolean;
   browserResearchLiveReady?: boolean;
@@ -905,25 +909,20 @@ export function ChatComposer({
           </div>
         )}
 
-        {(contextFiles?.length || artifactIntent || browserResearchEnabled) && (
+        {(contextFiles?.length || artifactIntent || browserResearchEnabled || agentModeEnabled) && (
           <div className="mb-1 flex flex-wrap gap-1.5 px-1">
             {browserResearchEnabled && (
-              <span
-                className={cn(
-                  "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium",
-                  browserResearchLiveReady
-                    ? "border-emerald-200 bg-emerald-50 text-emerald-800"
-                    : browserResearchEffectiveProvider === "tavily" || browserResearchTavilyConfigured
-                      ? "border-sky-200 bg-sky-50 text-sky-800"
-                      : "border-amber-200 bg-amber-50 text-amber-800",
-                )}
-              >
+              <span className="inline-flex items-center gap-1 rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-[11px] font-medium text-sky-800">
                 <Globe className="h-3 w-3" />
+                {BROWSER_RESEARCH_UI_COPY.fastSearchBadge}
+              </span>
+            )}
+            {agentModeEnabled && (
+              <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-800">
+                <Sparkles className="h-3 w-3" />
                 {browserResearchLiveReady
                   ? BROWSER_RESEARCH_UI_COPY.liveBadge
-                  : browserResearchEffectiveProvider === "tavily" || browserResearchTavilyConfigured
-                    ? BROWSER_RESEARCH_UI_COPY.fastSearchBadge
-                    : BROWSER_RESEARCH_UI_COPY.previewModeBadge}
+                  : BROWSER_RESEARCH_UI_COPY.previewModeBadge}
               </span>
             )}
             {artifactIntent && (
@@ -1053,11 +1052,14 @@ export function ChatComposer({
               <button
                 type="button"
                 disabled={disabled || browserResearchBusy}
-                onClick={() => onBrowserResearchEnabledChange?.(!browserResearchEnabled)}
+                onClick={() => {
+                  onBrowserResearchEnabledChange?.(!browserResearchEnabled);
+                  if (!browserResearchEnabled) onAgentModeEnabledChange?.(false);
+                }}
                 className={cn(
                   "flex h-[34px] items-center gap-1 rounded-[10px] px-2 text-[11px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/40",
                   browserResearchEnabled
-                    ? "bg-emerald-600 text-white hover:bg-emerald-700"
+                    ? "bg-sky-600 text-white hover:bg-sky-700"
                     : "text-ink-3 hover:bg-muted hover:text-ink-2",
                 )}
                 title={
@@ -1066,10 +1068,36 @@ export function ChatComposer({
                     : BROWSER_RESEARCH_UI_COPY.agentModeOffHint
                 }
                 aria-pressed={browserResearchEnabled}
-                aria-label="Toggle browser research mode"
+                aria-label="Toggle fast web search (Tavily)"
               >
                 <Globe className="h-3.5 w-3.5" />
                 {BROWSER_RESEARCH_UI_COPY.agentModeLabel}
+              </button>
+            )}
+            {browserResearchAvailable && browserResearchLiveReady && (
+              <button
+                type="button"
+                disabled={disabled || browserResearchBusy}
+                onClick={() => {
+                  onAgentModeEnabledChange?.(!agentModeEnabled);
+                  if (!agentModeEnabled) onBrowserResearchEnabledChange?.(false);
+                }}
+                className={cn(
+                  "flex h-[34px] items-center gap-1 rounded-[10px] px-2 text-[11px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/40",
+                  agentModeEnabled
+                    ? "bg-emerald-600 text-white hover:bg-emerald-700"
+                    : "text-ink-3 hover:bg-muted hover:text-ink-2",
+                )}
+                title={
+                  agentModeEnabled
+                    ? BROWSER_RESEARCH_UI_COPY.liveAgentModeOnHint
+                    : BROWSER_RESEARCH_UI_COPY.liveAgentModeOffHint
+                }
+                aria-pressed={agentModeEnabled}
+                aria-label="Toggle live browser agent mode (Browserbase)"
+              >
+                <Sparkles className="h-3.5 w-3.5" />
+                {BROWSER_RESEARCH_UI_COPY.liveAgentModeLabel}
               </button>
             )}
             <button

@@ -11,6 +11,8 @@ import type { BrowserResearchMockSource, BrowserResearchProvider, BrowserResearc
 
 type ChatReplyInput = {
   query: string;
+  userQuestion?: string;
+  resolvedQuery?: string;
   findings: BrowserResearchProviderResult["findings"];
   mockSources: BrowserResearchMockSource[];
   provider: BrowserResearchProvider;
@@ -54,15 +56,20 @@ async function synthesizeChatReply(
 ): Promise<{ text?: string; costUsd: number; workMinutes: number }> {
   const flags = getRuntimeFlags();
   const forceMode = flags.mode === "on" ? undefined : ("shadow" as const);
+  const userQuestion = input.userQuestion ?? input.query;
+  const searchQuery = input.resolvedQuery ?? input.query;
   const prompt = [
-    `The user asked: ${input.query}`,
+    `The user asked: ${userQuestion}`,
+    searchQuery !== userQuestion ? `Web search query used: ${searchQuery}` : "",
     "",
     "Findings:",
     ...input.findings.map((finding) => `- ${finding.title}: ${finding.summary}`),
     "",
     "Sources:",
     ...input.mockSources.map((source) => `- ${source.title} (${source.url}): ${source.note}`),
-  ].join("\n");
+  ]
+    .filter(Boolean)
+    .join("\n");
 
   const fallbackPlan = planRoute({
     capability: "summarization",
@@ -82,8 +89,10 @@ async function synthesizeChatReply(
           `You are ${input.employeeName}, an AI employee in a team chat.`,
           "The user asked you to research something on the web.",
           "Write a concise, friendly reply explaining what you found, like ChatGPT would.",
+          "Answer the user's original question directly — not the search mechanics.",
           "Cite sources inline as markdown links. Do not invent URLs.",
           "Use 2-4 short paragraphs. Lead with the direct answer when possible.",
+          "If results are weak or unrelated, say so honestly and suggest refining the question.",
         ].join(" "),
         prompt,
         maxTokens: 900,
@@ -123,8 +132,15 @@ export async function persistBrowserResearchChatReply(
 ): Promise<RoomMessage | null> {
   if (!run.roomId || !run.topicId) return null;
 
+  const userQuestion =
+    typeof run.metadata.userQuestion === "string" ? run.metadata.userQuestion : run.query;
+  const resolvedQuery =
+    typeof run.metadata.resolvedQuery === "string" ? run.metadata.resolvedQuery : run.query;
+
   const synthesis = await synthesizeChatReply({
     query: run.query,
+    userQuestion,
+    resolvedQuery,
     findings: result.findings,
     mockSources: result.mockSources,
     provider: result.provider,
@@ -135,7 +151,7 @@ export async function persistBrowserResearchChatReply(
 
   const content = sanitizeReplyForChat(
     synthesis.text ?? buildTemplateChatReply({
-      query: run.query,
+      query: userQuestion,
       findings: result.findings,
       mockSources: result.mockSources,
       provider: result.provider,
@@ -156,6 +172,9 @@ export async function persistBrowserResearchChatReply(
     createdAt: nowISO(),
   };
 
+  const agentRunId =
+    typeof run.metadata.agentRunId === "string" ? run.metadata.agentRunId : undefined;
+
   const { error: messageError } = await client.from("messages").insert({
     workspace_id: run.workspaceId,
     id: aiMessage.id,
@@ -167,11 +186,23 @@ export async function persistBrowserResearchChatReply(
     content: aiMessage.content,
     mentions: [],
     mentions_json: [],
-    agent_run_id: run.workUnitId ?? null,
+    agent_run_id: agentRunId ?? run.workUnitId ?? null,
     pending: false,
     created_at: aiMessage.createdAt,
   });
   if (messageError) throw messageError;
+
+  await client
+    .from("browser_research_runs")
+    .update({
+      metadata: {
+        ...run.metadata,
+        chatReplyMessageId: aiMessage.id,
+      },
+      updated_at: nowISO(),
+    })
+    .eq("workspace_id", run.workspaceId)
+    .eq("id", run.id);
 
   await client
     .from("ai_employees")

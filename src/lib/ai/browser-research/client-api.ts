@@ -38,17 +38,52 @@ export async function fetchBrowserResearchRuns(params: {
   return { runs: data.runs ?? [], config: data.config ?? null };
 }
 
+export async function fetchBrowserResearchRun(params: {
+  workspaceId: string;
+  runId: string;
+}): Promise<{ run: BrowserResearchRun; chatReply: RoomMessage | null }> {
+  const search = new URLSearchParams({ workspaceId: params.workspaceId });
+  const res = await fetch(
+    `/api/browser-research/runs/${params.runId}?${search.toString()}`,
+    { headers: await authHeaders(), cache: "no-store" },
+  );
+  const data = await parseJsonResponse<{
+    run?: BrowserResearchRun;
+    chatReply?: RoomMessage | null;
+    error?: string;
+  }>(res);
+  if (!res.ok || !data.run) {
+    throw new Error(data.error ?? "Failed to load research run.");
+  }
+  return { run: data.run, chatReply: data.chatReply ?? null };
+}
+
+export function upsertBrowserResearchRun(
+  runs: BrowserResearchRun[],
+  run: BrowserResearchRun,
+): BrowserResearchRun[] {
+  const next = [...runs.filter((item) => item.id !== run.id), run];
+  return sortBrowserResearchRuns(next);
+}
+
+export function isActiveBrowserResearchRun(run: BrowserResearchRun): boolean {
+  return run.status === "created" || run.status === "planning" || run.status === "running";
+}
+
 export async function createBrowserResearchRun(params: {
   workspaceId: string;
   employeeId: string;
   query: string;
   roomId?: string;
   topicId?: string;
+  triggerMessageId?: string;
 }): Promise<{
   run: BrowserResearchRun;
   chatReply: RoomMessage | null;
   message?: string;
   config: BrowserResearchProviderConfig | null;
+  async?: boolean;
+  resolvedQuery?: string;
 }> {
   const res = await fetch("/api/browser-research/runs", {
     method: "POST",
@@ -59,6 +94,7 @@ export async function createBrowserResearchRun(params: {
       query: params.query,
       roomId: params.roomId ?? null,
       topicId: params.topicId ?? null,
+      triggerMessageId: params.triggerMessageId ?? null,
     }),
   });
   const data = await parseJsonResponse<{
@@ -66,6 +102,8 @@ export async function createBrowserResearchRun(params: {
     chatReply?: RoomMessage | null;
     message?: string;
     config?: BrowserResearchProviderConfig;
+    async?: boolean;
+    resolvedQuery?: string;
     error?: string;
   }>(res);
   if (!res.ok) {
@@ -79,6 +117,8 @@ export async function createBrowserResearchRun(params: {
     chatReply: data.chatReply ?? null,
     message: data.message,
     config: data.config ?? null,
+    async: data.async,
+    resolvedQuery: data.resolvedQuery,
   };
 }
 

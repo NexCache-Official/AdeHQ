@@ -9,6 +9,7 @@ import {
   sanitizeReplyForChat,
 } from "@/lib/ai/normalize-model-response";
 import { buildEmployeeSystemPrompt, buildEmployeeUserPrompt } from "@/lib/ai/prompts";
+import { getResearchCapabilities } from "@/lib/ai/research/research-planner";
 import { ModelResponseSchema } from "@/lib/ai/schemas";
 import type { AiCapability, ReasoningProfile } from "@/lib/ai/runtime/types";
 import type { EmployeeResponse, EmployeeRoleKey, SendMessageInput } from "@/lib/types";
@@ -76,6 +77,7 @@ export function buildEmployeePromptContext(input: EmployeeRouteInput) {
     userMessage: input.message,
     fileContextPrompt: input.fileContextPrompt,
     artifactIntent: input.artifactIntent,
+    researchCapabilities: getResearchCapabilities(input.employee),
   };
 }
 

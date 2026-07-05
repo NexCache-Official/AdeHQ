@@ -77,6 +77,9 @@ const FAST_SEARCH_PATTERNS = [
   /\b(recently|just raised|latest round|amount raised)\b/i,
 ];
 
+/** Re-export meta-instruction helpers for browse API and tests. */
+export { isMetaResearchInstruction, isMostlyMetaInstruction } from "@/lib/ai/research/resolve-research-query";
+
 /** Factual lookup queries that Tavily can answer faster than live browsing. */
 export function isFastSearchQuery(query: string): boolean {
   const trimmed = query.trim();

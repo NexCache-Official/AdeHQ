@@ -76,20 +76,24 @@ export async function POST(
       followUpRuns: result.followUpRuns ?? [],
       activatedRuns: result.activatedRuns ?? [],
       collaborationPlan: result.collaborationPlan,
+      pendingResearch: result.pendingResearch ?? false,
+      researchRun: result.researchRun,
       responseReason: runRow.response_reason
         ? String(runRow.response_reason)
         : undefined,
-      aiMessage: {
-        id: result.aiMessageId,
-        roomId,
-        topicId: runRow.topic_id ? String(runRow.topic_id) : undefined,
-        senderType: "ai" as const,
-        senderId: result.employeeId,
-        senderName: result.employeeName,
-        content: result.reply,
-        artifacts: result.artifacts,
-        agentRunId: params.runId,
-      },
+      aiMessage: result.aiMessageId
+        ? {
+            id: result.aiMessageId,
+            roomId,
+            topicId: runRow.topic_id ? String(runRow.topic_id) : undefined,
+            senderType: "ai" as const,
+            senderId: result.employeeId,
+            senderName: result.employeeName,
+            content: result.reply,
+            artifacts: result.artifacts,
+            agentRunId: params.runId,
+          }
+        : undefined,
       metrics: result.metrics,
     });
   } catch (error) {

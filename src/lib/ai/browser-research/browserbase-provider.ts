@@ -122,6 +122,7 @@ export type RunBrowserbaseBrowserResearchOptions = {
   workUnitId?: string;
   createdByUserId?: string;
   client?: SupabaseClient;
+  onLiveSessionReady?: (liveSessionUrl: string) => void | Promise<void>;
 };
 
 function isStagehandLlmRouteError(error: unknown): boolean {
@@ -215,6 +216,9 @@ async function runLiveBrowserResearchSession(
 
     await stagehand.init();
     const liveSessionUrl = stagehand.browserbaseSessionURL;
+    if (liveSessionUrl && options.onLiveSessionReady) {
+      await options.onLiveSessionReady(liveSessionUrl);
+    }
     const page = stagehand.context.pages()[0];
     if (!page) {
       throw new Error("Browserbase session did not expose a page.");

@@ -4,12 +4,14 @@ import {
   BrowserResearchPermissionError,
   getBrowserResearchProviderConfig,
 } from "@/lib/ai/browser-research";
+import { resolveResearchQuery } from "@/lib/ai/research";
 import {
   createAndRunBrowserResearch,
   listBrowserResearchRuns,
 } from "@/lib/ai/browser-research/server";
 import { AuthError, requireAuthUser, requireWorkspaceMembership } from "@/lib/supabase/auth-server";
 import { createServiceRoleClient } from "@/lib/supabase/server";
+import type { RoomMessage } from "@/lib/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -20,14 +22,29 @@ type CreateBody = {
   topicId?: string | null;
   employeeId?: string;
   query?: string;
+  triggerMessageId?: string;
 };
+
+function messageFromRow(row: Record<string, unknown>): RoomMessage {
+  return {
+    id: String(row.id),
+    roomId: String(row.room_id),
+    topicId: row.topic_id ? String(row.topic_id) : undefined,
+    senderType: row.sender_type as RoomMessage["senderType"],
+    senderId: String(row.sender_id),
+    senderName: String(row.sender_name ?? "User"),
+    content: String(row.content ?? ""),
+    createdAt: String(row.created_at),
+  };
+}
 
 export async function POST(request: NextRequest) {
   try {
     const body = (await request.json()) as CreateBody;
     const workspaceId = body.workspaceId?.trim();
     const employeeId = body.employeeId?.trim();
-    const query = body.query?.trim() ?? "";
+    let query = body.query?.trim() ?? "";
+    const triggerMessageId = body.triggerMessageId?.trim();
 
     if (!workspaceId) {
       return NextResponse.json({ error: "workspaceId is required." }, { status: 400 });
@@ -35,27 +52,58 @@ export async function POST(request: NextRequest) {
     if (!employeeId) {
       return NextResponse.json({ error: "employeeId is required." }, { status: 400 });
     }
-    if (!query) {
-      return NextResponse.json({ error: "query is required." }, { status: 400 });
-    }
 
     const { user, client } = await requireAuthUser(request);
     await requireWorkspaceMembership(client, workspaceId, user.id);
 
+    let userQuestion = query;
+    if (triggerMessageId && body.topicId?.trim()) {
+      const topicId = body.topicId.trim();
+      const { data: rows } = await client
+        .from("messages")
+        .select("id, room_id, topic_id, sender_type, sender_id, sender_name, content, created_at")
+        .eq("workspace_id", workspaceId)
+        .eq("topic_id", topicId)
+        .order("created_at", { ascending: true })
+        .limit(40);
+
+      const messages = ((rows ?? []) as Record<string, unknown>[]).map(messageFromRow);
+      const trigger = messages.find((message) => message.id === triggerMessageId);
+      const userMessage = trigger?.content ?? query;
+      const resolved = resolveResearchQuery({
+        messages,
+        userMessage,
+        excludeMessageId: triggerMessageId,
+      });
+      query = resolved.query;
+      userQuestion = resolved.userQuestion;
+    }
+
+    if (!query) {
+      return NextResponse.json({ error: "query is required." }, { status: 400 });
+    }
+
     const serviceClient = createServiceRoleClient();
-    const { run, chatReply } = await createAndRunBrowserResearch(serviceClient, {
+    const { run, chatReply, async: isAsync } = await createAndRunBrowserResearch(serviceClient, {
       workspaceId,
       roomId: body.roomId?.trim() || undefined,
       topicId: body.topicId?.trim() || undefined,
       employeeId,
       createdBy: user.id,
       query,
+      triggerMessageId,
+      userQuestion,
+      resolvedFrom: triggerMessageId ? "thread" : undefined,
     });
 
     return NextResponse.json({
       run,
       chatReply,
-      message: browserResearchCompletedMessage(run.provider),
+      async: isAsync,
+      resolvedQuery: query,
+      message: isAsync
+        ? "Live browser research started."
+        : browserResearchCompletedMessage(run.provider),
       config: getBrowserResearchProviderConfig(),
     });
   } catch (error) {

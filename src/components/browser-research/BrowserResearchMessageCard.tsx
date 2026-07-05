@@ -11,7 +11,7 @@ import { authHeaders } from "@/lib/api/auth-client";
 import { parseJsonResponse } from "@/lib/api/parse-json-response";
 import { Button } from "@/components/ui";
 import { cn, timeAgo } from "@/lib/utils";
-import { ExternalLink, FileText, Globe, Loader2 } from "lucide-react";
+import { ExternalLink, FileText, Globe, Loader2, MonitorPlay } from "lucide-react";
 import { useEffect, useState } from "react";
 
 type BrowserResearchMessageCardProps = {
@@ -72,9 +72,17 @@ export function BrowserResearchMessageCard({
   employeeName,
   pending = false,
 }: BrowserResearchMessageCardProps) {
+  const [showLiveEmbed, setShowLiveEmbed] = useState(false);
   const reportArtifactId =
     typeof run.metadata?.reportArtifactId === "string" ? run.metadata.reportArtifactId : undefined;
+  const liveSessionUrl =
+    typeof run.metadata?.liveSessionUrl === "string" ? run.metadata.liveSessionUrl : undefined;
+  const resolvedQuery =
+    typeof run.metadata?.resolvedQuery === "string" ? run.metadata.resolvedQuery : run.query;
   const evidenceSources = run.mockSources.filter((source) => source.evidenceId);
+  const isLiveActive =
+    pending || run.status === "running" || run.status === "planning" || run.status === "created";
+  const showLiveViewer = run.provider === "browserbase" && Boolean(liveSessionUrl) && isLiveActive;
 
   const openReport = () => {
     if (!reportArtifactId || !topicId) return;
@@ -103,7 +111,7 @@ export function BrowserResearchMessageCard({
         <span
           className={cn(
             "rounded-full px-2 py-0.5 text-[10px] font-medium",
-            pending || run.status === "running" || run.status === "planning"
+            isLiveActive
               ? "bg-amber-50 text-amber-800"
               : run.status === "completed"
                 ? "bg-emerald-50 text-emerald-800"
@@ -114,13 +122,48 @@ export function BrowserResearchMessageCard({
         </span>
       </div>
 
-      <p className="text-[13px] font-medium text-ink-2">{run.query}</p>
+      <p className="text-[13px] font-medium text-ink-2">{resolvedQuery}</p>
 
-      {(pending || run.status === "running" || run.status === "planning") && (
+      {isLiveActive && (
         <p className="mt-2 flex items-center gap-1.5 text-xs text-ink-3">
           <Loader2 className="h-3.5 w-3.5 animate-spin" />
-          Browsing sources and extracting findings…
+          {run.provider === "browserbase"
+            ? BROWSER_RESEARCH_UI_COPY.liveBrowsingStatus
+            : BROWSER_RESEARCH_UI_COPY.searchingStatus}
         </p>
+      )}
+
+      {showLiveViewer && liveSessionUrl && (
+        <div className="mt-3 space-y-2">
+          <div className="flex flex-wrap gap-2">
+            <a
+              href={liveSessionUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border bg-surface px-3 text-xs font-medium text-ink hover:bg-muted"
+            >
+              <MonitorPlay className="h-3.5 w-3.5" />
+              {BROWSER_RESEARCH_UI_COPY.watchLiveBrowser}
+              <ExternalLink className="h-3 w-3 opacity-60" />
+            </a>
+            <Button
+              size="sm"
+              variant="ghost"
+              type="button"
+              onClick={() => setShowLiveEmbed((open) => !open)}
+            >
+              {showLiveEmbed ? "Hide embed" : "Embed preview"}
+            </Button>
+          </div>
+          {showLiveEmbed && (
+            <iframe
+              src={liveSessionUrl}
+              className="h-[360px] w-full rounded-lg border border-border bg-white"
+              title={BROWSER_RESEARCH_UI_COPY.liveBrowserEmbedTitle}
+              sandbox="allow-scripts allow-same-origin allow-popups"
+            />
+          )}
+        </div>
       )}
 
       {run.findings.length > 0 && (

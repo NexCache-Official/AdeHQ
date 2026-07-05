@@ -24,6 +24,7 @@ import {
   shouldExecuteBrowserResearchViaRuntime,
 } from "./runtime-shadow";
 import { estimateTavilyResearchWorkMinutes, runTavilyBrowserResearchProvider } from "./tavily-provider";
+import { scheduleBrowserResearchRunExecution, shouldRunBrowserResearchAsync } from "./async-execute";
 import {
   BROWSER_RESEARCH_DEFAULT_WORK_MINUTES,
   BROWSER_RESEARCH_QUERY_MAX_LENGTH,
@@ -264,6 +265,11 @@ export type CreateBrowserResearchRunParams = {
   query: string;
   runId?: string;
   provider?: BrowserResearchProvider;
+  triggerMessageId?: string;
+  userQuestion?: string;
+  plannerReasoning?: string;
+  resolvedFrom?: string;
+  agentRunId?: string;
 };
 
 export type ExecuteBrowserResearchContext = {
@@ -275,6 +281,7 @@ export type ExecuteBrowserResearchContext = {
   topicId?: string;
   createdBy?: string;
   client?: SupabaseClient;
+  onLiveSessionReady?: (liveSessionUrl: string) => void | Promise<void>;
 };
 
 async function executeBrowserResearchProvider(
@@ -294,6 +301,7 @@ async function executeBrowserResearchProvider(
         workUnitId: context?.workUnitId,
         createdByUserId: context?.createdBy,
         client: context?.client,
+        onLiveSessionReady: context?.onLiveSessionReady,
       });
       return result;
     } catch (error) {
@@ -444,6 +452,12 @@ export async function createBrowserResearchRun(
       searchProvider: provider,
       providerFallbackReason: "fallbackReason" in resolved ? resolved.fallbackReason : undefined,
       providerRouteReason: "routeReason" in resolved ? resolved.routeReason : undefined,
+      triggerMessageId: params.triggerMessageId,
+      userQuestion: params.userQuestion ?? params.query,
+      resolvedQuery: params.query,
+      plannerReasoning: params.plannerReasoning,
+      resolvedFrom: params.resolvedFrom,
+      agentRunId: params.agentRunId,
       routingPreview: {
         providerRoute: routing.providerRoute,
         runtimeMode: routing.runtimeMode,
@@ -476,6 +490,7 @@ export async function runBrowserResearchRun(
   client: SupabaseClient,
   workspaceId: string,
   runId: string,
+  options?: { agentRunId?: string },
 ): Promise<{ run: BrowserResearchRun; chatReply: RoomMessage | null }> {
   const existing = await getBrowserResearchRun(client, workspaceId, runId);
   if (!existing) {
@@ -551,6 +566,19 @@ export async function runBrowserResearchRun(
       topicId: existing.topicId,
       createdBy: existing.createdBy,
       client,
+      onLiveSessionReady: async (liveSessionUrl) => {
+        const current = await getBrowserResearchRun(client, workspaceId, runId);
+        await patchRun(client, workspaceId, runId, {
+          status: "running",
+          started_at: current?.startedAt ?? nowISO(),
+          metadata: {
+            ...(current?.metadata ?? {}),
+            liveSessionUrl,
+            liveSessionStartedAt: nowISO(),
+            agentRunId: options?.agentRunId ?? current?.metadata?.agentRunId,
+          },
+        });
+      },
     });
 
     let completedResult = result;
@@ -707,9 +735,20 @@ export async function runBrowserResearchMock(
 export async function createAndRunBrowserResearch(
   client: SupabaseClient,
   params: CreateBrowserResearchRunParams,
-): Promise<{ run: BrowserResearchRun; chatReply: RoomMessage | null }> {
+): Promise<{ run: BrowserResearchRun; chatReply: RoomMessage | null; async: boolean }> {
   const created = await createBrowserResearchRun(client, params);
-  return runBrowserResearchRun(client, params.workspaceId, created.id);
+  if (shouldRunBrowserResearchAsync(created.provider)) {
+    scheduleBrowserResearchRunExecution({
+      runId: created.id,
+      workspaceId: params.workspaceId,
+      agentRunId: params.agentRunId,
+    });
+    return { run: created, chatReply: null, async: true };
+  }
+  const result = await runBrowserResearchRun(client, params.workspaceId, created.id, {
+    agentRunId: params.agentRunId,
+  });
+  return { ...result, async: false };
 }
 
 /** @deprecated Use createAndRunBrowserResearch */

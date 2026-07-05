@@ -1,7 +1,14 @@
 import type { AIEmployee, MemoryEntry, ProjectRoom, RoomMessage, RoomTopic, SavedArtifactType, Workspace } from "@/lib/types";
 import type { EmployeeRoleKey } from "@/lib/types";
+import type { BrowserAccess } from "@/lib/ai/intelligence-policy";
 import { isMayaEmployee } from "@/lib/maya-employee";
 import type { TopicSummary } from "@/lib/topic-summary/types";
+
+export type ResearchCapabilitiesPrompt = {
+  tavily: boolean;
+  browserbase: boolean;
+  browserAccess: BrowserAccess;
+};
 
 type PromptContext = {
   employee: AIEmployee;
@@ -17,6 +24,7 @@ type PromptContext = {
   userMessage: string;
   fileContextPrompt?: string;
   artifactIntent?: { type: SavedArtifactType; instruction?: string } | null;
+  researchCapabilities?: ResearchCapabilitiesPrompt;
 };
 
 function formatTopicSummaryForPrompt(summary: TopicSummary): string {
@@ -111,8 +119,36 @@ function connectedLiveTools(tools: AIEmployee["tools"]): boolean {
   );
 }
 
-function coordinationAndTrustRules(tools: AIEmployee["tools"]): string {
-  const hasLiveTools = connectedLiveTools(tools);
+function researchCapabilityRules(caps?: ResearchCapabilitiesPrompt): string {
+  if (!caps || caps.browserAccess === "none") {
+    return "";
+  }
+
+  const hasProviders = caps.tavily || caps.browserbase;
+  if (!hasProviders) {
+    return `- Browser research access is enabled (${caps.browserAccess}) but live search providers are not configured yet — note when verified data requires setup.`;
+  }
+
+  return [
+    `- Web research is available in this workspace${
+      caps.tavily ? " (fast search for recent facts)" : ""
+    }${caps.browserbase ? " (live browsing for complex sites)" : ""}.`,
+    "- For recent factual questions (funding, news, market data), the system may run a web search automatically before your reply.",
+    "- Do NOT say you lack live access when search can run — either answer from provided findings or say you're looking it up.",
+    "- If no search ran and verified data is missing, say what you can prepare now and what still needs lookup or uploaded files.",
+  ].join("\n");
+}
+
+function coordinationAndTrustRules(
+  tools: AIEmployee["tools"],
+  researchCapabilities?: ResearchCapabilitiesPrompt,
+): string {
+  const hasConnectedTools = connectedLiveTools(tools);
+  const hasResearch =
+    Boolean(researchCapabilities?.tavily || researchCapabilities?.browserbase) &&
+    researchCapabilities?.browserAccess !== "none";
+  const hasLiveTools = hasConnectedTools || hasResearch;
+  const researchRules = researchCapabilityRules(researchCapabilities);
   return `
 Mention etiquette:
 - When directly asking, assigning, handing off, challenging, or coordinating with another participant, use a real @mention (e.g. "@Priya Nair can you own…").
@@ -123,6 +159,7 @@ Capability honesty:
 - Do NOT claim you are currently browsing, searching the web, scraping, emailing, sending messages, checking live retailers, identifying live leads, or pulling competitor data unless a connected tool explicitly allows it.
 - Allowed without live tools: research plans, sales models, email templates, clarification questions, assumptions frameworks, artifact drafts from provided context/files.
 - If live data is needed, say what you can prepare now and what needs browser/search access or uploaded source files.
+${researchRules}
 ${hasLiveTools ? "" : "- No browser/search/email tool is connected for you right now — be explicit about that when relevant."}
 
 Health supplement / regulated outreach safety:
@@ -152,8 +189,8 @@ function roleWorkflowRules(roleKey: EmployeeRoleKey): string {
 - Do not claim you sent the email or that it was delivered. Draft only unless Gmail/send is connected with approval.`;
     case "research":
       return `Research workflow: save findings to effects.memory, create tasks for deeper dives, log meaningful research work only.
-- Do NOT claim live web browsing, lead lists, or retailer checks unless browser/search tools are connected.
-- Say what framework/plan you can prepare now; note what needs browser/search or uploaded files for verified data.`;
+- When web search is available, the system may search automatically for funding, news, and other recent facts — do not claim you lack live access in those cases.
+- Say what framework/plan you can prepare now; note what needs browser/search or uploaded files for verified data when search did not run.`;
     case "pm":
       return `PM workflow: break requests into effects.tasks, capture decisions in memory, log planning in workLog.`;
     case "recruiting_manager":
@@ -315,7 +352,7 @@ Important rules:
 - Whenever you complete meaningful work (drafts, research frameworks, outreach plans), populate effects — memory, tasks, workLog with business-meaningful actions only.
 - Chat-only replies are for greetings and clarifying questions — use empty effects.workLog for greetings and banter.
 
-${coordinationAndTrustRules(ctx.employee.tools)}
+${coordinationAndTrustRules(ctx.employee.tools, ctx.researchCapabilities)}
 
 ${fileAwareRules(Boolean(ctx.fileContextPrompt), ctx.artifactIntent)}
 

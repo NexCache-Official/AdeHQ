@@ -52,11 +52,14 @@ import {
   type BrowserResearchRun,
 } from "@/lib/ai/browser-research";
 import {
-  createBrowserResearchRun,
+  fetchBrowserResearchRun,
   fetchBrowserResearchRuns,
+  isActiveBrowserResearchRun,
   sortBrowserResearchRuns,
+  upsertBrowserResearchRun,
   type BrowserResearchProviderConfig,
 } from "@/lib/ai/browser-research/client-api";
+import { useBrowserResearchRealtime } from "@/lib/ai/browser-research/use-browser-research-realtime";
 import { BrowserResearchMessageCard } from "@/components/browser-research/BrowserResearchMessageCard";
 import { STATUS_META } from "@/lib/icons";
 import { effectiveEmployeeStatus, isMayaEmployee } from "@/lib/maya-employee";
@@ -196,10 +199,12 @@ export function RoomChat({
   const [smartAssistSuggestions, setSmartAssistSuggestions] = useState<SuggestedConversationAction[]>([]);
   const [messageLimit, setMessageLimit] = useState(MESSAGE_PAGE);
   const [browserResearchEnabled, setBrowserResearchEnabled] = useState(false);
+  const [agentModeEnabled, setAgentModeEnabled] = useState(false);
   const [browserResearchConfig, setBrowserResearchConfig] =
     useState<BrowserResearchProviderConfig | null>(null);
   const [browserResearchRuns, setBrowserResearchRuns] = useState<BrowserResearchRun[]>([]);
   const [browserResearchBusy, setBrowserResearchBusy] = useState(false);
+  const deliveredResearchRepliesRef = useRef(new Set<string>());
   const bottomRef = useRef<HTMLDivElement>(null);
 
   const allTopicMessages = topic
@@ -434,6 +439,73 @@ export function RoomChat({
     };
   }, [browserResearchAvailable, researchEmployee, state.workspace?.id, topic?.id]);
 
+  const handleResearchRunUpdated = useCallback((run: BrowserResearchRun) => {
+    setBrowserResearchRuns((current) => upsertBrowserResearchRun(current, run));
+  }, []);
+
+  const handleResearchChatReply = useCallback(
+    (message: RoomMessage) => {
+      if (!topic) return;
+      if (deliveredResearchRepliesRef.current.has(message.id)) return;
+      deliveredResearchRepliesRef.current.add(message.id);
+      actions.addMessage(room.id, { ...message, topicId: topic.id });
+      notifyTopicSummaryUpdated(topic.id);
+    },
+    [actions, room.id, topic],
+  );
+
+  useBrowserResearchRealtime({
+    enabled: browserResearchAvailable && backend === "supabase",
+    workspaceId: state.workspace?.id,
+    topicId: topic?.id,
+    onRunUpdated: handleResearchRunUpdated,
+    onChatReply: handleResearchChatReply,
+  });
+
+  const activeResearchRunIds = useMemo(
+    () => browserResearchRuns.filter(isActiveBrowserResearchRun).map((run) => run.id),
+    [browserResearchRuns],
+  );
+
+  // Fallback poll when Realtime misses an update (e.g. brief disconnect).
+  useEffect(() => {
+    if (!state.workspace?.id || !activeResearchRunIds.length || !topic) return;
+
+    let cancelled = false;
+    const pollRuns = async () => {
+      for (const runId of activeResearchRunIds) {
+        if (cancelled) return;
+        try {
+          const { run, chatReply } = await fetchBrowserResearchRun({
+            workspaceId: state.workspace!.id,
+            runId,
+          });
+          if (cancelled) return;
+          setBrowserResearchRuns((current) => upsertBrowserResearchRun(current, run));
+          if (
+            chatReply &&
+            !deliveredResearchRepliesRef.current.has(chatReply.id)
+          ) {
+            handleResearchChatReply(chatReply);
+          }
+        } catch {
+          // non-blocking fallback
+        }
+      }
+    };
+
+    const interval = window.setInterval(() => void pollRuns(), 15000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [
+    activeResearchRunIds,
+    handleResearchChatReply,
+    state.workspace?.id,
+    topic?.id,
+  ]);
+
   const withDebugHeaders = async () => {
     const headers = (await authHeaders()) as Record<string, string>;
     if (readDebugMode()) headers["X-AdeHQ-Debug"] = "true";
@@ -589,7 +661,13 @@ export function RoomChat({
               })),
             });
 
-            if (data.aiMessage) {
+            if (data.researchRun) {
+              setBrowserResearchRuns((current) =>
+                upsertBrowserResearchRun(current, data.researchRun as BrowserResearchRun),
+              );
+            }
+
+            if (data.aiMessage?.content) {
               actions.addMessage(room.id, {
                 id: data.aiMessage.id,
                 topicId: topic.id,
@@ -608,6 +686,13 @@ export function RoomChat({
                   deliveredAt: new Date().toISOString(),
                 });
               }
+              notifyTopicSummaryUpdated(topic.id);
+            } else if (triggerId) {
+              actions.updateMessage(room.id, triggerId, {
+                pending: false,
+                deliveryStatus: "delivered",
+                deliveredAt: new Date().toISOString(),
+              });
             }
 
             if (!isDm) {
@@ -617,7 +702,6 @@ export function RoomChat({
             if (!isDm) {
               void actions.refreshWorkLogForTopic(topic.id);
             }
-            notifyTopicSummaryUpdated(topic.id);
 
             if (!isDm && Array.isArray(data.activatedRuns) && data.activatedRuns.length) {
               for (const activated of data.activatedRuns as QueuedRunClient[]) {
@@ -773,7 +857,12 @@ export function RoomChat({
     mentionsJson?: import("@/lib/types").MentionRef[],
     attachmentFileIds?: string[],
     contextFileIds?: string[],
-    options?: { skipOrchestration?: boolean; throwOnError?: boolean },
+    options?: {
+      skipOrchestration?: boolean;
+      throwOnError?: boolean;
+      preferTavily?: boolean;
+      preferAgentMode?: boolean;
+    },
   ) => {
     if (!topic || topic.status === "archived" || room.status === "archived") return;
 
@@ -824,6 +913,8 @@ export function RoomChat({
         attachmentFileIds,
         contextFileIds,
         ...(options?.skipOrchestration ? { skipAiOrchestration: true } : {}),
+        ...(options?.preferTavily ? { preferTavily: true } : {}),
+        ...(options?.preferAgentMode ? { preferAgentMode: true } : {}),
       };
 
       trace("message", "info", `POST /api/rooms/${room.id}/messages`, body);
@@ -1095,114 +1186,14 @@ export function RoomChat({
       return;
     }
 
-    if (
-      browserResearchEnabled &&
-      browserResearchAvailable &&
-      researchEmployee &&
-      useServerApi &&
-      state.workspace?.id
-    ) {
-      const trimmed = text.trim();
-      if (!trimmed) return;
-      setBrowserResearchBusy(true);
-      setSendError(null);
-      const pendingRun: BrowserResearchRun = {
-        id: "pending",
-        workspaceId: state.workspace.id,
-        roomId: room.id,
-        topicId: topic.id,
-        employeeId: researchEmployee.id,
-        createdBy: state.user?.id ?? "",
-        query: trimmed,
-        status: "running",
-        provider: browserResearchConfig?.effectiveProvider ?? "mock",
-        plannedSteps: [],
-        mockSources: [],
-        findings: [],
-        metadata: {},
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      };
-      setBrowserResearchRuns((current) =>
-        sortBrowserResearchRuns([...current.filter((run) => run.id !== "pending"), pendingRun]),
-      );
-
-      const messageId = uid("msg");
-      const mentions = extractMentions(
-        trimmed,
-        roomEmployees.map((e) => ({ id: e.id, name: e.name })),
-      );
-      actions.addLocalMessage(room.id, {
-        id: messageId,
-        topicId: topic.id,
-        senderType: "human",
-        senderId: state.user?.id ?? "unknown",
-        senderName: state.user?.name ?? "You",
-        content: trimmed,
-        mentions,
-        pending: false,
-        deliveryStatus: "delivered",
-        deliveredAt: new Date().toISOString(),
-      });
-
-      // Persist in background — Browse must not depend on the full messages orchestrator.
-      void (async () => {
-        try {
-          const headers = await withDebugHeaders();
-          await fetch(`/api/rooms/${room.id}/messages/save`, {
-            method: "POST",
-            headers,
-            body: JSON.stringify({
-              content: trimmed,
-              topicId: topic.id,
-              clientMessageId: messageId,
-              mentionsJson,
-            }),
-          });
-        } catch {
-          // non-blocking
-        }
-      })();
-
-      try {
-        trace("browser-research", "info", "POST /api/browser-research/runs", {
-          workspaceId: state.workspace.id,
-          employeeId: researchEmployee.id,
-          query: trimmed,
-          roomId: room.id,
-          topicId: topic.id,
-        });
-        const researchStarted = Date.now();
-        const { run, chatReply, config } = await createBrowserResearchRun({
-          workspaceId: state.workspace.id,
-          employeeId: researchEmployee.id,
-          query: trimmed,
-          roomId: room.id,
-          topicId: topic.id,
-        });
-        trace("browser-research", "success", `Research run ${run.status} (${Date.now() - researchStarted}ms)`, {
-          runId: run.id,
-          provider: run.provider,
-        });
-        setBrowserResearchRuns((current) =>
-          sortBrowserResearchRuns([...current.filter((item) => item.id !== "pending"), run]),
-        );
-        if (chatReply) {
-          actions.addMessage(room.id, { ...chatReply, topicId: topic.id });
-        }
-        if (config) setBrowserResearchConfig(config);
-        void actions.refreshWorkLogForTopic(topic.id);
-      } catch (error) {
-        setBrowserResearchRuns((current) => current.filter((run) => run.id !== "pending"));
-        setSendError(error instanceof Error ? error.message : "Browser research failed.");
-      } finally {
-        setBrowserResearchBusy(false);
-      }
-      return;
-    }
-
     if (useServerApi) {
-      await sendViaServer(text, undefined, mentionsJson, attachmentFileIds, contextFileIds);
+      await sendViaServer(text, undefined, mentionsJson, attachmentFileIds, contextFileIds, {
+        preferTavily: browserResearchEnabled && browserResearchAvailable,
+        preferAgentMode:
+          agentModeEnabled &&
+          browserResearchAvailable &&
+          (browserResearchConfig?.liveReady ?? false),
+      });
       if (isMayaGeneralChat && topic.id) {
         await mayaResponder.handleUserMessage(text);
       }
@@ -1251,8 +1242,10 @@ export function RoomChat({
     ? isRoomArchived
       ? "This room is archived — restore it from the Rooms page to send messages"
       : "This topic is archived — restore it to send messages"
-    : browserResearchEnabled && browserResearchAvailable
-      ? `Research the web with ${researchEmployee?.name ?? "this employee"}…`
+    : agentModeEnabled && browserResearchAvailable
+      ? `Agent mode — ${researchEmployee?.name ?? "this employee"} will browse live…`
+      : browserResearchEnabled && browserResearchAvailable
+        ? `Fast search with ${researchEmployee?.name ?? "this employee"}…`
       : isMayaDmEmployee && isMainChat
         ? "Ask Maya about hiring, your workforce, or AdeHQ…"
         : isMayaHiringMode
@@ -1598,6 +1591,8 @@ export function RoomChat({
             browserResearchAvailable={browserResearchAvailable}
             browserResearchEnabled={browserResearchEnabled}
             onBrowserResearchEnabledChange={setBrowserResearchEnabled}
+            agentModeEnabled={agentModeEnabled}
+            onAgentModeEnabledChange={setAgentModeEnabled}
             browserResearchEffectiveProvider={browserResearchConfig?.effectiveProvider}
             browserResearchTavilyConfigured={browserResearchConfig?.tavilyConfigured ?? false}
             browserResearchLiveReady={browserResearchConfig?.liveReady ?? false}
