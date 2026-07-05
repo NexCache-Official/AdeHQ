@@ -133,9 +133,11 @@ function researchCapabilityRules(caps?: ResearchCapabilitiesPrompt): string {
     `- Web research is available in this workspace${
       caps.tavily ? " (fast search for recent facts)" : ""
     }${caps.browserbase ? " (live browsing for complex sites)" : ""}.`,
-    "- For recent factual questions (funding, news, market data), the system may run a web search automatically before your reply.",
-    "- Do NOT say you lack live access when search can run — either answer from provided findings or say you're looking it up.",
-    "- If no search ran and verified data is missing, say what you can prepare now and what still needs lookup or uploaded files.",
+    "- A lightweight planning step may run first to decide whether search is needed — you will receive findings when search runs.",
+    "- When the user enables Browse or Agent mode on a message, web research runs for that send — answer from those findings; do not refuse or substitute training data.",
+    "- When no search ran, you may answer from training data with a clear date caveat and ask: 'Want me to search for the latest?'",
+    "- Do NOT say you are searching, looking it up, or browsing unless research results are already in this thread.",
+    "- Never send a placeholder like 'Let me look that up' — either use provided findings or offer to search explicitly.",
   ].join("\n");
 }
 
@@ -189,7 +191,8 @@ function roleWorkflowRules(roleKey: EmployeeRoleKey): string {
 - Do not claim you sent the email or that it was delivered. Draft only unless Gmail/send is connected with approval.`;
     case "research":
       return `Research workflow: save findings to effects.memory, create tasks for deeper dives, log meaningful research work only.
-- When web search is available, the system may search automatically for funding, news, and other recent facts — do not claim you lack live access in those cases.
+- A planning step decides whether to search; when Browse/Agent mode is on, search always runs for that message.
+- Without search results, share what you know with a date caveat and offer to verify via search — do not pretend search is in progress.
 - Say what framework/plan you can prepare now; note what needs browser/search or uploaded files for verified data when search did not run.`;
     case "pm":
       return `PM workflow: break requests into effects.tasks, capture decisions in memory, log planning in workLog.`;

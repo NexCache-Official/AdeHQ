@@ -22,6 +22,8 @@ import { refreshTopicStats } from "@/lib/server/topic-stats";
 import { ensureGeneralTopic, topicFromRow } from "@/lib/server/topic-helpers";
 import { fetchTopicSummary } from "@/lib/topic-summary/persistence";
 import { defaultModelModeForRole, normalizeModelMode } from "@/lib/ai/model-catalog";
+import { normalizeIntelligencePolicy } from "@/lib/ai/intelligence-policy";
+import type { EmployeeIntelligencePolicy } from "@/lib/types";
 import { sanitizeReplyForChat } from "@/lib/ai/normalize-model-response";
 import {
   artifactWorkLogAction,
@@ -80,6 +82,23 @@ function employeeFromRow(row: DbRow, tools: ToolAccess[]): AIEmployee {
     participationStyle: row.participation_style
       ? (String(row.participation_style) as AIEmployee["participationStyle"])
       : "balanced_teammate",
+    intelligencePolicy: normalizeIntelligencePolicy(
+      row.intelligence_policy
+        ? jsonObject<EmployeeIntelligencePolicy>(row.intelligence_policy, {
+            defaultMode: "balanced",
+            allowedModes: ["efficient", "balanced", "strong"],
+            workHourProfile: "moderate",
+            browserAccess: "none",
+            routingPreference: "auto",
+          })
+        : undefined,
+      {
+        modelMode: normalizeModelMode(
+          row.model_mode ? String(row.model_mode) : defaultModelModeForRole(row.role_key as AIEmployee["roleKey"]),
+        ),
+        roleKey: row.role_key as AIEmployee["roleKey"],
+      },
+    ),
     lastActiveAt: String(row.last_active_at ?? row.updated_at ?? nowISO()),
     createdAt: String(row.created_at ?? nowISO()),
   };

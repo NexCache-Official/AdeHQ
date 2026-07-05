@@ -165,7 +165,9 @@ export function normalizeIntelligencePolicy(
       raw?.routingPreference ?? fallback?.routingPreference ?? DEFAULT_POLICY.routingPreference,
     ),
     browserAccess: normalizeBrowserAccess(
-      raw?.browserAccess ?? fallback?.browserAccess ?? DEFAULT_POLICY.browserAccess,
+      raw?.browserAccess ??
+        fallback?.browserAccess ??
+        (fallback?.roleKey === "research" ? "research_only" : DEFAULT_POLICY.browserAccess),
     ),
     workHourProfile: normalizeWorkHourProfile(
       raw?.workHourProfile ?? fallback?.workHourProfile ?? DEFAULT_POLICY.workHourProfile,

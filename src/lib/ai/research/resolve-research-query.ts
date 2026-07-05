@@ -21,7 +21,13 @@ const META_RESEARCH_PATTERNS = [
 ];
 
 const TRIVIAL_MESSAGES =
-  /^(yes|no|ok|okay|thanks|thank you|sure|please|go ahead|yep|nope|got it)\.?!?$/i;
+  /^(yes|no|ok|okay|thanks|thank you|sure|please|go ahead|yep|nope|got it|do it|go for it)\.?!?$/i;
+
+const AFFIRMATIVE_ONLY =
+  /^(yes|yeah|yep|sure|ok|okay|please|go ahead|do it|go for it)[,.\s!]*$/i;
+
+const AI_OFFERED_SEARCH =
+  /\b(verify|look (that|it) up|search (for|the|up)|outdated|latest (info|data|news|figures)|check (the )?web|I'?d need to (verify|confirm|check)|want me to search)\b/i;
 
 const MIN_SUBSTANTIVE_LENGTH = 12;
 
@@ -82,6 +88,27 @@ export type ResolveResearchQueryInput = {
   userMessage: string;
   excludeMessageId?: string;
 };
+
+/** User confirmed a prior offer to search (e.g. "yes" after AI asked to verify). */
+export function isAffirmativeSearchFollowUp(
+  userMessage: string,
+  messages: RoomMessage[],
+  excludeMessageId?: string,
+): boolean {
+  const trimmed = userMessage.trim();
+  if (!trimmed) return false;
+  if (!AFFIRMATIVE_ONLY.test(trimmed) && !isMetaResearchInstruction(trimmed)) return false;
+
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    const message = messages[i];
+    if (excludeMessageId && message.id === excludeMessageId) continue;
+    if (message.senderType === "human") break;
+    if (message.senderType === "ai" && AI_OFFERED_SEARCH.test(message.content)) {
+      return true;
+    }
+  }
+  return isMetaResearchInstruction(trimmed);
+}
 
 /**
  * Resolve a standalone web search query from thread context.

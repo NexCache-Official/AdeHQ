@@ -354,7 +354,7 @@ export async function processQueuedAgentRun(
       !artifactIntent &&
       canEmployeeUseBrowserResearch(employee)
     ) {
-      const researchPlan = planResearch({
+      const researchPlan = await planResearch({
         messages: roomWithMessages.messages,
         userMessage: content,
         employee,
@@ -528,8 +528,12 @@ export async function processQueuedAgentRun(
               },
             };
           }
+
+          throw new Error("Research completed without a chat reply.");
         } catch (researchError) {
           console.warn("[AdeHQ research planner]", researchError);
+          const researchErrorMessage =
+            researchError instanceof Error ? researchError.message : "Research failed";
           await appendRunStep(client, {
             workspaceId,
             agentRunId: runId,
@@ -538,10 +542,61 @@ export async function processQueuedAgentRun(
             employeeId,
             stepType: "error",
             title: "Research failed",
-            summary:
-              researchError instanceof Error ? researchError.message : "Research failed",
+            summary: researchErrorMessage,
             status: "failed",
           }).catch(() => undefined);
+
+          const fallbackReply = `I tried to search for that but ran into a problem (${researchErrorMessage}). Want me to try again?`;
+          const { aiMessage, artifacts } = await persistEmployeeEffects(
+            client,
+            workspaceId,
+            roomId,
+            topicId,
+            employee,
+            fallbackReply,
+            { workLog: [], tasks: [], memory: [], approvals: [] },
+            triggerMessageId,
+            runId,
+          );
+          await completeAgentRun(client, workspaceId, runId, {
+            status: "completed",
+            responseMessageId: aiMessage.id,
+          });
+          await finalizeAiRun({
+            client,
+            workspaceId,
+            runId,
+            usageId,
+            responseMessageId: aiMessage.id,
+            actualCostUsd: 0,
+            failed: false,
+          });
+          await client
+            .from("ai_employees")
+            .update({ status: "idle", last_active_at: nowISO() })
+            .eq("workspace_id", workspaceId)
+            .eq("id", employeeId);
+
+          return {
+            reply: fallbackReply,
+            aiMessageId: aiMessage.id,
+            aiMode: "research_failed",
+            employeeId,
+            employeeName: employee.name,
+            artifacts,
+            metrics: {
+              provider: employee.provider,
+              model: employee.model,
+              modelMode,
+              inputTokens: 0,
+              outputTokens: 0,
+              fallbackUsed: false,
+              estimatedCostUsd: 0,
+              durationMs: 0,
+              usageId,
+              agentRunId: runId,
+            },
+          };
         }
       }
     }

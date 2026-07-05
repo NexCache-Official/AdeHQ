@@ -7,8 +7,10 @@
 import {
   isMetaResearchInstruction,
   isMostlyMetaInstruction,
-  planResearch,
+  planResearchSync,
   resolveResearchQuery,
+  resolveUserDirectedResearchPlan,
+  getResearchCapabilities,
 } from "@/lib/ai/research";
 import type { RoomMessage } from "@/lib/types";
 
@@ -93,27 +95,22 @@ function researchEmployee() {
   };
 }
 
-run("planner auto-searches funding questions without browse toggle", () => {
-  const plan = planResearch({
-    messages: [
-      msg("m1", "How much did Conduct AI and Twelve Labs raise recently?"),
-    ],
+run("user-directed: Browse toggle forces search", () => {
+  const plan = planResearchSync({
+    messages: [msg("m1", "How much did Conduct AI and Twelve Labs raise recently?")],
     userMessage: "How much did Conduct AI and Twelve Labs raise recently?",
     employee: researchEmployee(),
+    preferTavily: true,
   });
   assertEqual(plan.action === "search" || plan.action === "browse", true);
-  assertEqual(
-    plan.researchQuery?.includes("Conduct AI") ?? false,
-    true,
-  );
 });
 
-run("planner resolves browse follow-up to underlying query", () => {
+run("user-directed: resolves browse follow-up to underlying query", () => {
   const messages = [
     msg("m1", "How much did Conduct AI and Twelve Labs raise recently?"),
     msg("m2", "Please find out using the browser"),
   ];
-  const plan = planResearch({
+  const plan = planResearchSync({
     messages,
     userMessage: "Please find out using the browser",
     employee: researchEmployee(),
@@ -125,6 +122,57 @@ run("planner resolves browse follow-up to underlying query", () => {
     plan.researchQuery,
     "How much did Conduct AI and Twelve Labs raise recently?",
   );
+});
+
+run("user-directed: yes look it up after funding question", () => {
+  const messages = [
+    msg("m1", "How much did Supabase raise in their last round?"),
+    msg("m2", "I believe they raised around $200M in 2024 but I'd need to verify that.", "ai"),
+    msg("m3", "yes look it up"),
+  ];
+  const plan = planResearchSync({
+    messages,
+    userMessage: "yes look it up",
+    employee: researchEmployee(),
+    excludeMessageId: "m3",
+  });
+  assertEqual(plan.action === "search" || plan.action === "browse", true);
+  assertEqual(plan.researchQuery, "How much did Supabase raise in their last round?");
+});
+
+run("no keyword auto-search without user direction", () => {
+  const employee = researchEmployee();
+  const resolved = resolveResearchQuery({
+    messages: [msg("m1", "how much did Supabase raise in their last round?")],
+    userMessage: "how much did Supabase raise in their last round?",
+  });
+  const caps = getResearchCapabilities(employee);
+  const directed = resolveUserDirectedResearchPlan(
+    {
+      messages: [msg("m1", "how much did Supabase raise in their last round?")],
+      userMessage: "how much did Supabase raise in their last round?",
+      employee,
+    },
+    caps,
+    resolved,
+  );
+  assertEqual(directed, null);
+  const syncPlan = planResearchSync({
+    messages: [msg("m1", "how much did Supabase raise in their last round?")],
+    userMessage: "how much did Supabase raise in their last round?",
+    employee,
+  });
+  assertEqual(syncPlan.action, "reply");
+});
+
+run("user-directed: Agent mode forces search", () => {
+  const plan = planResearchSync({
+    messages: [msg("m1", "Check the pricing page on example.com")],
+    userMessage: "Check the pricing page on example.com",
+    employee: researchEmployee(),
+    preferAgentMode: true,
+  });
+  assertEqual(plan.action === "search" || plan.action === "browse", true);
 });
 
 console.log(`\n${passed} passed, ${failed} failed\n`);
