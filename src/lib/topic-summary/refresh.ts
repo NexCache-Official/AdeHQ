@@ -6,7 +6,8 @@ import {
   generateTopicSummaryPayload,
   loadTopicSummaryGenerationContext,
 } from "./generate";
-import { fetchTopicSummary, upsertTopicSummary, fetchTopicChatClearedAt } from "./persistence";
+import { fetchTopicSummary, upsertTopicSummary } from "./persistence";
+import { fetchTopicChatClearedAtColumn } from "@/lib/conversation-context/epochs";
 import { reconcileTopicSummarySuggestionLifecycle } from "./reconcile-suggestion-lifecycle";
 import {
   TOPIC_SUMMARY_AUTO_COOLDOWN_MS,
@@ -95,19 +96,22 @@ export async function refreshTopicSummary(
     params.roomId,
   );
 
-  const chatClearedAt = await fetchTopicChatClearedAt(client, params.workspaceId, params.topicId);
+  const chatClearedAt = await fetchTopicChatClearedAtColumn(client, params.workspaceId, params.topicId);
   if (chatClearedAt && ctx.messages.length === 0) {
     return { summary: null, refreshed: false, skippedReason: "chat_cleared" };
   }
 
+  const useArchivedSummary = !chatClearedAt;
+  const existingForContext = useArchivedSummary ? existing : null;
+
   if (!manual && ctx.messages.length < 3) {
-    return { summary: existing, refreshed: false, skippedReason: "insufficient_messages" };
+    return { summary: existingForContext, refreshed: false, skippedReason: "insufficient_messages" };
   }
 
   const contextBlock = buildTopicSummaryContextBlock({
     topicTitle: params.topicTitle,
     topicDescription: params.topicDescription,
-    existing,
+    existing: existingForContext,
     messages: ctx.messages,
     tasks: ctx.tasks,
     memory: ctx.memory,

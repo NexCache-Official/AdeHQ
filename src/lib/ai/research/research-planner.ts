@@ -6,6 +6,8 @@ import {
   isBrowserResearchLiveReady,
   isTavilyConfigured,
 } from "@/lib/ai/browser-research/provider-config";
+import { isGatewaySearchConfigured } from "@/lib/ai/search/config";
+import { decideSearchRoute } from "@/lib/ai/search/search-router";
 import type { BrowserAccess } from "@/lib/ai/intelligence-policy";
 import type { AIEmployee, RoomMessage } from "@/lib/types";
 import { inferResearchPlanWithModel } from "./research-planner-infer";
@@ -25,7 +27,12 @@ export const ResearchPlanSchema = {
 export type ResearchPlan = {
   action: "reply" | "search" | "browse" | "clarify";
   researchQuery?: string;
-  provider?: "tavily" | "browserbase";
+  provider?:
+    | "tavily"
+    | "browserbase"
+    | "gateway_perplexity"
+    | "gateway_exa"
+    | "gateway_parallel";
   reasoning: string;
   confidence: number;
   userQuestion: string;
@@ -33,6 +40,7 @@ export type ResearchPlan = {
 };
 
 export type ResearchCapabilities = {
+  gatewaySearch: boolean;
   tavily: boolean;
   browserbase: boolean;
   browserAccess: BrowserAccess;
@@ -54,10 +62,11 @@ export function getResearchCapabilities(
   employee: Pick<AIEmployee, "intelligencePolicy" | "modelMode" | "roleKey">,
 ): ResearchCapabilities {
   const browserAccess = getEmployeeBrowserAccess(employee);
+  const gatewaySearch = isGatewaySearchConfigured();
   const tavily = isTavilyConfigured();
   const browserbase = isBrowserResearchLiveReady();
   const canSearch = canEmployeeUseBrowserResearch(employee);
-  return { tavily, browserbase, browserAccess, canSearch };
+  return { gatewaySearch, tavily, browserbase, browserAccess, canSearch };
 }
 
 function buildSearchPlan(
@@ -74,10 +83,14 @@ function buildSearchPlan(
   };
   const hasUrl = /\bhttps?:\/\//.test(input.userMessage);
   const provider = pickResearchProvider(base.resolved.query, prefs, capabilities);
+  const routeDecision = decideSearchRoute(base.resolved.query, prefs);
   const useBrowse =
-    (prefs.preferAgentMode || hasUrl) && capabilities.browserbase && provider === "browserbase";
+    routeDecision.browserRequired &&
+    (prefs.preferAgentMode || hasUrl) &&
+    capabilities.browserbase &&
+    provider === "browserbase";
 
-  if (!provider && !capabilities.tavily && !capabilities.browserbase) {
+  if (!provider && !capabilities.gatewaySearch && !capabilities.tavily && !capabilities.browserbase) {
     return {
       ...base,
       action: "search",
@@ -91,7 +104,7 @@ function buildSearchPlan(
     ...base,
     action: useBrowse ? "browse" : "search",
     researchQuery: base.resolved.query,
-    provider: provider ?? (capabilities.tavily ? "tavily" : "browserbase"),
+    provider: provider ?? (capabilities.gatewaySearch ? "gateway_perplexity" : capabilities.tavily ? "tavily" : "browserbase"),
     reasoning,
     confidence,
   };

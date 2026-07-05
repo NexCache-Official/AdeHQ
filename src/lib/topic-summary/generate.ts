@@ -1,6 +1,7 @@
 import { generateObject } from "ai";
 import { z } from "zod";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { fetchTopicChatClearedAtColumn } from "@/lib/conversation-context/epochs";
 import { recordAiRuntime } from "@/lib/ai/runtime-log";
 import { resolveModel } from "@/lib/ai/model-catalog";
 import { getRuntimeFlags } from "@/lib/ai/runtime/flags";
@@ -409,15 +410,35 @@ export async function loadTopicSummaryGenerationContext(
   topicId: string,
   roomId: string,
 ) {
+  const chatClearedAt = await fetchTopicChatClearedAtColumn(client, workspaceId, topicId);
+
+  let messagesQuery = client
+    .from("messages")
+    .select("id, sender_name, content, created_at")
+    .eq("workspace_id", workspaceId)
+    .eq("topic_id", topicId)
+    .order("created_at", { ascending: false })
+    .limit(40);
+
+  if (chatClearedAt) {
+    messagesQuery = messagesQuery.gte("created_at", chatClearedAt);
+  }
+
+  let workLogsQuery = client
+    .from("work_log_events")
+    .select("id, action, summary, created_at")
+    .eq("workspace_id", workspaceId)
+    .eq("topic_id", topicId)
+    .order("created_at", { ascending: false })
+    .limit(15);
+
+  if (chatClearedAt) {
+    workLogsQuery = workLogsQuery.gte("created_at", chatClearedAt);
+  }
+
   const [messagesResult, tasksResult, memoryResult, approvalsResult, logsResult, employeesResult] =
     await Promise.all([
-      client
-        .from("messages")
-        .select("id, sender_name, content, created_at")
-        .eq("workspace_id", workspaceId)
-        .eq("topic_id", topicId)
-        .order("created_at", { ascending: false })
-        .limit(40),
+      messagesQuery,
       client
         .from("tasks")
         .select("title, status, priority")
@@ -436,13 +457,7 @@ export async function loadTopicSummaryGenerationContext(
         .eq("workspace_id", workspaceId)
         .eq("topic_id", topicId)
         .limit(10),
-      client
-        .from("work_log_events")
-        .select("id, action, summary")
-        .eq("workspace_id", workspaceId)
-        .eq("topic_id", topicId)
-        .order("created_at", { ascending: false })
-        .limit(15),
+      workLogsQuery,
       client
         .from("ai_employees")
         .select("id, name, role")

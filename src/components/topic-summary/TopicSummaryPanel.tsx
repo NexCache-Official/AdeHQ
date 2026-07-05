@@ -300,7 +300,7 @@ export function TopicSummaryPanel({
 
       {!loading && !hasContent && (
         <p className="text-xs text-ink-3">
-          No workstream summary yet. Use Summarize after meaningful work in this topic.
+          No current summary yet.
         </p>
       )}
 

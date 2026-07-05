@@ -5,8 +5,8 @@ import { isGeneralTopic } from "@/lib/topics";
 import {
   clearTopicMemorySuggestionLifecycle,
   countTopicMessages,
-  markTopicChatCleared,
 } from "@/lib/topic-summary/persistence";
+import { markTopicConversationCleared } from "@/lib/conversation-context/epochs";
 import { nowISO } from "@/lib/utils";
 
 function isMissingRelationError(error: unknown): boolean {
@@ -147,7 +147,12 @@ export async function clearTopicChatHistory(
   const includeRoomOrphans = isGeneralTopic(topic);
 
   await cancelTopicAgentRuns(client, workspaceId, topicId);
-  await markTopicChatCleared(client, workspaceId, topicId);
+  await markTopicConversationCleared(client, {
+    workspaceId,
+    roomId,
+    topicId,
+    scopeType: "topic",
+  });
 
   const messageIds = await collectMessageIdsForClear(
     client,

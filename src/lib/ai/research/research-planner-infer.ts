@@ -6,6 +6,8 @@ import {
   isBrowserResearchLiveReady,
   isTavilyConfigured,
 } from "@/lib/ai/browser-research/provider-config";
+import { isGatewaySearchConfigured } from "@/lib/ai/search/config";
+import { decideSearchRoute } from "@/lib/ai/search/search-router";
 import type { BrowserAccess } from "@/lib/ai/intelligence-policy";
 import { resolveModel, getOutputTokenCap, getTimeoutMs } from "@/lib/ai/model-catalog";
 import { siliconFlowChatModel, siliconFlowProviderOptions } from "@/lib/ai/siliconflow-client";
@@ -33,8 +35,10 @@ function formatRecentMessages(messages: RoomMessage[], limit = 8): string {
 
 function capabilitySummary(caps: ResearchCapabilities): string {
   const lines = [`Browser access: ${caps.browserAccess}`];
-  if (caps.tavily) lines.push("- Fast web search (Tavily) is configured.");
-  else lines.push("- Fast web search (Tavily) is not configured.");
+  if (caps.gatewaySearch) lines.push("- Fast web search (Vercel AI Gateway) is configured.");
+  else lines.push("- Fast web search (Vercel AI Gateway) is not configured.");
+  if (caps.tavily) lines.push("- Backup web search (Tavily) is configured.");
+  else lines.push("- Backup web search (Tavily) is not configured.");
   if (caps.browserbase) lines.push("- Live browser agent (Browserbase) is configured.");
   else lines.push("- Live browser agent (Browserbase) is not configured.");
   return lines.join("\n");
@@ -50,8 +54,8 @@ Think briefly about:
 
 Rules:
 - Choose "reply" for casual chat, opinions, drafts, planning, or stable knowledge that does not need verification.
-- Choose "search" when recent verified facts are needed and fast web search is available.
-- Choose "browse" only for complex live-site tasks when browser agent is available (login flows, multi-page sites, specific URLs).
+- Choose "search" when recent verified facts are needed — prefer fast Gateway search for one-question factual lookups (revenue, funding, news, leadership).
+- Choose "browse" only for complex live-site tasks when browser agent is available (login flows, multi-page sites, screenshots, specific URLs, report-grade workflows).
 - Choose "clarify" only when the request is too vague to act on.
 - Do NOT choose search/browse just because a message mentions funding, news, or a year — judge whether verification is needed now.
 - If training data might be outdated but the user has not asked for verification, prefer "reply" and note that in reasoning (the main model can offer to search).
@@ -109,10 +113,14 @@ function mapModelDecisionToPlan(
   const preferTavily = decision.suggestedProvider === "tavily";
   const preferAgentMode = decision.suggestedProvider === "browserbase";
   const provider = pickResearchProvider(query, { preferTavily, preferAgentMode }, caps);
+  const routeDecision = decideSearchRoute(query, { preferAgentMode, preferFastSearch: preferTavily });
   const useBrowse =
-    decision.action === "browse" && caps.browserbase && provider === "browserbase";
+    decision.action === "browse" &&
+    routeDecision.browserRequired &&
+    caps.browserbase &&
+    provider === "browserbase";
 
-  if (!provider && !caps.tavily && !caps.browserbase) {
+  if (!provider && !caps.gatewaySearch && !caps.tavily && !caps.browserbase) {
     return {
       ...base,
       action: "reply",
@@ -124,7 +132,7 @@ function mapModelDecisionToPlan(
     ...base,
     action: useBrowse ? "browse" : "search",
     researchQuery: query,
-    provider: provider ?? (caps.tavily ? "tavily" : "browserbase"),
+    provider: provider ?? (caps.gatewaySearch ? "gateway_perplexity" : caps.tavily ? "tavily" : "browserbase"),
   };
 }
 

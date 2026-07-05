@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { fetchTopicChatClearedAtColumn } from "@/lib/conversation-context/epochs";
 import { nowISO } from "@/lib/utils";
 import {
   isTerminalSuggestionState,
@@ -195,6 +196,8 @@ export async function fetchTopicSummary(
   workspaceId: string,
   topicId: string,
 ): Promise<TopicSummary | null> {
+  const chatClearedAt = await fetchTopicChatClearedAtColumn(client, workspaceId, topicId);
+
   if (await suppressSummaryIfChatCleared(client, workspaceId, topicId)) {
     return null;
   }
@@ -213,6 +216,14 @@ export async function fetchTopicSummary(
   if (!summaryResult.data) return null;
 
   const summary = topicSummaryFromRow(summaryResult.data as DbRow);
+  if (
+    chatClearedAt &&
+    summary.lastRefreshedAt &&
+    +new Date(summary.lastRefreshedAt) < +new Date(chatClearedAt)
+  ) {
+    return null;
+  }
+
   const metadataLifecycle = parseLifecycle(metadata[LIFECYCLE_METADATA_KEY]);
   return {
     ...summary,

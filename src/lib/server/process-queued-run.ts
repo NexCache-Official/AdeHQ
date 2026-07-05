@@ -55,7 +55,13 @@ import { canEmployeeUseBrowserResearch } from "@/lib/ai/browser-research/permiss
 import {
   executePlannedResearch,
   planResearch,
+  type ResearchPlan,
 } from "@/lib/ai/research";
+import { classifyDmMessageWithSteward } from "@/lib/orchestration/dm-steward";
+import {
+  fetchTopicSummary,
+} from "@/lib/topic-summary/persistence";
+import { fetchTopicChatClearedAtColumn, fetchTopicContextEpochId } from "@/lib/conversation-context/epochs";
 import { createServiceRoleClient } from "@/lib/supabase/server";
 
 async function persistRunOrchestrationPhase(
@@ -92,6 +98,10 @@ async function persistRunOrchestrationPhase(
 }
 
 type DbRow = Record<string, unknown>;
+
+function dmStewardUsesArchivedSummary(chatClearedAt: string | null): boolean {
+  return !chatClearedAt;
+}
 
 export class AgentRunClaimError extends Error {
   code: "already_claimed_or_not_ready" | "cancelled" | "not_found";
@@ -347,6 +357,7 @@ export async function processQueuedAgentRun(
 
     const preferTavily = Boolean(runMetadata.preferTavily ?? runMetadata.preferResearch);
     const preferAgentMode = Boolean(runMetadata.preferAgentMode ?? runMetadata.preferBrowserbase);
+    const isDmRoom = ctx.room.kind === "dm";
 
     if (
       !isGreetingRun &&
@@ -354,16 +365,97 @@ export async function processQueuedAgentRun(
       !artifactIntent &&
       canEmployeeUseBrowserResearch(employee)
     ) {
-      const researchPlan = await planResearch({
-        messages: roomWithMessages.messages,
-        userMessage: content,
-        employee,
-        preferTavily,
-        preferAgentMode,
-        excludeMessageId: triggerMessageId,
-      });
+      let researchPlan: ResearchPlan | null = null;
+
+      if (isDmRoom) {
+        const [chatClearedAt, epochId, topicSummary] = await Promise.all([
+          fetchTopicChatClearedAtColumn(client, workspaceId, topicId),
+          fetchTopicContextEpochId(client, workspaceId, topicId),
+          fetchTopicSummary(client, workspaceId, topicId),
+        ]);
+
+        const dmSteward = classifyDmMessageWithSteward({
+          workspaceId,
+          dmRoomId: roomId,
+          topicId,
+          employeeId,
+          employeeName: employee.name,
+          employeeRole: employee.role,
+          messageId: triggerMessageId,
+          messageContent: content,
+          recentMessages: roomWithMessages.messages.slice(-12).map((m) => ({
+            id: m.id,
+            authorType: m.senderType === "human" ? "human" : "ai",
+            content: m.content,
+            createdAt: m.createdAt,
+          })),
+          currentSummary: dmStewardUsesArchivedSummary(chatClearedAt)
+            ? topicSummary?.summary ?? null
+            : null,
+          chatClearedAt,
+          currentEpochId: epochId,
+          preferAgentMode,
+          preferFastSearch: preferTavily,
+        });
+
+        runMetadata.dmSteward = {
+          intent: dmSteward.intent,
+          route: dmSteward.route,
+          reason: dmSteward.reason,
+        };
+
+        if (dmSteward.route === "gateway_search" || dmSteward.route === "tavily_search") {
+          researchPlan = {
+            action: "search",
+            researchQuery: content.trim(),
+            provider:
+              dmSteward.route === "tavily_search" ? "tavily" : "gateway_perplexity",
+            reasoning: dmSteward.reason,
+            confidence: 0.95,
+            userQuestion: content.trim(),
+            resolved: {
+              query: content.trim(),
+              userQuestion: content.trim(),
+              resolvedFrom: "user_message",
+              wasMetaInstruction: false,
+            },
+          };
+        } else if (dmSteward.route === "browser_research") {
+          researchPlan = {
+            action: "browse",
+            researchQuery: content.trim(),
+            provider: "browserbase",
+            reasoning: dmSteward.reason,
+            confidence: 0.95,
+            userQuestion: content.trim(),
+            resolved: {
+              query: content.trim(),
+              userQuestion: content.trim(),
+              resolvedFrom: "user_message",
+              wasMetaInstruction: false,
+            },
+          };
+        } else if (dmSteward.route === "employee_model" || dmSteward.route === "ask_clarification") {
+          researchPlan = null;
+        }
+      }
+
+      if (!researchPlan) {
+        researchPlan = await planResearch({
+          messages: roomWithMessages.messages,
+          userMessage: content,
+          employee,
+          preferTavily,
+          preferAgentMode,
+          excludeMessageId: triggerMessageId,
+        });
+      }
 
       if (researchPlan.action === "search" || researchPlan.action === "browse") {
+        const isGatewaySearch =
+          researchPlan.provider === "gateway_perplexity" ||
+          researchPlan.provider === "gateway_exa" ||
+          researchPlan.provider === "gateway_parallel";
         await appendRunStep(client, {
           workspaceId,
           agentRunId: runId,
@@ -371,7 +463,12 @@ export async function processQueuedAgentRun(
           topicId,
           employeeId,
           stepType: "tool_call",
-          title: researchPlan.action === "browse" ? "Live browser research" : "Searching the web",
+          title:
+            researchPlan.action === "browse"
+              ? "Live browser research"
+              : isGatewaySearch
+                ? "Quick web search"
+                : "Searching the web",
           summary: researchPlan.reasoning,
           status: "running",
         });
@@ -397,7 +494,7 @@ export async function processQueuedAgentRun(
             agentRunId: runId,
           });
 
-          if (researchResult.async) {
+          if (researchResult.async && researchResult.run) {
             await appendRunStep(client, {
               workspaceId,
               agentRunId: runId,
@@ -458,6 +555,10 @@ export async function processQueuedAgentRun(
               .eq("workspace_id", workspaceId)
               .eq("id", researchResult.chatReply.id);
 
+            const completionLabel = researchResult.searchAnswer
+              ? `gateway search · ${researchPlan.resolved.query.slice(0, 120)}`
+              : `${researchResult.run?.provider ?? "search"} · ${researchPlan.resolved.query.slice(0, 120)}`;
+
             await appendRunStep(client, {
               workspaceId,
               agentRunId: runId,
@@ -465,8 +566,8 @@ export async function processQueuedAgentRun(
               topicId,
               employeeId,
               stepType: "tool_call",
-              title: "Research complete",
-              summary: `${researchResult.run.provider} · ${researchPlan.resolved.query.slice(0, 120)}`,
+              title: researchResult.searchAnswer ? "Quick search complete" : "Research complete",
+              summary: completionLabel,
               status: "success",
             });
 
@@ -485,7 +586,10 @@ export async function processQueuedAgentRun(
               runId,
               usageId,
               responseMessageId: researchResult.chatReply.id,
-              actualCostUsd: researchResult.run.estimatedCostUsd ?? 0,
+              actualCostUsd:
+                researchResult.searchAnswer?.estimatedCostUsd ??
+                researchResult.run?.estimatedCostUsd ??
+                0,
               failed: false,
             });
 
@@ -496,32 +600,51 @@ export async function processQueuedAgentRun(
               .eq("id", employeeId);
 
             if (!isGreetingRun) {
-              scheduleTopicSummaryRefresh(client, {
-                workspaceId,
-                roomId,
-                topicId,
-                topicTitle: ctx.topic.title,
-                topicDescription: ctx.topic.description,
-                trigger: "meaningful_ai_reply",
-                employeeId,
-              });
+              if (isDmRoom) {
+                await refreshTopicSummary(client, {
+                  workspaceId,
+                  roomId,
+                  topicId,
+                  topicTitle: ctx.topic.title,
+                  topicDescription: ctx.topic.description,
+                  trigger: "meaningful_ai_reply",
+                  employeeId,
+                  logWorkEvents: false,
+                });
+              } else {
+                scheduleTopicSummaryRefresh(client, {
+                  workspaceId,
+                  roomId,
+                  topicId,
+                  topicTitle: ctx.topic.title,
+                  topicDescription: ctx.topic.description,
+                  trigger: "meaningful_ai_reply",
+                  employeeId,
+                });
+              }
             }
+
+            const searchProvider =
+              researchResult.searchAnswer?.route ?? researchResult.run?.provider ?? "search";
 
             return {
               reply: researchResult.chatReply.content,
               aiMessageId: researchResult.chatReply.id,
-              aiMode: "research",
+              aiMode: researchResult.searchAnswer ? "gateway_search" : "research",
               employeeId,
               employeeName: employee.name,
               researchRun: researchResult.run,
               metrics: {
-                provider: researchResult.run.provider,
-                model: researchResult.run.provider,
+                provider: searchProvider,
+                model: searchProvider,
                 modelMode,
                 inputTokens: 0,
                 outputTokens: 0,
                 fallbackUsed: false,
-                estimatedCostUsd: researchResult.run.estimatedCostUsd ?? 0,
+                estimatedCostUsd:
+                  researchResult.searchAnswer?.estimatedCostUsd ??
+                  researchResult.run?.estimatedCostUsd ??
+                  0,
                 durationMs: 0,
                 usageId,
                 agentRunId: runId,
