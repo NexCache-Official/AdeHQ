@@ -6,7 +6,7 @@ import {
   generateTopicSummaryPayload,
   loadTopicSummaryGenerationContext,
 } from "./generate";
-import { fetchTopicSummary, upsertTopicSummary } from "./persistence";
+import { fetchTopicSummary, upsertTopicSummary, fetchTopicChatClearedAt } from "./persistence";
 import { reconcileTopicSummarySuggestionLifecycle } from "./reconcile-suggestion-lifecycle";
 import {
   TOPIC_SUMMARY_AUTO_COOLDOWN_MS,
@@ -94,6 +94,11 @@ export async function refreshTopicSummary(
     params.topicId,
     params.roomId,
   );
+
+  const chatClearedAt = await fetchTopicChatClearedAt(client, params.workspaceId, params.topicId);
+  if (chatClearedAt && ctx.messages.length === 0) {
+    return { summary: null, refreshed: false, skippedReason: "chat_cleared" };
+  }
 
   if (!manual && ctx.messages.length < 3) {
     return { summary: existing, refreshed: false, skippedReason: "insufficient_messages" };

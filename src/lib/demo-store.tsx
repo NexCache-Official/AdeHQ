@@ -1431,7 +1431,14 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           ...s,
           topics: s.topics.map((t) =>
             t.id === topicId
-              ? { ...t, summary: undefined, pinnedSummary: null, updatedAt: nowISO() }
+              ? {
+                  ...t,
+                  summary: undefined,
+                  pinnedSummary: null,
+                  messageCount: 0,
+                  lastMessageAt: null,
+                  updatedAt: nowISO(),
+                }
               : t,
           ),
           rooms: s.rooms.map((room) =>

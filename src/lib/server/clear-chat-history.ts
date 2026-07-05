@@ -1,6 +1,12 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { refreshTopicStats } from "@/lib/server/topic-stats";
-import { clearTopicMemorySuggestionLifecycle } from "@/lib/topic-summary/persistence";
+import { topicFromRow } from "@/lib/server/topic-helpers";
+import { isGeneralTopic } from "@/lib/topics";
+import {
+  clearTopicMemorySuggestionLifecycle,
+  countTopicMessages,
+  markTopicChatCleared,
+} from "@/lib/topic-summary/persistence";
 import { nowISO } from "@/lib/utils";
 
 function isMissingRelationError(error: unknown): boolean {
@@ -13,6 +19,114 @@ function isMissingRelationError(error: unknown): boolean {
   return msg.includes("does not exist") || msg.includes("Could not find the table");
 }
 
+async function cancelTopicAgentRuns(
+  client: SupabaseClient,
+  workspaceId: string,
+  topicId: string,
+): Promise<void> {
+  const { data: activeRuns, error } = await client
+    .from("agent_runs")
+    .select("id, run_metadata, status")
+    .eq("workspace_id", workspaceId)
+    .eq("topic_id", topicId)
+    .in("status", ["queued", "waiting", "running"]);
+  if (error && !isMissingRelationError(error)) throw error;
+
+  for (const row of (activeRuns as Record<string, unknown>[] | null) ?? []) {
+    const runId = String(row.id);
+    const status = String(row.status);
+    const meta = { ...((row.run_metadata as Record<string, unknown>) ?? {}) };
+    meta.collaborationStatus = "cancelled";
+    meta.cancelReason = "chat_history_cleared";
+
+    if (status === "queued" || status === "waiting") {
+      const { error: cancelError } = await client
+        .from("agent_runs")
+        .update({
+          status: "cancelled",
+          error_message: "Chat history cleared",
+          run_metadata: meta,
+          completed_at: nowISO(),
+        })
+        .eq("workspace_id", workspaceId)
+        .eq("id", runId);
+      if (cancelError && !isMissingRelationError(cancelError)) throw cancelError;
+    } else if (status === "running") {
+      const { error: failError } = await client
+        .from("agent_runs")
+        .update({
+          status: "failed",
+          error_message: "Chat history cleared",
+          run_metadata: meta,
+          completed_at: nowISO(),
+        })
+        .eq("workspace_id", workspaceId)
+        .eq("id", runId);
+      if (failError && !isMissingRelationError(failError)) throw failError;
+    }
+  }
+}
+
+async function collectMessageIdsForClear(
+  client: SupabaseClient,
+  workspaceId: string,
+  roomId: string,
+  topicId: string,
+  includeRoomOrphans: boolean,
+): Promise<string[]> {
+  const ids = new Set<string>();
+
+  const { data: topicMessages, error: topicMessagesError } = await client
+    .from("messages")
+    .select("id")
+    .eq("workspace_id", workspaceId)
+    .eq("topic_id", topicId);
+  if (topicMessagesError) throw topicMessagesError;
+  for (const row of topicMessages ?? []) ids.add(String(row.id));
+
+  if (includeRoomOrphans) {
+    const { data: orphanMessages, error: orphanError } = await client
+      .from("messages")
+      .select("id")
+      .eq("workspace_id", workspaceId)
+      .eq("room_id", roomId)
+      .is("topic_id", null);
+    if (orphanError) throw orphanError;
+    for (const row of orphanMessages ?? []) ids.add(String(row.id));
+  }
+
+  return Array.from(ids);
+}
+
+async function deleteMessageGraph(
+  client: SupabaseClient,
+  workspaceId: string,
+  messageIds: string[],
+): Promise<void> {
+  if (!messageIds.length) return;
+
+  const { error: reactionsError } = await client
+    .from("message_reactions")
+    .delete()
+    .eq("workspace_id", workspaceId)
+    .in("message_id", messageIds);
+  if (reactionsError && !isMissingRelationError(reactionsError)) throw reactionsError;
+
+  const { error: attachmentsError } = await client
+    .from("message_attachments")
+    .delete()
+    .eq("workspace_id", workspaceId)
+    .in("message_id", messageIds);
+  if (attachmentsError && !isMissingRelationError(attachmentsError)) throw attachmentsError;
+
+  const { error: messagesDeleteError } = await client
+    .from("messages")
+    .delete()
+    .eq("workspace_id", workspaceId)
+    .in("id", messageIds);
+  if (messagesDeleteError) throw messagesDeleteError;
+}
+
 /** Permanently remove chat messages for a topic while keeping the topic (and tasks, memory, etc.). */
 export async function clearTopicChatHistory(
   client: SupabaseClient,
@@ -20,37 +134,29 @@ export async function clearTopicChatHistory(
   roomId: string,
   topicId: string,
 ): Promise<{ deletedMessageCount: number }> {
-  const { data: messages, error: messagesLookupError } = await client
-    .from("messages")
-    .select("id")
+  const { data: topicRow, error: topicError } = await client
+    .from("topics")
+    .select("*")
     .eq("workspace_id", workspaceId)
-    .eq("topic_id", topicId);
-  if (messagesLookupError) throw messagesLookupError;
+    .eq("id", topicId)
+    .maybeSingle();
+  if (topicError) throw topicError;
+  if (!topicRow) throw new Error("Topic not found.");
 
-  const messageIds = (messages ?? []).map((row) => String(row.id));
+  const topic = topicFromRow(topicRow as Record<string, unknown>);
+  const includeRoomOrphans = isGeneralTopic(topic);
 
-  if (messageIds.length) {
-    const { error: reactionsError } = await client
-      .from("message_reactions")
-      .delete()
-      .eq("workspace_id", workspaceId)
-      .in("message_id", messageIds);
-    if (reactionsError) throw reactionsError;
+  await cancelTopicAgentRuns(client, workspaceId, topicId);
+  await markTopicChatCleared(client, workspaceId, topicId);
 
-    const { error: attachmentsError } = await client
-      .from("message_attachments")
-      .delete()
-      .eq("workspace_id", workspaceId)
-      .in("message_id", messageIds);
-    if (attachmentsError && !isMissingRelationError(attachmentsError)) throw attachmentsError;
-  }
-
-  const { error: messagesDeleteError } = await client
-    .from("messages")
-    .delete()
-    .eq("workspace_id", workspaceId)
-    .eq("topic_id", topicId);
-  if (messagesDeleteError) throw messagesDeleteError;
+  const messageIds = await collectMessageIdsForClear(
+    client,
+    workspaceId,
+    roomId,
+    topicId,
+    includeRoomOrphans,
+  );
+  await deleteMessageGraph(client, workspaceId, messageIds);
 
   await client
     .from("topic_summaries")
@@ -77,8 +183,25 @@ export async function clearTopicChatHistory(
     .eq("id", topicId);
 
   await clearTopicMemorySuggestionLifecycle(client, workspaceId, topicId);
-
   await refreshTopicStats(client, topicId);
+
+  const remaining = await countTopicMessages(client, workspaceId, topicId);
+  if (remaining > 0) {
+    throw new Error(`Clear incomplete: ${remaining} message(s) still remain for this topic.`);
+  }
+
+  if (includeRoomOrphans) {
+    const { count: orphanCount, error: orphanCountError } = await client
+      .from("messages")
+      .select("id", { count: "exact", head: true })
+      .eq("workspace_id", workspaceId)
+      .eq("room_id", roomId)
+      .is("topic_id", null);
+    if (orphanCountError) throw orphanCountError;
+    if ((orphanCount ?? 0) > 0) {
+      throw new Error(`Clear incomplete: ${orphanCount} untagged message(s) remain in this room.`);
+    }
+  }
 
   return { deletedMessageCount: messageIds.length };
 }

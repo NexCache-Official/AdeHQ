@@ -37,14 +37,26 @@ export async function POST(
       return NextResponse.json({ error: "You cannot clear chat history for this topic." }, { status: 403 });
     }
 
+    const serviceClient = createServiceRoleClient();
     const result = await clearTopicChatHistory(
-      createServiceRoleClient(),
+      serviceClient,
       topic.workspaceId,
       topic.roomId,
       topic.id,
     );
 
-    return NextResponse.json({ ...result, cleared: true });
+    const { data: updatedTopicRow } = await serviceClient
+      .from("topics")
+      .select("*")
+      .eq("workspace_id", topic.workspaceId)
+      .eq("id", topic.id)
+      .maybeSingle();
+
+    return NextResponse.json({
+      ...result,
+      cleared: true,
+      topic: updatedTopicRow ? topicFromRow(updatedTopicRow) : topic,
+    });
   } catch (error) {
     if (error instanceof AuthError) {
       return NextResponse.json({ error: error.message }, { status: error.status });

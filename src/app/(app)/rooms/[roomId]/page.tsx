@@ -56,7 +56,7 @@ export default function RoomDetailPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const roomId = params.roomId as string;
-  const { state, actions, backend } = useStore();
+  const { state, actions, backend, hydrated } = useStore();
   const [newTopicOpen, setNewTopicOpen] = useState(false);
   const [topicCreateError, setTopicCreateError] = useState<string | null>(null);
   const [summarizing, setSummarizing] = useState(false);
@@ -410,11 +410,17 @@ export default function RoomDetailPage() {
 
   const clearTopicChat = async () => {
     if (!selectedTopic) return;
+    if (!hydrated) {
+      setTopicActionError("Still loading workspace — try again in a moment.");
+      return;
+    }
     setTopicActionError(null);
     setTopicActionBusy(true);
     try {
-      if (backend === "supabase") {
-        await clearTopicChatHistoryClient(selectedTopic.id);
+      const useRemote = Boolean(state.workspace?.id && state.user);
+      if (useRemote) {
+        const result = await clearTopicChatHistoryClient(selectedTopic.id);
+        if (result.topic) actions.upsertTopic(result.topic);
       }
       actions.clearTopicMessages(roomId, selectedTopic.id);
       clearLocalTopicSummaryUiState(selectedTopic.id);
@@ -430,10 +436,15 @@ export default function RoomDetailPage() {
 
   const clearRoomChat = async () => {
     if (!state.workspace?.id) return;
+    if (!hydrated) {
+      setTopicActionError("Still loading workspace — try again in a moment.");
+      return;
+    }
     setTopicActionError(null);
     setTopicActionBusy(true);
     try {
-      if (backend === "supabase") {
+      const useRemote = Boolean(state.workspace?.id && state.user);
+      if (useRemote) {
         await clearRoomChatHistoryClient(roomId, state.workspace.id);
       }
       for (const topic of roomTopics) {

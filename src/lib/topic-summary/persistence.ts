@@ -15,6 +15,7 @@ import type {
 type DbRow = Record<string, unknown>;
 
 const LIFECYCLE_METADATA_KEY = "memorySuggestionLifecycle";
+export const CHAT_CLEARED_METADATA_KEY = "chatClearedAt";
 
 function parseJsonArray<T>(value: unknown): T[] {
   return Array.isArray(value) ? (value as T[]) : [];
@@ -118,11 +119,86 @@ export async function clearTopicMemorySuggestionLifecycle(
   if (error) throw error;
 }
 
+export async function fetchTopicChatClearedAt(
+  client: SupabaseClient,
+  workspaceId: string,
+  topicId: string,
+): Promise<string | null> {
+  const metadata = await fetchTopicMetadataRecord(client, workspaceId, topicId);
+  const value = metadata[CHAT_CLEARED_METADATA_KEY];
+  return typeof value === "string" && value.trim() ? value : null;
+}
+
+export async function markTopicChatCleared(
+  client: SupabaseClient,
+  workspaceId: string,
+  topicId: string,
+): Promise<void> {
+  const metadata = await fetchTopicMetadataRecord(client, workspaceId, topicId);
+  const timestamp = nowISO();
+  const { error } = await client
+    .from("topics")
+    .update({
+      metadata: { ...metadata, [CHAT_CLEARED_METADATA_KEY]: timestamp },
+      updated_at: timestamp,
+    })
+    .eq("workspace_id", workspaceId)
+    .eq("id", topicId);
+  if (error) throw error;
+}
+
+export async function countTopicMessages(
+  client: SupabaseClient,
+  workspaceId: string,
+  topicId: string,
+): Promise<number> {
+  const { count, error } = await client
+    .from("messages")
+    .select("id", { count: "exact", head: true })
+    .eq("workspace_id", workspaceId)
+    .eq("topic_id", topicId);
+  if (error) throw error;
+  return count ?? 0;
+}
+
+/** When chat was cleared and no messages remain, suppress stale summary rows. */
+export async function suppressSummaryIfChatCleared(
+  client: SupabaseClient,
+  workspaceId: string,
+  topicId: string,
+): Promise<boolean> {
+  const chatClearedAt = await fetchTopicChatClearedAt(client, workspaceId, topicId);
+  if (!chatClearedAt) return false;
+  const messageCount = await countTopicMessages(client, workspaceId, topicId);
+  if (messageCount > 0) return false;
+
+  await client
+    .from("topic_summaries")
+    .delete()
+    .eq("workspace_id", workspaceId)
+    .eq("topic_id", topicId)
+    .then(({ error }) => {
+      if (error && !String(error.message).includes("does not exist")) throw error;
+    });
+
+  await client
+    .from("topics")
+    .update({ summary: null, pinned_summary: null, updated_at: nowISO() })
+    .eq("workspace_id", workspaceId)
+    .eq("id", topicId);
+
+  return true;
+}
+
 export async function fetchTopicSummary(
   client: SupabaseClient,
   workspaceId: string,
   topicId: string,
 ): Promise<TopicSummary | null> {
+  if (await suppressSummaryIfChatCleared(client, workspaceId, topicId)) {
+    return null;
+  }
+
   const [summaryResult, metadata] = await Promise.all([
     client
       .from("topic_summaries")

@@ -3,14 +3,20 @@ import { parseJsonResponse } from "@/lib/api/parse-json-response";
 
 export async function clearTopicChatHistoryClient(topicId: string): Promise<{
   deletedMessageCount: number;
+  topic?: import("@/lib/types").RoomTopic;
 }> {
   const res = await fetch(`/api/topics/${topicId}/clear-chat`, {
     method: "POST",
     headers: await authHeaders(),
+    cache: "no-store",
   });
-  const data = await parseJsonResponse<{ deletedMessageCount?: number; error?: string }>(res);
+  const data = await parseJsonResponse<{
+    deletedMessageCount?: number;
+    topic?: import("@/lib/types").RoomTopic;
+    error?: string;
+  }>(res);
   if (!res.ok) throw new Error(data.error ?? "Failed to clear chat history.");
-  return { deletedMessageCount: data.deletedMessageCount ?? 0 };
+  return { deletedMessageCount: data.deletedMessageCount ?? 0, topic: data.topic };
 }
 
 export async function clearRoomChatHistoryClient(
