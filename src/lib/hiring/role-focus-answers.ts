@@ -1,5 +1,6 @@
 import type { AiEmployeeJobBrief } from "./types";
 import { getRoleByKey } from "./role-library";
+import { detectRecruiterUserIntent, shouldSkipBriefUpdateIntent } from "./recruiter-intents";
 
 const FOCUS_MAP: Record<string, { businessFocus: string; technicalFocus?: string; responsibility: string }> = {
   competitors: {
@@ -103,6 +104,7 @@ export function applyRoleFocusAnswer(
 ): { brief: AiEmployeeJobBrief; focusLabel: string | null } | null {
   const trimmed = answer.trim();
   if (!trimmed || trimmed.length > 120) return null;
+  if (shouldSkipBriefUpdateIntent(detectRecruiterUserIntent(trimmed))) return null;
 
   const role = getRoleByKey(roleKey ?? undefined);
   const chips = role?.questionTemplates.coreWorkChips ?? [];

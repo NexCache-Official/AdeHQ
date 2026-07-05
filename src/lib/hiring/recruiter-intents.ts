@@ -8,16 +8,30 @@ export type RecruiterUserIntent =
 const NEGATIVE_ADJUST =
   /\b(not|don't|do not|unhappy|change|update|adjust|wrong|fix|edit|refine|more detail|instead)\b/i;
 
-export function detectRecruiterUserIntent(text: string): RecruiterUserIntent {
-  const trimmed = text.trim();
-  if (!trimmed) return "gathering";
-  const lower = trimmed.toLowerCase();
+/** User wants to open/review the brief or move forward — not answer a discovery question. */
+export function isProceedToBriefAction(text: string): boolean {
+  const lower = text.trim().toLowerCase();
+  if (!lower) return false;
 
   if (
     /\b(review (the )?job brief|review (the )?brief|show (me )?(the )?brief|open (the )?brief)\b/i.test(
       lower,
     )
   ) {
+    return true;
+  }
+
+  return /\b(go ahead and hire|ready to hire|let'?s hire|proceed to hire|hire now|start hiring|finalize (the )?brief|move to (the )?brief)\b/i.test(
+    lower,
+  );
+}
+
+export function detectRecruiterUserIntent(text: string): RecruiterUserIntent {
+  const trimmed = text.trim();
+  if (!trimmed) return "gathering";
+  const lower = trimmed.toLowerCase();
+
+  if (isProceedToBriefAction(lower)) {
     return "review_brief";
   }
 

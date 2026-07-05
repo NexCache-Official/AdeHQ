@@ -13,6 +13,8 @@ function testIntent(input: string, expected: ReturnType<typeof detectRecruiterUs
 testIntent("im happy, shortlist candidates", "generate_candidates");
 testIntent("I'm happy with the brief", "approve_brief");
 testIntent("Review job brief", "review_brief");
+testIntent("Go ahead and hire", "review_brief");
+testIntent("go ahead and hire", "review_brief");
 testIntent("React", "gathering");
 testIntent("change the mission to focus on growth", "gathering");
 

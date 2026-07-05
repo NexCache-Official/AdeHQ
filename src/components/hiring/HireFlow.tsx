@@ -46,6 +46,7 @@ import {
 } from "@/lib/hiring/maya-recruiter-state";
 import {
   detectRecruiterUserIntent,
+  isProceedToBriefAction,
   mayaReplyForRecruiterIntent,
   shouldSkipBriefUpdateIntent,
 } from "@/lib/hiring/recruiter-intents";
@@ -1121,7 +1122,11 @@ function RecruiterChat({
     readiness.ready ? "Ready to review" : readiness.score >= 50 ? "Almost ready" : "Understanding role…";
 
   const handleChip = (chip: RecruiterSuggestionChip) => {
-    if (chip.intent === "review_brief") {
+    if (
+      chip.intent === "review_brief" ||
+      isProceedToBriefAction(chip.value) ||
+      isProceedToBriefAction(chip.label)
+    ) {
       onReview();
       return;
     }

@@ -8,6 +8,7 @@ import {
   MAYA_EMPLOYEE_TITLE,
   MAYA_RECRUITER_TAGLINE,
 } from "@/lib/hiring/maya";
+import { isProceedToBriefAction } from "@/lib/hiring/recruiter-intents";
 import type { MayaRecruiterState } from "@/lib/hiring/maya-recruiter-state";
 import type {
   AiEmployeeApplicant,
@@ -76,7 +77,11 @@ export function RecruiterChat({
     readiness.ready ? "Ready to review" : readiness.score >= 50 ? "Almost ready" : "Understanding role…";
 
   const handleChip = (chip: RecruiterSuggestionChip) => {
-    if (chip.intent === "review_brief") {
+    if (
+      chip.intent === "review_brief" ||
+      isProceedToBriefAction(chip.value) ||
+      isProceedToBriefAction(chip.label)
+    ) {
       onReview();
       return;
     }
