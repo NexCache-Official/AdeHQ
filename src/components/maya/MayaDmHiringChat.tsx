@@ -72,7 +72,7 @@ export function MayaDmHiringChat({
         messages={hiring.session.recruiterMessages}
         chips={hiring.extraChips}
         readiness={hiring.displayReadiness}
-        briefReady={hiring.displayReadiness.ready}
+        briefReady={hiring.session.briefReady || hiring.displayReadiness.ready}
         busy={hiring.session.busy || hiring.generatingCandidates}
         mayaState={hiring.mayaState}
         onSend={hiring.sendUserMessage}

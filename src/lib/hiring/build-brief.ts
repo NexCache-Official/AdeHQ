@@ -1,4 +1,11 @@
 import { DEPARTMENT_CARDS } from "./data";
+import {
+  buildSynthesisInput,
+  missionNeedsRefresh,
+  synthesizeCoreResponsibilities,
+  synthesizeMission,
+  synthesizeSuccessMetrics,
+} from "./brief-synthesis";
 import { applyRoleFocusAnswer } from "./role-focus-answers";
 import { synthesizeRoleTitle } from "./role-title-synthesizer";
 import { getRoleByKey, legacyDepartmentIdForRole } from "./role-library";
@@ -256,6 +263,7 @@ export function synthesizeBriefFromRole(
       messages,
       role.legacyDepartmentId ?? "custom",
       brief,
+      roleKey,
     );
     for (const line of userLines) {
       const focus = applyRoleFocusAnswer(line, enriched, roleKey);
@@ -278,7 +286,7 @@ export function synthesizeBriefForHiringContext(input: {
     return synthesizeBriefFromRole(input.roleKey, messages, input.existing);
   }
   const dept = input.roleKey === "custom" ? "custom" : (input.departmentId ?? legacyDepartmentIdForRole(input.roleKey) ?? "custom");
-  return synthesizeBriefFromConversation(input.roleSeed, messages, dept, input.existing);
+  return synthesizeBriefFromConversation(input.roleSeed, messages, dept, input.existing, input.roleKey);
 }
 
 function extractTechnicalTerms(text: string): string[] {
@@ -317,11 +325,13 @@ export function synthesizeBriefFromConversation(
   messages: RecruiterMessage[],
   departmentId?: string | null,
   existing?: Partial<AiEmployeeJobBrief>,
+  roleKey?: string | null,
 ): AiEmployeeJobBrief {
   const dept = departmentId ?? "custom";
   const userLines = messages.filter((m) => m.role === "user").map((m) => m.text);
   const allUserText = userLines.join(" ").toLowerCase();
   const combined = [roleSeed, ...userLines].join(" ");
+  const role = getRoleByKey(roleKey ?? undefined);
 
   const deptSeed = DEPT_BRIEF_SEEDS[dept];
   const useDeptSeed = deptSeed && (isDeptNameOnly(roleSeed, departmentId) || userLines.length === 0);
@@ -354,19 +364,13 @@ export function synthesizeBriefFromConversation(
   const technicalFocus =
     existing?.technicalFocus?.length
       ? existing.technicalFocus
-      : extractTechnicalTerms(combined).length > 0
-        ? extractTechnicalTerms(combined)
-        : allUserText.includes("saas") && allUserText.includes("data")
-          ? [
-              "SaaS platform architecture",
-              "Product engineering",
-              "Data science workflows",
-              "AI-enabled systems",
-              "Performance and reliability",
-            ]
-        : allUserText.includes("performance") || allUserText.includes("latency")
-          ? ["Latency reduction", "Bandwidth optimization", "Performance debugging"]
-          : [];
+      : role?.defaultTechnicalFocus?.length
+        ? [...role.defaultTechnicalFocus]
+        : extractTechnicalTerms(combined).length > 0
+          ? extractTechnicalTerms(combined)
+          : allUserText.includes("performance") || allUserText.includes("latency")
+            ? ["Latency reduction", "Bandwidth optimization", "Performance debugging"]
+            : [];
 
   const qualityPreference =
     existing?.qualityPreference ||
@@ -386,66 +390,44 @@ export function synthesizeBriefFromConversation(
       ? "Technical, precise, implementation-focused"
       : "Professional, clear, stakeholder-appropriate");
 
-  const mission =
-    existing?.mission ||
-    (technicalFocus.length > 0
-      ? allUserText.includes("saas")
-        ? "Help design, build, and improve SaaS platform features, integrations, and data-driven product workflows."
-        : `Improve latency, bandwidth efficiency, and runtime performance for ${domain.toLowerCase()} workloads.`
-      : useDeptSeed
-        ? deptSeed.mission
-        : `Help the team succeed as a ${roleTitle.toLowerCase()} in ${domain.toLowerCase()}.`);
+  const synthesisInput = buildSynthesisInput(
+    {
+      roleTitle,
+      department: existing?.department || DEPT_NAMES[dept] || role?.departmentLabel || "Custom",
+      domain,
+      businessFocus:
+        existing?.businessFocus?.length
+          ? existing.businessFocus
+          : role?.defaultBusinessFocus?.length
+            ? [...role.defaultBusinessFocus]
+            : useDeptSeed && deptSeed
+              ? deptSeed.businessFocus
+              : [],
+      technicalFocus,
+      coreResponsibilities: existing?.coreResponsibilities ?? [],
+    },
+    userLines,
+    role,
+    useDeptSeed ? deptSeed : null,
+  );
 
-  const coreResponsibilities =
-    existing?.coreResponsibilities?.length
+  const refreshDerivedSections = missionNeedsRefresh(existing?.mission, synthesisInput);
+
+  const mission = refreshDerivedSections
+    ? synthesizeMission(synthesisInput)
+    : (existing?.mission ?? synthesizeMission(synthesisInput));
+
+  const coreResponsibilities = refreshDerivedSections
+    ? synthesizeCoreResponsibilities(synthesisInput)
+    : existing?.coreResponsibilities?.length
       ? existing.coreResponsibilities
-      : allUserText.includes("saas") && technicalFocus.length > 0
-        ? [
-            "Build and improve product features across the SaaS platform",
-            "Help design reliable backend and data workflows",
-            "Translate product discussions into implementation tasks",
-            "Identify technical risks and suggest practical improvements",
-            "Support shipping work with clear technical reasoning",
-          ]
-      : technicalFocus.length > 0
-        ? [
-            "Identify bottlenecks in AI system performance",
-            "Suggest bandwidth optimization strategies",
-            "Help evaluate infrastructure tradeoffs",
-            "Turn performance discussions into technical tasks",
-          ]
-        : useDeptSeed
-          ? deptSeed.coreResponsibilities
-          : [
-              `Own day-to-day ${roleTitle.toLowerCase()} workstreams`,
-              "Turn discussions into clear next steps and follow-ups",
-              "Flag risks and ask for approval before external actions",
-            ];
+      : synthesizeCoreResponsibilities(synthesisInput);
 
-  const successMetrics =
-    existing?.successMetrics?.length
+  const successMetrics = refreshDerivedSections
+    ? synthesizeSuccessMetrics(synthesisInput)
+    : existing?.successMetrics?.length
       ? existing.successMetrics
-      : allUserText.includes("saas") && technicalFocus.length > 0
-        ? [
-            "Features move from idea to implementation faster",
-            "Technical decisions are clearly explained",
-            "Bugs and risks are surfaced early",
-            "Work is broken into clear, shippable tasks",
-          ]
-      : technicalFocus.length > 0
-        ? [
-            "Lower response latency",
-            "Better throughput",
-            "Reduced bandwidth overhead",
-            "Clearer performance roadmap",
-          ]
-        : useDeptSeed
-          ? deptSeed.successMetrics
-          : [
-              "Consistent high-quality output",
-              "Follow-ups do not get missed",
-              "Communication matches agreed standards",
-            ];
+      : synthesizeSuccessMetrics(synthesisInput);
 
   const seniorityLevel =
     existing?.seniorityLevel ||
@@ -459,15 +441,15 @@ export function synthesizeBriefFromConversation(
     existing?.assumptions ??
     [
       `This role is currently inferred as a ${roleTitle}.`,
-      ...(technicalFocus.length > 0
-        ? ["The employee should translate technical discussions into practical next steps."]
+      ...(synthesisInput.businessFocus.length > 0 || synthesisInput.technicalFocus.length > 0
+        ? ["Focus areas are inferred from what the user has shared so far."]
         : []),
     ];
 
   const openQuestions =
     existing?.openQuestions ??
-    (technicalFocus.length > 0
-      ? ["Should this employee focus more on frontend, backend, AI infrastructure, or data science?"]
+    (role?.questionTemplates.coreWork
+      ? [role.questionTemplates.coreWork]
       : [
           "What should this employee own day to day?",
           "Should the role be hands-on, advisory, or balanced?",
@@ -480,18 +462,14 @@ export function synthesizeBriefFromConversation(
     mission,
     coreResponsibilities,
     technicalFocus,
-    businessFocus: existing?.businessFocus?.length
-      ? existing.businessFocus
-      : useDeptSeed
-        ? deptSeed.businessFocus
-        : [],
+    businessFocus: synthesisInput.businessFocus,
     successMetrics,
     communicationStyle,
     personalityTraits:
       existing?.personalityTraits ??
-      (technicalFocus.length > 0
-        ? ["analytical", "precise", "practical"]
-        : useDeptSeed
+      (role?.defaultResponsibilities?.length
+        ? ["professional", "clear", "practical"]
+        : useDeptSeed && deptSeed
           ? deptSeed.personalityTraits
           : ["professional", "clear"]),
     proactivityLevel,
@@ -501,18 +479,22 @@ export function synthesizeBriefFromConversation(
     approvalRules:
       existing?.approvalRules?.length
         ? existing.approvalRules
-        : useDeptSeed
-          ? deptSeed.approvalRules
-          : [
-              "Ask before sending external emails or messages",
-              "Ask before publishing public statements",
-              "Flag legal, compliance, or reputational risks",
-            ],
+        : role?.defaultApprovalRules?.length
+          ? [...role.defaultApprovalRules]
+          : useDeptSeed && deptSeed
+            ? deptSeed.approvalRules
+            : [
+                "Ask before sending external emails or messages",
+                "Ask before publishing public statements",
+                "Flag legal, compliance, or reputational risks",
+              ],
     toolsNeeded: existing?.toolsNeeded?.length
       ? existing.toolsNeeded
-      : useDeptSeed
-        ? deptSeed.toolsNeeded
-        : [],
+      : role?.defaultTools?.length
+        ? [...role.defaultTools]
+        : useDeptSeed && deptSeed
+          ? deptSeed.toolsNeeded
+          : [],
     assumptions,
     openQuestions,
   };

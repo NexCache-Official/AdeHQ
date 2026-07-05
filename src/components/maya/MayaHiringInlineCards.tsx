@@ -46,7 +46,7 @@ function HiringSessionCard({
                 type="button"
                 disabled={busy}
                 onClick={onReviewBrief}
-                className="rounded-lg border border-border bg-canvas px-2.5 py-1 text-[11px] font-medium text-ink disabled:opacity-50"
+                className="rounded-lg bg-green px-2.5 py-1 text-[11px] font-medium text-white disabled:opacity-50"
               >
                 Review brief
               </button>
@@ -112,7 +112,7 @@ function JobBriefArtifactCard({
                 type="button"
                 disabled={busy}
                 onClick={onReview}
-                className="rounded-lg border border-border bg-canvas px-2.5 py-1 text-[11px] font-medium text-ink disabled:opacity-50"
+                className="rounded-lg bg-green px-2.5 py-1 text-[11px] font-medium text-white disabled:opacity-50"
               >
                 Open
               </button>

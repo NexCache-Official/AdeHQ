@@ -43,6 +43,11 @@ import {
   type MayaRecruiterState,
 } from "@/lib/hiring/maya-recruiter-state";
 import {
+  detectRecruiterUserIntent,
+  mayaReplyForRecruiterIntent,
+  shouldSkipBriefUpdateIntent,
+} from "@/lib/hiring/recruiter-intents";
+import {
   MAYA_EMPLOYEE_NAME,
   MAYA_EMPLOYEE_TITLE,
   MAYA_RECRUITER_TAGLINE,
@@ -163,7 +168,7 @@ export function HireFlow({ onboarding = false, entrySource = "hire_route" }: Hir
   const previewBrief = session.briefPartial ?? session.brief;
   const displayReadiness = useMemo(() => {
     const base = session.readiness;
-    const canReview = session.briefReady && base.ready;
+    const canReview = session.briefReady || base.ready;
     if (!canReview) return base;
     return finalizeReadinessScore(base, previewBrief as AiEmployeeJobBrief, true);
   }, [session.readiness, session.briefReady, previewBrief]);
@@ -226,7 +231,7 @@ export function HireFlow({ onboarding = false, entrySource = "hire_route" }: Hir
         dispatch({ type: "SET_READINESS", readiness: res.readiness });
         dispatch({
           type: "SET_BRIEF_READY",
-          briefReady: Boolean(res.canReviewBrief && res.readiness.ready),
+          briefReady: Boolean(res.canReviewBrief ?? res.briefReady),
         });
       }
       if (res.suggestionChips) {
@@ -428,9 +433,25 @@ export function HireFlow({ onboarding = false, entrySource = "hire_route" }: Hir
       return;
     }
 
+    const userIntent = detectRecruiterUserIntent(trimmed);
+    if (userIntent === "review_brief") {
+      dispatch({ type: "ADD_MESSAGE", message: { role: "user", text: trimmed } });
+      dispatch({
+        type: "ADD_MESSAGE",
+        message: {
+          role: "ade",
+          text: mayaReplyForRecruiterIntent("review_brief")!,
+        },
+      });
+      dispatch({ type: "SET_BRIEF_READY", briefReady: true });
+      goToBrief();
+      return;
+    }
+
     const nextMessages = [...session.recruiterMessages, { role: "user" as const, text: trimmed }];
+    const skipBriefUi = shouldSkipBriefUpdateIntent(userIntent);
     const optimisticAck = pickOptimisticAck(trimmed);
-    const sectionsUpdating = inferSectionsUpdating(trimmed);
+    const sectionsUpdating = skipBriefUi ? [] : inferSectionsUpdating(trimmed);
     const composeSection = briefSectionToComposeKey(sectionsUpdating[0]) ?? "mission";
 
     const localBrief = synthesizeBriefForHiringContext({
@@ -453,13 +474,17 @@ export function HireFlow({ onboarding = false, entrySource = "hire_route" }: Hir
         { role: "ade", text: optimisticAck, isOptimistic: true },
       ],
     });
-    setMayaState("acknowledging");
-    setBriefUpdateState({ status: "updating", sectionsUpdating });
-    setBriefCompose({ active: true, section: localSection ?? composeSection });
-    if (composeTimerRef.current) clearTimeout(composeTimerRef.current);
-    composeTimerRef.current = setTimeout(() => {
-      setBriefCompose({ active: false, section: null });
-    }, 3200);
+    if (!skipBriefUi) {
+      setMayaState("acknowledging");
+      setBriefUpdateState({ status: "updating", sectionsUpdating });
+      setBriefCompose({ active: true, section: localSection ?? composeSection });
+      if (composeTimerRef.current) clearTimeout(composeTimerRef.current);
+      composeTimerRef.current = setTimeout(() => {
+        setBriefCompose({ active: false, section: null });
+      }, 3200);
+    } else {
+      setMayaState(userIntent === "generate_candidates" ? "ready_to_review" : "thinking");
+    }
     dispatch({ type: "SET_BUSY", busy: true });
 
     try {
@@ -488,21 +513,26 @@ export function HireFlow({ onboarding = false, entrySource = "hire_route" }: Hir
       if (res.brief) {
         dispatch({ type: "SET_BRIEF", brief: res.brief });
       }
-      if (res.canReviewBrief && res.readiness?.ready) {
+      if (res.canReviewBrief ?? res.briefReady) {
         dispatch({ type: "SET_BRIEF_READY", briefReady: true });
         setMayaState("ready_to_review");
       } else if (!isDraftNow) {
         dispatch({ type: "SET_BRIEF_READY", briefReady: false });
         setMayaState("idle");
       }
-      setBriefUpdateState({
-        status: "updated",
-        sectionsUpdating,
-        lastUpdatedAt: new Date().toISOString(),
-      });
-      setTimeout(() => {
-        setBriefUpdateState(INITIAL_BRIEF_UPDATE_STATE);
-      }, 2400);
+      if (!skipBriefUi) {
+        setBriefUpdateState({
+          status: "updated",
+          sectionsUpdating,
+          lastUpdatedAt: new Date().toISOString(),
+        });
+        setTimeout(() => {
+          setBriefUpdateState(INITIAL_BRIEF_UPDATE_STATE);
+        }, 2400);
+      }
+      if (userIntent === "generate_candidates") {
+        generateApplicants(true);
+      }
       if (isDraftNow && res.brief) {
         dispatch({ type: "SET_BRIEF_READY", briefReady: true });
       }
@@ -766,7 +796,7 @@ export function HireFlow({ onboarding = false, entrySource = "hire_route" }: Hir
               messages={session.recruiterMessages}
               chips={session.suggestionChips}
               readiness={displayReadiness}
-              briefReady={displayReadiness.ready}
+              briefReady={session.briefReady || displayReadiness.ready}
               busy={session.busy}
               mayaState={mayaState}
               onSend={sendUserMessage}
@@ -1067,8 +1097,20 @@ function RecruiterChat({
               : `${MAYA_EMPLOYEE_TITLE} · ${MAYA_RECRUITER_TAGLINE}`}
           </div>
         </div>
-        <div className="ml-auto rounded-full border border-border bg-muted px-2.5 py-1 text-[11px] text-ink-2">
-          {readinessLabel} · {readiness.score}%
+        <div className="ml-auto flex items-center gap-2">
+          <div className="rounded-full border border-border bg-muted px-2.5 py-1 text-[11px] text-ink-2">
+            {readinessLabel} · {readiness.score}%
+          </div>
+          {briefReady && variant === "recruiter" && (
+            <button
+              type="button"
+              onClick={onReview}
+              disabled={busy}
+              className="rounded-full bg-green px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-green/90 disabled:opacity-50"
+            >
+              Review job brief
+            </button>
+          )}
         </div>
       </div>
       <div className="flex flex-1 flex-col gap-3 overflow-y-auto p-5">
@@ -1106,7 +1148,7 @@ function RecruiterChat({
                 className={cn(
                   "rounded-full border px-3.5 py-2 text-[13px] disabled:opacity-50",
                   c.intent === "review_brief"
-                    ? "border-ink bg-ink text-white hover:bg-ink/90"
+                    ? "border-green bg-green text-white hover:bg-green/90"
                     : "border-border bg-surface hover:border-ink hover:bg-ink hover:text-white",
                 )}
               >

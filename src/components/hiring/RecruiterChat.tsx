@@ -16,7 +16,7 @@ import type {
 } from "@/lib/hiring/types";
 import { AdeOrb } from "@/components/hiring/HireChrome";
 import { TypewriterText } from "@/components/hiring/BriefSections";
-import { Sparkles } from "lucide-react";
+import { Sparkles, FileText } from "lucide-react";
 
 export function RecruiterChat({
   messages,
@@ -126,6 +126,17 @@ export function RecruiterChat({
           <div className="shrink-0 rounded-full border border-border bg-muted px-2.5 py-1 text-[11px] text-ink-2">
             {readinessLabel} · {readiness.score}%
           </div>
+        )}
+        {briefReady && variant === "recruiter" && (
+          <button
+            type="button"
+            onClick={onReview}
+            disabled={busy}
+            className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-green px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-green/90 disabled:opacity-50"
+          >
+            <FileText className="h-3.5 w-3.5" />
+            Review job brief
+          </button>
         )}
         {briefReady && onGenerateCandidates && candidates.length === 0 && (
           <button
@@ -237,7 +248,7 @@ export function RecruiterChat({
                 className={cn(
                   "rounded-full border px-3.5 py-2 text-[13px] disabled:opacity-50",
                   c.intent === "review_brief"
-                    ? "border-ink bg-ink text-white hover:bg-ink/90"
+                    ? "border-green bg-green text-white hover:bg-green/90"
                     : "border-border bg-muted/50 hover:border-ink hover:bg-ink hover:text-white",
                 )}
               >

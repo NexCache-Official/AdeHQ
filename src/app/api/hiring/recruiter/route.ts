@@ -11,6 +11,11 @@ import {
 import { applyChipMutation, READY_BRIEF_PHRASE, recruiterReadyMessage } from "@/lib/hiring/chip-mutations";
 import { buildRecruiterOpeningMessage } from "@/lib/hiring/recruiter-openings";
 import { applyRoleFocusAnswer } from "@/lib/hiring/role-focus-answers";
+import {
+  detectRecruiterUserIntent,
+  mayaReplyForRecruiterIntent,
+  shouldSkipBriefUpdateIntent,
+} from "@/lib/hiring/recruiter-intents";
 import { getRoleByKey } from "@/lib/hiring/role-library";
 import {
   checklistFromBrief,
@@ -199,17 +204,26 @@ function buildResponse(input: {
   forceCanReview?: boolean;
 }) {
   const lastUser = [...input.conversation].reverse().find((m) => m.role === "user")?.text ?? "";
-  const chipMutation = lastUser ? applyChipMutation(lastUser, input.brief) : null;
+  const userIntent = detectRecruiterUserIntent(lastUser);
+  const skipBriefMutation = shouldSkipBriefUpdateIntent(userIntent);
+  const chipMutation =
+    !skipBriefMutation && lastUser ? applyChipMutation(lastUser, input.brief) : null;
   let brief = chipMutation?.brief ?? input.brief;
   const roleKey = input.body.roleKey ?? null;
-  const roleFocus = lastUser ? applyRoleFocusAnswer(lastUser, brief, roleKey) : null;
+  const roleFocus =
+    !skipBriefMutation && lastUser ? applyRoleFocusAnswer(lastUser, brief, roleKey) : null;
   if (roleFocus) {
     brief = roleFocus.brief;
   }
   const changedFields = [...(chipMutation?.changedFields ?? []), ...(roleFocus ? ["businessFocus"] : [])];
 
   const baseReadiness = assessRecruiterReadiness(input.conversation, brief, roleKey);
-  const canReviewBrief = input.forceCanReview || baseReadiness.ready;
+  const canReviewBrief =
+    input.forceCanReview ||
+    baseReadiness.ready ||
+    userIntent === "approve_brief" ||
+    userIntent === "generate_candidates" ||
+    userIntent === "review_brief";
   const readiness = finalizeReadinessScore(baseReadiness, brief, canReviewBrief);
   let suggestionChips = generateSuggestionChips(readiness, brief, input.conversation, roleKey);
   if (canReviewBrief && !suggestionChips.some((chip) => chip.intent === "review_brief")) {
@@ -228,7 +242,10 @@ function buildResponse(input: {
   const lastAde = [...input.conversation].reverse().find((m) => m.role === "ade")?.text ?? "";
 
   let message = input.message;
-  if (!message && chipMutation) {
+  if (userIntent !== "gathering") {
+    const intentReply = mayaReplyForRecruiterIntent(userIntent);
+    if (intentReply) message = intentReply;
+  } else if (!message && chipMutation) {
     message = chipMutation.message;
   } else if (!message) {
     if (userTurns === 0) {
@@ -286,9 +303,10 @@ RULES:
 4. Extract semantics from ALL user messages — NEVER map answers by question order.
 5. Ask at most ONE useful question per turn.
 6. If enough information exists, say the brief is ready but keep the user free to refine.
-7. Always include an updated semantic brief or partial brief.
-8. Never ask about channels, rooms, or start location.
-9. ${MAYA_HIRE_LANGUAGE_RULE}
+7. Always include an updated semantic brief or partial brief that reflects the exact role the user is hiring for — sales, legal, marketing, research, support, finance, design, operations, or any custom role.
+8. Mission, responsibilities, and success metrics must match the role discussed — never default to generic engineering or infra language unless the user asked for that.
+9. Never ask about channels, rooms, or start location.
+10. ${MAYA_HIRE_LANGUAGE_RULE}
 
 Mode: ${body.mode ?? "chat"}
 ${body.refineInstruction ? `Refine (${body.refineMode ?? "improve"}) section ${body.refineSection}: ${body.refineInstruction}` : ""}

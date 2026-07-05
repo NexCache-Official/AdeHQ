@@ -113,16 +113,42 @@ export function applyRoleFocusAnswer(
 
   if (!matchedChip) {
     const stackMatch =
-      /\b(next\.?js|supabase|react|typescript|api|mobile|internal tools?|general software)\b/i.exec(trimmed);
+      /\b(next\.?js|supabase|react|typescript|api|mobile|internal tools?|general software|general engineering)\b/i.exec(
+        trimmed,
+      );
     if (stackMatch) {
       const next = cloneBrief(brief);
-      const label = stackMatch[0].charAt(0).toUpperCase() + stackMatch[0].slice(1);
+      const raw = stackMatch[0].toLowerCase();
+      const label =
+        raw === "general engineering"
+          ? "General engineering"
+          : stackMatch[0].charAt(0).toUpperCase() + stackMatch[0].slice(1);
       pushUnique(next.technicalFocus, label);
       if (!next.domain.trim() || next.domain.toLowerCase() === "software engineering") {
-        next.domain = label;
+        next.domain = raw === "general engineering" ? "General software engineering" : label;
+      }
+      if (raw === "general engineering") {
+        pushUnique(next.businessFocus, "General software engineering");
+        pushUnique(
+          next.coreResponsibilities,
+          "Own pragmatic implementation work across the product as priorities shift",
+        );
       }
       return { brief: next, focusLabel: label };
     }
+
+    const words = trimmed.split(/\s+/).filter(Boolean);
+    if (words.length >= 2 && words.length <= 16) {
+      const next = cloneBrief(brief);
+      const label = trimmed.charAt(0).toUpperCase() + trimmed.slice(1);
+      pushUnique(next.businessFocus, label);
+      pushUnique(next.coreResponsibilities, `Own ${trimmed.toLowerCase()} work for the team`);
+      next.openQuestions = next.openQuestions.filter(
+        (q) => !/focus areas matter most|what should this employee own/i.test(q),
+      );
+      return { brief: next, focusLabel: label };
+    }
+
     return null;
   }
 

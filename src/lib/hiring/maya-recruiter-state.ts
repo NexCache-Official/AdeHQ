@@ -1,4 +1,9 @@
 import type { BriefComposeSection } from "./detect-brief-change";
+import {
+  detectRecruiterUserIntent,
+  mayaReplyForRecruiterIntent,
+  shouldSkipBriefUpdateIntent,
+} from "./recruiter-intents";
 
 export type MayaRecruiterState =
   | "idle"
@@ -49,6 +54,9 @@ const OPTIMISTIC_ACKS = [
 
 export function pickOptimisticAck(seed?: string): string {
   const trimmed = seed?.trim() ?? "";
+  const intentReply = mayaReplyForRecruiterIntent(detectRecruiterUserIntent(trimmed));
+  if (intentReply) return intentReply;
+
   if (trimmed) {
     const short = trimmed.length > 48 ? `${trimmed.slice(0, 45)}…` : trimmed;
     const contextual = [
@@ -66,6 +74,10 @@ export function pickOptimisticAck(seed?: string): string {
 }
 
 export function inferSectionsUpdating(message: string): BriefUpdateSection[] {
+  if (shouldSkipBriefUpdateIntent(detectRecruiterUserIntent(message))) {
+    return [];
+  }
+
   const lower = message.toLowerCase();
   const sections = new Set<BriefUpdateSection>();
 
@@ -93,8 +105,7 @@ export function inferSectionsUpdating(message: string): BriefUpdateSection[] {
   }
 
   if (sections.size === 0) {
-    sections.add("mission");
-    sections.add("coreResponsibilities");
+    return [];
   }
 
   return [...sections];

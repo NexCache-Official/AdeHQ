@@ -24,6 +24,7 @@ const PRODUCT_CONTEXT_PATTERNS = [
   /\binternal tools?\b/i,
   /\bsaas\b/i,
   /\bfintech\b/i,
+  /\bgeneral engineering\b/i,
   /\bgeneral software\b/i,
   /\bour product\b/i,
   /\bproduct area\b/i,
@@ -82,27 +83,78 @@ export function userAnsweredAfterAdeAsked(topic: RegExp, conversation: Recruiter
   return false;
 }
 
+const WORK_CONTEXT_PATTERNS = [
+  ...PRODUCT_CONTEXT_PATTERNS,
+  /\b(customer|client|market|segment|category|competitor|campaign|pipeline|brand|content|social|seo|legal|compliance|contract|support|ticket|research|strategy|operations|finance|accounting|hr|people|recruit|design|ux|ui|prototype|launch|outreach|proposal|demo|onboarding|churn|retention)\b/i,
+];
+
+const ROLE_FOCUS_PATTERNS = [
+  ...ENGINEERING_DISCIPLINE_PATTERNS,
+  /\bcontent\b/i,
+  /\bcampaigns?\b/i,
+  /\boutreach\b/i,
+  /\bresearch\b/i,
+  /\bcompliance\b/i,
+  /\bcontracts?\b/i,
+  /\bsupport\b/i,
+  /\bdesign\b/i,
+  /\boperations\b/i,
+  /\bfinance\b/i,
+  /\bsales\b/i,
+  /\bmarketing\b/i,
+  /\bpr\b/i,
+  /\bmedia\b/i,
+  /\banalyst\b/i,
+  /\bmanager\b/i,
+  /\bcoordinator\b/i,
+  /\bstrategist\b/i,
+];
+
+export function hasRoleFocusFromContext(
+  brief: AiEmployeeJobBrief,
+  conversation: RecruiterMessage[],
+): boolean {
+  if (brief.businessFocus.length > 0 || brief.technicalFocus.length > 0) return true;
+  if (brief.coreResponsibilities.length >= 2) return true;
+  const blob = userTextBlob(conversation);
+  if (ROLE_FOCUS_PATTERNS.some((pattern) => pattern.test(blob))) return true;
+  return userAnsweredAfterAdeAsked(
+    /focus|own|day to day|work on|outcome|drive|handle|support|primary|should this|what kind|which/i,
+    conversation,
+  );
+}
+
+export function hasDomainOrWorkContext(
+  brief: AiEmployeeJobBrief,
+  conversation: RecruiterMessage[],
+): boolean {
+  const blob = userTextBlob(conversation);
+  if (WORK_CONTEXT_PATTERNS.some((pattern) => pattern.test(blob))) return true;
+  if (brief.domain.trim() && !isGenericDomain(brief.domain)) return true;
+  return userAnsweredAfterAdeAsked(
+    /stack|product area|product or platform|platform|work with first|market|customer|segment|category|focus on|working on|main product|something else/i,
+    conversation,
+  );
+}
+
+export function isGenericDomain(domain?: string): boolean {
+  return isGenericEngineeringDomain(domain);
+}
+
+/** @deprecated Use hasRoleFocusFromContext */
 export function hasEngineeringDiscipline(
   brief: AiEmployeeJobBrief,
   conversation: RecruiterMessage[],
 ): boolean {
-  const blob = userTextBlob(conversation);
-  if (ENGINEERING_DISCIPLINE_PATTERNS.some((p) => p.test(blob))) return true;
-  const focusHaystack = [...brief.technicalFocus, ...brief.businessFocus].join(" ");
-  return ENGINEERING_DISCIPLINE_PATTERNS.some((p) => p.test(focusHaystack));
+  return hasRoleFocusFromContext(brief, conversation);
 }
 
+/** @deprecated Use hasDomainOrWorkContext */
 export function hasProductContext(
   brief: AiEmployeeJobBrief,
   conversation: RecruiterMessage[],
 ): boolean {
-  const blob = userTextBlob(conversation);
-  if (PRODUCT_CONTEXT_PATTERNS.some((p) => p.test(blob))) return true;
-  if (brief.domain.trim() && !isGenericEngineeringDomain(brief.domain)) return true;
-  return userAnsweredAfterAdeAsked(
-    /stack|product area|work with first|next\.js|supabase|something else/i,
-    conversation,
-  );
+  return hasDomainOrWorkContext(brief, conversation);
 }
 
 export function isGenericEngineeringDomain(domain?: string): boolean {

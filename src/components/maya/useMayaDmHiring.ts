@@ -23,6 +23,11 @@ import {
   generateSuggestionChips,
 } from "@/lib/hiring/recruiter-brain";
 import { classifyMayaDmIntent, workspaceGuideReply } from "@/lib/hiring/maya-dm-intent";
+import {
+  detectRecruiterUserIntent,
+  mayaReplyForRecruiterIntent,
+  shouldSkipBriefUpdateIntent,
+} from "@/lib/hiring/recruiter-intents";
 import type { HiringSurface } from "@/lib/hiring/hiring-session-service";
 import {
   completeHireFromSession,
@@ -224,7 +229,7 @@ export function useMayaDmHiring({
   const previewBrief = session.briefPartial ?? session.brief;
   const displayReadiness = useMemo(() => {
     const base = session.readiness;
-    const canReview = session.briefReady && base.ready;
+    const canReview = session.briefReady || base.ready;
     if (!canReview) return base;
     return finalizeReadinessScore(base, previewBrief as AiEmployeeJobBrief, true);
   }, [session.readiness, session.briefReady, previewBrief]);
@@ -256,7 +261,7 @@ export function useMayaDmHiring({
         dispatch({ type: "SET_READINESS", readiness: res.readiness });
         dispatch({
           type: "SET_BRIEF_READY",
-          briefReady: Boolean(res.canReviewBrief && res.readiness.ready),
+          briefReady: Boolean(res.canReviewBrief ?? res.briefReady),
         });
       }
       if (res.suggestionChips) {
@@ -682,14 +687,39 @@ export function useMayaDmHiring({
       }
 
       const isDraftNow = action === "draft_now";
-      const isGenerate =
-        /generate candidates/i.test(trimmed) || /show (me )?candidates/i.test(trimmed);
+      const userIntent = detectRecruiterUserIntent(trimmed);
       const forceGenerate = /generate candidates now|generate now/i.test(trimmed);
       const isHireRecommended =
         /hire (the )?recommended/i.test(trimmed) || /hire (them|this one)/i.test(trimmed);
 
-      if (isGenerate && session.brief) {
-        await generateCandidates(forceGenerate);
+      if (userIntent === "generate_candidates" && (session.brief || session.briefPartial)) {
+        syncMessageToRoom("human", trimmed, userClientId);
+        dispatch({ type: "ADD_MESSAGE", message: { role: "user", text: trimmed } });
+        const reply = mayaReplyForRecruiterIntent("generate_candidates")!;
+        dispatch({ type: "ADD_MESSAGE", message: { role: "ade", text: reply } });
+        syncMessageToRoom("ai", reply, createClientMessageId("maya-a"));
+        dispatch({ type: "SET_BRIEF_READY", briefReady: true });
+        await generateCandidates(true);
+        return;
+      }
+
+      if (userIntent === "review_brief") {
+        syncMessageToRoom("human", trimmed, userClientId);
+        dispatch({ type: "ADD_MESSAGE", message: { role: "user", text: trimmed } });
+        const reply = mayaReplyForRecruiterIntent("review_brief")!;
+        dispatch({ type: "ADD_MESSAGE", message: { role: "ade", text: reply } });
+        syncMessageToRoom("ai", reply, createClientMessageId("maya-a"));
+        const briefForReview =
+          session.brief ??
+          synthesizeBriefForHiringContext({
+            roleSeed,
+            messages: [...session.recruiterMessages, { role: "user", text: trimmed }],
+            departmentId: effectiveDepartmentId,
+            roleKey: session.roleKey,
+            existing: session.briefPartial,
+          });
+        dispatch({ type: "SET_BRIEF", brief: briefForReview });
+        dispatch({ type: "SET_BRIEF_READY", briefReady: true });
         return;
       }
 
@@ -746,8 +776,9 @@ export function useMayaDmHiring({
       }
 
       const nextMessages = [...session.recruiterMessages, { role: "user" as const, text: trimmed }];
+      const skipBriefUi = shouldSkipBriefUpdateIntent(userIntent);
       const optimisticAck = pickOptimisticAck(trimmed);
-      const sectionsUpdating = inferSectionsUpdating(trimmed);
+      const sectionsUpdating = skipBriefUi ? [] : inferSectionsUpdating(trimmed);
       const composeSection = briefSectionToComposeKey(sectionsUpdating[0]) ?? "mission";
 
       syncMessageToRoom("human", trimmed, userClientId);
@@ -765,12 +796,16 @@ export function useMayaDmHiring({
         type: "SET_MESSAGES",
         messages: [...nextMessages, { role: "ade", text: optimisticAck, isOptimistic: true }],
       });
-      setMayaState("acknowledging");
-      setBriefUpdateState({ status: "updating", sectionsUpdating });
-      setBriefCompose({ active: true, section: composeSection });
-      composeTimerRef.current = setTimeout(() => {
-        setBriefCompose({ active: false, section: null });
-      }, 3200);
+      if (!skipBriefUi) {
+        setMayaState("acknowledging");
+        setBriefUpdateState({ status: "updating", sectionsUpdating });
+        setBriefCompose({ active: true, section: composeSection });
+        composeTimerRef.current = setTimeout(() => {
+          setBriefCompose({ active: false, section: null });
+        }, 3200);
+      } else {
+        setMayaState(userIntent === "generate_candidates" ? "ready_to_review" : "thinking");
+      }
 
       try {
         setMayaState("thinking");
@@ -796,19 +831,24 @@ export function useMayaDmHiring({
           lastBriefLogRef,
         );
         if (res.brief) dispatch({ type: "SET_BRIEF", brief: res.brief });
-        if (res.canReviewBrief && res.readiness?.ready) {
+        if (res.canReviewBrief ?? res.briefReady) {
           dispatch({ type: "SET_BRIEF_READY", briefReady: true });
           setMayaState("ready_to_review");
         } else {
           dispatch({ type: "SET_BRIEF_READY", briefReady: false });
           setMayaState("idle");
         }
-        setBriefUpdateState({
-          status: "updated",
-          sectionsUpdating,
-          lastUpdatedAt: new Date().toISOString(),
-        });
-        setTimeout(() => setBriefUpdateState(INITIAL_BRIEF_UPDATE_STATE), 2400);
+        if (!skipBriefUi) {
+          setBriefUpdateState({
+            status: "updated",
+            sectionsUpdating,
+            lastUpdatedAt: new Date().toISOString(),
+          });
+          setTimeout(() => setBriefUpdateState(INITIAL_BRIEF_UPDATE_STATE), 2400);
+        }
+        if (userIntent === "generate_candidates") {
+          await generateCandidates(true);
+        }
       } catch (e) {
         setMayaState("error");
         setBriefUpdateState({ status: "error", sectionsUpdating: [] });
@@ -869,6 +909,15 @@ export function useMayaDmHiring({
 
   const extraChips = useMemo((): RecruiterSuggestionChip[] => {
     const chips = [...session.suggestionChips];
+    const canReview = session.briefReady || displayReadiness.ready;
+    if (canReview && !chips.some((c) => c.intent === "review_brief")) {
+      chips.unshift({
+        id: "review-brief",
+        label: "Review job brief",
+        value: "Review job brief",
+        intent: "review_brief",
+      });
+    }
     if (displayReadiness.ready && !chips.some((c) => c.intent === "generate_candidates")) {
       chips.unshift({
         id: "gen-candidates",
@@ -886,7 +935,7 @@ export function useMayaDmHiring({
       });
     }
     return chips;
-  }, [displayReadiness.ready, visibleCandidates.length, session.suggestionChips]);
+  }, [displayReadiness.ready, session.briefReady, visibleCandidates.length, session.suggestionChips]);
 
   return {
     session,
