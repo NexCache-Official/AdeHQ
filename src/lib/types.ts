@@ -191,7 +191,8 @@ export type MessageArtifact = {
     | "email_draft"
     | "memory_suggestion"
     | "artifact"
-    | "file";
+    | "file"
+    | "search_sources";
   id: string;
   label: string;
   meta?: {
@@ -207,6 +208,18 @@ export type MessageArtifact = {
     artifactStatus?: "draft" | "saved";
     createdByName?: string;
     sourceCount?: number;
+    usedSourceCount?: number;
+    excludedSourceCount?: number;
+    searchSources?: Array<{
+      id: string;
+      title: string;
+      url: string;
+      domain: string;
+      snippet?: string;
+      sourceType?: string;
+      confidence?: "high" | "medium" | "low";
+      publishedAt?: string;
+    }>;
     fileName?: string;
     fileExtension?: string;
     fileSizeLabel?: string;

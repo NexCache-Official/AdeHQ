@@ -1,8 +1,9 @@
 import { generateText, stepCountIs } from "ai";
 import { gateway } from "@ai-sdk/gateway";
 import { resolveVercelGatewayModelId } from "@/lib/ai/runtime/adapters/vercel-models";
-import type { SearchRoute, SearchSource } from "./types";
+import type { SearchMode, SearchRoute, SearchSource } from "./types";
 import {
+  getFastFactSearchPreset,
   getGatewaySearchCostUsd,
   getGatewaySearchModelId,
   isGatewaySearchConfigured,
@@ -11,10 +12,20 @@ import {
 export type GatewaySearchOptions = {
   query: string;
   route?: Extract<SearchRoute, "gateway_perplexity" | "gateway_exa" | "gateway_parallel">;
+  searchMode?: SearchMode;
   maxResults?: number;
   recency?: "day" | "week" | "month" | "year";
   domains?: string[];
   employeeName?: string;
+};
+
+export type GatewaySearchAnswerResult = {
+  text: string;
+  sources: SearchSource[];
+  usedTool: boolean;
+  synthesisModel: string;
+  searchLatencyMs: number;
+  synthesisLatencyMs: number;
 };
 
 type GatewayToolsModule = {
@@ -38,8 +49,27 @@ async function loadGatewayTools(): Promise<GatewayToolsModule | null> {
   return cachedGatewayTools;
 }
 
-function buildSearchPrompt(query: string, employeeName?: string): string {
+function buildSearchPrompt(
+  query: string,
+  employeeName?: string,
+  searchMode: SearchMode = "standard",
+): string {
   const who = employeeName ? `${employeeName} (AI employee)` : "An AdeHQ AI employee";
+  if (searchMode === "fast_fact") {
+    return [
+      `${who} is answering a quick factual question in chat.`,
+      "",
+      `Question: ${query.trim()}`,
+      "",
+      "Instructions:",
+      "- Answer in 2-4 short paragraphs max.",
+      "- For private companies, distinguish revenue vs ARR vs run-rate; say estimated/reported, not audited.",
+      "- Give a range when sources disagree; name the best-supported estimate.",
+      "- Do not include a Sources section or markdown links — sources are shown separately.",
+      "- If you cannot verify, say so plainly.",
+    ].join("\n");
+  }
+
   return [
     `${who} is answering a quick factual question in chat.`,
     "",
@@ -50,7 +80,7 @@ function buildSearchPrompt(query: string, employeeName?: string): string {
     "- Answer concisely in plain language (2-5 short paragraphs max).",
     "- For private companies, say when revenue/funding figures are estimates or ARR run-rate, not audited annual revenue.",
     "- Do not invent a single exact number when sources disagree — give a range or the best-supported estimate.",
-    "- End with a short Sources section listing markdown links [title](url) when URLs are available.",
+    "- Do not include a Sources section — sources are shown separately.",
     "- If sources are weak or conflicting, say so explicitly.",
   ].join("\n");
 }
@@ -68,11 +98,12 @@ function extractSourcesFromText(text: string): SearchSource[] {
 function buildToolConfig(
   route: GatewaySearchOptions["route"],
   opts: GatewaySearchOptions,
+  preset = getFastFactSearchPreset(),
 ): { toolName: string; tool: unknown } | null {
   const common = {
-    maxResults: opts.maxResults ?? 5,
-    maxTokens: 20_000,
-    maxTokensPerPage: 2048,
+    maxResults: opts.maxResults ?? preset.maxResults,
+    maxTokens: preset.maxTokens,
+    maxTokensPerPage: preset.maxTokensPerPage,
     country: "US",
     searchLanguageFilter: ["en"],
     ...(opts.recency ? { searchRecencyFilter: opts.recency } : {}),
@@ -86,7 +117,7 @@ function buildToolConfig(
       toolName: "exa_search",
       tool: cachedGatewayTools.exaSearch({
         type: "fast",
-        numResults: opts.maxResults ?? 5,
+        numResults: opts.maxResults ?? preset.maxResults,
         ...(opts.domains?.length ? { includeDomains: opts.domains } : {}),
       }),
     };
@@ -97,7 +128,7 @@ function buildToolConfig(
       toolName: "parallel_search",
       tool: cachedGatewayTools.parallelSearch({
         mode: "one-shot",
-        maxResults: opts.maxResults ?? 5,
+        maxResults: opts.maxResults ?? preset.maxResults,
       }),
     };
   }
@@ -114,53 +145,85 @@ function buildToolConfig(
 
 async function runSonarSearchAnswer(
   prompt: string,
-): Promise<{ text: string; sources: SearchSource[] }> {
+  maxOutputTokens: number,
+  timeoutMs: number,
+): Promise<{ text: string; sources: SearchSource[]; synthesisLatencyMs: number }> {
+  const started = Date.now();
   const sonarResult = await generateText({
     model: gateway("perplexity/sonar"),
     prompt,
-    maxOutputTokens: 1200,
+    maxOutputTokens,
     temperature: 0.2,
+    abortSignal: AbortSignal.timeout(timeoutMs),
   });
   const text = sonarResult.text.trim();
   return {
     text,
     sources: extractSourcesFromText(text),
+    synthesisLatencyMs: Date.now() - started,
   };
 }
 
 /** Fast search via Vercel AI Gateway search tools, with sonar model fallback. */
 export async function runGatewaySearchAnswer(
   options: GatewaySearchOptions,
-): Promise<{ text: string; sources: SearchSource[]; usedTool: boolean }> {
+): Promise<GatewaySearchAnswerResult> {
   if (!isGatewaySearchConfigured()) {
     throw new Error("AI_GATEWAY_API_KEY is not configured.");
   }
 
   const route = options.route ?? "gateway_perplexity";
-  const prompt = buildSearchPrompt(options.query, options.employeeName);
+  const searchMode = options.searchMode ?? "standard";
+  const preset = getFastFactSearchPreset();
+  const prompt = buildSearchPrompt(options.query, options.employeeName, searchMode);
   const modelId =
     resolveVercelGatewayModelId({ runtimeMode: "efficient" }) || getGatewaySearchModelId();
+  const synthesisModel =
+    searchMode === "fast_fact" ? "perplexity/sonar" : modelId;
+  const totalStarted = Date.now();
+
+  if (searchMode === "fast_fact") {
+    const sonar = await runSonarSearchAnswer(
+      prompt,
+      preset.synthesisMaxOutputTokens,
+      preset.timeoutMs,
+    );
+    return {
+      text: sonar.text,
+      sources: sonar.sources,
+      usedTool: false,
+      synthesisModel: "perplexity/sonar",
+      searchLatencyMs: 0,
+      synthesisLatencyMs: sonar.synthesisLatencyMs,
+    };
+  }
 
   await loadGatewayTools();
-  const toolConfig = buildToolConfig(route, options);
+  const toolConfig = buildToolConfig(route, options, preset);
 
   if (toolConfig) {
+    const toolStarted = Date.now();
     const tools = { [toolConfig.toolName]: toolConfig.tool } as Record<string, never>;
     const result = await generateText({
       model: gateway(modelId),
       prompt,
       tools,
-      stopWhen: stepCountIs(5),
-      maxOutputTokens: 1200,
+      stopWhen: stepCountIs(3),
+      maxOutputTokens: preset.synthesisMaxOutputTokens,
       temperature: 0.2,
+      abortSignal: AbortSignal.timeout(preset.timeoutMs),
     });
 
     const text = result.text.trim();
+    const searchLatencyMs = Date.now() - toolStarted;
     if (text.length > 0) {
       return {
         text,
         sources: extractSourcesFromText(text),
         usedTool: true,
+        synthesisModel: modelId,
+        searchLatencyMs,
+        synthesisLatencyMs: searchLatencyMs,
       };
     }
 
@@ -169,11 +232,18 @@ export async function runGatewaySearchAnswer(
     );
   }
 
-  const sonar = await runSonarSearchAnswer(prompt);
+  const sonar = await runSonarSearchAnswer(
+    prompt,
+    preset.synthesisMaxOutputTokens,
+    preset.timeoutMs,
+  );
   return {
     text: sonar.text,
     sources: sonar.sources,
     usedTool: false,
+    synthesisModel: "perplexity/sonar",
+    searchLatencyMs: Date.now() - totalStarted - sonar.synthesisLatencyMs,
+    synthesisLatencyMs: sonar.synthesisLatencyMs,
   };
 }
 

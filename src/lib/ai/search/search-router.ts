@@ -174,6 +174,7 @@ export function decideSearchRoute(
       need,
       route: routed.route,
       browserRequired: false,
+      searchMode: "fast_fact",
       reason:
         routed.route === "none"
           ? "Fast search requested but no search provider is configured."

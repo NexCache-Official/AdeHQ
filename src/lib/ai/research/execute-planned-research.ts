@@ -8,7 +8,8 @@ import type { BrowserResearchRun } from "@/lib/ai/browser-research/types";
 import { sanitizeReplyForChat } from "@/lib/ai/normalize-model-response";
 import { executeSearchAnswer } from "@/lib/ai/search/search-answer";
 import { isGatewayResearchProvider } from "@/lib/ai/research/research-provider";
-import type { RoomMessage } from "@/lib/types";
+import type { GatewaySearchRunMeta } from "@/lib/ai/search/types";
+import type { MessageArtifact, RoomMessage } from "@/lib/types";
 import { nowISO, uid } from "@/lib/utils";
 import type { ResearchPlan } from "./research-planner";
 
@@ -32,21 +33,9 @@ export type ExecutePlannedResearchResult = {
     route: string;
     estimatedCostUsd: number;
     estimatedWorkMinutes: number;
+    searchMeta?: GatewaySearchRunMeta;
   };
 };
-
-function formatSearchAnswerContent(answer: string, sources: Array<{ title: string; url: string }>): string {
-  const trimmed = answer.trim();
-  if (!sources.length) return trimmed;
-  if (/\*\*Sources\*\*/i.test(trimmed) || /\[.+\]\(https?:\/\//.test(trimmed)) {
-    return trimmed;
-  }
-  const sourceLines = sources
-    .slice(0, 6)
-    .map((s) => `- [${s.title}](${s.url})`)
-    .join("\n");
-  return `${trimmed}\n\n**Sources**\n${sourceLines}`;
-}
 
 async function persistGatewaySearchChatReply(
   client: SupabaseClient,
@@ -57,6 +46,7 @@ async function persistGatewaySearchChatReply(
     employeeId: string;
     employeeName: string;
     content: string;
+    artifacts?: MessageArtifact[];
     agentRunId?: string;
     triggerMessageId?: string;
   },
@@ -69,6 +59,7 @@ async function persistGatewaySearchChatReply(
     senderId: params.employeeId,
     senderName: params.employeeName,
     content: sanitizeReplyForChat(params.content),
+    artifacts: params.artifacts,
     createdAt: nowISO(),
   };
 
@@ -83,6 +74,7 @@ async function persistGatewaySearchChatReply(
     content: aiMessage.content,
     mentions: [],
     mentions_json: [],
+    artifacts: params.artifacts ?? null,
     agent_run_id: params.agentRunId ?? null,
     trigger_message_id: params.triggerMessageId ?? null,
     pending: false,
@@ -122,14 +114,18 @@ export async function executePlannedResearch(
             : "gateway_perplexity",
     });
 
-    const content = formatSearchAnswerContent(searchResult.answer, searchResult.sources);
+    const artifacts = searchResult.searchSourcesArtifact
+      ? [searchResult.searchSourcesArtifact]
+      : undefined;
+
     const chatReply = await persistGatewaySearchChatReply(client, {
       workspaceId: params.workspaceId,
       roomId: params.roomId,
       topicId: params.topicId,
       employeeId: params.employeeId,
       employeeName: employee?.name ?? "AI",
-      content,
+      content: searchResult.answer,
+      artifacts,
       agentRunId: params.agentRunId,
       triggerMessageId: params.triggerMessageId,
     });
@@ -142,6 +138,7 @@ export async function executePlannedResearch(
         route: searchResult.route,
         estimatedCostUsd: searchResult.estimatedCostUsd,
         estimatedWorkMinutes: searchResult.estimatedWorkMinutes,
+        searchMeta: searchResult.searchMeta,
       },
     };
   }

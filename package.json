@@ -32,6 +32,7 @@
     "test:dm-steward": "tsx scripts/test-dm-steward-routing.ts",
     "test:clear-chat-context": "tsx scripts/test-clear-chat-context.ts",
     "test:search-routing": "tsx scripts/test-search-routing.ts",
+    "test:search-answer-quality": "tsx scripts/test-search-answer-quality.ts",
     "test:work-stop": "tsx scripts/test-work-stop.ts",
     "test:topic-context-imports": "tsx scripts/test-topic-context-imports.ts",
     "test:browser-research:mock": "tsx scripts/test-browser-research-mock.ts",

@@ -1,3 +1,5 @@
+import type { MessageArtifact } from "@/lib/types";
+
 export type SearchRoute =
   | "none"
   | "gateway_perplexity"
@@ -15,11 +17,14 @@ export type SearchNeed =
   | "source_verification"
   | "deep_browser_research";
 
+export type SearchMode = "fast_fact" | "standard";
+
 export type SearchRouteDecision = {
   need: SearchNeed;
   route: SearchRoute;
   browserRequired: boolean;
   reason: string;
+  searchMode?: SearchMode;
   maxResults?: number;
   domains?: string[];
   recency?: "day" | "week" | "month" | "year";
@@ -40,4 +45,23 @@ export type SearchAnswerResult = {
   estimatedCostUsd: number;
   estimatedWorkMinutes: number;
   uncertaintyNote?: string;
+  searchMeta?: GatewaySearchRunMeta;
+  searchSourcesArtifact?: MessageArtifact;
+};
+
+export type GatewaySearchRunMeta = {
+  searchRoute: SearchRoute;
+  searchNeed: SearchNeed;
+  searchMode: SearchMode;
+  browserRequired: false;
+  searchRequests: number;
+  sourceCount: number;
+  usedSourceCount: number;
+  excludedSourceCount: number;
+  searchCostUsd: number;
+  synthesisModel: string;
+  totalLatencyMs: number;
+  searchLatencyMs: number;
+  synthesisLatencyMs: number;
+  excludedSourceReasons?: string[];
 };

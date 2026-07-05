@@ -60,3 +60,21 @@ export function getGatewaySearchModelId(): string {
     "openai/gpt-4o-mini"
   );
 }
+
+export type FastFactSearchPreset = {
+  maxResults: number;
+  maxTokens: number;
+  maxTokensPerPage: number;
+  synthesisMaxOutputTokens: number;
+  timeoutMs: number;
+};
+
+export function getFastFactSearchPreset(): FastFactSearchPreset {
+  return {
+    maxResults: 5,
+    maxTokens: 10_000,
+    maxTokensPerPage: 1_600,
+    synthesisMaxOutputTokens: 650,
+    timeoutMs: 10_000,
+  };
+}

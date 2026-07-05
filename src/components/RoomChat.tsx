@@ -725,6 +725,8 @@ export function RoomChat({
               fallbackTier: data.metrics?.fallbackTier,
               aiMessageId: data.aiMessage?.id,
               replyPreview: data.aiMessage?.content?.slice(0, 120),
+              searchMeta: data.searchMeta ?? data.metrics?.searchMeta,
+              dmSteward: data.dmSteward,
               artifacts: data.aiMessage?.artifacts?.map((a: { type: string; label: string }) => ({
                 type: a.type,
                 label: a.label,

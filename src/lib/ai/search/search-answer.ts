@@ -13,8 +13,15 @@ import {
 } from "./config";
 import { runGatewaySearchAnswer, estimateGatewaySearchCostUsd } from "./vercel-gateway-search";
 import { runTavilySearchAnswer, estimateTavilySearchAnswerCostUsd } from "./tavily-search";
-import type { SearchAnswerResult, SearchRoute } from "./types";
+import type { SearchAnswerResult, SearchNeed, SearchRoute, SearchRouteDecision } from "./types";
 import { estimateWorkMinutesFromCost } from "@/lib/ai/work-hours/estimate";
+import {
+  buildSearchSourcesArtifact,
+  ensurePrivateCompanyWording,
+  normalizeGatewaySearchSources,
+  stripInlineSourcesSection,
+} from "./source-normalizer";
+import type { MessageArtifact } from "@/lib/types";
 
 export type ExecuteSearchAnswerParams = {
   client?: SupabaseClient;
@@ -30,20 +37,34 @@ export type ExecuteSearchAnswerParams = {
 };
 
 const SEARCH_UNAVAILABLE_MESSAGE =
-  "I need web search enabled to answer that with current sources. Configure AI Gateway search or Tavily, or ask me to draft from general knowledge without live verification.";
+  "I couldn't verify that with current web sources. I can answer from general knowledge with clear uncertainty, or try again if you want me to re-run search.";
+
+const NO_SOURCES_MESSAGE =
+  "I searched but couldn't find credible sources to verify that. I'd rather not guess — want me to try a broader search?";
+
+function buildDecision(params: ExecuteSearchAnswerParams): SearchRouteDecision {
+  if (params.routeOverride) {
+    const routed = decideSearchRoute(params.query, { preferAgentMode: params.preferAgentMode });
+    return {
+      need: routed.need === "none" ? "current_fact" : routed.need,
+      route: params.routeOverride,
+      browserRequired: params.routeOverride === "browserbase",
+      searchMode: routed.searchMode ?? "fast_fact",
+      reason: "route_override",
+      maxResults: routed.maxResults ?? 5,
+      recency: routed.recency,
+      estimatedWorkMinutes: isGatewaySearchRoute(params.routeOverride) ? 1.5 : 2,
+    };
+  }
+  return decideSearchRoute(params.query, { preferAgentMode: params.preferAgentMode });
+}
 
 export async function executeSearchAnswer(
   params: ExecuteSearchAnswerParams,
 ): Promise<SearchAnswerResult> {
-  const decision = params.routeOverride
-    ? {
-        need: "current_fact" as const,
-        route: params.routeOverride,
-        browserRequired: params.routeOverride === "browserbase",
-        reason: "route_override",
-        estimatedWorkMinutes: isGatewaySearchRoute(params.routeOverride) ? 1.5 : 2,
-      }
-    : decideSearchRoute(params.query, { preferAgentMode: params.preferAgentMode });
+  const decision = buildDecision(params);
+  const searchMode = decision.searchMode ?? "standard";
+  const totalStarted = Date.now();
 
   if (decision.browserRequired || decision.route === "browserbase" || decision.route === "none") {
     if (decision.route === "none") {
@@ -73,6 +94,8 @@ export async function executeSearchAnswer(
       metadata: {
         query: params.query.slice(0, 500),
         searchRoute: decision.route,
+        searchMode,
+        searchNeed: decision.need,
         agentRunId: params.agentRunId,
       },
     });
@@ -82,10 +105,13 @@ export async function executeSearchAnswer(
 
   try {
     let text = "";
-    let sources: SearchAnswerResult["sources"] = [];
+    let rawSources: SearchAnswerResult["sources"] = [];
     let providerRoute: SearchAnswerResult["providerRoute"] = "model_fallback";
     let estimatedCostUsd = 0;
     let estimatedWorkMinutes = decision.estimatedWorkMinutes;
+    let synthesisModel = "unknown";
+    let searchLatencyMs = 0;
+    let synthesisLatencyMs = 0;
 
     const tryGateway =
       isGatewaySearchRoute(decision.route) && isGatewaySearchConfigured();
@@ -100,40 +126,50 @@ export async function executeSearchAnswer(
       const result = await runGatewaySearchAnswer({
         query: params.query,
         route: gatewayRoute,
+        searchMode,
         maxResults: decision.maxResults,
         recency: decision.recency,
         domains: decision.domains,
         employeeName: params.employeeName,
       });
       text = result.text;
-      sources = result.sources;
+      rawSources = result.sources;
       providerRoute = "vercel_gateway";
       estimatedCostUsd = estimateGatewaySearchCostUsd();
       estimatedWorkMinutes = getGatewaySearchWorkMinutes();
+      synthesisModel = result.synthesisModel;
+      searchLatencyMs = result.searchLatencyMs;
+      synthesisLatencyMs = result.synthesisLatencyMs;
 
       if (!text.trim() && isTavilySearchConfigured()) {
+        const tavilyStarted = Date.now();
         const tavilyResult = await runTavilySearchAnswer({
           query: params.query,
           maxResults: decision.maxResults,
           employeeName: params.employeeName,
         });
         text = tavilyResult.text;
-        sources = tavilyResult.sources;
+        rawSources = tavilyResult.sources;
         providerRoute = "tavily";
         estimatedCostUsd = estimateTavilySearchAnswerCostUsd();
         estimatedWorkMinutes = Math.max(1, estimateWorkMinutesFromCost(estimatedCostUsd));
+        synthesisModel = "tavily";
+        synthesisLatencyMs = Date.now() - tavilyStarted;
       }
     } else if (tryTavily) {
+      const tavilyStarted = Date.now();
       const result = await runTavilySearchAnswer({
         query: params.query,
         maxResults: decision.maxResults,
         employeeName: params.employeeName,
       });
       text = result.text;
-      sources = result.sources;
+      rawSources = result.sources;
       providerRoute = "tavily";
       estimatedCostUsd = estimateTavilySearchAnswerCostUsd();
       estimatedWorkMinutes = Math.max(1, estimateWorkMinutesFromCost(estimatedCostUsd));
+      synthesisModel = "tavily";
+      synthesisLatencyMs = Date.now() - tavilyStarted;
     } else {
       return {
         answer: SEARCH_UNAVAILABLE_MESSAGE,
@@ -145,13 +181,13 @@ export async function executeSearchAnswer(
       };
     }
 
-    if (params.client && workUnitId) {
-      await completeAiWorkUnit(params.client, params.workspaceId, workUnitId, {
-        actualWorkMinutes: estimatedWorkMinutes,
-        actualCostUsd: estimatedCostUsd,
-        metadata: { sourceCount: sources.length },
-      });
-    }
+    const normalized = normalizeGatewaySearchSources(rawSources, params.query, {
+      maxUsed: 5,
+      searchNeed: decision.need,
+    });
+
+    text = stripInlineSourcesSection(text);
+    text = ensurePrivateCompanyWording(text, params.query, decision.need);
 
     if (!text.trim()) {
       return {
@@ -164,13 +200,64 @@ export async function executeSearchAnswer(
       };
     }
 
+    if (normalized.usedSourceCount === 0 && normalized.sourceCount === 0) {
+      return {
+        answer: NO_SOURCES_MESSAGE,
+        sources: [],
+        route: decision.route,
+        providerRoute,
+        estimatedCostUsd,
+        estimatedWorkMinutes,
+      };
+    }
+
+    const totalLatencyMs = Date.now() - totalStarted;
+    const searchMeta = {
+      searchRoute: decision.route,
+      searchNeed: decision.need as SearchNeed,
+      searchMode,
+      browserRequired: false as const,
+      searchRequests: 1,
+      sourceCount: normalized.sourceCount,
+      usedSourceCount: normalized.usedSourceCount,
+      excludedSourceCount: normalized.excludedSourceCount,
+      searchCostUsd: estimatedCostUsd,
+      synthesisModel,
+      totalLatencyMs,
+      searchLatencyMs,
+      synthesisLatencyMs,
+      excludedSourceReasons: normalized.excluded
+        .map((source) => source.excludedReason)
+        .filter(Boolean) as string[],
+    };
+
+    if (params.client && workUnitId) {
+      await completeAiWorkUnit(params.client, params.workspaceId, workUnitId, {
+        actualWorkMinutes: estimatedWorkMinutes,
+        actualCostUsd: estimatedCostUsd,
+        metadata: {
+          sourceCount: normalized.sourceCount,
+          usedSourceCount: normalized.usedSourceCount,
+          excludedSourceCount: normalized.excludedSourceCount,
+          totalLatencyMs,
+        },
+      });
+    }
+
     return {
       answer: text,
-      sources,
+      sources: normalized.used.map((source) => ({
+        title: source.title,
+        url: source.url,
+        snippet: source.snippet,
+      })),
       route: decision.route,
       providerRoute,
       estimatedCostUsd,
       estimatedWorkMinutes,
+      searchMeta,
+      searchSourcesArtifact:
+        normalized.usedSourceCount > 0 ? buildSearchSourcesArtifact(normalized) : undefined,
     };
   } catch (error) {
     if (params.client && workUnitId) {

@@ -4,6 +4,8 @@ export type {
   SearchRouteDecision,
   SearchSource,
   SearchAnswerResult,
+  SearchMode,
+  GatewaySearchRunMeta,
 } from "./types";
 
 export {
@@ -21,7 +23,19 @@ export {
   getSearchPrimaryProvider,
   getSearchBackupProvider,
   isBrowserResearchRequiresExplicitDeepTask,
+  getFastFactSearchPreset,
 } from "./config";
+
+export {
+  normalizeGatewaySearchSources,
+  rankSearchSources,
+  filterLowQualitySources,
+  isUnrelatedSource,
+  stripInlineSourcesSection,
+  buildSearchSourcesArtifact,
+  type SearchSourceCard,
+  type NormalizedSearchSources,
+} from "./source-normalizer";
 
 export { runGatewaySearchAnswer, estimateGatewaySearchCostUsd } from "./vercel-gateway-search";
 export { runTavilySearchAnswer, estimateTavilySearchAnswerCostUsd } from "./tavily-search";

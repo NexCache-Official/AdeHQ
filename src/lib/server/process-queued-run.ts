@@ -163,6 +163,8 @@ export async function processQueuedAgentRun(
   followUpRuns?: QueuedRun[];
   activatedRuns?: QueuedRun[];
   collaborationPlan?: ConversationPlan;
+  searchMeta?: import("@/lib/ai/search/types").GatewaySearchRunMeta;
+  dmSteward?: Record<string, unknown>;
 }> {
   const claim = await claimAgentRun(client, workspaceId, runId);
   if (!claim.ok) {
@@ -503,6 +505,9 @@ export async function processQueuedAgentRun(
           intent: dmSteward.intent,
           route: dmSteward.route,
           reason: dmSteward.reason,
+          browserRequired: dmSteward.browserRequired,
+          searchRequired: dmSteward.searchRequired,
+          avoidBrowserbaseReason: dmSteward.costPolicy.avoidBrowserbaseReason,
         };
 
         if (dmSteward.route === "gateway_search" || dmSteward.route === "tavily_search") {
@@ -581,6 +586,7 @@ export async function processQueuedAgentRun(
           .eq("id", triggerMessageId)
           .maybeSingle();
         const createdBy = triggerSender?.sender_id ? String(triggerSender.sender_id) : "unknown";
+        const researchStartedAt = Date.now();
 
         try {
           const serviceClient = createServiceRoleClient();
@@ -727,6 +733,17 @@ export async function processQueuedAgentRun(
 
             const searchProvider =
               researchResult.searchAnswer?.route ?? researchResult.run?.provider ?? "search";
+            const searchMeta = researchResult.searchAnswer?.searchMeta;
+            const totalLatencyMs = searchMeta?.totalLatencyMs ?? Date.now() - researchStartedAt;
+
+            if (searchMeta) {
+              runMetadata.gatewaySearch = searchMeta;
+              await client
+                .from("agent_runs")
+                .update({ run_metadata: runMetadata })
+                .eq("workspace_id", workspaceId)
+                .eq("id", runId);
+            }
 
             return {
               reply: researchResult.chatReply.content,
@@ -734,10 +751,13 @@ export async function processQueuedAgentRun(
               aiMode: researchResult.searchAnswer ? "gateway_search" : "research",
               employeeId,
               employeeName: employee.name,
+              artifacts: researchResult.chatReply.artifacts,
               researchRun: researchResult.run,
+              searchMeta,
+              dmSteward: runMetadata.dmSteward as Record<string, unknown> | undefined,
               metrics: {
                 provider: searchProvider,
-                model: searchProvider,
+                model: searchMeta?.synthesisModel ?? searchProvider,
                 modelMode,
                 inputTokens: 0,
                 outputTokens: 0,
@@ -746,7 +766,7 @@ export async function processQueuedAgentRun(
                   researchResult.searchAnswer?.estimatedCostUsd ??
                   researchResult.run?.estimatedCostUsd ??
                   0,
-                durationMs: 0,
+                durationMs: totalLatencyMs,
                 usageId,
                 agentRunId: runId,
               },

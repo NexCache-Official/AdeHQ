@@ -26,6 +26,7 @@ import {
 } from "@/lib/message-actions";
 import { ArtifactCard, FileArtifactCard } from "./ArtifactCard";
 import { EmailArtifactInlineCard } from "@/components/artifacts/ArtifactViewerModal";
+import { SearchSourceCards } from "@/components/search/SearchSourceCards";
 import { MessageMarkdown } from "./MessageMarkdown";
 import {
   BrainCircuit,
@@ -643,6 +644,8 @@ export function RoomMessageItem({
     (a) => a.type === "file" && !a.meta?.chunkId,
   ) ?? [];
   const workLogArtifacts = message.artifacts?.filter((a) => a.type === "work_log") ?? [];
+  const searchSourceArtifacts =
+    message.artifacts?.filter((a) => a.type === "search_sources") ?? [];
   const otherArtifacts = (message.artifacts ?? []).filter(
     (
       a,
@@ -654,6 +657,7 @@ export function RoomMessageItem({
       a.type !== "artifact" &&
       a.type !== "file" &&
       a.type !== "work_log" &&
+      a.type !== "search_sources" &&
       (a.type === "task" || a.type === "memory" || a.type === "approval"),
   );
   const debugWorkLogArtifacts = debugEnabled ? workLogArtifacts : [];
@@ -755,6 +759,10 @@ export function RoomMessageItem({
             topicId={message.topicId}
             roomId={messageRoomId}
           />
+        ))}
+
+        {searchSourceArtifacts.map((artifact) => (
+          <SearchSourceCards key={artifact.id} artifact={artifact} />
         ))}
 
         {generatedArtifacts.map((artifact) => {
