@@ -28,7 +28,9 @@ import { useHiringCandidateIntegrity } from "@/lib/hiring/use-hiring-candidate-i
 import {
   completeHireFromSession,
   generateCandidatesForSession,
+  hiringExitWarningCopy,
   logCandidatesGeneratedForSession,
+  shouldWarnBeforeHiringExit,
   type HiringSurface,
 } from "@/lib/hiring/hiring-session-service";
 import { ActionOnceGuard } from "@/lib/messaging/idempotency";
@@ -70,7 +72,7 @@ import { cn, nowISO, uid } from "@/lib/utils";
 import { BriefDocumentPreview } from "./BriefDocumentPreview";
 import { BriefEditor } from "./BriefEditor";
 import { TypewriterText } from "./BriefSections";
-import { AdeOrb, HireHeader, HireStepper } from "./HireChrome";
+import { AdeOrb, HireExitConfirmDialog, HireHeader, HireStepper } from "./HireChrome";
 import { RoleStepPanel, type RoleStepSelection } from "./RoleStepPanel";
 import {
   ApplicantCard,
@@ -102,6 +104,7 @@ export function HireFlow({ onboarding = false, entrySource = "hire_route" }: Hir
     tryClaimHireLock,
     releaseHireLock,
     completeDurableHire,
+    abandonSession,
   } = useHiringSessionSync({ mayaRoomId, surface: hiringSurface });
   const { visibleCandidates, candidateContext } = useHiringCandidateIntegrity({
     session,
@@ -124,6 +127,8 @@ export function HireFlow({ onboarding = false, entrySource = "hire_route" }: Hir
   }>({ active: false, section: null });
   const [mayaState, setMayaState] = useState<MayaRecruiterState>("idle");
   const [briefUpdateState, setBriefUpdateState] = useState<BriefUpdateState>(INITIAL_BRIEF_UPDATE_STATE);
+  const [exitDialogOpen, setExitDialogOpen] = useState(false);
+  const [leavingHiring, setLeavingHiring] = useState(false);
 
   const roleSeed = useMemo(() => {
     if (session.roleInput.trim()) return session.roleInput.trim();
@@ -195,6 +200,16 @@ export function HireFlow({ onboarding = false, entrySource = "hire_route" }: Hir
       if (composeTimerRef.current) clearTimeout(composeTimerRef.current);
     };
   }, []);
+
+  useEffect(() => {
+    if (!shouldWarnBeforeHiringExit(session)) return;
+    const handler = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [session]);
 
   const clearBriefCompose = useCallback(() => {
     if (composeTimerRef.current) clearTimeout(composeTimerRef.current);
@@ -778,12 +793,42 @@ export function HireFlow({ onboarding = false, entrySource = "hire_route" }: Hir
     router.replace("/rooms");
   };
 
+  const requestLeaveHiring = () => {
+    if (shouldWarnBeforeHiringExit(session)) {
+      setExitDialogOpen(true);
+      return;
+    }
+    goToWorkspace();
+  };
+
+  const confirmLeaveHiring = async () => {
+    setLeavingHiring(true);
+    try {
+      await abandonSession();
+      setExitDialogOpen(false);
+      goToWorkspace();
+    } finally {
+      setLeavingHiring(false);
+    }
+  };
+
+  const exitCopy = hiringExitWarningCopy(session);
+
   return (
     <div className="flex min-h-screen flex-col bg-canvas text-ink">
+      <HireExitConfirmDialog
+        open={exitDialogOpen}
+        title={exitCopy.title}
+        body={exitCopy.body}
+        confirmLabel={exitCopy.confirmLabel}
+        busy={leavingHiring}
+        onConfirm={() => void confirmLeaveHiring()}
+        onCancel={() => setExitDialogOpen(false)}
+      />
       <HireHeader
         onBack={hiringBackStep(session.step) ? goBack : undefined}
         backLabel={backLabel ? `← ${backLabel}` : undefined}
-        onGoToWorkspace={goToWorkspace}
+        onGoToWorkspace={requestLeaveHiring}
       />
       <HireStepper step={session.step} recruiterTurns={recruiterTurns} />
 

@@ -7,6 +7,62 @@ import { cn } from "@/lib/utils";
 import type { HiringStep } from "@/lib/hiring/types";
 import { ArrowLeft } from "lucide-react";
 
+export function HireExitConfirmDialog({
+  open,
+  title,
+  body,
+  confirmLabel = "Leave and clear session",
+  cancelLabel = "Keep hiring",
+  busy = false,
+  onConfirm,
+  onCancel,
+}: {
+  open: boolean;
+  title: string;
+  body: string;
+  confirmLabel?: string;
+  cancelLabel?: string;
+  busy?: boolean;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  if (!open) return null;
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-ink/35 px-5 backdrop-blur-[2px]">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="hire-exit-title"
+        className="w-full max-w-md rounded-2xl border border-border bg-surface p-6 shadow-[0_24px_80px_-32px_rgba(17,17,19,0.45)]"
+      >
+        <h2 id="hire-exit-title" className="text-lg font-semibold tracking-tight text-ink">
+          {title}
+        </h2>
+        <p className="mt-2 text-sm leading-relaxed text-ink-2">{body}</p>
+        <div className="mt-6 flex flex-wrap justify-end gap-2">
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={busy}
+            className="rounded-lg border border-border bg-surface px-4 py-2.5 text-sm font-medium text-ink-2 hover:border-ink/30 hover:text-ink disabled:opacity-50"
+          >
+            {cancelLabel}
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            disabled={busy}
+            className="rounded-lg bg-ink px-4 py-2.5 text-sm font-medium text-white disabled:opacity-50"
+          >
+            {busy ? "Clearing…" : confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function HireHeader({
   onBack,
   backLabel,

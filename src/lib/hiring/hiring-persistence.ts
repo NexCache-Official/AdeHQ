@@ -45,13 +45,14 @@ function jsonObject<T extends object>(value: unknown, fallback: T): T {
     : fallback;
 }
 
-function hasMeaningfulHiringProgress(state: HiringSessionState): boolean {
+export function hasMeaningfulHiringProgress(state: HiringSessionState): boolean {
   return (
     state.recruiterMessages.length > 0 ||
     state.candidates.length > 0 ||
     Boolean(state.brief) ||
     Boolean(state.briefPartial && Object.keys(state.briefPartial).length > 0) ||
-    Boolean(state.roleInput.trim())
+    Boolean(state.roleInput.trim()) ||
+    state.step !== "role"
   );
 }
 
@@ -195,6 +196,7 @@ export async function fetchActiveHiringSession(params: {
       .eq("id", params.sessionId)
       .eq("workspace_id", params.workspaceId)
       .eq("user_id", params.userId)
+      .in("status", ACTIVE_HIRING_STATUSES)
       .maybeSingle();
     if (error) throw error;
     if (!data) return null;
@@ -439,6 +441,44 @@ export async function clearHiringSessionCandidates(sessionId: string): Promise<v
     .delete()
     .eq("hiring_session_id", sessionId);
   if (error) throw error;
+}
+
+export async function markHiringSessionCancelled(params: {
+  sessionId: string;
+  workspaceId: string;
+}): Promise<void> {
+  const { error } = await supabase
+    .from("hiring_sessions")
+    .update({ status: "cancelled" })
+    .eq("id", params.sessionId)
+    .eq("workspace_id", params.workspaceId)
+    .in("status", ACTIVE_HIRING_STATUSES);
+
+  if (error) throw error;
+}
+
+/** Clear local cache and mark the durable session abandoned. */
+export async function abandonDurableHiringSession(params: {
+  backend: HiringBackendMode;
+  sessionId: string | null;
+  workspaceId?: string;
+  scope: HiringSessionScope;
+}): Promise<void> {
+  clearHiringSession(params.scope);
+
+  if (params.backend !== "supabase" || !params.sessionId || !params.workspaceId) {
+    return;
+  }
+
+  try {
+    await markHiringSessionCancelled({
+      sessionId: params.sessionId,
+      workspaceId: params.workspaceId,
+    });
+    await clearHiringSessionCandidates(params.sessionId);
+  } catch (error) {
+    console.warn("[AdeHQ hiring] Failed to abandon durable session.", error);
+  }
 }
 
 export async function loadDurableHiringSession(params: {

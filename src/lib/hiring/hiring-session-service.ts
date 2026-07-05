@@ -18,7 +18,8 @@ import {
 } from "./candidate-validation";
 import { callCandidates } from "./hiring-api";
 import {
-  clearHiringSessionCandidates,
+  abandonDurableHiringSession,
+  hasMeaningfulHiringProgress,
   loadDurableHiringSession,
   type HiringBackendMode,
 } from "./hiring-persistence";
@@ -35,7 +36,7 @@ import {
 } from "./maya-hiring-proposal";
 import { createMayaHiringTopic } from "./maya-dm-topics";
 import { inferRoleFromText } from "./role-inference";
-import { clearHiringSession, initialHiringSession } from "./session";
+import { initialHiringSession } from "./session";
 import type {
   AiEmployeeApplicant,
   AiEmployeeJobBrief,
@@ -440,11 +441,37 @@ export async function cancelHiringSession(params: {
   scope: HiringSessionScope;
   sessionId?: string | null;
   backend?: HiringBackendMode;
+  workspaceId?: string;
 }): Promise<void> {
-  clearHiringSession(params.scope);
-  if (params.sessionId && params.backend === "supabase") {
-    await clearHiringSessionCandidates(params.sessionId).catch(() => undefined);
-  }
+  await abandonDurableHiringSession({
+    backend: params.backend ?? "demo",
+    sessionId: params.sessionId ?? null,
+    workspaceId: params.workspaceId,
+    scope: params.scope,
+  });
+}
+
+export function shouldWarnBeforeHiringExit(state: HiringSessionState): boolean {
+  if (state.step === "success" || state.step === "assign_optional") return false;
+  return hasMeaningfulHiringProgress(state);
+}
+
+export function hiringExitWarningCopy(state: HiringSessionState): {
+  title: string;
+  body: string;
+  confirmLabel: string;
+} {
+  const roleLabel =
+    state.brief?.roleTitle ??
+    state.briefPartial?.roleTitle ??
+    state.customRoleTitle ??
+    (state.roleInput.trim() || "this role");
+
+  return {
+    title: "Leave hiring?",
+    body: `Your progress on ${roleLabel} will be cleared from this session. Next time you hire, you'll start with a clean slate.`,
+    confirmLabel: "Leave and clear session",
+  };
 }
 
 export function initialSessionForSurface(

@@ -9,6 +9,7 @@ import {
 } from "@/lib/hiring/hiring-session-service";
 import {
   claimHireLock,
+  abandonDurableHiringSession,
   finalizeDurableHiringSession,
   loadDurableHiringSession,
   persistDurableHiringSession,
@@ -182,6 +183,24 @@ export function useHiringSessionSync({
     });
   }, [source]);
 
+  const abandonSession = useCallback(async () => {
+    if (persistTimerRef.current) clearTimeout(persistTimerRef.current);
+    await abandonDurableHiringSession({
+      backend,
+      sessionId: sessionIdRef.current,
+      workspaceId,
+      scope,
+    });
+    sessionIdRef.current = null;
+    dispatch({
+      type: "RESTORE",
+      state: {
+        ...initialHiringSession(),
+        ...(source ? { sessionSource: source } : {}),
+      },
+    });
+  }, [backend, workspaceId, scope, source]);
+
   return {
     session,
     dispatch,
@@ -194,5 +213,6 @@ export function useHiringSessionSync({
     releaseHireLock,
     completeDurableHire,
     resetAfterMayaHire,
+    abandonSession,
   };
 }
