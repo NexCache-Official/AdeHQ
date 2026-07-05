@@ -1,4 +1,5 @@
 import type { BriefComposeSection } from "./detect-brief-change";
+import { normalizeRecruiterAnswer } from "./normalize-recruiter-answer";
 import {
   detectRecruiterUserIntent,
   mayaReplyForRecruiterIntent,
@@ -53,7 +54,7 @@ const OPTIMISTIC_ACKS = [
 ];
 
 export function pickOptimisticAck(seed?: string): string {
-  const trimmed = seed?.trim() ?? "";
+  const trimmed = normalizeRecruiterAnswer(seed ?? "");
   const intentReply = mayaReplyForRecruiterIntent(detectRecruiterUserIntent(trimmed));
   if (intentReply) return intentReply;
 

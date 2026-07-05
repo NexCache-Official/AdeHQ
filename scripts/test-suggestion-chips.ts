@@ -1,10 +1,33 @@
 import assert from "node:assert/strict";
+import { normalizeRecruiterAnswer } from "../src/lib/hiring/normalize-recruiter-answer";
 import {
   extractExamplesFromRecruiterMessage,
   extractOptionListBeforeQuestion,
   inferQuestionTopicFromRecruiterMessage,
   parseRecruiterSuggestionChips,
 } from "../src/lib/hiring/suggestion-chips";
+
+assert.equal(normalizeRecruiterAnswer("Or cross-functional workflows"), "Cross-functional workflows");
+assert.equal(normalizeRecruiterAnswer("and product"), "Product");
+
+const analystQuestion =
+  "Let's bring on a Business Analyst. What should they analyze — operations, product, finance, or cross-functional workflows?";
+
+const analystOptions = extractOptionListBeforeQuestion(analystQuestion);
+assert.ok(
+  analystOptions.some((x) => x === "Cross-functional workflows"),
+  `expected clean last option, got ${analystOptions.join("|")}`,
+);
+assert.ok(
+  !analystOptions.some((x) => /^or /i.test(x)),
+  `options should not start with Or: ${analystOptions.join("|")}`,
+);
+
+const analystChips = parseRecruiterSuggestionChips([{ role: "ade", text: analystQuestion }]);
+assert.ok(
+  analystChips.some((chip) => chip.label === "Cross-functional workflows"),
+  `expected normalized chip, got ${analystChips.map((c) => c.label).join(", ")}`,
+);
 
 const stackQuestion =
   "Got it — full-stack. To narrow down the tech stack, what specific frontend and backend technologies or frameworks does your team use? (e.g., React + Node.js, Vue + Python, etc.)";

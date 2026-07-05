@@ -18,7 +18,7 @@ import {
 import { candidateToEmployee } from "@/lib/hiring/map-candidate";
 import { legacyDepartmentIdForRole, getRoleByKey } from "@/lib/hiring/role-library";
 import { buildRecruiterOpeningMessage } from "@/lib/hiring/recruiter-openings";
-import { assessRecruiterReadiness, parseRecruiterSuggestionChips } from "@/lib/hiring/recruiter-brain";
+import { normalizeRecruiterAnswer } from "@/lib/hiring/normalize-recruiter-answer";
 import { inferRoleFromText, inferenceOpeningMessage } from "@/lib/hiring/role-inference";
 import {
   hiringBackStep,
@@ -55,7 +55,7 @@ import {
   MAYA_EMPLOYEE_TITLE,
   MAYA_RECRUITER_TAGLINE,
 } from "@/lib/hiring/maya";
-import { finalizeReadinessScore } from "@/lib/hiring/recruiter-brain";
+import { assessRecruiterReadiness, finalizeReadinessScore, parseRecruiterSuggestionChips } from "@/lib/hiring/recruiter-brain";
 import type {
   AiEmployeeApplicant,
   AiEmployeeJobBrief,
@@ -447,7 +447,7 @@ export function HireFlow({ onboarding = false, entrySource = "hire_route" }: Hir
   };
 
   const sendUserMessage = async (text: string, action: "message" | "draft_now" | "refine_section" = "message") => {
-    const trimmed = text.trim();
+    const trimmed = normalizeRecruiterAnswer(text);
     if (!trimmed || session.busy) return;
     dispatch({ type: "SET_ERROR", error: null });
 

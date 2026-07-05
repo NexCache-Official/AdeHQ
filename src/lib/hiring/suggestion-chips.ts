@@ -1,4 +1,5 @@
 import { DEPARTMENT_CARDS } from "./data";
+import { normalizeRecruiterAnswer } from "./normalize-recruiter-answer";
 import type {
   AiEmployeeJobBrief,
   RecruiterMessage,
@@ -74,18 +75,11 @@ function parseInlineOptionList(segment: string): string[] {
   const parts = cleaned
     .split(/,\s*/)
     .flatMap((part) => part.split(/\s+or\s+/i))
-    .map((part) =>
-      part
-        .trim()
-        .replace(/^(will it focus on|should it|could it|would it)\s+/i, "")
-        .replace(/^on\s+/i, "")
-        .replace(/^to\s+/i, "")
-        .replace(/[.)]+$/g, ""),
-    )
+    .map((part) => normalizeRecruiterAnswer(part))
     .filter((part) => part.length > 2 && part.length < 80)
     .filter((part) => !/something else|not sure|help me decide|^etc$/i.test(part));
 
-  return parts.map((part) => part.charAt(0).toUpperCase() + part.slice(1));
+  return parts;
 }
 
 export type RecruiterQuestionTopic =

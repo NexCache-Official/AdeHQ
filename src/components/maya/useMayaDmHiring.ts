@@ -17,6 +17,7 @@ import {
   type MayaRecruiterState,
 } from "@/lib/hiring/maya-recruiter-state";
 import { buildRecruiterOpeningMessage } from "@/lib/hiring/recruiter-openings";
+import { normalizeRecruiterAnswer } from "@/lib/hiring/normalize-recruiter-answer";
 import {
   assessRecruiterReadiness,
   finalizeReadinessScore,
@@ -666,7 +667,7 @@ export function useMayaDmHiring({
 
   const sendUserMessage = useCallback(
     async (text: string, action: "message" | "draft_now" | "refine_section" = "message") => {
-      const trimmed = text.trim();
+      const trimmed = normalizeRecruiterAnswer(text);
       if (!trimmed || session.busy) return;
 
       const fingerprint = messageSendFingerprint(

@@ -29,6 +29,7 @@ import {
   isEngineeringBrief,
 } from "@/lib/hiring/recruiter-brain";
 import { resolveRecruiterSuggestionChips } from "@/lib/hiring/resolve-suggestion-chips";
+import { normalizeRecruiterAnswer } from "@/lib/hiring/normalize-recruiter-answer";
 import {
   generateRecruiterResponse,
   getRecruiterRuntimeDispatch,
@@ -93,8 +94,8 @@ function sanitizeSuggestionChips(chips: RecruiterSuggestionChip[] = []): Recruit
 
   for (const chip of chips) {
     if (chip.intent === "review_brief") continue;
-    const label = chip.label.trim();
-    const value = chip.value.trim();
+    const label = normalizeRecruiterAnswer(chip.label);
+    const value = normalizeRecruiterAnswer(chip.value);
     if (!label || !value) continue;
 
     const key = `${chip.intent}:${label.toLowerCase()}:${value.toLowerCase()}`;
@@ -112,7 +113,11 @@ function sanitizeSuggestionChips(chips: RecruiterSuggestionChip[] = []): Recruit
 }
 
 function normalizeBody(body: RecruiterBody) {
-  const conversation = body.conversation ?? body.messages ?? [];
+  const conversation = (body.conversation ?? body.messages ?? []).map((message) =>
+    message.role === "user"
+      ? { ...message, text: normalizeRecruiterAnswer(message.text) }
+      : message,
+  );
   const departmentId = body.selectedDepartment ?? body.departmentId ?? null;
   const roleKey = body.roleKey ?? null;
   const action = body.action ?? (body.mode === "draft_now" ? "draft_now" : "message");

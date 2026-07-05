@@ -1,5 +1,6 @@
 import type { AiEmployeeJobBrief } from "./types";
 import { getRoleByKey } from "./role-library";
+import { normalizeRecruiterAnswer } from "./normalize-recruiter-answer";
 import { detectRecruiterUserIntent, shouldSkipBriefUpdateIntent } from "./recruiter-intents";
 
 const FOCUS_MAP: Record<string, { businessFocus: string; technicalFocus?: string; responsibility: string }> = {
@@ -102,7 +103,7 @@ export function applyRoleFocusAnswer(
   brief: AiEmployeeJobBrief,
   roleKey?: string | null,
 ): { brief: AiEmployeeJobBrief; focusLabel: string | null } | null {
-  const trimmed = answer.trim();
+  const trimmed = normalizeRecruiterAnswer(answer);
   if (!trimmed || trimmed.length > 120) return null;
   if (shouldSkipBriefUpdateIntent(detectRecruiterUserIntent(trimmed))) return null;
 
