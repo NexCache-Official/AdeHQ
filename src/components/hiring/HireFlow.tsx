@@ -18,7 +18,7 @@ import {
 import { candidateToEmployee } from "@/lib/hiring/map-candidate";
 import { legacyDepartmentIdForRole, getRoleByKey } from "@/lib/hiring/role-library";
 import { buildRecruiterOpeningMessage } from "@/lib/hiring/recruiter-openings";
-import { assessRecruiterReadiness, generateSuggestionChips } from "@/lib/hiring/recruiter-brain";
+import { assessRecruiterReadiness, parseRecruiterSuggestionChips } from "@/lib/hiring/recruiter-brain";
 import { inferRoleFromText, inferenceOpeningMessage } from "@/lib/hiring/role-inference";
 import {
   hiringBackStep,
@@ -235,28 +235,19 @@ export function HireFlow({ onboarding = false, entrySource = "hire_route" }: Hir
         });
       }
 
-      const nextMessages =
-        appendMaya && recruiterMessage
-          ? [
-              ...(conversationBase ??
-                session.recruiterMessages.filter((message) => !message.isOptimistic)),
-              { role: "ade" as const, text: recruiterMessage },
-            ]
-          : (conversationBase ?? session.recruiterMessages.filter((message) => !message.isOptimistic));
+      const messagesForChips =
+        conversationBase ??
+        session.recruiterMessages.filter((message) => !message.isOptimistic);
       const chipBrief = res.brief ?? res.briefPartial ?? session.brief ?? session.briefPartial;
       const chipReadiness = res.readiness ?? session.readiness;
-      if (chipBrief?.roleTitle && chipReadiness) {
+
+      if (res.suggestionChips?.length) {
+        dispatch({ type: "SET_SUGGESTION_CHIPS", chips: res.suggestionChips });
+      } else if (chipBrief?.roleTitle && chipReadiness && messagesForChips.length) {
         dispatch({
           type: "SET_SUGGESTION_CHIPS",
-          chips: generateSuggestionChips(
-            chipReadiness,
-            chipBrief as AiEmployeeJobBrief,
-            nextMessages,
-            session.roleKey,
-          ),
+          chips: parseRecruiterSuggestionChips(messagesForChips, session.roleKey),
         });
-      } else if (res.suggestionChips) {
-        dispatch({ type: "SET_SUGGESTION_CHIPS", chips: res.suggestionChips });
       }
 
       const nextBrief = res.brief ?? res.briefPartial;
@@ -327,7 +318,7 @@ export function HireFlow({ onboarding = false, entrySource = "hire_route" }: Hir
     dispatch({ type: "SET_READINESS", readiness: localReadiness });
     dispatch({
       type: "SET_SUGGESTION_CHIPS",
-      chips: generateSuggestionChips(localReadiness, localBrief, openingConversation, roleKey),
+      chips: parseRecruiterSuggestionChips(openingConversation, roleKey),
     });
     prevBriefRef.current = { ...localBrief };
     dispatch({ type: "SET_BRIEF_READY", briefReady: false });
@@ -347,10 +338,11 @@ export function HireFlow({ onboarding = false, entrySource = "hire_route" }: Hir
         }),
       );
       const finalOpening = res.recruiterMessage ?? res.message ?? opening;
+      const openingConversation = [{ role: "ade" as const, text: finalOpening }];
       if (finalOpening !== opening) {
-        dispatch({ type: "SET_MESSAGES", messages: [{ role: "ade", text: finalOpening }] });
+        dispatch({ type: "SET_MESSAGES", messages: openingConversation });
       }
-      applyRecruiterResponse(res, undefined, false);
+      applyRecruiterResponse(res, openingConversation, false);
     } catch (e) {
       dispatch({
         type: "SET_ERROR",

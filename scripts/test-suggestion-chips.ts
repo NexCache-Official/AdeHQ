@@ -2,39 +2,9 @@ import assert from "node:assert/strict";
 import {
   extractExamplesFromRecruiterMessage,
   extractOptionListBeforeQuestion,
-  generateSuggestionChips,
   inferQuestionTopicFromRecruiterMessage,
+  parseRecruiterSuggestionChips,
 } from "../src/lib/hiring/suggestion-chips";
-import type { AiEmployeeJobBrief, RecruiterReadiness } from "../src/lib/hiring/types";
-
-const engineeringBrief: AiEmployeeJobBrief = {
-  roleTitle: "Software Engineer",
-  department: "Engineering",
-  domain: "Full-stack development",
-  mission: "Ship features",
-  coreResponsibilities: ["Build features"],
-  technicalFocus: ["Full-stack product engineering"],
-  businessFocus: ["Full-stack product engineering"],
-  successMetrics: ["Ship on time"],
-  communicationStyle: "Technical",
-  personalityTraits: ["practical"],
-  proactivityLevel: "balanced",
-  qualityPreference: "balanced",
-  seniorityLevel: "specialist",
-  autonomyLevel: "balanced",
-  approvalRules: ["Ask before deploys"],
-  toolsNeeded: [],
-  assumptions: [],
-  openQuestions: [],
-};
-
-const almostReady: RecruiterReadiness = {
-  score: 82,
-  ready: false,
-  confidence: "medium",
-  missing: ["seniority", "autonomy", "tools", "approval_rules"],
-  reason: "gathering",
-};
 
 const stackQuestion =
   "Got it — full-stack. To narrow down the tech stack, what specific frontend and backend technologies or frameworks does your team use? (e.g., React + Node.js, Vue + Python, etc.)";
@@ -51,9 +21,7 @@ const focusOptions = extractOptionListBeforeQuestion(focusQuestion);
 assert.ok(focusOptions.some((x) => /frontend product work/i.test(x)), focusOptions.join("|"));
 assert.ok(focusOptions.some((x) => /full-stack/i.test(x)), focusOptions.join("|"));
 
-const stackChips = generateSuggestionChips(
-  almostReady,
-  engineeringBrief,
+const stackChips = parseRecruiterSuggestionChips(
   [
     { role: "ade", text: focusQuestion },
     { role: "user", text: "Full-stack" },
@@ -69,6 +37,23 @@ assert.ok(
 assert.ok(
   !stackChips.some((chip) => /senior advisor|autonomous manager/i.test(chip.label)),
   `should not show seniority chips for stack question: ${stackChips.map((c) => c.label).join(", ")}`,
+);
+
+const socialOpening =
+  "Let's bring on a Social Media Manager. Which channels — LinkedIn, X, Instagram, TikTok, or multiple?";
+
+const socialChips = parseRecruiterSuggestionChips(
+  [{ role: "ade", text: socialOpening }],
+  "social_media_manager",
+);
+
+assert.ok(
+  socialChips.some((chip) => /linkedin|instagram|tiktok|multiple/i.test(chip.label)),
+  `expected social channel chips, got ${socialChips.map((c) => c.label).join(", ")}`,
+);
+assert.ok(
+  !socialChips.some((chip) => /react|node\.js|tech stack|frontend and backend/i.test(chip.label)),
+  `should not show engineering chips for social media: ${socialChips.map((c) => c.label).join(", ")}`,
 );
 
 console.log("suggestion-chips: ok");

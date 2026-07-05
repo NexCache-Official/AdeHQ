@@ -25,10 +25,10 @@ import {
   buildRecruiterTurnMessage,
   chooseNextRecruiterQuestion,
   finalizeReadinessScore,
-  generateSuggestionChips,
   inferDepartmentId,
   isEngineeringBrief,
 } from "@/lib/hiring/recruiter-brain";
+import { resolveRecruiterSuggestionChips } from "@/lib/hiring/resolve-suggestion-chips";
 import {
   generateRecruiterResponse,
   getRecruiterRuntimeDispatch,
@@ -225,18 +225,6 @@ function buildResponse(input: {
     userIntent === "generate_candidates" ||
     userIntent === "review_brief";
   const readiness = finalizeReadinessScore(baseReadiness, brief, canReviewBrief);
-  let suggestionChips = generateSuggestionChips(readiness, brief, input.conversation, roleKey);
-  if (canReviewBrief && !suggestionChips.some((chip) => chip.intent === "review_brief")) {
-    suggestionChips = [
-      {
-        id: "review-brief",
-        label: "Review job brief",
-        value: "Review job brief",
-        intent: "review_brief",
-      },
-      ...suggestionChips,
-    ];
-  }
   const userTurns = input.conversation.filter((m) => m.role === "user").length;
   const departmentId = input.body.selectedDepartment ?? input.body.departmentId ?? null;
   const lastAde = [...input.conversation].reverse().find((m) => m.role === "ade")?.text ?? "";
@@ -268,14 +256,43 @@ function buildResponse(input: {
     brief,
     briefPartial: brief,
     readiness,
-    suggestionChips,
+    suggestionChips: [] as RecruiterSuggestionChip[],
     canReviewBrief,
     briefReady: canReviewBrief,
-    chips: suggestionChips.map((chip) => chip.label),
+    chips: [] as string[],
     checklist,
     usedFallback: input.usedFallback,
     roleKey,
     changedFields,
+  };
+}
+
+async function finalizeRecruiterResponse(
+  response: ReturnType<typeof buildResponse>,
+  input: {
+    conversation: RecruiterMessage[];
+    roleKey?: string | null;
+    lastUser?: string;
+  },
+) {
+  const lastUser =
+    input.lastUser ??
+    [...input.conversation].reverse().find((message) => message.role === "user")?.text ??
+    "";
+  const suggestionChips = await resolveRecruiterSuggestionChips({
+    readiness: response.readiness,
+    brief: response.brief,
+    conversation: input.conversation,
+    roleKey: input.roleKey ?? response.roleKey,
+    lastAdeMessage: response.message ?? "",
+    lastUserMessage: lastUser,
+    canReviewBrief: response.canReviewBrief,
+  });
+
+  return {
+    ...response,
+    suggestionChips,
+    chips: suggestionChips.map((chip) => chip.label),
   };
 }
 
@@ -341,34 +358,40 @@ export async function POST(request: NextRequest) {
 
     if (!useRecruiterLlm(body, conversation, action)) {
       return NextResponse.json(
-        buildResponse({
-          body,
-          brief: refinedBrief,
-          conversation,
-          message:
-            action === "draft_now"
-              ? "I have enough to draft a strong job brief. You can review it now, or keep refining the role."
-              : undefined,
-          usedFallback: true,
-          forceCanReview: action === "draft_now",
-        }),
+        await finalizeRecruiterResponse(
+          buildResponse({
+            body,
+            brief: refinedBrief,
+            conversation,
+            message:
+              action === "draft_now"
+                ? "I have enough to draft a strong job brief. You can review it now, or keep refining the role."
+                : undefined,
+            usedFallback: true,
+            forceCanReview: action === "draft_now",
+          }),
+          { conversation, roleKey },
+        ),
       );
     }
 
     if (!isSiliconFlowConfigured() && getRecruiterRuntimeDispatch() === "old") {
       const brief = refinedBrief;
       return NextResponse.json(
-        buildResponse({
-          body,
-          brief,
-          conversation,
-          message:
-            action === "draft_now"
-              ? "I have enough to draft a strong job brief. You can review it now, or keep refining the role."
-              : undefined,
-          usedFallback: true,
-          forceCanReview: action === "draft_now",
-        }),
+        await finalizeRecruiterResponse(
+          buildResponse({
+            body,
+            brief,
+            conversation,
+            message:
+              action === "draft_now"
+                ? "I have enough to draft a strong job brief. You can review it now, or keep refining the role."
+                : undefined,
+            usedFallback: true,
+            forceCanReview: action === "draft_now",
+          }),
+          { conversation, roleKey },
+        ),
       );
     }
 
@@ -420,23 +443,29 @@ export async function POST(request: NextRequest) {
       }
 
       return NextResponse.json(
-        buildResponse({
-          body,
-          brief,
-          conversation,
-          message: object.message,
-          usedFallback: false,
-          forceCanReview: action === "draft_now",
-        }),
+        await finalizeRecruiterResponse(
+          buildResponse({
+            body,
+            brief,
+            conversation,
+            message: object.message,
+            usedFallback: false,
+            forceCanReview: action === "draft_now",
+          }),
+          { conversation, roleKey },
+        ),
       );
     } catch {
       return NextResponse.json(
-        buildResponse({
-          body,
-          brief: baseBrief,
-          conversation,
-          usedFallback: true,
-        }),
+        await finalizeRecruiterResponse(
+          buildResponse({
+            body,
+            brief: baseBrief,
+            conversation,
+            usedFallback: true,
+          }),
+          { conversation, roleKey },
+        ),
       );
     }
   } catch (err) {

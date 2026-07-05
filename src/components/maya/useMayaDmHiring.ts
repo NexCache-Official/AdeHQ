@@ -20,7 +20,7 @@ import { buildRecruiterOpeningMessage } from "@/lib/hiring/recruiter-openings";
 import {
   assessRecruiterReadiness,
   finalizeReadinessScore,
-  generateSuggestionChips,
+  parseRecruiterSuggestionChips,
 } from "@/lib/hiring/recruiter-brain";
 import { classifyMayaDmIntent, workspaceGuideReply } from "@/lib/hiring/maya-dm-intent";
 import {
@@ -265,28 +265,19 @@ export function useMayaDmHiring({
         });
       }
 
-      const nextMessages =
-        appendMaya && recruiterMessage
-          ? [
-              ...(conversationBase ??
-                session.recruiterMessages.filter((m) => !m.isOptimistic)),
-              { role: "ade" as const, text: recruiterMessage },
-            ]
-          : (conversationBase ?? session.recruiterMessages.filter((m) => !m.isOptimistic));
+      const messagesForChips =
+        conversationBase ??
+        session.recruiterMessages.filter((m) => !m.isOptimistic);
       const chipBrief = res.brief ?? res.briefPartial ?? session.brief ?? session.briefPartial;
       const chipReadiness = res.readiness ?? session.readiness;
-      if (chipBrief?.roleTitle && chipReadiness) {
+
+      if (res.suggestionChips?.length) {
+        dispatch({ type: "SET_SUGGESTION_CHIPS", chips: res.suggestionChips });
+      } else if (chipBrief?.roleTitle && chipReadiness && messagesForChips.length) {
         dispatch({
           type: "SET_SUGGESTION_CHIPS",
-          chips: generateSuggestionChips(
-            chipReadiness,
-            chipBrief as AiEmployeeJobBrief,
-            nextMessages,
-            session.roleKey,
-          ),
+          chips: parseRecruiterSuggestionChips(messagesForChips, session.roleKey),
         });
-      } else if (res.suggestionChips) {
-        dispatch({ type: "SET_SUGGESTION_CHIPS", chips: res.suggestionChips });
       }
 
       const nextBrief = res.brief ?? res.briefPartial;
@@ -351,7 +342,7 @@ export function useMayaDmHiring({
       dispatch({ type: "SET_READINESS", readiness: localReadiness });
       dispatch({
         type: "SET_SUGGESTION_CHIPS",
-        chips: generateSuggestionChips(localReadiness, localBrief, openingConversation, roleKey),
+        chips: parseRecruiterSuggestionChips(openingConversation, roleKey),
       });
       prevBriefRef.current = { ...localBrief };
       dispatch({ type: "SET_BRIEF_PARTIAL", briefPartial: localBrief });
