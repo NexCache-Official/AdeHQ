@@ -29,6 +29,7 @@
     "test:employee-queued-runtime": "tsx scripts/test-employee-queued-runtime.ts",
     "test:model-router:compat": "tsx scripts/test-model-router-compat.ts",
     "test:room-steward": "tsx scripts/test-room-steward.ts",
+    "test:topic-context-imports": "tsx scripts/test-topic-context-imports.ts",
     "test:browser-research:mock": "tsx scripts/test-browser-research-mock.ts",
     "test:browser-research:tavily": "tsx scripts/test-browser-research-tavily.ts",
     "test:browser-research:shadow": "tsx scripts/test-browser-research-runtime-shadow.ts",

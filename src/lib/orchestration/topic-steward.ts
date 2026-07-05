@@ -1,4 +1,9 @@
 import { isGeneralTopic } from "@/lib/topics";
+import {
+  buildContextSummaryFromMessages,
+  selectMessagesForTopicImport,
+  type TopicImportMessage,
+} from "@/lib/topics/context-imports";
 import type { RoomTopic } from "@/lib/types";
 import type { OrchestrationIntent, OrchestratorInput, TopicStewardSuggestion } from "./types";
 
@@ -42,6 +47,7 @@ function inferTopicTitle(messages: OrchestratorInput["recentMessages"]): string 
     .join(" ");
   if (/\bpricing\b/i.test(blob)) return "Pricing Strategy";
   if (/\bpro plus\b/i.test(blob)) return "Pro Plus Pricing";
+  if (/\bwashing machine\b/i.test(blob)) return "Washing Machine Launch";
   if (/\blawnmower\b/i.test(blob)) return "Lawnmower Market Research";
   if (/\bcompetitor\b/i.test(blob)) return "Competitive Positioning";
   if (/\blaunch\b/i.test(blob)) return "Launch Planning";
@@ -107,18 +113,59 @@ export function suggestTopics(
 
   if (confidence < 0.78) return [];
 
-  const messageIds = recentInTopic.slice(-4).map((m) => m.id);
+  const importMessages: TopicImportMessage[] = recentInTopic.map((message) => ({
+    id: message.id,
+    senderType: message.senderType,
+    senderId: message.senderId ?? undefined,
+    senderName:
+      message.senderType === "human"
+        ? "Human"
+        : message.senderType === "ai"
+          ? "AI"
+          : "System",
+    content: message.text,
+    createdAt: message.createdAt,
+    topicId: message.topicId ?? undefined,
+  }));
+
+  const selectedMessages = selectMessagesForTopicImport({
+    messages: importMessages,
+    triggerMessageId: input.messageId,
+    suggestedTopicTitle: inferredTitle,
+    maxMessages: 8,
+  });
+  const messageIds = selectedMessages.map((message) => message.id);
   if (!messageIds.includes(input.messageId)) messageIds.push(input.messageId);
+
+  const { summary } = buildContextSummaryFromMessages(
+    selectedMessages,
+    inferredTitle,
+  );
+  const previewBullets = [
+    selectedMessages.some((message) => message.senderType === "human" && /product|launch|idea/i.test(message.content))
+      ? "product idea"
+      : null,
+    selectedMessages.some((message) => message.senderType === "ai" && /\?|clarif|need/i.test(message.content))
+      ? "clarification questions"
+      : null,
+    selectedMessages.some((message) => message.senderType === "ai" && /research|market|compet/i.test(message.content))
+      ? "research follow-up"
+      : null,
+  ].filter(Boolean) as string[];
 
   return [
     {
       type: "create_topic",
       title: inferredTitle,
       reason: onGeneral
-        ? "This conversation has become a focused workstream. A dedicated topic keeps context scoped."
-        : "A scoped topic would help organize this workstream.",
+        ? "This looks like a focused workstream. AdeHQ can copy the relevant context into a new topic so the team can continue there."
+        : "A scoped topic would help organize this workstream with imported context.",
       confidence: Math.min(0.95, confidence),
       messageIds,
+      contextSummary: summary,
+      sourceScope: onGeneral ? "room" : "topic",
+      previewBullets,
+      triggerMessageId: input.messageId,
     },
   ];
 }

@@ -13,6 +13,12 @@ export type TopicSuggestionPayload = {
   reason?: string | null;
   confidence?: number;
   message_ids?: string[];
+  metadata?: {
+    contextSummary?: string | null;
+    sourceScope?: "room" | "topic" | "dm" | null;
+    previewBullets?: string[];
+    triggerMessageId?: string | null;
+  } | null;
 };
 
 export function TopicSuggestionCard({
@@ -22,7 +28,7 @@ export function TopicSuggestionCard({
   onDismiss,
 }: {
   suggestion: TopicSuggestionPayload;
-  onCreateTopic: (title: string) => void | Promise<void>;
+  onCreateTopic: (suggestion: TopicSuggestionPayload) => void | Promise<void>;
   onAccept: (suggestionId: string) => void | Promise<void>;
   onDismiss: (suggestionId: string) => void | Promise<void>;
 }) {
@@ -35,13 +41,16 @@ export function TopicSuggestionCard({
     suggestion.type === "move_to_existing_topic"
       ? suggestion.reason ?? "This conversation may fit better in an existing topic."
       : suggestion.reason ??
-        "This conversation has become a focused workstream. Creating a topic keeps context scoped.";
+        "This looks like a focused workstream. AdeHQ can copy the relevant context into a new topic so the team can continue there.";
+  const preview = suggestion.metadata?.contextSummary?.trim();
+  const previewBullets = suggestion.metadata?.previewBullets ?? [];
+  const messageCount = suggestion.message_ids?.length ?? 0;
 
   const handleCreate = async () => {
     if (!suggestion.title || busy) return;
     setBusy(true);
     try {
-      await onCreateTopic(suggestion.title);
+      await onCreateTopic(suggestion);
       await onAccept(suggestion.id);
     } finally {
       setBusy(false);
@@ -67,16 +76,21 @@ export function TopicSuggestionCard({
         <div className="min-w-0 flex-1">
           <p className="text-sm font-semibold text-slate-900">Suggested topic: {title}</p>
           <p className="mt-1 text-xs leading-relaxed text-slate-600">{subtitle}</p>
-          {suggestion.message_ids?.length ? (
+          {messageCount ? (
             <p className="mt-1 text-[11px] text-slate-500">
-              Based on {suggestion.message_ids.length} recent message
-              {suggestion.message_ids.length === 1 ? "" : "s"}
+              Based on {messageCount} relevant message{messageCount === 1 ? "" : "s"}
+              {previewBullets.length ? `: ${previewBullets.join(", ")}` : ""}
+            </p>
+          ) : null}
+          {preview ? (
+            <p className="mt-2 rounded-lg bg-white/70 px-3 py-2 text-xs leading-relaxed text-slate-700">
+              Preview: {preview}
             </p>
           ) : null}
           <div className="mt-3 flex flex-wrap gap-2">
             {suggestion.type === "create_topic" && suggestion.title ? (
               <Button size="sm" onClick={handleCreate} disabled={busy}>
-                Create topic
+                {busy ? "Creating…" : "Create topic with context"}
               </Button>
             ) : null}
             {suggestion.type === "move_to_existing_topic" ? (

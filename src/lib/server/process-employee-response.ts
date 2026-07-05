@@ -201,6 +201,7 @@ export async function processEmployeeResponse(
     humanParticipants: ctx.humanParticipants,
     fileContextPrompt: fileContextPrompt || undefined,
     artifactIntent,
+    importedContextPrompt: ctx.importedContextBlock,
   };
   const routeOptions = {
     mode: options.mode,

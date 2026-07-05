@@ -1010,6 +1010,7 @@ export default function RoomDetailPage() {
                   room={room}
                   topic={selectedTopic}
                   isDm={isDm}
+                  onSelectTopic={selectTopic}
                   draftText={composerDraft}
                   onDraftConsumed={() => setComposerDraft("")}
                   onSlashCommand={handleSlashCommand}
@@ -1079,6 +1080,7 @@ export default function RoomDetailPage() {
                 room={room}
                 topic={selectedTopic}
                 isDm={isDm}
+                onSelectTopic={selectTopic}
                 draftText={composerDraft}
                 onDraftConsumed={() => setComposerDraft("")}
                 onSlashCommand={handleSlashCommand}

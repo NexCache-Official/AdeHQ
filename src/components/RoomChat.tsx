@@ -18,6 +18,8 @@ import {
   dismissTopicSuggestionApi,
   type TopicSuggestionPayload,
 } from "./orchestration/TopicSuggestionCard";
+import { TopicContextImportCard } from "@/components/topics/TopicContextImportCard";
+import type { TopicContextImportRecord } from "@/lib/topics/context-imports";
 import type { SuggestedConversationAction } from "@/lib/orchestration/types";
 import { useStore } from "@/lib/demo-store";
 import { ENABLE_DEMO_MODE } from "@/lib/config/features";
@@ -166,6 +168,7 @@ export function RoomChat({
   summarizing = false,
   onAddEmployee,
   messageActions,
+  onSelectTopic,
 }: {
   room: ProjectRoom;
   topic?: RoomTopic;
@@ -180,6 +183,7 @@ export function RoomChat({
   summarizing?: boolean;
   onAddEmployee?: () => void;
   messageActions?: MessageActionHandlers;
+  onSelectTopic?: (topicId: string) => void;
 }) {
   const { state, actions, backend } = useStore();
   const { trace } = useDebugTrace();
@@ -197,6 +201,8 @@ export function RoomChat({
   const [collaborationPlan, setCollaborationPlan] = useState<ConversationPlan | null>(null);
   const [orchestratorDebug, setOrchestratorDebug] = useState<Record<string, unknown> | null>(null);
   const [topicSuggestions, setTopicSuggestions] = useState<TopicSuggestionPayload[]>([]);
+  const [contextImports, setContextImports] = useState<TopicContextImportRecord[]>([]);
+  const [contextImportWarning, setContextImportWarning] = useState<string | null>(null);
   const [smartAssistSuggestions, setSmartAssistSuggestions] = useState<SuggestedConversationAction[]>([]);
   const [messageLimit, setMessageLimit] = useState(MESSAGE_PAGE);
   const [browserResearchEnabled, setBrowserResearchEnabled] = useState(false);
@@ -327,6 +333,31 @@ export function RoomChat({
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [topicMessages.length, activeRuns.length, browserResearchRuns.length]);
+
+  useEffect(() => {
+    if (!topic || backend !== "supabase" || !state.workspace?.id) {
+      setContextImports([]);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const headers = await authHeaders();
+        const res = await fetch(
+          `/api/rooms/${room.id}/topics/${topic.id}/context-imports`,
+          { headers },
+        );
+        const payload = await res.json().catch(() => ({}));
+        if (cancelled || !res.ok) return;
+        setContextImports(Array.isArray(payload.imports) ? payload.imports : []);
+      } catch {
+        if (!cancelled) setContextImports([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [backend, room.id, state.workspace?.id, topic?.id]);
 
   useEffect(() => {
     if (!topic || backend !== "supabase" || isDm) return;
@@ -1121,17 +1152,43 @@ export function RoomChat({
     }
   };
 
-  const handleCreateTopicFromSuggestion = async (title: string) => {
-    if (!topic) return;
+  const handleCreateTopicFromSuggestion = async (suggestion: TopicSuggestionPayload) => {
+    if (!topic || !suggestion.title) return;
     const headers = await authHeaders();
     const res = await fetch(`/api/rooms/${room.id}/topics`, {
       method: "POST",
       headers: { ...headers, "Content-Type": "application/json" },
-      body: JSON.stringify({ title, description: "", priority: "normal" }),
+      body: JSON.stringify({
+        title: suggestion.title,
+        description: "",
+        priority: "normal",
+        contextImport: {
+          suggestionId: suggestion.id,
+          sourceRoomId: room.id,
+          sourceTopicId: topic.id,
+          sourceDmId: isDm ? room.id : undefined,
+          triggerMessageId:
+            suggestion.metadata?.triggerMessageId ??
+            suggestion.message_ids?.[suggestion.message_ids.length - 1],
+          sourceMessageIds: suggestion.message_ids ?? [],
+          suggestedTitle: suggestion.title,
+          sourceScope:
+            suggestion.metadata?.sourceScope ??
+            (isGeneralTopic(topic) ? "room" : "topic"),
+        },
+      }),
     });
     const payload = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(payload.error ?? "Could not create topic.");
     if (payload.topic) actions.upsertTopic(payload.topic);
+    if (payload.contextImportWarning) {
+      setContextImportWarning(String(payload.contextImportWarning));
+    } else {
+      setContextImportWarning(null);
+    }
+    if (payload.topic?.id) {
+      onSelectTopic?.(payload.topic.id);
+    }
   };
 
   const handleAcceptTopicSuggestion = async (suggestionId: string) => {
@@ -1378,7 +1435,7 @@ export function RoomChat({
             </Button>
           </div>
         )}
-        {topicMessages.length === 0 ? (
+        {topicMessages.length === 0 && contextImports.length === 0 ? (
           isDm && dmEmployee && isMayaEmployee(dmEmployee) && isMainChat && !chatDisabled ? (
             <MayaDmEmptyState
               firstName={state.user?.name?.split(" ")[0] ?? "there"}
@@ -1419,6 +1476,34 @@ export function RoomChat({
           )
         ) : (
           <div className={cn("mx-auto", ROOM_CHAT_MAX_WIDTH)}>
+            {contextImports.map((contextImport) => (
+              <TopicContextImportCard
+                key={contextImport.id}
+                contextImport={contextImport}
+                sourceLabel={
+                  contextImport.sourceTopicId && contextImport.sourceTopicId !== topic?.id
+                    ? "previous topic"
+                    : "previous conversation"
+                }
+                onViewSource={
+                  contextImport.sourceTopicId
+                    ? () => {
+                        if (contextImport.sourceTopicId) {
+                          onSelectTopic?.(contextImport.sourceTopicId);
+                        }
+                      }
+                    : undefined
+                }
+              />
+            ))}
+            {topicMessages.length === 0 ? (
+              <div className="mx-auto flex max-w-md flex-col items-center gap-3 px-4 py-6 text-center">
+                <h3 className="text-base font-semibold text-ink">Continue this workstream</h3>
+                <p className="text-sm leading-relaxed text-ink-2">
+                  Imported context is above. Send a message when you are ready to continue.
+                </p>
+              </div>
+            ) : null}
             {chatTimelineItems.map((item) =>
               item.kind === "message" ? (
                 <div key={item.row.message.id}>
@@ -1535,6 +1620,11 @@ export function RoomChat({
 
       <div className="shrink-0 px-[26px] pb-[18px] pt-1.5">
         <div className={cn("mx-auto", ROOM_CHAT_MAX_WIDTH)}>
+          {contextImportWarning ? (
+            <div className="mb-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+              {contextImportWarning}
+            </div>
+          ) : null}
           {topicSuggestions.map((suggestion) => (
             <TopicSuggestionCard
               key={suggestion.id}

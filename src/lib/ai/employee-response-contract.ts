@@ -78,6 +78,7 @@ export function buildEmployeePromptContext(input: EmployeeRouteInput) {
     fileContextPrompt: input.fileContextPrompt,
     artifactIntent: input.artifactIntent,
     researchCapabilities: getResearchCapabilities(input.employee),
+    importedContextPrompt: input.importedContextPrompt,
   };
 }
 

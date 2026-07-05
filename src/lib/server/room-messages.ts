@@ -21,6 +21,10 @@ import { roomIdFromRow } from "@/lib/server/db-row";
 import { refreshTopicStats } from "@/lib/server/topic-stats";
 import { ensureGeneralTopic, topicFromRow } from "@/lib/server/topic-helpers";
 import { fetchTopicSummary } from "@/lib/topic-summary/persistence";
+import {
+  buildImportedContextBlock,
+  getTopicContextImportsForTopic,
+} from "@/lib/topics/context-imports";
 import { defaultModelModeForRole, normalizeModelMode } from "@/lib/ai/model-catalog";
 import { normalizeIntelligencePolicy } from "@/lib/ai/intelligence-policy";
 import type { EmployeeIntelligencePolicy } from "@/lib/types";
@@ -154,6 +158,8 @@ export type RoomContext = {
   topicApprovals: Approval[];
   topicWorkLogs: WorkLogEvent[];
   humanParticipants: { id: string; name: string }[];
+  importedContextBlock?: string;
+  topicContextImports?: import("@/lib/topics/context-imports").TopicContextImportRecord[];
 };
 
 export type RespondersContext = {
@@ -273,6 +279,8 @@ export async function loadTopicContext(
   }
 
   const topicSummary = await fetchTopicSummary(client, workspaceId, topicId);
+  const topicContextImports = await getTopicContextImportsForTopic(client, workspaceId, topicId);
+  const importedContextBlock = buildImportedContextBlock(topicContextImports);
 
   const roomResult = await client
     .from("rooms")
@@ -466,6 +474,8 @@ export async function loadTopicContext(
       id,
       name: profiles.get(id) ?? "Teammate",
     })),
+    importedContextBlock: importedContextBlock || undefined,
+    topicContextImports,
   };
 }
 

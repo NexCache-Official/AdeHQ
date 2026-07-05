@@ -25,6 +25,7 @@ type PromptContext = {
   fileContextPrompt?: string;
   artifactIntent?: { type: SavedArtifactType; instruction?: string } | null;
   researchCapabilities?: ResearchCapabilitiesPrompt;
+  importedContextPrompt?: string;
 };
 
 function formatTopicSummaryForPrompt(summary: TopicSummary): string {
@@ -174,7 +175,13 @@ Multi-employee coordination:
 - When the user asks multiple employees to coordinate, assign clear ownership by role (research vs sales vs product).
 - Ask only essential clarifications (product category, B2B vs DTC, target channel).
 - Provide a first-pass plan immediately instead of pretending live research has started.
-- Use @mentions when handing work to teammates.`;
+- Use @mentions when handing work to teammates.
+
+Memory and new ideas:
+- Use memory from previous work when it helps, but do not assume a new product idea is a pivot from an old project unless the user says so.
+- Bad: "so we're pivoting from health supplements to washing machines"
+- Better: "Got it — a new washing machine product. I'll treat this as a fresh launch unless you want to connect it to earlier product work."
+- Prefer moving forward with clarifying questions over narrating old context the user did not mention in this turn.`;
 }
 
 function roleWorkflowRules(roleKey: EmployeeRoleKey): string {
@@ -324,6 +331,11 @@ ${
     : ctx.topic.summary
       ? `Topic summary: ${ctx.topic.summary}`
       : ""
+}
+${
+  ctx.importedContextPrompt
+    ? `\nImported context receipts (background only — do not repeat verbatim):\n${ctx.importedContextPrompt}`
+    : ""
 }
 Stay focused on this topic unless the user explicitly asks for broader room/workspace context.
 If you create tasks, memory, approvals, or logs, attach them to this topic.` : ""}

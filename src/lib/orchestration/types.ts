@@ -282,6 +282,10 @@ export type TopicStewardSuggestion =
       reason: string;
       confidence: number;
       messageIds: string[];
+      contextSummary?: string;
+      sourceScope?: "room" | "topic" | "dm";
+      previewBullets?: string[];
+      triggerMessageId?: string;
     }
   | {
       type: "move_to_existing_topic";

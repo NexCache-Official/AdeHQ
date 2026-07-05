@@ -14,6 +14,11 @@ import {
 import { refreshTopicStats } from "@/lib/server/topic-stats";
 import { logOrchestrationWorkLog } from "@/lib/orchestration/persistence";
 import { scheduleTopicSummaryRefresh } from "@/lib/topic-summary/refresh";
+import {
+  createTopicContextImport,
+  fetchMessagesForImportSelection,
+  selectMessagesForTopicImport,
+} from "@/lib/topics/context-imports";
 import { nowISO, uid } from "@/lib/utils";
 import type { TopicPriority } from "@/lib/types";
 
@@ -26,6 +31,17 @@ type CreateTopicBody = {
   aiEmployeeIds?: string[];
   starterMessage?: string;
   metadata?: Record<string, unknown>;
+  contextImport?: {
+    suggestionId?: string;
+    sourceRoomId?: string;
+    sourceTopicId?: string;
+    sourceDmId?: string;
+    triggerMessageId?: string;
+    sourceMessageIds?: string[];
+    suggestedTitle?: string;
+    importReason?: string;
+    sourceScope?: "room" | "topic" | "dm";
+  };
 };
 
 export async function GET(
@@ -224,9 +240,59 @@ export async function POST(
       .eq("id", topic.id)
       .single();
 
+    let contextImportWarning: string | undefined;
+    let contextImportId: string | undefined;
+    if (body.contextImport) {
+      try {
+        const sourceRoomId = body.contextImport.sourceRoomId ?? params.roomId;
+        const sourceTopicId = body.contextImport.sourceTopicId ?? null;
+        const allMessages = await fetchMessagesForImportSelection(client, workspaceId, {
+          sourceRoomId,
+          sourceTopicId,
+          limit: 50,
+        });
+        const selected = selectMessagesForTopicImport({
+          messages: allMessages,
+          triggerMessageId:
+            body.contextImport.triggerMessageId ??
+            body.contextImport.sourceMessageIds?.[body.contextImport.sourceMessageIds.length - 1] ??
+            "",
+          suggestedTopicTitle: body.contextImport.suggestedTitle ?? title,
+          maxMessages: 8,
+        });
+        const importRecord = await createTopicContextImport(client, {
+          workspaceId,
+          createdBy: user.id,
+          targetRoomId: params.roomId,
+          targetTopicId: topic.id,
+          sourceRoomId,
+          sourceTopicId,
+          sourceDmId: body.contextImport.sourceDmId ?? null,
+          triggerMessageId:
+            body.contextImport.triggerMessageId ??
+            selected[selected.length - 1]?.id ??
+            "",
+          suggestedTitle: body.contextImport.suggestedTitle ?? title,
+          importReason: body.contextImport.importReason ?? "topic_suggestion",
+          sourceMessages: selected,
+          metadata: {
+            sourceScope: body.contextImport.sourceScope ?? (sourceTopicId ? "topic" : "room"),
+            suggestionId: body.contextImport.suggestionId ?? null,
+          },
+        });
+        contextImportId = importRecord.id;
+      } catch (importError) {
+        console.warn("[AdeHQ topics POST] context import failed", importError);
+        contextImportWarning =
+          "Topic created, but context import failed. You can still continue manually.";
+      }
+    }
+
     return NextResponse.json({
       topic: refreshed ? topicFromRow(refreshed) : topic,
       systemMessageId,
+      contextImportId,
+      contextImportWarning,
     });
   } catch (error) {
     if (createdTopicId) {

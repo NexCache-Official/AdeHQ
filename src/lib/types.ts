@@ -911,6 +911,7 @@ export type SendMessageInput = {
   topicWorkLogs?: WorkLogEvent[];
   fileContextPrompt?: string;
   artifactIntent?: { type: SavedArtifactType; instruction?: string } | null;
+  importedContextPrompt?: string;
 };
 
 // ---------------------------------------------------------------------------

@@ -466,6 +466,15 @@ export async function persistTopicSuggestions(
     reason: suggestion.reason,
     confidence: suggestion.confidence,
     message_ids: suggestion.messageIds,
+    metadata:
+      suggestion.type === "create_topic"
+        ? {
+            contextSummary: suggestion.contextSummary ?? null,
+            sourceScope: suggestion.sourceScope ?? null,
+            previewBullets: suggestion.previewBullets ?? [],
+            triggerMessageId: suggestion.triggerMessageId ?? params.triggerMessageId,
+          }
+        : {},
     status: "pending",
     created_by: params.createdBy,
   }));
