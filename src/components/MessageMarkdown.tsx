@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 import { Check, Copy, FileSearch } from "lucide-react";
 import type { MentionRef } from "@/lib/types";
 import { findMentionSpans, type MentionParticipant } from "@/lib/mentions";
+import { markdownTypography, pickMarkdownTypography } from "@/lib/chat/layout";
 import { MentionChip } from "./MentionChip";
 
 type MentionRenderContext = {
@@ -37,10 +38,13 @@ function parseSourceChip(raw: string): SourceChip | null {
   return { fileName, locator, snippet };
 }
 
-function SourceChipView({ source }: { source: SourceChip }) {
+function SourceChipView({ source, chipClassName }: { source: SourceChip; chipClassName: string }) {
   return (
     <span
-      className="mx-0.5 inline-flex max-w-full items-center gap-1 rounded-full border border-accent/20 bg-accent-soft px-2 py-0.5 align-baseline text-[11px] font-semibold text-accent-d"
+      className={cn(
+        "mx-0.5 inline-flex max-w-full items-center gap-1 rounded-full border border-accent/20 bg-accent-soft px-2 py-0.5 align-baseline font-semibold text-accent-d",
+        chipClassName,
+      )}
       title={source.snippet || undefined}
     >
       <FileSearch className="h-3 w-3 shrink-0" />
@@ -77,7 +81,12 @@ function renderTextWithMentions(
   return nodes;
 }
 
-function inlineNodes(text: string, keyPrefix: string, ctx: MentionRenderContext): React.ReactNode[] {
+function inlineNodes(
+  text: string,
+  keyPrefix: string,
+  ctx: MentionRenderContext,
+  sourceChipClassName: string = markdownTypography.sourceChip,
+): React.ReactNode[] {
   const nodes: React.ReactNode[] = [];
   let index = 0;
 
@@ -97,7 +106,13 @@ function inlineNodes(text: string, keyPrefix: string, ctx: MentionRenderContext)
         const raw = rest.slice(0, end + 2);
         const source = parseSourceChip(raw);
         if (source) {
-          nodes.push(<SourceChipView key={`${keyPrefix}-source-${index}`} source={source} />);
+          nodes.push(
+            <SourceChipView
+              key={`${keyPrefix}-source-${index}`}
+              source={source}
+              chipClassName={sourceChipClassName}
+            />,
+          );
           index += end + 2;
           continue;
         }
@@ -190,7 +205,15 @@ function inlineNodes(text: string, keyPrefix: string, ctx: MentionRenderContext)
   return nodes;
 }
 
-function CodeBlock({ code, language }: { code: string; language?: string }) {
+function CodeBlock({
+  code,
+  language,
+  codeClassName,
+}: {
+  code: string;
+  language?: string;
+  codeClassName: string;
+}) {
   const [copied, setCopied] = useState(false);
 
   const copy = async () => {
@@ -212,7 +235,7 @@ function CodeBlock({ code, language }: { code: string; language?: string }) {
           {copied ? "Copied" : "Copy"}
         </button>
       </div>
-      <pre className="max-w-full overflow-x-auto p-3 text-[12.5px] leading-relaxed">
+      <pre className={cn("max-w-full overflow-x-auto p-3", codeClassName)}>
         <code>{code}</code>
       </pre>
     </div>
@@ -255,17 +278,20 @@ function isSpecialLine(line: string, nextLine?: string): boolean {
   );
 }
 
-function renderList(lines: string[], key: string, ctx: MentionRenderContext) {
+function renderList(
+  lines: string[],
+  key: string,
+  ctx: MentionRenderContext,
+  listClassName: string,
+  sourceChipClassName: string = markdownTypography.sourceChip,
+) {
   const ordered = /^\s*\d+\./.test(lines[0]);
   const ListTag = ordered ? "ol" : "ul";
 
   return (
     <ListTag
       key={key}
-      className={cn(
-        "my-2 space-y-1.5 pl-5 text-[14px] leading-[1.6]",
-        ordered ? "list-decimal" : "list-disc",
-      )}
+      className={cn("my-2 space-y-1.5 pl-5", listClassName, ordered ? "list-decimal" : "list-disc")}
     >
       {lines.map((line, index) => {
         const taskMatch = line.match(/^\s*(?:[-*]|\d+\.)\s+\[([ xX])\]\s+(.*)$/);
@@ -282,13 +308,13 @@ function renderList(lines: string[], key: string, ctx: MentionRenderContext) {
               >
                 {checked && <Check className="h-2.5 w-2.5" />}
               </span>
-              <span>{inlineNodes(taskMatch[2], `${key}-task-${index}`, ctx)}</span>
+              <span>{inlineNodes(taskMatch[2], `${key}-task-${index}`, ctx, sourceChipClassName)}</span>
             </li>
           );
         }
         return (
           <li key={`${key}-${index}`}>
-            {inlineNodes(normalMatch?.[1] ?? line, `${key}-item-${index}`, ctx)}
+            {inlineNodes(normalMatch?.[1] ?? line, `${key}-item-${index}`, ctx, sourceChipClassName)}
           </li>
         );
       })}
@@ -299,15 +325,20 @@ function renderList(lines: string[], key: string, ctx: MentionRenderContext) {
 export function MessageMarkdown({
   content,
   compact = false,
+  roomScale = false,
   mentionsJson,
   mentionParticipants,
 }: {
   content: string;
   compact?: boolean;
+  roomScale?: boolean;
   mentionsJson?: MentionRef[];
   mentionParticipants?: MentionParticipant[];
 }) {
+  const typo = pickMarkdownTypography(roomScale);
   const mentionCtx: MentionRenderContext = { mentionsJson, participants: mentionParticipants };
+  const renderInline = (text: string, keyPrefix: string) =>
+    inlineNodes(text, keyPrefix, mentionCtx, typo.sourceChip);
   const lines = content.replace(/\r\n/g, "\n").split("\n");
   const blocks: React.ReactNode[] = [];
   let index = 0;
@@ -330,7 +361,14 @@ export function MessageMarkdown({
         index += 1;
       }
       if (index < lines.length) index += 1;
-      blocks.push(<CodeBlock key={`code-${blocks.length}`} code={code.join("\n")} language={language} />);
+      blocks.push(
+        <CodeBlock
+          key={`code-${blocks.length}`}
+          code={code.join("\n")}
+          language={language}
+          codeClassName={typo.code}
+        />,
+      );
       continue;
     }
 
@@ -343,10 +381,14 @@ export function MessageMarkdown({
           key={`heading-${blocks.length}`}
           className={cn(
             "font-semibold text-ink",
-            compact ? "mb-1 mt-2 text-sm" : level === 1 ? "mb-1.5 mt-3 text-[17px]" : "mb-1 mt-3 text-[15px]",
+            compact
+              ? cn("mb-1 mt-2", typo.headingCompact)
+              : level === 1
+                ? cn("mb-1.5 mt-3", typo.headingLg)
+                : cn("mb-1 mt-3", typo.headingMd),
           )}
         >
-          {inlineNodes(heading[2], `heading-${blocks.length}`, mentionCtx)}
+          {renderInline(heading[2], `heading-${blocks.length}`)}
         </Tag>,
       );
       index += 1;
@@ -368,10 +410,12 @@ export function MessageMarkdown({
       blocks.push(
         <blockquote
           key={`quote-${blocks.length}`}
-          className="my-2 border-l-2 border-accent/35 bg-accent-soft/40 px-3 py-2 text-[13.5px] leading-relaxed text-ink-2"
+          className={cn("my-2 border-l-2 border-accent/35 bg-accent-soft/40 px-3 py-2 text-ink-2", typo.quote)}
         >
           {quote.map((item, quoteIndex) => (
-            <p key={`quote-${quoteIndex}`}>{inlineNodes(item, `quote-${blocks.length}-${quoteIndex}`, mentionCtx)}</p>
+            <p key={`quote-${quoteIndex}`}>
+              {renderInline(item, `quote-${blocks.length}-${quoteIndex}`)}
+            </p>
           ))}
         </blockquote>,
       );
@@ -388,12 +432,12 @@ export function MessageMarkdown({
       }
       blocks.push(
         <div key={`table-${blocks.length}`} className="my-3 max-w-full overflow-x-auto rounded-xl border border-border">
-          <table className="min-w-full border-collapse bg-surface text-left text-[12.5px]">
+          <table className={cn("min-w-full border-collapse bg-surface text-left", typo.table)}>
             <thead className="bg-muted text-ink">
               <tr>
                 {headers.map((header, cellIndex) => (
                   <th key={`head-${cellIndex}`} className="border-b border-border px-3 py-2 font-semibold">
-                    {inlineNodes(header, `table-head-${blocks.length}-${cellIndex}`, mentionCtx)}
+                    {renderInline(header, `table-head-${blocks.length}-${cellIndex}`)}
                   </th>
                 ))}
               </tr>
@@ -403,7 +447,10 @@ export function MessageMarkdown({
                 <tr key={`row-${rowIndex}`} className="border-t border-border-2">
                   {headers.map((_, cellIndex) => (
                     <td key={`cell-${rowIndex}-${cellIndex}`} className="px-3 py-2 text-ink-2">
-                      {inlineNodes(row[cellIndex] ?? "", `table-cell-${blocks.length}-${rowIndex}-${cellIndex}`, mentionCtx)}
+                      {renderInline(
+                        row[cellIndex] ?? "",
+                        `table-cell-${blocks.length}-${rowIndex}-${cellIndex}`,
+                      )}
                     </td>
                   ))}
                 </tr>
@@ -421,7 +468,7 @@ export function MessageMarkdown({
         listLines.push(lines[index]);
         index += 1;
       }
-      blocks.push(renderList(listLines, `list-${blocks.length}`, mentionCtx));
+      blocks.push(renderList(listLines, `list-${blocks.length}`, mentionCtx, typo.list, typo.sourceChip));
       continue;
     }
 
@@ -437,9 +484,9 @@ export function MessageMarkdown({
     blocks.push(
       <p
         key={`paragraph-${blocks.length}`}
-        className={cn("whitespace-pre-wrap text-[14px] leading-[1.6]", compact ? "my-0.5" : "my-2")}
+        className={cn("whitespace-pre-wrap", typo.body, compact ? "my-0.5" : "my-2")}
       >
-        {inlineNodes(paragraph.join("\n"), `paragraph-${blocks.length}`, mentionCtx)}
+        {renderInline(paragraph.join("\n"), `paragraph-${blocks.length}`)}
       </p>,
     );
   }

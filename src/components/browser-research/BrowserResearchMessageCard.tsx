@@ -100,17 +100,17 @@ export function BrowserResearchMessageCard({
         <div className="flex items-start gap-2">
           <Globe className="mt-0.5 h-4 w-4 text-accent-600" />
           <div>
-            <div className="text-sm font-semibold text-ink">
+            <div className="text-[16.1px] font-semibold text-ink">
               {employeeName ? `${employeeName} — browser research` : "Browser research"}
             </div>
-            <div className="text-[11px] text-ink-3">
+            <div className="text-[12.7px] text-ink-3">
               {browserResearchRunLabel(run.provider)} · {timeAgo(run.createdAt)}
             </div>
           </div>
         </div>
         <span
           className={cn(
-            "rounded-full px-2 py-0.5 text-[10px] font-medium",
+            "rounded-full px-2 py-0.5 text-[11.5px] font-medium",
             isLiveActive
               ? "bg-amber-50 text-amber-800"
               : run.status === "completed"
@@ -122,10 +122,10 @@ export function BrowserResearchMessageCard({
         </span>
       </div>
 
-      <p className="text-[13px] font-medium text-ink-2">{resolvedQuery}</p>
+      <p className="text-[15px] font-medium text-ink-2">{resolvedQuery}</p>
 
       {isLiveActive && (
-        <p className="mt-2 flex items-center gap-1.5 text-xs text-ink-3">
+        <p className="mt-2 flex items-center gap-1.5 text-[13.8px] text-ink-3">
           <Loader2 className="h-3.5 w-3.5 animate-spin" />
           {run.provider === "browserbase"
             ? BROWSER_RESEARCH_UI_COPY.liveBrowsingStatus
@@ -140,7 +140,7 @@ export function BrowserResearchMessageCard({
               href={liveSessionUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border bg-surface px-3 text-xs font-medium text-ink hover:bg-muted"
+              className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border bg-surface px-3 text-[13.8px] font-medium text-ink hover:bg-muted"
             >
               <MonitorPlay className="h-3.5 w-3.5" />
               {BROWSER_RESEARCH_UI_COPY.watchLiveBrowser}
@@ -168,12 +168,12 @@ export function BrowserResearchMessageCard({
 
       {run.findings.length > 0 && (
         <section className="mt-3">
-          <div className="text-[11px] font-semibold uppercase tracking-wide text-ink-3">
+          <div className="text-[12.7px] font-semibold uppercase tracking-wide text-ink-3">
             {browserResearchFindingsSectionLabel(run.provider)}
           </div>
           <ul className="mt-1 space-y-1.5">
             {run.findings.slice(0, 6).map((finding) => (
-              <li key={`${finding.title}-${finding.summary.slice(0, 24)}`} className="text-xs text-ink-2">
+              <li key={`${finding.title}-${finding.summary.slice(0, 24)}`} className="text-[13.8px] text-ink-2">
                 <span className="font-medium text-ink">{finding.title}</span>
                 {" — "}
                 {finding.summary}
@@ -185,18 +185,18 @@ export function BrowserResearchMessageCard({
 
       {run.mockSources.length > 0 && (
         <section className="mt-3">
-          <div className="text-[11px] font-semibold uppercase tracking-wide text-ink-3">
+          <div className="text-[12.7px] font-semibold uppercase tracking-wide text-ink-3">
             {browserResearchSourceSectionLabel(run.provider)}
           </div>
           <ul className="mt-1 space-y-2">
             {run.mockSources.slice(0, 4).map((source) => (
               <li key={source.url} className="rounded-lg border border-border bg-surface px-2.5 py-2">
-                <div className="text-xs font-medium text-ink">{source.title}</div>
+                <div className="text-[13.8px] font-medium text-ink">{source.title}</div>
                 <a
                   href={source.url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="truncate text-[11px] text-accent-700 hover:underline"
+                  className="truncate text-[12.7px] text-accent-700 hover:underline"
                 >
                   {source.url}
                 </a>

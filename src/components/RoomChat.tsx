@@ -25,13 +25,14 @@ import { useResponder } from "@/lib/ai/use-responder";
 import { authHeaders } from "@/lib/api/auth-client";
 import { parseJsonResponse } from "@/lib/api/parse-json-response";
 import { isGeneralTopic, mainChatLabel } from "@/lib/topics";
+import { ROOM_CHAT_MAX_WIDTH, ROOM_CHAT_WIDE_MAX_WIDTH } from "@/lib/chat/layout";
 import { RoomMessageItem } from "./RoomMessageItem";
 import { ChatComposer, type ComposerUploadedFile, type SlashCommandResult } from "./ChatComposer";
 import type { MessageActionHandlers } from "@/lib/message-actions";
 import { EmptyState } from "./States";
 import { Button } from "./ui";
 import { EmployeeAvatar } from "./EmployeeAvatar";
-import { extractMentions, uid } from "@/lib/utils";
+import { extractMentions, uid, cn } from "@/lib/utils";
 import { readDebugMode } from "@/lib/debug-trace";
 import { useDebugTrace } from "./DebugProvider";
 import {
@@ -1367,7 +1368,7 @@ export function RoomChat({
 
       <div className="flex-1 overflow-y-auto px-[26px] pb-2 pt-[18px]">
         {hasOlder && (
-          <div className="mx-auto mb-3 max-w-3xl text-center">
+          <div className={cn("mx-auto mb-3", ROOM_CHAT_WIDE_MAX_WIDTH, "text-center")}>
             <Button
               variant="ghost"
               size="sm"
@@ -1417,13 +1418,13 @@ export function RoomChat({
           </div>
           )
         ) : (
-          <div className="mx-auto max-w-[760px]">
+          <div className={cn("mx-auto", ROOM_CHAT_MAX_WIDTH)}>
             {chatTimelineItems.map((item) =>
               item.kind === "message" ? (
                 <div key={item.row.message.id}>
                   {item.row.showDaySeparator && (
                     <div className="mb-[18px] mt-1.5 text-center">
-                      <span className="rounded-full bg-muted px-3 py-0.5 text-[11px] text-ink-3">
+                      <span className="rounded-full bg-muted px-3 py-0.5 text-[12.7px] text-ink-3">
                         {daySeparatorLabel(item.row.message.createdAt)}
                       </span>
                     </div>
@@ -1437,7 +1438,7 @@ export function RoomChat({
                   />
                 </div>
               ) : state.workspace?.id ? (
-                <div key={item.run.id} className="mx-auto mb-3 max-w-3xl">
+                <div key={item.run.id} className={cn("mx-auto mb-3", ROOM_CHAT_WIDE_MAX_WIDTH)}>
                   <BrowserResearchMessageCard
                     run={item.run}
                     workspaceId={state.workspace.id}
@@ -1479,7 +1480,7 @@ export function RoomChat({
                   <EmployeeAvatar employee={dmEmployee} size="md" showStatus={false} />
                 </div>
                 <div className="flex w-fit items-center gap-1.5 rounded-[13px] border border-border bg-surface px-3.5 py-2.5">
-                  <span className="text-[11px] text-ink-3">
+                  <span className="text-[12.7px] text-ink-3">
                     {mayaResponder.phase === "reading"
                       ? "Reading…"
                       : mayaResponder.phase === "thinking"
@@ -1493,7 +1494,7 @@ export function RoomChat({
               </div>
             )}
             {isMayaGeneralChat && mayaResponder.pendingProposal && (
-              <div className="mx-auto max-w-3xl">
+              <div className={cn("mx-auto", ROOM_CHAT_WIDE_MAX_WIDTH)}>
                 <MayaHiringTopicSuggestionCard
                   roleTitle={mayaResponder.pendingProposal.roleTitle}
                   activeAction={mayaResponder.activeProposalAction}
@@ -1504,7 +1505,7 @@ export function RoomChat({
               </div>
             )}
             {isMayaGeneralChat && mayaResponder.employeePickerRoster.length > 0 && (
-              <div className="mx-auto max-w-3xl">
+              <div className={cn("mx-auto", ROOM_CHAT_WIDE_MAX_WIDTH)}>
                 <MayaEmployeePickerCard
                   employees={mayaResponder.employeePickerRoster}
                   disabled={mayaResponder.busy}
@@ -1520,7 +1521,7 @@ export function RoomChat({
 
       {failedSend && (
         <div className="border-t border-rose-200 bg-rose-50 px-4 py-2 sm:px-6">
-          <div className="mx-auto flex max-w-3xl items-center gap-3 text-sm text-rose-800">
+          <div className={cn("mx-auto flex items-center gap-3 text-[16.1px] text-rose-800", ROOM_CHAT_WIDE_MAX_WIDTH)}>
             <AlertCircle className="h-4 w-4 shrink-0" />
             <span className="flex-1">
               Message failed to send{sendError ? `: ${sendError}` : "."}
@@ -1533,7 +1534,7 @@ export function RoomChat({
       )}
 
       <div className="shrink-0 px-[26px] pb-[18px] pt-1.5">
-        <div className="mx-auto max-w-[760px]">
+        <div className={cn("mx-auto", ROOM_CHAT_MAX_WIDTH)}>
           {topicSuggestions.map((suggestion) => (
             <TopicSuggestionCard
               key={suggestion.id}
@@ -1599,7 +1600,7 @@ export function RoomChat({
             browserResearchBusy={browserResearchBusy}
           />
           {!chatDisabled && (
-          <p className="px-1.5 pt-[7px] text-[11px] text-ink-3">
+          <p className="px-1.5 pt-[7px] text-[12.7px] text-ink-3">
             <span>
               <b className="font-mono text-ink-2">@</b> mention someone
             </span>

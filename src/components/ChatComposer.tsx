@@ -1002,7 +1002,7 @@ export function ChatComposer({
             rows={1}
             disabled={disabled}
             placeholder={placeholder ?? "Message the room… use @ to mention an employee"}
-            className="max-h-[168px] min-h-[40px] w-full flex-1 resize-none bg-transparent px-1 py-2 text-sm text-ink outline-none placeholder:text-ink-3 disabled:cursor-not-allowed disabled:opacity-60"
+            className="max-h-[193px] min-h-[46px] w-full flex-1 resize-none bg-transparent px-1 py-2 text-[16.1px] text-ink outline-none placeholder:text-ink-3 disabled:cursor-not-allowed disabled:opacity-60"
           />
           <div className="flex shrink-0 items-center gap-0.5 pb-0.5">
             <button
@@ -1117,7 +1117,7 @@ export function ChatComposer({
         </div>
       </div>
 
-      <div className="mt-1.5 hidden flex-wrap items-center gap-1.5 px-1 text-[11px] text-ink-3 sm:flex">
+      <div className="mt-1.5 hidden flex-wrap items-center gap-1.5 px-1 text-[12.7px] text-ink-3 sm:flex">
         {QUICK_COMMANDS.slice(0, 3).map((command) => (
           <button
             key={command.label}
