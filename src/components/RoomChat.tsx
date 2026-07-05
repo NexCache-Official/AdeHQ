@@ -961,6 +961,14 @@ export function RoomChat({
       const payload = await parseJsonResponse<{
         queuedRuns?: QueuedRunClient[];
         blockedRuns?: Array<{ employeeName?: string; reason: string }>;
+        cancelledResearchRuns?: BrowserResearchRun[];
+        workStop?: {
+          detected: boolean;
+          target: string;
+          reason: string;
+          cancelledBrowserResearchCount: number;
+          cancelledAgentRunCount: number;
+        };
         code?: string;
         hint?: string;
         orchestratorDebug?: Record<string, unknown> | null;
@@ -1039,6 +1047,16 @@ export function RoomChat({
         deliveryStatus: "delivered",
         deliveredAt,
       });
+
+      if (payload.cancelledResearchRuns?.length) {
+        setBrowserResearchRuns((current) => {
+          let next = current;
+          for (const run of payload.cancelledResearchRuns ?? []) {
+            next = upsertBrowserResearchRun(next, run);
+          }
+          return next;
+        });
+      }
 
       if (payload.humanMessage && payload.humanMessage.id !== messageId) {
         actions.removeLocalMessage(room.id, messageId);

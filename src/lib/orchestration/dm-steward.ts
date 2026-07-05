@@ -3,6 +3,7 @@ import {
   isQuickFactLookup,
   requiresDeepBrowserResearch,
 } from "@/lib/ai/search/search-router";
+import { detectWorkStopRequest } from "@/lib/orchestration/work-stop";
 
 export type DmStewardIntent =
   | "direct_answer"
@@ -13,7 +14,8 @@ export type DmStewardIntent =
   | "memory_update"
   | "task_request"
   | "clarification_needed"
-  | "social";
+  | "social"
+  | "stop_active_work";
 
 export type DmStewardRoute =
   | "employee_model"
@@ -148,6 +150,20 @@ export function classifyDmMessageWithSteward(input: DmStewardInput): DmStewardDe
       reason: "Social/greeting — concise employee reply.",
       contextPolicy,
       costPolicy: { stewardModel: "efficient", estimatedWorkMinutes: 1 },
+    };
+  }
+
+  const stopRequest = detectWorkStopRequest(message);
+  if (stopRequest.isStop) {
+    return {
+      intent: "stop_active_work",
+      shouldRespond: true,
+      route: "employee_model",
+      browserRequired: false,
+      searchRequired: false,
+      reason: stopRequest.reason,
+      contextPolicy,
+      costPolicy: { stewardModel: "efficient", estimatedWorkMinutes: 0.5 },
     };
   }
 

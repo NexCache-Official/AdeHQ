@@ -37,6 +37,8 @@ import { getAiParticipationMode, isHiringTopic, isSmartAssistMode } from "@/lib/
 import { isMayaEmployee } from "@/lib/maya-employee";
 import { messageError, serializeUnknownError, debugErrorPayload } from "@/lib/server/message-errors";
 import { detectArtifactIntent } from "@/lib/server/file-context";
+import { detectWorkStopRequest } from "@/lib/orchestration/work-stop";
+import { cancelActiveTopicWork, type CancelActiveTopicWorkResult } from "@/lib/server/cancel-active-topic-work";
 import type { MentionRef, MessageArtifact } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -234,6 +236,9 @@ export async function POST(
       });
     }
 
+    const stopDetection = detectWorkStopRequest(trimmed);
+    let workStopCancelResult: CancelActiveTopicWorkResult | null = null;
+
     const [recentMessagesResult, topicsResult, topicOrchestrationState] = await Promise.all([
       client
         .from("messages")
@@ -406,6 +411,34 @@ export async function POST(
       preferResearch: Boolean(body.preferTavily ?? body.preferResearch),
       preferBrowserbase: Boolean(body.preferAgentMode ?? body.preferBrowserbase),
     };
+
+    if (stopDetection.isStop) {
+      const stopEmployeeId =
+        respondersCtx.room.kind === "dm"
+          ? respondersCtx.room.dmEmployeeId ?? dmEmployee?.id ?? orchestrationEmployees[0]?.id
+          : orchestrationPlan.selectedEmployeeIds[0] ??
+            mentions[0] ??
+            orchestrationEmployees[0]?.id;
+
+      workStopCancelResult = await cancelActiveTopicWork(client, {
+        workspaceId,
+        roomId: params.roomId,
+        topicId,
+        employeeId: stopEmployeeId,
+        reason: stopDetection.reason,
+      });
+    }
+
+    const workStopSignals =
+      stopDetection.isStop
+        ? {
+            workStopAck: true,
+            cancelledBrowserResearchCount:
+              workStopCancelResult?.cancelledBrowserResearchRuns.length ?? 0,
+            cancelledAgentRunCount: workStopCancelResult?.cancelledAgentRunIds.length ?? 0,
+          }
+        : {};
+
     const decisions = orchestrationId
       ? rawDecisions.map((d) => ({
           ...d,
@@ -416,6 +449,7 @@ export async function POST(
             contextFileIds,
             artifactIntent: artifactIntent ?? undefined,
             ...researchSignals,
+            ...workStopSignals,
           },
         }))
       : rawDecisions.map((d) => ({
@@ -426,6 +460,7 @@ export async function POST(
             contextFileIds,
             artifactIntent: artifactIntent ?? undefined,
             ...researchSignals,
+            ...workStopSignals,
           },
         }));
     const orchestratorDebug =
@@ -526,6 +561,17 @@ export async function POST(
       humanMessage,
       queuedRuns: queued,
       blockedRuns: blocked,
+      cancelledResearchRuns: workStopCancelResult?.cancelledBrowserResearchRuns ?? [],
+      workStop: stopDetection.isStop
+        ? {
+            detected: true,
+            target: stopDetection.target,
+            reason: stopDetection.reason,
+            cancelledBrowserResearchCount:
+              workStopCancelResult?.cancelledBrowserResearchRuns.length ?? 0,
+            cancelledAgentRunCount: workStopCancelResult?.cancelledAgentRunIds.length ?? 0,
+          }
+        : undefined,
       collaborationPlan: conversationPlan,
       orchestrationPlan,
       orchestrationId,

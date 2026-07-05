@@ -63,6 +63,11 @@ import {
 } from "@/lib/topic-summary/persistence";
 import { fetchTopicChatClearedAtColumn, fetchTopicContextEpochId } from "@/lib/conversation-context/epochs";
 import { createServiceRoleClient } from "@/lib/supabase/server";
+import {
+  buildWorkStopAcknowledgment,
+  detectWorkStopRequest,
+} from "@/lib/orchestration/work-stop";
+import { cancelActiveTopicWork } from "@/lib/server/cancel-active-topic-work";
 
 async function persistRunOrchestrationPhase(
   client: SupabaseClient,
@@ -210,6 +215,98 @@ export async function processQueuedAgentRun(
       .maybeSingle();
 
     let content = options.content ?? (triggerMsg?.content ? String(triggerMsg.content) : "");
+
+    const stopDetection = detectWorkStopRequest(content);
+    const workStopAck = Boolean(runMetadata.workStopAck) || stopDetection.isStop;
+
+    if (workStopAck) {
+      const cancelledBrowserResearchCount = Number(
+        runMetadata.cancelledBrowserResearchCount ?? 0,
+      );
+      const cancelledAgentRunCount = Number(runMetadata.cancelledAgentRunCount ?? 0);
+
+      let browserCount = cancelledBrowserResearchCount;
+      let agentCount = cancelledAgentRunCount;
+
+      if (stopDetection.isStop && browserCount === 0 && agentCount === 0) {
+        const fallbackCancel = await cancelActiveTopicWork(client, {
+          workspaceId,
+          roomId,
+          topicId,
+          employeeId,
+          reason: stopDetection.reason,
+          exceptAgentRunId: runId,
+        });
+        browserCount = fallbackCancel.cancelledBrowserResearchRuns.length;
+        agentCount = fallbackCancel.cancelledAgentRunIds.length;
+      }
+
+      const reply = buildWorkStopAcknowledgment({
+        employeeName: employee.name,
+        cancelledBrowserResearchCount: browserCount,
+        cancelledAgentRunCount: agentCount,
+      });
+
+      const { aiMessage, artifacts } = await persistEmployeeEffects(
+        client,
+        workspaceId,
+        roomId,
+        topicId,
+        employee,
+        reply,
+        { workLog: [], tasks: [], memory: [], approvals: [] },
+        triggerMessageId,
+        runId,
+      );
+
+      await persistRunOrchestrationPhase(
+        client,
+        workspaceId,
+        runMetadata,
+        employeeId,
+        "completed",
+        { runId },
+      );
+
+      if (usageId) {
+        await finalizeAiRun({
+          client,
+          workspaceId,
+          runId,
+          usageId,
+          responseMessageId: aiMessage.id,
+          actualCostUsd: 0,
+          failed: false,
+        });
+      }
+
+      await client
+        .from("ai_employees")
+        .update({ status: "idle", last_active_at: nowISO() })
+        .eq("workspace_id", workspaceId)
+        .eq("id", employeeId);
+
+      return {
+        reply,
+        aiMessageId: aiMessage.id,
+        aiMode: "work_stop_ack",
+        employeeId,
+        employeeName: employee.name,
+        artifacts,
+        metrics: {
+          provider: employee.provider,
+          model: "template",
+          modelMode: "efficient",
+          inputTokens: 0,
+          outputTokens: 0,
+          fallbackUsed: false,
+          estimatedCostUsd: 0,
+          durationMs: 0,
+          usageId,
+          agentRunId: runId,
+        },
+      };
+    }
 
     // Greeting runs never touch files — skip retrieval to save a round-trip and tokens.
     const attachmentFileIds = isGreetingRun

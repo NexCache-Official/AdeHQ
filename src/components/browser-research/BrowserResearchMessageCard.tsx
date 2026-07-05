@@ -81,7 +81,9 @@ export function BrowserResearchMessageCard({
     typeof run.metadata?.resolvedQuery === "string" ? run.metadata.resolvedQuery : run.query;
   const evidenceSources = run.mockSources.filter((source) => source.evidenceId);
   const isLiveActive =
-    pending || run.status === "running" || run.status === "planning" || run.status === "created";
+    run.status !== "cancelled" &&
+    (pending || run.status === "running" || run.status === "planning" || run.status === "created");
+  const isCancelled = run.status === "cancelled";
   const showLiveViewer = run.provider === "browserbase" && Boolean(liveSessionUrl) && isLiveActive;
 
   const openReport = () => {
@@ -111,14 +113,16 @@ export function BrowserResearchMessageCard({
         <span
           className={cn(
             "rounded-full px-2 py-0.5 text-[11.5px] font-medium",
-            isLiveActive
+            isCancelled
+              ? "bg-slate-100 text-slate-600"
+              : isLiveActive
               ? "bg-amber-50 text-amber-800"
               : run.status === "completed"
                 ? "bg-emerald-50 text-emerald-800"
                 : "bg-slate-100 text-slate-600",
           )}
         >
-          {pending ? "running…" : run.status}
+          {isCancelled ? "cancelled" : pending ? "running…" : run.status}
         </span>
       </div>
 
@@ -131,6 +135,10 @@ export function BrowserResearchMessageCard({
             ? BROWSER_RESEARCH_UI_COPY.liveBrowsingStatus
             : BROWSER_RESEARCH_UI_COPY.searchingStatus}
         </p>
+      )}
+
+      {isCancelled && (
+        <p className="mt-2 text-[13.8px] text-ink-3">Search stopped.</p>
       )}
 
       {showLiveViewer && liveSessionUrl && (
