@@ -791,7 +791,7 @@ export function useMayaDmHiring({
       const skipBriefUi = shouldSkipBriefUpdateIntent(userIntent);
       const optimisticAck = pickOptimisticAck(trimmed);
       const sectionsUpdating = skipBriefUi ? [] : inferSectionsUpdating(trimmed);
-      const composeSection = briefSectionToComposeKey(sectionsUpdating[0]) ?? "mission";
+      const composeSection = briefSectionToComposeKey(sectionsUpdating[0]) ?? null;
 
       syncMessageToRoom("human", trimmed, userClientId);
 

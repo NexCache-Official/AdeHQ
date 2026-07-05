@@ -261,21 +261,6 @@ export function BriefDocumentPreview({
           </div>
         )}
 
-        {(b.openQuestions?.length ?? 0) > 0 && (
-          <div ref={setSectionRef("openQuestions")}>
-          <BriefSectionBlock
-            label="Open Questions"
-            active={sectionActive("openQuestions")}
-          >
-            <BulletList
-              items={b.openQuestions}
-              composing={sectionActive("openQuestions")}
-              composeAll={sectionActive("openQuestions")}
-            />
-          </BriefSectionBlock>
-          </div>
-        )}
-
         <div ref={setSectionRef("meta")} className={cnMetaBlock(sectionActive("meta"))}>
           <MetaLine label="Seniority" value={b.seniorityLevel} composing={sectionActive("meta")} />
           <MetaLine label="Autonomy" value={b.autonomyLevel} composing={sectionActive("meta")} />

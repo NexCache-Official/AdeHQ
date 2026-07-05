@@ -25,7 +25,7 @@ export function detectBriefChange(
   if (prev.roleTitle !== next.roleTitle || prev.domain !== next.domain || prev.department !== next.department) {
     return "title";
   }
-  if (prev.mission !== next.mission) return "mission";
+  if (!prev.mission?.trim() && next.mission?.trim()) return "mission";
   if (arrChanged(prev.coreResponsibilities, next.coreResponsibilities)) return "coreResponsibilities";
   if (arrChanged(prev.technicalFocus, next.technicalFocus)) return "technicalFocus";
   if (arrChanged(prev.businessFocus, next.businessFocus)) return "businessFocus";

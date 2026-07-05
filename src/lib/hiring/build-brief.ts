@@ -220,7 +220,7 @@ export function mergeBriefPartial(
     approvalRules: partial.approvalRules ?? base.approvalRules,
     toolsNeeded: partial.toolsNeeded ?? base.toolsNeeded,
     assumptions: partial.assumptions ?? base.assumptions,
-    openQuestions: partial.openQuestions ?? base.openQuestions,
+    openQuestions: [],
   };
 }
 
@@ -251,10 +251,7 @@ export function synthesizeBriefFromRole(
     toolsNeeded: existing?.toolsNeeded?.length ? existing.toolsNeeded : [],
     approvalRules: existing?.approvalRules?.length ? existing.approvalRules : [],
     assumptions: existing?.assumptions ?? [],
-    openQuestions:
-      userLines.length === 0
-        ? [`What specific ${role.title.toLowerCase()} focus areas matter most for your team?`]
-        : (existing?.openQuestions ?? []),
+    openQuestions: [],
   };
 
   if (userLines.length > 0) {
@@ -446,15 +443,6 @@ export function synthesizeBriefFromConversation(
         : []),
     ];
 
-  const openQuestions =
-    existing?.openQuestions ??
-    (role?.questionTemplates.coreWork
-      ? [role.questionTemplates.coreWork]
-      : [
-          "What should this employee own day to day?",
-          "Should the role be hands-on, advisory, or balanced?",
-        ]);
-
   return {
     roleTitle,
     department: existing?.department || DEPT_NAMES[dept] || "Custom",
@@ -496,7 +484,7 @@ export function synthesizeBriefFromConversation(
           ? deptSeed.toolsNeeded
           : [],
     assumptions,
-    openQuestions,
+    openQuestions: [],
   };
 }
 
@@ -529,9 +517,6 @@ export function briefToInstructions(brief: AiEmployeeJobBrief): string {
     ...brief.successMetrics.map((r) => `- ${r}`),
     ...(brief.assumptions.length
       ? ["", "Assumptions:", ...brief.assumptions.map((r) => `- ${r}`)]
-      : []),
-    ...(brief.openQuestions.length
-      ? ["", "Open questions:", ...brief.openQuestions.map((r) => `- ${r}`)]
       : []),
   ].join("\n");
 }

@@ -77,13 +77,13 @@ export async function generateRecruiterResponseOld(
     throw new Error("SILICONFLOW_API_KEY is not configured.");
   }
 
-  const modelId = resolveModel("siliconflow", "cheap");
+  const modelId = resolveModel("siliconflow", "balanced");
   const { object } = await generateObject({
     model: siliconFlowChatModel(modelId),
     schema: recruiterResponseSchema,
     system: params.system,
     prompt: params.prompt,
-    maxOutputTokens: 1400,
+    maxOutputTokens: 950,
     providerOptions: siliconFlowProviderOptions(modelId),
   });
 
@@ -189,11 +189,12 @@ export async function generateRecruiterResponseRuntime(
       workUnitId,
       capability: "structured_chat",
       runtimeMode: "efficient",
+      modelMode: "balanced",
       reasoningProfile: "none",
       schema: recruiterResponseSchema,
       system: params.system,
       prompt: params.prompt,
-      maxTokens: 1400,
+      maxTokens: 950,
       preferJsonMode: true,
       metadata: {
         source: "hiring_recruiter",
@@ -261,7 +262,7 @@ export async function generateRecruiterResponse(
       const message = error instanceof Error ? error.message : String(error);
       recordAiRuntime({
         provider: "siliconflow",
-        model: resolveModel("siliconflow", "cheap"),
+          model: resolveModel("siliconflow", "balanced"),
         mode: "fallback",
         fallbackReason: "hiring_recruiter_runtime_failed",
         workspaceId: options.workspaceId,

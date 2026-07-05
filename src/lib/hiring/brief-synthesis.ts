@@ -25,12 +25,6 @@ function focusPhrases(input: BriefSynthesisInput): string[] {
   return [...input.businessFocus, ...input.technicalFocus].filter(Boolean);
 }
 
-function focusTokens(input: BriefSynthesisInput): string[] {
-  return focusPhrases(input)
-    .flatMap((phrase) => phrase.toLowerCase().split(/[\s,/]+/))
-    .filter((word) => word.length > 4);
-}
-
 function performanceFocus(input: BriefSynthesisInput): boolean {
   const blob = `${focusPhrases(input).join(" ")} ${input.userLines.join(" ")}`.toLowerCase();
   return /\b(latency|bandwidth|throughput|performance|infra|infrastructure|sre|devops)\b/.test(blob);
@@ -42,10 +36,7 @@ export function missionNeedsRefresh(mission: string | undefined, input: BriefSyn
   if (STALE_MISSION_PATTERNS.some((pattern) => pattern.test(mission)) && !performanceFocus(input)) {
     return true;
   }
-  const tokens = focusTokens(input);
-  if (tokens.length === 0) return false;
-  const lower = mission.toLowerCase();
-  return !tokens.some((token) => lower.includes(token));
+  return false;
 }
 
 function substantiveUserLines(userLines: string[]): string[] {

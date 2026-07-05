@@ -465,7 +465,7 @@ export function HireFlow({ onboarding = false, entrySource = "hire_route" }: Hir
     const skipBriefUi = shouldSkipBriefUpdateIntent(userIntent);
     const optimisticAck = pickOptimisticAck(trimmed);
     const sectionsUpdating = skipBriefUi ? [] : inferSectionsUpdating(trimmed);
-    const composeSection = briefSectionToComposeKey(sectionsUpdating[0]) ?? "mission";
+    const composeSection = briefSectionToComposeKey(sectionsUpdating[0]) ?? null;
 
     const localBrief = synthesizeBriefForHiringContext({
       roleSeed,
@@ -804,7 +804,7 @@ export function HireFlow({ onboarding = false, entrySource = "hire_route" }: Hir
         )}
 
         {session.step === "recruiter" && (
-          <div className="grid w-full grid-cols-1 items-start gap-5 lg:grid-cols-[1.5fr_1fr]">
+          <div className="grid w-full grid-cols-1 items-start gap-5 lg:grid-cols-[1.65fr_1fr]">
             <RecruiterChat
               messages={session.recruiterMessages}
               chips={session.suggestionChips}
@@ -1057,18 +1057,7 @@ function RecruiterChat({
     endRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  const allChips =
-    briefReady && variant === "recruiter" && !chips.some((chip) => chip.intent === "review_brief")
-      ? [
-          {
-            id: "review-brief",
-            label: "Review job brief",
-            value: "Review job brief",
-            intent: "review_brief" as const,
-          },
-          ...chips,
-        ]
-      : chips;
+  const allChips = chips.filter((chip) => chip.intent !== "review_brief");
 
   const readinessLabel =
     readiness.ready ? "Ready to review" : readiness.score >= 50 ? "Almost ready" : "Understanding role…";
@@ -1236,12 +1225,63 @@ function RecruiterMessageRow({
           message.isOptimistic && !isUser && "border-accent/30 bg-accent-soft/25",
         )}
       >
-        {typeOut ? (
-          <TypewriterText text={message.text} active speed={10} />
+        {typeOut && !hasChatMarkdown(message.text) ? (
+          <TypewriterText text={message.text} active speed={3} />
         ) : (
-          message.text
+          <ChatMarkdown text={message.text} />
         )}
       </div>
     </motion.div>
   );
+}
+
+function hasChatMarkdown(text: string): boolean {
+  return /\*\*[^*]+\*\*|(?:^|\s)-\s+\S/.test(text);
+}
+
+function ChatMarkdown({ text }: { text: string }) {
+  const normalized = text.replace(/\s+-\s+(?=\*\*|[A-Z0-9])/g, "\n- ");
+  const lines = normalized.split(/\n+/).map((line) => line.trim()).filter(Boolean);
+  const blocks: Array<{ type: "p"; text: string } | { type: "ul"; items: string[] }> = [];
+
+  for (const line of lines) {
+    if (line.startsWith("- ")) {
+      const last = blocks[blocks.length - 1];
+      if (last?.type === "ul") {
+        last.items.push(line.slice(2).trim());
+      } else {
+        blocks.push({ type: "ul", items: [line.slice(2).trim()] });
+      }
+    } else {
+      blocks.push({ type: "p", text: line });
+    }
+  }
+
+  return (
+    <div className="space-y-2">
+      {blocks.map((block, index) =>
+        block.type === "ul" ? (
+          <ul key={index} className="space-y-1 pl-1">
+            {block.items.map((item, itemIndex) => (
+              <li key={itemIndex} className="flex gap-2">
+                <span className="mt-[0.55em] h-1 w-1 shrink-0 rounded-full bg-current opacity-45" />
+                <span>{renderInlineMarkdown(item)}</span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p key={index}>{renderInlineMarkdown(block.text)}</p>
+        ),
+      )}
+    </div>
+  );
+}
+
+function renderInlineMarkdown(text: string) {
+  return text.split(/(\*\*[^*]+\*\*)/g).map((part, index) => {
+    if (part.startsWith("**") && part.endsWith("**")) {
+      return <strong key={index}>{part.slice(2, -2)}</strong>;
+    }
+    return <span key={index}>{part}</span>;
+  });
 }

@@ -83,8 +83,32 @@ function normalizeBrief(raw: z.infer<typeof briefSchema>): AiEmployeeJobBrief {
     personalityTraits: raw.personalityTraits ?? [],
     toolsNeeded: raw.toolsNeeded ?? [],
     assumptions: raw.assumptions ?? [],
-    openQuestions: raw.openQuestions ?? [],
+    openQuestions: [],
   };
+}
+
+function sanitizeSuggestionChips(chips: RecruiterSuggestionChip[] = []): RecruiterSuggestionChip[] {
+  const seen = new Set<string>();
+  const cleaned: RecruiterSuggestionChip[] = [];
+
+  for (const chip of chips) {
+    if (chip.intent === "review_brief") continue;
+    const label = chip.label.trim();
+    const value = chip.value.trim();
+    if (!label || !value) continue;
+
+    const key = `${chip.intent}:${label.toLowerCase()}:${value.toLowerCase()}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    cleaned.push({
+      ...chip,
+      label,
+      value,
+      id: chip.id || `${chip.intent}-${label.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}`,
+    });
+  }
+
+  return cleaned.slice(0, 5);
 }
 
 function normalizeBody(body: RecruiterBody) {
@@ -202,29 +226,29 @@ function buildResponse(input: {
   message?: string;
   usedFallback: boolean;
   forceCanReview?: boolean;
+  suggestionChips?: RecruiterSuggestionChip[];
 }) {
   const lastUser = [...input.conversation].reverse().find((m) => m.role === "user")?.text ?? "";
   const userIntent = detectRecruiterUserIntent(lastUser);
   const skipBriefMutation = shouldSkipBriefUpdateIntent(userIntent);
   const chipMutation =
     !skipBriefMutation && lastUser ? applyChipMutation(lastUser, input.brief) : null;
-  let brief = chipMutation?.brief ?? input.brief;
+  let brief = { ...(chipMutation?.brief ?? input.brief), openQuestions: [] };
   const roleKey = input.body.roleKey ?? null;
   const roleFocus =
     !skipBriefMutation && lastUser ? applyRoleFocusAnswer(lastUser, brief, roleKey) : null;
   if (roleFocus) {
-    brief = roleFocus.brief;
+    brief = { ...roleFocus.brief, openQuestions: [] };
   }
   const changedFields = [...(chipMutation?.changedFields ?? []), ...(roleFocus ? ["businessFocus"] : [])];
 
   const baseReadiness = assessRecruiterReadiness(input.conversation, brief, roleKey);
-  const canReviewBrief =
-    input.forceCanReview ||
-    baseReadiness.ready ||
+  const explicitReviewIntent =
     userIntent === "approve_brief" ||
     userIntent === "generate_candidates" ||
     userIntent === "review_brief";
-  const readiness = finalizeReadinessScore(baseReadiness, brief, canReviewBrief);
+  let canReviewBrief = input.forceCanReview || baseReadiness.ready || explicitReviewIntent;
+  let readiness = finalizeReadinessScore(baseReadiness, brief, canReviewBrief);
   const userTurns = input.conversation.filter((m) => m.role === "user").length;
   const departmentId = input.body.selectedDepartment ?? input.body.departmentId ?? null;
   const lastAde = [...input.conversation].reverse().find((m) => m.role === "ade")?.text ?? "";
@@ -248,6 +272,12 @@ function buildResponse(input: {
     }
   }
 
+  const messageStillAsksQuestion = /\?\s*$/.test(message ?? "");
+  if (messageStillAsksQuestion && !input.forceCanReview && !explicitReviewIntent) {
+    canReviewBrief = false;
+    readiness = finalizeReadinessScore(baseReadiness, brief, false);
+  }
+
   const checklist = checklistFromBrief(brief, input.body.roleSeed, input.conversation);
 
   return {
@@ -256,7 +286,7 @@ function buildResponse(input: {
     brief,
     briefPartial: brief,
     readiness,
-    suggestionChips: [] as RecruiterSuggestionChip[],
+    suggestionChips: sanitizeSuggestionChips(input.suggestionChips),
     canReviewBrief,
     briefReady: canReviewBrief,
     chips: [] as string[],
@@ -275,11 +305,20 @@ async function finalizeRecruiterResponse(
     lastUser?: string;
   },
 ) {
+  const preferredChips = sanitizeSuggestionChips(response.suggestionChips);
+  if (preferredChips.length >= 2) {
+    return {
+      ...response,
+      suggestionChips: preferredChips,
+      chips: preferredChips.map((chip) => chip.label),
+    };
+  }
+
   const lastUser =
     input.lastUser ??
     [...input.conversation].reverse().find((message) => message.role === "user")?.text ??
     "";
-  const suggestionChips = await resolveRecruiterSuggestionChips({
+  const suggestionChips = sanitizeSuggestionChips(await resolveRecruiterSuggestionChips({
     readiness: response.readiness,
     brief: response.brief,
     conversation: input.conversation,
@@ -287,7 +326,7 @@ async function finalizeRecruiterResponse(
     lastAdeMessage: response.message ?? "",
     lastUserMessage: lastUser,
     canReviewBrief: response.canReviewBrief,
-  });
+  }));
 
   return {
     ...response,
@@ -319,11 +358,14 @@ RULES:
 3. NEVER repeat a question the user already answered. Move the conversation forward.
 4. Extract semantics from ALL user messages — NEVER map answers by question order.
 5. Ask at most ONE useful question per turn.
-6. If enough information exists, say the brief is ready but keep the user free to refine.
-7. Always include an updated semantic brief or partial brief that reflects the exact role the user is hiring for — sales, legal, marketing, research, support, finance, design, operations, or any custom role.
-8. Mission, responsibilities, and success metrics must match the role discussed — never default to generic engineering or infra language unless the user asked for that.
-9. Never ask about channels, rooms, or start location.
-10. ${MAYA_HIRE_LANGUAGE_RULE}
+6. Keep responses concise. Use bullets only when recommending options. Markdown bold is okay for option names.
+7. If enough information exists, say the brief is ready but keep the user free to refine.
+8. Always include an updated semantic brief or partial brief that reflects the exact role the user is hiring for — sales, legal, marketing, research, support, finance, design, operations, or any custom role.
+9. Mission should be stable after it captures the role. Update responsibilities, focus, tools, and metrics for later details instead of rewriting mission every turn.
+10. Never include openQuestions in the brief. Set openQuestions to [].
+11. Always include 2–4 suggestionChips that directly answer your latest question. If your message asks a question, do not include a review_brief chip.
+12. Never ask about channels, rooms, or start location.
+13. ${MAYA_HIRE_LANGUAGE_RULE}
 
 Mode: ${body.mode ?? "chat"}
 ${body.refineInstruction ? `Refine (${body.refineMode ?? "improve"}) section ${body.refineSection}: ${body.refineInstruction}` : ""}
@@ -400,7 +442,7 @@ export async function POST(request: NextRequest) {
       .join("\n");
     const llmPrompt = [
       `Conversation:\n${history || "(starting)"}`,
-      body.currentBrief ? `Current brief:\n${JSON.stringify(body.currentBrief)}` : "",
+      body.currentBrief ? `Current brief:\n${JSON.stringify({ ...body.currentBrief, openQuestions: [] })}` : "",
     ]
       .filter(Boolean)
       .join("\n\n");
@@ -451,6 +493,7 @@ export async function POST(request: NextRequest) {
             message: object.message,
             usedFallback: false,
             forceCanReview: action === "draft_now",
+            suggestionChips: object.suggestionChips,
           }),
           { conversation, roleKey },
         ),

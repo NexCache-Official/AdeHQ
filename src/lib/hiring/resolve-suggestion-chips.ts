@@ -36,6 +36,11 @@ export async function resolveRecruiterSuggestionChips(input: {
   const mode =
     input.canReviewBrief || input.readiness.ready ? "ready_to_review" : "gathering";
 
+  const parsed = parseRecruiterSuggestionChips(chipConversation, input.roleKey);
+  if (parsed.length >= 2) {
+    return parsed;
+  }
+
   const planned = await planRecruiterSuggestionChips({
     lastAdeMessage: input.lastAdeMessage,
     roleTitle: input.brief.roleTitle,
@@ -50,40 +55,7 @@ export async function resolveRecruiterSuggestionChips(input: {
     mode,
   });
   if (planned?.length) {
-    if (
-      input.canReviewBrief &&
-      !planned.some((chip) => chip.intent === "review_brief")
-    ) {
-      return [
-        {
-          id: "review-brief",
-          label: "Review job brief",
-          value: "Review job brief",
-          intent: "review_brief",
-        },
-        ...planned,
-      ];
-    }
     return planned;
-  }
-
-  const parsed = parseRecruiterSuggestionChips(chipConversation, input.roleKey);
-  if (parsed.length >= 2) {
-    if (
-      input.canReviewBrief &&
-      !parsed.some((chip) => chip.intent === "review_brief")
-    ) {
-      return [
-        {
-          id: "review-brief",
-          label: "Review job brief",
-          value: "Review job brief",
-          intent: "review_brief",
-        },
-        ...parsed,
-      ];
-    }
-    return parsed;
   }
 
   return generateSuggestionChips(
