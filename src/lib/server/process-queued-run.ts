@@ -69,6 +69,16 @@ import {
 } from "@/lib/orchestration/work-stop";
 import { cancelActiveTopicWork } from "@/lib/server/cancel-active-topic-work";
 
+function formatResearchError(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  if (typeof error === "object" && error && "message" in error) {
+    const message = (error as { message?: unknown }).message;
+    if (typeof message === "string" && message.trim()) return message;
+  }
+  if (typeof error === "string" && error.trim()) return error;
+  return "Research failed";
+}
+
 async function persistRunOrchestrationPhase(
   client: SupabaseClient,
   workspaceId: string,
@@ -645,7 +655,7 @@ export async function processQueuedAgentRun(
             };
           }
 
-          if (researchResult.chatReply) {
+          if (researchResult.chatReply?.content?.trim()) {
             await client
               .from("messages")
               .update({ agent_run_id: runId })
@@ -752,8 +762,7 @@ export async function processQueuedAgentRun(
           throw new Error("Research completed without a chat reply.");
         } catch (researchError) {
           console.warn("[AdeHQ research planner]", researchError);
-          const researchErrorMessage =
-            researchError instanceof Error ? researchError.message : "Research failed";
+          const researchErrorMessage = formatResearchError(researchError);
           await appendRunStep(client, {
             workspaceId,
             agentRunId: runId,

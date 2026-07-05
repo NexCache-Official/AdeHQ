@@ -7,6 +7,7 @@ import {
   countTopicMessages,
 } from "@/lib/topic-summary/persistence";
 import { markTopicConversationCleared } from "@/lib/conversation-context/epochs";
+import { cancelActiveTopicWork } from "@/lib/server/cancel-active-topic-work";
 import { nowISO } from "@/lib/utils";
 
 function isMissingRelationError(error: unknown): boolean {
@@ -147,6 +148,14 @@ export async function clearTopicChatHistory(
   const includeRoomOrphans = isGeneralTopic(topic);
 
   await cancelTopicAgentRuns(client, workspaceId, topicId);
+  await cancelActiveTopicWork(client, {
+    workspaceId,
+    roomId,
+    topicId,
+    reason: "Chat history cleared.",
+  }).catch((error) => {
+    console.warn("[AdeHQ clear chat] cancel active work failed", error);
+  });
   await markTopicConversationCleared(client, {
     workspaceId,
     roomId,

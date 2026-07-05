@@ -8,7 +8,8 @@ import { fetchTopicOrchestrations } from "@/lib/orchestration/orchestration-clie
 import type { OrchestrationPlan } from "@/lib/orchestration/types";
 import { readDismissedOrchestrationIds } from "@/lib/orchestration/dismissed-orchestrations";
 import { enrichHumanSeenBy } from "@/lib/message-read-receipts";
-import { notifyTopicSummaryUpdated } from "@/lib/topic-summary/client";
+import { notifyTopicSummaryUpdated, TOPIC_SUMMARY_UPDATED_EVENT } from "@/lib/topic-summary/client";
+import { CHAT_CLEARED_METADATA_KEY } from "@/lib/topic-summary/persistence";
 import {
   SCROLL_TO_MESSAGE_EVENT,
 } from "@/lib/navigation/jump-to-source";
@@ -141,6 +142,23 @@ function daySeparatorLabel(iso: string): string {
     day: "numeric",
     year: date.getFullYear() === today.getFullYear() ? undefined : "numeric",
   });
+}
+
+function getTopicChatClearedAt(topic?: RoomTopic): string | null {
+  if (!topic) return null;
+  const fromMeta = topic.metadata?.[CHAT_CLEARED_METADATA_KEY];
+  if (typeof fromMeta === "string" && fromMeta.trim()) return fromMeta;
+  return null;
+}
+
+function filterBrowserResearchRunsAfterClear(
+  runs: BrowserResearchRun[],
+  chatClearedAt: string | null,
+): BrowserResearchRun[] {
+  if (!chatClearedAt) return runs;
+  const clearedMs = +new Date(chatClearedAt);
+  if (!Number.isFinite(clearedMs)) return runs;
+  return runs.filter((run) => +new Date(run.createdAt) > clearedMs);
 }
 
 function shouldGroupWithPrevious(
@@ -448,6 +466,7 @@ export function RoomChat({
   }, [dmEmployee, roomEmployees]);
 
   const browserResearchAvailable = Boolean(researchEmployee && useServerApi && !isMayaHiringMode);
+  const topicChatClearedAt = getTopicChatClearedAt(topic);
 
   useEffect(() => {
     if (!browserResearchAvailable || !topic || !state.workspace?.id || !researchEmployee) return;
@@ -460,7 +479,11 @@ export function RoomChat({
           topicId: topic.id,
         });
         if (cancelled) return;
-        setBrowserResearchRuns(sortBrowserResearchRuns(runs.slice(0, 5)));
+        const visibleRuns = filterBrowserResearchRunsAfterClear(
+          runs.slice(0, 5),
+          topicChatClearedAt,
+        );
+        setBrowserResearchRuns(sortBrowserResearchRuns(visibleRuns));
         if (config) setBrowserResearchConfig(config);
       } catch {
         // non-blocking — browse mode still usable
@@ -469,11 +492,26 @@ export function RoomChat({
     return () => {
       cancelled = true;
     };
-  }, [browserResearchAvailable, researchEmployee, state.workspace?.id, topic?.id]);
+  }, [browserResearchAvailable, researchEmployee, state.workspace?.id, topic?.id, topicChatClearedAt]);
+
+  useEffect(() => {
+    if (!topic?.id) return;
+    const onTopicSummaryUpdated = (event: Event) => {
+      const detail = (event as CustomEvent<{ topicId?: string; cleared?: boolean }>).detail;
+      if (detail?.topicId !== topic.id || !detail.cleared) return;
+      setBrowserResearchRuns([]);
+      deliveredResearchRepliesRef.current.clear();
+    };
+    window.addEventListener(TOPIC_SUMMARY_UPDATED_EVENT, onTopicSummaryUpdated);
+    return () => window.removeEventListener(TOPIC_SUMMARY_UPDATED_EVENT, onTopicSummaryUpdated);
+  }, [topic?.id]);
 
   const handleResearchRunUpdated = useCallback((run: BrowserResearchRun) => {
+    if (topicChatClearedAt && +new Date(run.createdAt) <= +new Date(topicChatClearedAt)) {
+      return;
+    }
     setBrowserResearchRuns((current) => upsertBrowserResearchRun(current, run));
-  }, []);
+  }, [topicChatClearedAt]);
 
   const handleResearchChatReply = useCallback(
     (message: RoomMessage) => {

@@ -110,6 +110,19 @@ export async function executeSearchAnswer(
       providerRoute = "vercel_gateway";
       estimatedCostUsd = estimateGatewaySearchCostUsd();
       estimatedWorkMinutes = getGatewaySearchWorkMinutes();
+
+      if (!text.trim() && isTavilySearchConfigured()) {
+        const tavilyResult = await runTavilySearchAnswer({
+          query: params.query,
+          maxResults: decision.maxResults,
+          employeeName: params.employeeName,
+        });
+        text = tavilyResult.text;
+        sources = tavilyResult.sources;
+        providerRoute = "tavily";
+        estimatedCostUsd = estimateTavilySearchAnswerCostUsd();
+        estimatedWorkMinutes = Math.max(1, estimateWorkMinutesFromCost(estimatedCostUsd));
+      }
     } else if (tryTavily) {
       const result = await runTavilySearchAnswer({
         query: params.query,
@@ -138,6 +151,17 @@ export async function executeSearchAnswer(
         actualCostUsd: estimatedCostUsd,
         metadata: { sourceCount: sources.length },
       });
+    }
+
+    if (!text.trim()) {
+      return {
+        answer: SEARCH_UNAVAILABLE_MESSAGE,
+        sources: [],
+        route: decision.route,
+        providerRoute: "model_fallback",
+        estimatedCostUsd: 0,
+        estimatedWorkMinutes: 0,
+      };
     }
 
     return {

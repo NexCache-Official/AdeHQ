@@ -1,4 +1,4 @@
-import { generateText } from "ai";
+import { generateText, stepCountIs } from "ai";
 import { gateway } from "@ai-sdk/gateway";
 import { resolveVercelGatewayModelId } from "@/lib/ai/runtime/adapters/vercel-models";
 import type { SearchRoute, SearchSource } from "./types";
@@ -112,6 +112,22 @@ function buildToolConfig(
   return null;
 }
 
+async function runSonarSearchAnswer(
+  prompt: string,
+): Promise<{ text: string; sources: SearchSource[] }> {
+  const sonarResult = await generateText({
+    model: gateway("perplexity/sonar"),
+    prompt,
+    maxOutputTokens: 1200,
+    temperature: 0.2,
+  });
+  const text = sonarResult.text.trim();
+  return {
+    text,
+    sources: extractSourcesFromText(text),
+  };
+}
+
 /** Fast search via Vercel AI Gateway search tools, with sonar model fallback. */
 export async function runGatewaySearchAnswer(
   options: GatewaySearchOptions,
@@ -134,27 +150,29 @@ export async function runGatewaySearchAnswer(
       model: gateway(modelId),
       prompt,
       tools,
+      stopWhen: stepCountIs(5),
       maxOutputTokens: 1200,
       temperature: 0.2,
     });
 
-    return {
-      text: result.text.trim(),
-      sources: extractSourcesFromText(result.text),
-      usedTool: true,
-    };
+    const text = result.text.trim();
+    if (text.length > 0) {
+      return {
+        text,
+        sources: extractSourcesFromText(text),
+        usedTool: true,
+      };
+    }
+
+    console.warn(
+      "[AdeHQ gateway search] Tool path returned empty text — falling back to perplexity/sonar.",
+    );
   }
 
-  const sonarResult = await generateText({
-    model: gateway("perplexity/sonar"),
-    prompt,
-    maxOutputTokens: 1200,
-    temperature: 0.2,
-  });
-
+  const sonar = await runSonarSearchAnswer(prompt);
   return {
-    text: sonarResult.text.trim(),
-    sources: extractSourcesFromText(sonarResult.text),
+    text: sonar.text,
+    sources: sonar.sources,
     usedTool: false,
   };
 }

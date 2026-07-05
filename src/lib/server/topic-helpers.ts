@@ -27,7 +27,10 @@ export function topicFromRow(row: DbRow): RoomTopic {
     memoryCount: Number(row.memory_count ?? 0),
     approvalCount: Number(row.approval_count ?? 0),
     agentRunCount: Number(row.agent_run_count ?? 0),
-    metadata: (row.metadata as Record<string, unknown>) ?? {},
+    metadata: {
+      ...((row.metadata as Record<string, unknown>) ?? {}),
+      ...(row.chat_cleared_at ? { chatClearedAt: String(row.chat_cleared_at) } : {}),
+    },
     createdAt: String(row.created_at ?? nowISO()),
     updatedAt: String(row.updated_at ?? row.created_at ?? nowISO()),
   };
