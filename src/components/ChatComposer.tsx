@@ -182,6 +182,22 @@ const HUMAN_ROLE_LABELS: Record<WorkspaceMemberRole, string> = {
   viewer: "Viewer",
 };
 
+/** Single-line composer height; grows up to this before scrolling. */
+const COMPOSER_TEXTAREA_MIN_PX = 44;
+const COMPOSER_TEXTAREA_MAX_PX = 193;
+
+function adjustComposerTextareaHeight(textarea: HTMLTextAreaElement): boolean {
+  textarea.style.height = "0px";
+  const scrollHeight = textarea.scrollHeight;
+  const nextHeight = Math.min(
+    Math.max(scrollHeight, COMPOSER_TEXTAREA_MIN_PX),
+    COMPOSER_TEXTAREA_MAX_PX,
+  );
+  textarea.style.height = `${nextHeight}px`;
+  textarea.style.overflowY = scrollHeight > COMPOSER_TEXTAREA_MAX_PX ? "auto" : "hidden";
+  return nextHeight > COMPOSER_TEXTAREA_MIN_PX + 2;
+}
+
 export function ChatComposer({
   employees,
   mentionHumans = [],
@@ -248,6 +264,7 @@ export function ChatComposer({
   const sendInFlightRef = useRef(false);
   const [activeMentionIndex, setActiveMentionIndex] = useState(0);
   const [activeSlashIndex, setActiveSlashIndex] = useState(0);
+  const [composerMultiline, setComposerMultiline] = useState(false);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -263,8 +280,7 @@ export function ChatComposer({
   useLayoutEffect(() => {
     const input = inputRef.current;
     if (!input) return;
-    input.style.height = "0px";
-    input.style.height = `${Math.min(input.scrollHeight, 168)}px`;
+    setComposerMultiline(adjustComposerTextareaHeight(input));
   }, [value]);
 
   const mentionParticipants = useMemo(
@@ -551,9 +567,6 @@ export function ChatComposer({
     setSlashQuery(null);
     setTrackedMentions([]);
     setCommandNotice(null);
-    if (inputRef.current) {
-      inputRef.current.style.height = "0px";
-    }
 
     try {
       await onSend(
@@ -972,7 +985,7 @@ export function ChatComposer({
           </div>
         )}
 
-        <div className="flex items-end gap-1.5">
+        <div className={cn("flex gap-1.5", composerMultiline ? "items-end" : "items-center")}>
           <button
             type="button"
             onClick={() => setShowPlusMenu((open) => !open)}
@@ -1002,13 +1015,13 @@ export function ChatComposer({
             rows={1}
             disabled={disabled}
             placeholder={placeholder ?? "Message the room… use @ to mention an employee"}
-            className="max-h-[193px] min-h-[46px] w-full flex-1 resize-none bg-transparent px-1 py-2 text-[16.1px] text-ink outline-none placeholder:text-ink-3 disabled:cursor-not-allowed disabled:opacity-60"
+            className="min-h-0 w-full flex-1 resize-none overflow-hidden bg-transparent px-1 py-[10px] text-[16.1px] leading-[1.5] text-ink outline-none placeholder:text-ink-3 disabled:cursor-not-allowed disabled:opacity-60"
           />
-          <div className="flex shrink-0 items-center gap-0.5 pb-0.5">
+          <div className="flex shrink-0 items-center gap-0.5">
             <button
               type="button"
               disabled
-              className="hidden h-[34px] w-[34px] cursor-not-allowed items-center justify-center rounded-[10px] text-ink-3 opacity-45 sm:flex"
+              className="hidden h-9 w-9 cursor-not-allowed items-center justify-center rounded-[11px] text-ink-3 opacity-45 sm:flex"
               title="Emoji reactions arrive later"
               aria-label="Emoji"
             >
@@ -1018,7 +1031,7 @@ export function ChatComposer({
               type="button"
               onClick={() => setShowFormatting((open) => !open)}
               className={cn(
-                "flex h-[34px] w-[34px] items-center justify-center rounded-[10px] transition-colors hover:bg-muted hover:text-ink-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/40",
+                "flex h-9 w-9 items-center justify-center rounded-[11px] transition-colors hover:bg-muted hover:text-ink-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/40",
                 showFormatting ? "bg-muted text-ink-2" : "text-ink-3",
               )}
               title="Formatting"
@@ -1033,7 +1046,7 @@ export function ChatComposer({
                 setMentionQuery("");
                 inputRef.current?.focus();
               }}
-              className="flex h-[34px] w-[34px] items-center justify-center rounded-[10px] text-ink-3 transition-colors hover:bg-muted hover:text-ink-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/40"
+              className="flex h-9 w-9 items-center justify-center rounded-[11px] text-ink-3 transition-colors hover:bg-muted hover:text-ink-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/40"
               title="Mention employee"
               aria-label="Mention employee"
             >
@@ -1042,7 +1055,7 @@ export function ChatComposer({
             <button
               type="button"
               onClick={() => setShowCommands((open) => !open)}
-              className="flex h-[34px] w-[34px] items-center justify-center rounded-[10px] font-mono text-base font-semibold text-ink-3 transition-colors hover:bg-muted hover:text-ink-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/40"
+              className="flex h-9 w-9 items-center justify-center rounded-[11px] font-mono text-base font-semibold text-ink-3 transition-colors hover:bg-muted hover:text-ink-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/40"
               title="Slash command"
               aria-label="Open slash commands"
             >
@@ -1057,7 +1070,7 @@ export function ChatComposer({
                   if (!browserResearchEnabled) onAgentModeEnabledChange?.(false);
                 }}
                 className={cn(
-                  "flex h-[34px] items-center gap-1 rounded-[10px] px-2 text-[11px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/40",
+                  "flex h-9 items-center gap-1 rounded-[11px] px-2 text-[11px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/40",
                   browserResearchEnabled
                     ? "bg-sky-600 text-white hover:bg-sky-700"
                     : "text-ink-3 hover:bg-muted hover:text-ink-2",
@@ -1083,7 +1096,7 @@ export function ChatComposer({
                   if (!agentModeEnabled) onBrowserResearchEnabledChange?.(false);
                 }}
                 className={cn(
-                  "flex h-[34px] items-center gap-1 rounded-[10px] px-2 text-[11px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/40",
+                  "flex h-9 items-center gap-1 rounded-[11px] px-2 text-[11px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/40",
                   agentModeEnabled
                     ? "bg-emerald-600 text-white hover:bg-emerald-700"
                     : "text-ink-3 hover:bg-muted hover:text-ink-2",
