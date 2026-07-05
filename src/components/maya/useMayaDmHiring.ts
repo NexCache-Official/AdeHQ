@@ -264,7 +264,28 @@ export function useMayaDmHiring({
           briefReady: Boolean(res.canReviewBrief ?? res.briefReady),
         });
       }
-      if (res.suggestionChips) {
+
+      const nextMessages =
+        appendMaya && recruiterMessage
+          ? [
+              ...(conversationBase ??
+                session.recruiterMessages.filter((m) => !m.isOptimistic)),
+              { role: "ade" as const, text: recruiterMessage },
+            ]
+          : (conversationBase ?? session.recruiterMessages.filter((m) => !m.isOptimistic));
+      const chipBrief = res.brief ?? res.briefPartial ?? session.brief ?? session.briefPartial;
+      const chipReadiness = res.readiness ?? session.readiness;
+      if (chipBrief?.roleTitle && chipReadiness) {
+        dispatch({
+          type: "SET_SUGGESTION_CHIPS",
+          chips: generateSuggestionChips(
+            chipReadiness,
+            chipBrief as AiEmployeeJobBrief,
+            nextMessages,
+            session.roleKey,
+          ),
+        });
+      } else if (res.suggestionChips) {
         dispatch({ type: "SET_SUGGESTION_CHIPS", chips: res.suggestionChips });
       }
 

@@ -212,6 +212,18 @@ const TECHNICAL_FOCUS = [
   NOT_SURE,
 ];
 
+const STACK_COMBO_CHIPS = [
+  "React + Node.js",
+  "Next.js + TypeScript",
+  "Vue + Python",
+  "Ruby on Rails",
+  NOT_SURE,
+];
+
+const FRONTEND_STACK_CHIPS = ["React", "Vue", "Angular", "Next.js", NOT_SURE];
+
+const BACKEND_STACK_CHIPS = ["Node.js", "Python", "Go", "Ruby on Rails", NOT_SURE];
+
 const SENIORITY_CHIPS = [
   "Hands-on specialist",
   "Senior advisor",
@@ -308,6 +320,7 @@ function parseInlineOptionList(segment: string): string[] {
   cleaned = cleaned.replace(/^(will it focus on|should it|could it|would it)\s+/i, "");
   cleaned = cleaned.replace(/\s+or something else.*$/i, "");
   cleaned = cleaned.replace(/\s+just give me.*$/i, "");
+  cleaned = cleaned.replace(/\s+etc\.?\)?\.*$/i, "");
 
   const parts = cleaned
     .split(/,\s*/)
@@ -317,18 +330,212 @@ function parseInlineOptionList(segment: string): string[] {
         .trim()
         .replace(/^(will it focus on|should it|could it|would it)\s+/i, "")
         .replace(/^on\s+/i, "")
-        .replace(/^to\s+/i, ""),
+        .replace(/^to\s+/i, "")
+        .replace(/[.)]+$/g, ""),
     )
     .filter((part) => part.length > 2 && part.length < 80)
-    .filter((part) => !/something else|not sure|help me decide/i.test(part));
+    .filter((part) => !/something else|not sure|help me decide|^etc$/i.test(part));
 
   return parts.map((part) => part.charAt(0).toUpperCase() + part.slice(1));
+}
+
+export type RecruiterQuestionTopic =
+  | "stack"
+  | "domain"
+  | "core_work"
+  | "technical_focus"
+  | "business_focus"
+  | "seniority"
+  | "communication_style"
+  | "quality_preference"
+  | "tools"
+  | "approval_rules";
+
+/** Infer what Maya's last question is asking — overrides readiness gap ordering for chips. */
+export function inferQuestionTopicFromRecruiterMessage(text: string): RecruiterQuestionTopic | null {
+  const lower = text.toLowerCase();
+  if (
+    /\b(technologies|frameworks|tech stack|frontend and backend|language.*use|stack does your team|what specific frontend)\b/.test(
+      lower,
+    )
+  ) {
+    return "stack";
+  }
+  if (
+    /\bhow senior|judgment should they|hands[- ]?on executor|steady mid[- ]?level|senior advisor|architect|implementer\b/.test(
+      lower,
+    )
+  ) {
+    return "seniority";
+  }
+  if (/\btools|plug into|from day one|systems should they\b/.test(lower)) {
+    return "tools";
+  }
+  if (/\bapproval|run by you|external messages|publishing|sign[- ]?off\b/.test(lower)) {
+    return "approval_rules";
+  }
+  if (/\b(show up|communication|tone|voice|formal|collaborative|async)\b/.test(lower)) {
+    return "communication_style";
+  }
+  if (/\bmoving fast|balanced output|polish|quality.*speed|bias toward\b/.test(lower)) {
+    return "quality_preference";
+  }
+  if (
+    /\bfocus on.{0,100}(frontend|backend|full[- ]?stack|qa|infrastructure)\b/.test(lower) ||
+    (/\bshould this (engineer|employee|hire)\b/.test(lower) && /\bor qa\b/.test(lower))
+  ) {
+    return "technical_focus";
+  }
+  if (/\bwhat product|what market|product or platform|part of the business|customer segment\b/.test(lower)) {
+    return "domain";
+  }
+  if (/\boutcomes should|drive in the next|business focus\b/.test(lower)) {
+    return "business_focus";
+  }
+  if (/\b(day to day|own first|what should this|core work|focus on day)\b/.test(lower)) {
+    return "core_work";
+  }
+  return null;
+}
+
+/** Pull comma/or-separated options from the question sentence before "?". */
+export function extractOptionListBeforeQuestion(text: string): string[] {
+  const qIdx = text.lastIndexOf("?");
+  if (qIdx <= 0) return [];
+
+  const beforeQuestion = text.slice(0, qIdx);
+  const listPatterns = [
+    /\bfocus on\s+(.+)$/i,
+    /\bshould (?:this|they|the|it)\s+[^?]{0,60}?\s+focus on\s+(.+)$/i,
+    /\b(?:choose|pick|select)\s+(?:from\s+)?(.+)$/i,
+  ];
+
+  for (const pattern of listPatterns) {
+    const match = beforeQuestion.match(pattern);
+    if (match?.[1]) {
+      const parts = parseInlineOptionList(match[1]);
+      if (parts.length >= 2) return parts;
+    }
+  }
+
+  const lastSentence = beforeQuestion.split(/[.!]\s+/).pop() ?? beforeQuestion;
+  if (/,/.test(lastSentence) && /\bor\b/i.test(lastSentence)) {
+    const inline = parseInlineOptionList(lastSentence.replace(/^.*?\b(should|focus on|would|are they|is it)\b/i, ""));
+    if (inline.length >= 2) return inline;
+  }
+
+  return [];
+}
+
+function uniqueLabels(labels: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const label of labels) {
+    const key = label.trim().toLowerCase();
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    out.push(label.trim());
+  }
+  return out;
+}
+
+function chipsForQuestionTopic(
+  topic: RecruiterQuestionTopic,
+  currentBrief: AiEmployeeJobBrief,
+  roleKey?: string | null,
+): RecruiterSuggestionChip[] | null {
+  const role = getRoleByKey(roleKey ?? undefined);
+  const deptId = inferDepartmentId(currentBrief);
+
+  switch (topic) {
+    case "stack":
+      if (/\bfrontend\b/i.test(currentBrief.roleTitle + currentBrief.technicalFocus.join(" "))) {
+        return chipsFromLabels(FRONTEND_STACK_CHIPS);
+      }
+      if (/\bbackend\b/i.test(currentBrief.roleTitle + currentBrief.technicalFocus.join(" "))) {
+        return chipsFromLabels(BACKEND_STACK_CHIPS);
+      }
+      return chipsFromLabels(STACK_COMBO_CHIPS);
+    case "technical_focus":
+      if (role?.questionTemplates.coreWorkChips.length) {
+        return chipsFromLabels(role.questionTemplates.coreWorkChips);
+      }
+      return chipsFromLabels(isEngineeringBrief(currentBrief) ? TECHNICAL_FOCUS : CORE_WORK_BY_DEPT[deptId] ?? CORE_WORK_BY_DEPT.custom);
+    case "core_work":
+      if (role?.questionTemplates.coreWorkChips.length) {
+        return chipsFromLabels(role.questionTemplates.coreWorkChips);
+      }
+      return chipsFromLabels(CORE_WORK_BY_DEPT[deptId] ?? CORE_WORK_BY_DEPT.custom);
+    case "domain":
+      if (role?.questionTemplates.focusChips?.length) {
+        return chipsFromLabels(role.questionTemplates.focusChips);
+      }
+      return chipsFromLabels(DOMAIN_BY_DEPT[deptId] ?? DOMAIN_BY_DEPT.custom);
+    case "business_focus":
+      if (role?.questionTemplates.focusChips?.length) {
+        return chipsFromLabels(role.questionTemplates.focusChips);
+      }
+      return chipsFromLabels(BUSINESS_FOCUS_BY_DEPT[deptId] ?? BUSINESS_FOCUS_BY_DEPT.custom);
+    case "seniority":
+      if (role?.questionTemplates.seniorityChips?.length) {
+        return chipsFromLabels(role.questionTemplates.seniorityChips);
+      }
+      return chipsFromLabels(SENIORITY_CHIPS);
+    case "communication_style":
+      return chipsFromLabels(COMMUNICATION_CHIPS);
+    case "quality_preference":
+      return chipsFromLabels(QUALITY_CHIPS);
+    case "tools":
+      if (role?.questionTemplates.toolsChips?.length) {
+        return chipsFromLabels(role.questionTemplates.toolsChips, "add_tools");
+      }
+      return chipsFromLabels(TOOLS_BY_DEPT[deptId] ?? TOOLS_BY_DEPT.custom, "add_tools", 3);
+    case "approval_rules":
+      return chipsFromLabels(APPROVAL_BY_DEPT[deptId] ?? APPROVAL_BY_DEPT.custom, "add_approval_rules");
+    default:
+      return null;
+  }
+}
+
+function buildChipsFromLastRecruiterMessage(
+  lastAde: string,
+  lastUser: string,
+  currentBrief: AiEmployeeJobBrief,
+  roleKey?: string | null,
+): RecruiterSuggestionChip[] | null {
+  const fromExamples = extractExamplesFromRecruiterMessage(lastAde);
+  const fromOptionList = extractOptionListBeforeQuestion(lastAde);
+  const inlineLabels = uniqueLabels(
+    [...fromExamples, ...fromOptionList].filter((label) => !matchesUserAnswer(label, lastUser)),
+  );
+
+  if (inlineLabels.length >= 2) {
+    const chips = chipsFromLabels(inlineLabels, "answer_question", 4);
+    pushChip(chips, NOT_SURE, NOT_SURE);
+    return chips;
+  }
+
+  const topic = inferQuestionTopicFromRecruiterMessage(lastAde);
+  if (!topic) return null;
+
+  const chips = chipsForQuestionTopic(topic, currentBrief, roleKey);
+  if (!chips?.length) return null;
+
+  if (!chips.some((chip) => chip.label === NOT_SURE) && topic !== "approval_rules") {
+    pushChip(chips, NOT_SURE, NOT_SURE, chips[0]?.intent ?? "answer_question");
+  }
+  return chips;
 }
 
 /** Pull example answers from Ade's last question when she lists options inline. */
 export function extractExamplesFromRecruiterMessage(text: string): string[] {
   const segments: string[] = [];
   const lower = text.toLowerCase();
+
+  const parenEg = text.match(/\(\s*e\.?\s*g\.?\s*,?\s*([^)]+)\)/i);
+  if (parenEg?.[1]) {
+    segments.push(parenEg[1]);
+  }
 
   const dashIdx = text.lastIndexOf("—");
   if (dashIdx >= 0) {
@@ -342,7 +549,7 @@ export function extractExamplesFromRecruiterMessage(text: string): string[] {
     segments.push(colonMatch[1]);
   }
 
-  for (const marker of ["for example", "such as", "e.g.", "like "]) {
+  for (const marker of ["for example", "such as", "e.g.", "e.g.,", "like "]) {
     const idx = lower.indexOf(marker);
     if (idx >= 0) {
       segments.push(text.slice(idx + marker.length));
@@ -353,6 +560,7 @@ export function extractExamplesFromRecruiterMessage(text: string): string[] {
   for (const segment of segments) {
     const parts = parseInlineOptionList(segment);
     if (parts.length >= 2) return parts;
+    if (parts.length === 1 && segment.includes("+")) return parts;
   }
 
   return [];
@@ -385,42 +593,28 @@ export function generateSuggestionChips(
   const userTurns = conversation.filter((message) => message.role === "user").length;
   const lastAde = [...conversation].reverse().find((m) => m.role === "ade")?.text ?? "";
   const lastUser = [...conversation].reverse().find((m) => m.role === "user")?.text.trim() ?? "";
-  const fromQuestion = extractExamplesFromRecruiterMessage(lastAde);
 
-  if (fromQuestion.length >= 2) {
-    const chips = chipsFromLabels(
-      fromQuestion.filter((label) => !matchesUserAnswer(label, lastUser)),
-      "answer_question",
-      4,
-    );
-    if (chips.length >= 2) {
-      pushChip(chips, NOT_SURE, NOT_SURE);
-      return chips;
-    }
+  const fromLastQuestion = buildChipsFromLastRecruiterMessage(
+    lastAde,
+    lastUser,
+    currentBrief,
+    roleKey,
+  );
+  if (fromLastQuestion?.length) {
+    return fromLastQuestion;
   }
+
+  const questionTopic = inferQuestionTopicFromRecruiterMessage(lastAde);
+  const effectivePrimary = questionTopic ?? primary;
 
   if (userTurns === 0 && role?.questionTemplates.coreWorkChips.length) {
-    if (isEngineeringBrief(currentBrief) && primary === "technical_focus") {
-      return chipsFromLabels(role.questionTemplates.coreWorkChips);
-    }
     return chipsFromLabels(role.questionTemplates.coreWorkChips);
   }
 
-  if (isEngineeringBrief(currentBrief) && primary === "technical_focus" && role?.questionTemplates.coreWorkChips.length) {
-    return chipsFromLabels(role.questionTemplates.coreWorkChips);
-  }
+  switch (effectivePrimary) {
+    case "stack":
+      return chipsForQuestionTopic("stack", currentBrief, roleKey) ?? chipsFromLabels(STACK_COMBO_CHIPS);
 
-  if (role && primary === "core_work" && role.questionTemplates.coreWorkChips.length > 0) {
-    return chipsFromLabels(role.questionTemplates.coreWorkChips);
-  }
-  if (role && primary === "business_focus" && role.questionTemplates.focusChips?.length) {
-    return chipsFromLabels(role.questionTemplates.focusChips);
-  }
-  if (role?.questionTemplates.toolsChips?.length && primary === "tools") {
-    return chipsFromLabels(role.questionTemplates.toolsChips, "add_tools");
-  }
-
-  switch (primary) {
     case "role_title":
       return chipsFromLabels(
         deptId === "custom"
