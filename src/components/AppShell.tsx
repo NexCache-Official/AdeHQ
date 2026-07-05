@@ -72,7 +72,7 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
   const ui = useMemo<ShellUI>(
     () => ({
       openCommand: () => setCommandOpen(true),
-      openHire: () => router.push("/hire?entry=top_nav"),
+      openHire: () => router.push(`/hire?entry=top_nav&fresh=${Date.now()}`),
       openCreateRoom: () => setRoomOpen(true),
     }),
     [router],

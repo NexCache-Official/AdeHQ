@@ -56,6 +56,8 @@ export type HiringSurfaceConfig = {
   source: HiringSessionSource;
   dmFirst: boolean;
   sessionScopeKey: string;
+  /** Full-screen /hire entry — always begin at role selection, not mid-session resume. */
+  startFresh: boolean;
 };
 
 export function resolveHiringSurface(params: {
@@ -75,6 +77,7 @@ export function resolveHiringSurface(params: {
       source: "maya_hiring_topic",
       dmFirst: true,
       sessionScopeKey: mayaTopicId,
+      startFresh: false,
     };
   }
 
@@ -88,6 +91,7 @@ export function resolveHiringSurface(params: {
       source: "maya_direct_chat",
       dmFirst: true,
       sessionScopeKey: `direct-${mayaRoomId}`,
+      startFresh: false,
     };
   }
 
@@ -107,6 +111,7 @@ export function resolveHiringSurface(params: {
     source,
     dmFirst: false,
     sessionScopeKey: "hire-route",
+    startFresh: surface !== "onboarding",
   };
 }
 

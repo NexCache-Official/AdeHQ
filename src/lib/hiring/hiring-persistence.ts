@@ -481,6 +481,53 @@ export async function abandonDurableHiringSession(params: {
   }
 }
 
+/** Cancel any in-progress hire-route session and return a clean role-selection state. */
+export async function beginFreshHiringSession(params: {
+  backend: HiringBackendMode;
+  workspaceId?: string;
+  userId?: string;
+  mayaRoomId: string;
+  scope: HiringSessionScope;
+  dmFirst?: boolean;
+  source?: HiringSessionSource;
+}): Promise<{ sessionId: null; state: HiringSessionState }> {
+  clearHiringSession(params.scope);
+
+  const freshState: HiringSessionState = {
+    ...initialHiringSession(),
+    ...(params.dmFirst ? { step: "recruiter" as const } : {}),
+    ...(params.source ? { sessionSource: params.source } : {}),
+  };
+
+  const canUseSupabase =
+    params.backend === "supabase" &&
+    Boolean(params.workspaceId) &&
+    Boolean(params.userId) &&
+    Boolean(params.mayaRoomId);
+
+  if (canUseSupabase) {
+    try {
+      const remote = await fetchActiveHiringSession({
+        workspaceId: params.workspaceId!,
+        userId: params.userId!,
+        mayaRoomId: params.mayaRoomId,
+        scope: params.scope,
+      });
+      if (remote) {
+        await markHiringSessionCancelled({
+          sessionId: remote.sessionId,
+          workspaceId: params.workspaceId!,
+        });
+        await clearHiringSessionCandidates(remote.sessionId);
+      }
+    } catch (error) {
+      console.warn("[AdeHQ hiring] Failed to clear prior hire-route session.", error);
+    }
+  }
+
+  return { sessionId: null, state: freshState };
+}
+
 export async function loadDurableHiringSession(params: {
   backend: HiringBackendMode;
   workspaceId?: string;

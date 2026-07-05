@@ -8,6 +8,7 @@ import {
   type HiringSurface,
 } from "@/lib/hiring/hiring-session-service";
 import {
+  beginFreshHiringSession,
   claimHireLock,
   abandonDurableHiringSession,
   finalizeDurableHiringSession,
@@ -51,6 +52,7 @@ export function useHiringSessionSync({
 
   const dmFirst = surfaceConfig?.dmFirst ?? dmFirstProp ?? false;
   const source = surfaceConfig?.source ?? sourceProp;
+  const startFresh = surfaceConfig?.startFresh ?? false;
   const scope = useMemo<HiringSessionScope>(
     () =>
       surfaceConfig?.scope ?? {
@@ -83,6 +85,12 @@ export function useHiringSessionSync({
   const [hydrated, setHydrated] = useState(false);
 
   const [session, dispatch] = useReducer(hiringReducer, null, () => {
+    if (startFresh) {
+      return {
+        ...initialHiringSession(),
+        ...(source ? { sessionSource: source } : {}),
+      };
+    }
     const cached = loadHiringSession({ dmFirst, scope });
     if (cached) return normalizeRestoredHiringSession(cached, { dmFirst });
     return {
@@ -94,15 +102,27 @@ export function useHiringSessionSync({
 
   useEffect(() => {
     let cancelled = false;
-    void loadDurableHiringSession({
-      backend,
-      workspaceId,
-      userId,
-      mayaRoomId,
-      scope,
-      dmFirst,
-      topicBootstrap,
-    }).then((result) => {
+    const load = startFresh
+      ? beginFreshHiringSession({
+          backend,
+          workspaceId,
+          userId,
+          mayaRoomId,
+          scope,
+          dmFirst,
+          source,
+        })
+      : loadDurableHiringSession({
+          backend,
+          workspaceId,
+          userId,
+          mayaRoomId,
+          scope,
+          dmFirst,
+          topicBootstrap,
+        });
+
+    void load.then((result) => {
       if (cancelled) return;
       sessionIdRef.current = result.sessionId;
       dispatch({ type: "RESTORE", state: result.state });
@@ -111,7 +131,7 @@ export function useHiringSessionSync({
     return () => {
       cancelled = true;
     };
-  }, [backend, workspaceId, userId, mayaRoomId, scope, dmFirst, topicBootstrap]);
+  }, [backend, workspaceId, userId, mayaRoomId, scope, dmFirst, topicBootstrap, startFresh, source]);
 
   useEffect(() => {
     if (!hydrated) return;

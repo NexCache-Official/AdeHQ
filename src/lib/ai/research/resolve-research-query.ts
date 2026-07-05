@@ -31,16 +31,32 @@ const AI_OFFERED_SEARCH =
 
 const MIN_SUBSTANTIVE_LENGTH = 12;
 
+function matchesMetaResearchPattern(text: string): boolean {
+  const trimmed = text.trim();
+  if (!trimmed) return false;
+  return META_RESEARCH_PATTERNS.some((pattern) => pattern.test(trimmed));
+}
+
+function hasSubstantiveTopicAfterMetaPhrases(text: string): boolean {
+  const trimmed = text.trim();
+  if (!trimmed || TRIVIAL_MESSAGES.test(trimmed)) return false;
+
+  const stripped = trimmed
+    .replace(/\b(please|can you|could you|using the browser|use the browser|look it up|find out)\b/gi, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  return stripped.length >= MIN_SUBSTANTIVE_LENGTH;
+}
+
 /** True when the message is mostly asking the assistant to search, not stating a topic. */
 export function isMetaResearchInstruction(text: string): boolean {
   const trimmed = text.trim();
   if (!trimmed) return false;
 
-  const matchesMeta = META_RESEARCH_PATTERNS.some((pattern) => pattern.test(trimmed));
-  if (!matchesMeta) return false;
+  if (!matchesMetaResearchPattern(trimmed)) return false;
 
   // Combined message: meta phrase + substantive question in one line.
-  if (isFastSearchQuery(trimmed) && trimmed.length > 48 && !isMostlyMetaInstruction(trimmed)) {
+  if (isFastSearchQuery(trimmed) && trimmed.length > 48 && hasSubstantiveTopicAfterMetaPhrases(trimmed)) {
     return false;
   }
 
@@ -51,7 +67,7 @@ export function isMetaResearchInstruction(text: string): boolean {
 export function isMostlyMetaInstruction(text: string): boolean {
   const trimmed = text.trim();
   if (!trimmed) return true;
-  if (isMetaResearchInstruction(trimmed) && !isFastSearchQuery(trimmed)) return true;
+  if (matchesMetaResearchPattern(trimmed) && !isFastSearchQuery(trimmed)) return true;
   if (TRIVIAL_MESSAGES.test(trimmed)) return true;
 
   const stripped = trimmed

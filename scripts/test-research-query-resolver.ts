@@ -62,6 +62,19 @@ run("passes through funding question", () => {
   assertEqual(isMostlyMetaInstruction(text), false);
 });
 
+run("find out + substantive topic does not recurse or mark as meta-only", () => {
+  const text = "Find out what latest tech innovations Anduril has brought out.";
+  assertEqual(isMetaResearchInstruction(text), false);
+  assertEqual(isMostlyMetaInstruction(text), false);
+  const resolved = resolveResearchQuery({
+    messages: [msg("m1", text)],
+    userMessage: text,
+    excludeMessageId: "m1",
+  });
+  assertEqual(resolved.query, text);
+  assertEqual(resolved.wasMetaInstruction, false);
+});
+
 run("resolves meta request to prior user question", () => {
   const messages = [
     msg("m1", "How much did Conduct AI and Twelve Labs raise recently?"),
