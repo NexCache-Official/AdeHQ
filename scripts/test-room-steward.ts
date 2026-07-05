@@ -275,6 +275,64 @@ async function main() {
     assert(decision.selectedEmployeeIds.length === 0, "topic shift should not fan out");
   });
 
+  await run("runtime steward cannot suppress greeting response", async () => {
+    setRoomStewardTestHooks({
+      stubRuntimeDecision: {
+        intent: "social_ack",
+        confidence: 0.1,
+        shouldRespond: false,
+        selectedEmployeeIds: [],
+        offerOnlyEmployeeIds: [],
+        responseStyle: "silent",
+        reason: "Greeting does not require a response from AI employees",
+        pendingQuestionUpdates: [],
+      },
+    });
+    try {
+      const decision = await classifyRoomMessageWithSteward(
+        baseInput({
+          messageContent: "Hi everyone",
+          topicState: baseTopicState({ pendingQuestions: [] }),
+        }),
+      );
+      assert(
+        decision.intent === "social_broadcast",
+        `expected social_broadcast, got ${decision.intent}`,
+      );
+      assert(decision.shouldRespond, "greeting should queue one employee");
+      assert(decision.selectedEmployeeIds.length === 1, "expected exactly one greeter");
+    } finally {
+      setRoomStewardTestHooks(null);
+    }
+  });
+
+  await run("runtime steward cannot suppress task request", async () => {
+    setRoomStewardTestHooks({
+      stubRuntimeDecision: {
+        intent: "social_ack",
+        confidence: 0.1,
+        shouldRespond: false,
+        selectedEmployeeIds: [],
+        offerOnlyEmployeeIds: [],
+        responseStyle: "silent",
+        reason: "No response needed",
+        pendingQuestionUpdates: [],
+      },
+    });
+    try {
+      const decision = await classifyRoomMessageWithSteward(
+        baseInput({
+          messageContent: "Can you help me draft a launch pitch for our lawnmower?",
+          topicState: baseTopicState({ pendingQuestions: [] }),
+        }),
+      );
+      assert(decision.shouldRespond, "task request should still respond");
+      assert(decision.selectedEmployeeIds.length >= 1, "expected at least one employee");
+    } finally {
+      setRoomStewardTestHooks(null);
+    }
+  });
+
   await run("fallback handles pending answers when runtime steward fails", async () => {
     let fallbackObserved = false;
     setRoomStewardTestHooks({

@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { generateObject as runtimeGenerateObject, planRoute, RuntimeDisabledError } from "@/lib/ai/runtime";
 import type { RuntimeProviderPref, RuntimeV2Mode } from "@/lib/ai/runtime";
-import { getRuntimeFlags } from "@/lib/ai/runtime/flags";
+import { getRuntimeFlags, isRuntimeShadowMode } from "@/lib/ai/runtime/flags";
 import { recordAiRuntime } from "@/lib/ai/runtime-log";
 import type { EmployeeIntelligencePolicy } from "@/lib/types";
 import {
@@ -1027,29 +1027,62 @@ async function classifyWithRuntimeSteward(
   return parsed.data;
 }
 
+function shouldInvokeRuntimeSteward(
+  deterministic: RoomStewardDecision,
+  options: RoomStewardClassifyOptions,
+): boolean {
+  if (options.forceMode) return true;
+  if (deterministic.shouldRespond) return false;
+  if (deterministic.offerOnlyEmployeeIds.length > 0) return false;
+  return deterministic.intent === "silent_note";
+}
+
+function mergeRuntimeStewardDecision(
+  input: RoomStewardInput,
+  deterministic: RoomStewardDecision,
+  runtimeDecision: Partial<RoomStewardDecision>,
+  options: RoomStewardClassifyOptions,
+): RoomStewardDecision {
+  const flags = getRuntimeFlags({
+    mode: options.forceMode,
+    providerPref: options.forceProviderPref,
+  });
+  if (isRuntimeShadowMode(flags.mode) && !options.forceMode) {
+    return deterministic;
+  }
+
+  if (!runtimeDecision.shouldRespond || (runtimeDecision.confidence ?? 0) < 0.7) {
+    return deterministic;
+  }
+
+  return finalizeDecision(input, {
+    ...deterministic,
+    ...runtimeDecision,
+    participation: normalizeParticipationMode(input.participationMode),
+    pendingQuestionUpdates:
+      runtimeDecision.pendingQuestionUpdates?.length
+        ? runtimeDecision.pendingQuestionUpdates
+        : deterministic.pendingQuestionUpdates,
+    newPendingQuestions: deterministic.newPendingQuestions,
+  });
+}
+
 export async function classifyRoomMessageWithSteward(
   input: RoomStewardInput,
   options: RoomStewardClassifyOptions = {},
 ): Promise<RoomStewardDecision> {
-  roomStewardTestHooks?.onRuntimeCall?.(input);
   const deterministic = classifyRoomMessageDeterministic(input);
+
+  if (!shouldInvokeRuntimeSteward(deterministic, options)) {
+    return deterministic;
+  }
+
+  roomStewardTestHooks?.onRuntimeCall?.(input);
 
   try {
     const runtimeDecision = await classifyWithRuntimeSteward(input, options);
     if (!runtimeDecision) return deterministic;
-
-    const merged = finalizeDecision(input, {
-      ...deterministic,
-      ...runtimeDecision,
-      participation: normalizeParticipationMode(input.participationMode),
-      pendingQuestionUpdates:
-        runtimeDecision.pendingQuestionUpdates?.length
-          ? runtimeDecision.pendingQuestionUpdates
-          : deterministic.pendingQuestionUpdates,
-      newPendingQuestions: deterministic.newPendingQuestions,
-      costPolicy: deterministic.costPolicy,
-    });
-    return merged;
+    return mergeRuntimeStewardDecision(input, deterministic, runtimeDecision, options);
   } catch (error) {
     if (!(error instanceof RuntimeDisabledError)) {
       const message = error instanceof Error ? error.message : String(error);
