@@ -17,6 +17,18 @@ const INTENT_MODE_LABEL: Record<OrchestrationIntent, string> = {
   lead_collaborator: "Lead + collaborator",
   handoff: "Handoff",
   ambient_smart_assist: "Smart Assist",
+  social_ack: "Acknowledgement",
+  direct_question: "Direct question",
+  answer_to_pending_question: "Continuing thread",
+  task_request: "Task request",
+  work_update: "Work update",
+  ask_for_opinion: "Opinion request",
+  handoff_response: "Handoff response",
+  employee_followup_needed: "Follow-up needed",
+  offer_help: "Offer help",
+  multi_employee_collaboration: "Multi-employee collaboration",
+  topic_shift: "Topic shift",
+  correction_or_clarification: "Clarification",
 };
 
 const CONVERSATION_MODE_LABEL: Record<ConversationMode, string> = {
@@ -48,7 +60,7 @@ export function orchestrationRoleLabel(
   intent: OrchestrationIntent,
   panelIndex?: number,
 ): string {
-  if (intent === "panel_response" && role === "panelist") {
+  if ((intent === "panel_response" || intent === "multi_employee_collaboration") && role === "panelist") {
     return `Panelist ${(panelIndex ?? 0) + 1}`;
   }
   if (intent === "handoff") {
@@ -101,6 +113,7 @@ export function formatOrchestrationChipLabel(
 
   switch (plan.intent) {
     case "panel_response":
+    case "multi_employee_collaboration":
       return names.length >= 2
         ? `Panel response · ${names.join(" + ")}`
         : `Panel response · ${names[0] ?? "team"}`;
@@ -124,6 +137,15 @@ export function formatOrchestrationChipLabel(
       return names.length
         ? `Smart Assist selected ${names.join(", ")}`
         : "Smart Assist";
+    case "answer_to_pending_question":
+      return names[0] ? `${names[0]} continuing thread` : "Continuing thread";
+    case "employee_followup_needed":
+    case "correction_or_clarification":
+      return names[0] ? `${names[0]} following up` : "Following up";
+    case "task_request":
+    case "direct_question":
+    case "ask_for_opinion":
+      return names[0] ? `Smart Assist · ${names[0]}` : "Smart Assist";
     case "direct_reply":
       return names[0] ? `Direct reply · ${names[0]}` : "Direct reply";
     case "social_broadcast":

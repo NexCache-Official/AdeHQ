@@ -90,6 +90,7 @@ export const SUPABASE_WORKSPACE_TABLES = [
   "ai_model_catalog",
   "ai_work_units",
   "browser_research_runs",
+  "topic_orchestration_state",
   "ai_work_minutes_ledger",
   "ai_work_hours_simulation_events",
   "workspace_files",

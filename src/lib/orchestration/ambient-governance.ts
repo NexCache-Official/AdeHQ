@@ -30,6 +30,14 @@ export function applyRoomGovernanceToPlan(
   if (!plan.shouldRespond || input.isDm) return plan;
   if (input.mentionedEmployeeIds.length > 0) return plan;
   if (isHelpRequest(input.messageText)) return plan;
+  if (
+    plan.intent === "answer_to_pending_question" ||
+    plan.intent === "employee_followup_needed" ||
+    plan.intent === "correction_or_clarification" ||
+    plan.responseStyle === "continue_thread"
+  ) {
+    return plan;
+  }
 
   if (governance.lastMessageSenderType === "ai") {
     return blockedPlan("Blocked — ambient reply skipped after AI message.");

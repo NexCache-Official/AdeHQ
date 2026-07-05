@@ -15,11 +15,13 @@ import {
   isMultiEmployeeCollaborationRequest,
   resolveParticipantReferences,
 } from "./participant-reference-resolver";
+import { classifyRoomMessageWithSteward } from "./room-steward";
 import type {
   AIEmployeeProfile,
   OrchestrationIntent,
   OrchestrationPlan,
   OrchestratorInput,
+  RoomStewardDecision,
   SuggestedConversationAction,
 } from "./types";
 
@@ -98,6 +100,65 @@ function emptyPlan(intent: OrchestrationIntent, reason: string, confidence = 0.9
     suggestedActions: [],
     workLogRequired: false,
     workLogReason: null,
+  };
+}
+
+function employeeSummary(employee: AIEmployeeProfile): string {
+  return [
+    employee.role,
+    employee.instructions,
+    employee.metadata ? JSON.stringify(employee.metadata).slice(0, 240) : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+}
+
+function stewardDecisionToPlan(
+  decision: RoomStewardDecision,
+  employees: AIEmployeeProfile[],
+): OrchestrationPlan {
+  const byId = new Map(employees.map((employee) => [employee.id, employee]));
+  const selected = decision.selectedEmployeeIds.filter((id) => byId.has(id));
+  const lead = selected[0] ?? null;
+  const collaborators = selected.slice(1);
+  const suggestedActions: SuggestedConversationAction[] = decision.offerOnlyEmployeeIds
+    .filter((id) => byId.has(id))
+    .map((employeeId) => ({
+      type: "invite_employee" as const,
+      employeeId,
+      employeeName: byId.get(employeeId)?.name,
+      reason:
+        decision.responseStyle === "offer_help"
+          ? `${byId.get(employeeId)?.name ?? "This employee"} can offer help without taking over.`
+          : decision.reason,
+      confidence: decision.confidence,
+    }));
+
+  return {
+    intent: decision.intent,
+    confidence: decision.confidence,
+    reason: decision.reason,
+    selectedEmployeeIds: selected,
+    offerOnlyEmployeeIds: decision.offerOnlyEmployeeIds,
+    leadEmployeeId: lead,
+    collaboratorEmployeeIds: collaborators,
+    shouldRespond: decision.shouldRespond && selected.length > 0,
+    responseStyle: decision.responseStyle,
+    responseOrder: buildResponseOrderFromSelection(
+      decision.intent,
+      selected,
+      lead,
+      collaborators,
+    ),
+    suggestedActions,
+    workLogRequired: false,
+    workLogReason: null,
+    pendingQuestionUpdates: decision.pendingQuestionUpdates,
+    newPendingQuestions: decision.newPendingQuestions,
+    suppressedEmployeeIds: decision.suppressedEmployeeIds,
+    participation: decision.participation,
+    costPolicy: decision.costPolicy,
+    stewardDecision: decision,
   };
 }
 
@@ -373,6 +434,50 @@ export async function orchestrateConversation(
   const employees = filterOrchestrationEmployees(
     input.topicEmployees.length ? input.topicEmployees : input.roomEmployees,
   );
+
+  if (
+    !input.isDm &&
+    !input.isMayaDm &&
+    !input.isMayaHiringSession &&
+    input.topicId &&
+    input.topicState &&
+    input.participationMode
+  ) {
+    const stewardDecision = await classifyRoomMessageWithSteward({
+      workspaceId: input.workspaceId,
+      roomId: input.roomId,
+      topicId: input.topicId,
+      messageId: input.messageId,
+      messageContent: input.messageText,
+      authorType: "human",
+      mentionedEmployeeIds: input.mentionedEmployeeIds,
+      participationMode: input.participationMode,
+      roster: employees.map((employee) => ({
+        employeeId: employee.id,
+        name: employee.name,
+        roleTitle: employee.role,
+        roleKey: employee.roleKey,
+        expertiseSummary: employeeSummary(employee),
+        intelligencePolicy: employee.intelligencePolicy,
+        isActiveInTopic: input.topicState?.activeEmployeeIds.includes(employee.id) ?? false,
+      })),
+      recentMessages: input.recentMessages
+        .filter((message) => message.senderType === "human" || message.senderType === "ai")
+        .map((message) => ({
+          id: message.id,
+          authorType: message.senderType as "human" | "ai",
+          authorName:
+            employees.find((employee) => employee.id === message.senderId)?.name ??
+            (message.senderType === "human" ? "Human" : "AI"),
+          employeeId: message.senderType === "ai" && message.senderId ? message.senderId : undefined,
+          content: message.text,
+          createdAt: message.createdAt,
+        })),
+      topicState: input.topicState,
+    });
+    return stewardDecisionToPlan(stewardDecision, employees);
+  }
+
   const deterministic = orchestrateConversationDeterministic(input);
   if (deterministic.confidence >= 0.75 || !employees.length) {
     return deterministic;

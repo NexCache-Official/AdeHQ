@@ -78,12 +78,12 @@ const PARTICIPATION_MODES: { id: AiParticipationMode; label: string; hint: strin
   {
     id: "smart_assist",
     label: "Smart assist",
-    hint: "AI joins when relevant — @mentions, greetings, and role matches",
+    hint: "Continues active threads and answers relevant questions",
   },
   {
     id: "active_team",
     label: "Active team",
-    hint: "More proactive — up to 2 AI employees may contribute",
+    hint: "More proactive - up to 3 relevant employees may contribute",
   },
   {
     id: "manual_only",
@@ -91,14 +91,17 @@ const PARTICIPATION_MODES: { id: AiParticipationMode; label: string; hint: strin
     hint: "AI responds only when @mentioned",
   },
   {
-    id: "silent_observation",
-    label: "Silent observation",
-    hint: "AI tracks context quietly; speaks only when @mentioned",
+    id: "talent_observation",
+    label: "Talent observation",
+    hint: "Employees mostly observe and offer help when it matters",
   },
 ];
 
 function modeIsSelected(current: AiParticipationMode, option: AiParticipationMode): boolean {
   if (option === "smart_assist") return isSmartAssistMode(current);
+  if (option === "talent_observation") {
+    return current === "talent_observation" || current === "silent_observation";
+  }
   return current === option;
 }
 

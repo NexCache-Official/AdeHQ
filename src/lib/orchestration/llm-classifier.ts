@@ -406,15 +406,24 @@ export function buildResponseOrderFromSelection(
     case "social_broadcast":
       return [{ employeeId: selectedEmployeeIds[0], role: "social", delayMs: 0 }];
     case "direct_reply":
+    case "direct_question":
+    case "task_request":
+    case "ask_for_opinion":
       return [{ employeeId: selectedEmployeeIds[0], role: "direct", delayMs: 0 }];
     case "panel_response":
+    case "multi_employee_collaboration":
       return selectedEmployeeIds.map((employeeId, index) => ({
         employeeId,
         role: "panelist" as const,
         delayMs: index * 1500,
       }));
     case "lead_collaborator":
-    case "ambient_smart_assist": {
+    case "ambient_smart_assist":
+    case "answer_to_pending_question":
+    case "employee_followup_needed":
+    case "handoff_response":
+    case "correction_or_clarification":
+    case "offer_help": {
       const lead = leadEmployeeId ?? selectedEmployeeIds[0];
       const collaborators =
         collaboratorEmployeeIds.length > 0

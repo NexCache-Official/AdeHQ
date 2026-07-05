@@ -38,6 +38,7 @@ import {
   extractArtifactFromMessage,
   type EmailDraftJson,
 } from "@/lib/artifacts/intelligence";
+import { recordAiMessageInTopicOrchestrationState } from "@/lib/orchestration/room-steward";
 import { extractMentions, nowISO, uid } from "@/lib/utils";
 
 type DbRow = Record<string, unknown>;
@@ -1065,6 +1066,16 @@ export async function persistEmployeeEffects(
     created_at: aiMessage.createdAt,
   });
   if (messageError) throw messageError;
+
+  await recordAiMessageInTopicOrchestrationState(client, {
+    workspaceId,
+    roomId,
+    topicId,
+    employeeId: employee.id,
+    messageId: aiMessage.id,
+    content: aiMessage.content,
+    createdAt: aiMessage.createdAt,
+  });
 
   for (const artifactId of createdArtifactIds) {
     await client.from("message_attachments").insert({

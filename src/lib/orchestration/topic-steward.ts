@@ -18,7 +18,12 @@ const WORKSTREAM_KEYWORDS = [
   /\bonboarding\b/i,
 ];
 
-const SKIP_INTENTS: OrchestrationIntent[] = ["silent_note", "social_broadcast"];
+const SKIP_INTENTS: OrchestrationIntent[] = [
+  "silent_note",
+  "social_broadcast",
+  "social_ack",
+  "answer_to_pending_question",
+];
 
 function titleCase(seed: string): string {
   return seed

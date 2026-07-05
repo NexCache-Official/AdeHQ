@@ -90,6 +90,7 @@ export function getAiParticipationMode(topic: RoomTopic): AiParticipationMode {
   const mode = topic.metadata?.aiParticipationMode;
   if (
     mode === "silent_observation" ||
+    mode === "talent_observation" ||
     mode === "manual_only" ||
     mode === "smart_assist_lite" ||
     mode === "smart_assist" ||
@@ -108,7 +109,7 @@ export function isSmartAssistMode(mode: AiParticipationMode): boolean {
 export function participationModeLabel(mode: AiParticipationMode): string {
   if (isSmartAssistMode(mode)) return "Smart assist";
   if (mode === "active_team") return "Active team";
-  if (mode === "silent_observation") return "Silent observation";
+  if (mode === "silent_observation" || mode === "talent_observation") return "Talent observation";
   return "Manual only";
 }
 
@@ -119,6 +120,7 @@ export function resolveParticipationModeForTopic(
 ): AiParticipationMode {
   if (mode === "smart_assist" && isGeneralTopic(topic)) return "smart_assist_lite";
   if (mode === "smart_assist_lite" && !isGeneralTopic(topic)) return "smart_assist";
+  if (mode === "talent_observation") return "silent_observation";
   return mode;
 }
 

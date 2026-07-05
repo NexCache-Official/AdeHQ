@@ -225,6 +225,7 @@ export type MessageArtifact = {
 
 export type AiParticipationMode =
   | "silent_observation"
+  | "talent_observation"
   | "manual_only"
   | "smart_assist_lite"
   | "smart_assist"

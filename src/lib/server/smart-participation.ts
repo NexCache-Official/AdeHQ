@@ -60,6 +60,7 @@ export function pickSmartResponders(
   if (
     mode === "manual_only" ||
     mode === "silent_observation" ||
+    mode === "talent_observation" ||
     !employees.length
   ) {
     return [];

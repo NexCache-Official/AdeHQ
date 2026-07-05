@@ -1,6 +1,6 @@
 import type { AIEmployee } from "@/lib/types";
 
-export type OrchestrationIntent =
+export type LegacyOrchestrationIntent =
   | "silent_note"
   | "social_broadcast"
   | "direct_reply"
@@ -9,12 +9,117 @@ export type OrchestrationIntent =
   | "handoff"
   | "ambient_smart_assist";
 
+export type RoomStewardIntent =
+  | "silent_note"
+  | "social_ack"
+  | "social_broadcast"
+  | "direct_question"
+  | "answer_to_pending_question"
+  | "task_request"
+  | "work_update"
+  | "ask_for_opinion"
+  | "handoff_response"
+  | "employee_followup_needed"
+  | "offer_help"
+  | "multi_employee_collaboration"
+  | "topic_shift"
+  | "correction_or_clarification";
+
+export type OrchestrationIntent = LegacyOrchestrationIntent | RoomStewardIntent;
+
 export type OrchestrationResponseRole =
   | "lead"
   | "collaborator"
   | "panelist"
   | "direct"
   | "social";
+
+export type RoomStewardParticipationMode =
+  | "manual_only"
+  | "smart_assist"
+  | "active_team"
+  | "talent_observation";
+
+export type PendingQuestionAnswerType =
+  | "product_type"
+  | "target_customer"
+  | "differentiator"
+  | "approval"
+  | "preference"
+  | "missing_detail"
+  | "unknown";
+
+export type TopicOrchestrationPendingQuestion = {
+  id: string;
+  askedByEmployeeId: string;
+  askedAtMessageId: string;
+  questionText: string;
+  expectedAnswerType: PendingQuestionAnswerType;
+  createdAt: string;
+  expiresAt?: string;
+  answeredAtMessageId?: string;
+  status: "open" | "answered" | "expired";
+};
+
+export type TopicOrchestrationWorkIntent =
+  | "launch_pitch"
+  | "market_research"
+  | "sales_pitch"
+  | "hiring"
+  | "artifact_creation"
+  | "general_discussion"
+  | "unknown";
+
+export type TopicOrchestrationState = {
+  topicId: string;
+  roomId: string;
+  workspaceId: string;
+  activeEmployeeIds: string[];
+  lastHumanMessageId?: string;
+  lastAiMessageId?: string;
+  pendingQuestions: TopicOrchestrationPendingQuestion[];
+  currentWorkIntent?: TopicOrchestrationWorkIntent;
+  lastDecision?: string;
+  lastProjectEntity?: string;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
+export type RoomStewardResponseStyle =
+  | "answer"
+  | "continue_thread"
+  | "ask_followup"
+  | "offer_help"
+  | "panel"
+  | "silent";
+
+export type RoomStewardDecision = {
+  intent: RoomStewardIntent;
+  confidence: number;
+  shouldRespond: boolean;
+  selectedEmployeeIds: string[];
+  offerOnlyEmployeeIds: string[];
+  responseStyle: RoomStewardResponseStyle;
+  reason: string;
+  pendingQuestionUpdates: Array<{
+    questionId: string;
+    status: "answered" | "expired";
+    answeredAtMessageId?: string;
+    extractedAnswer?: string;
+  }>;
+  newPendingQuestions?: TopicOrchestrationPendingQuestion[];
+  suppressedEmployeeIds?: string[];
+  participation: "manual_only" | "smart_assist" | "active_team" | "talent_observation";
+  costPolicy: {
+    stewardModel: "efficient";
+    maxEmployeeCalls: number;
+    estimatedEmployeeCalls: number;
+    stewardCall: true;
+    selectedEmployeeCalls: number;
+    suppressedEmployeeCount: number;
+    estimatedCostSavedBySuppression?: number;
+  };
+};
 
 export type SuggestedConversationAction =
   | {
@@ -57,9 +162,11 @@ export type OrchestrationPlan = {
   confidence: number;
   reason: string;
   selectedEmployeeIds: string[];
+  offerOnlyEmployeeIds?: string[];
   leadEmployeeId?: string | null;
   collaboratorEmployeeIds?: string[];
   shouldRespond: boolean;
+  responseStyle?: RoomStewardResponseStyle;
   responseOrder: Array<{
     employeeId: string;
     role: OrchestrationResponseRole;
@@ -68,6 +175,12 @@ export type OrchestrationPlan = {
   suggestedActions: SuggestedConversationAction[];
   workLogRequired: boolean;
   workLogReason?: string | null;
+  pendingQuestionUpdates?: RoomStewardDecision["pendingQuestionUpdates"];
+  newPendingQuestions?: TopicOrchestrationPendingQuestion[];
+  suppressedEmployeeIds?: string[];
+  participation?: RoomStewardDecision["participation"];
+  costPolicy?: RoomStewardDecision["costPolicy"];
+  stewardDecision?: RoomStewardDecision;
 };
 
 export type OrchestrationWorkLogAction =
@@ -123,6 +236,7 @@ export type AIEmployeeProfile = Pick<
   | "metadata"
   | "systemEmployeeKey"
   | "isSystemEmployee"
+  | "intelligencePolicy"
 >;
 
 export type OrchestratorMessage = {
@@ -151,6 +265,8 @@ export type OrchestratorInput = {
     summary?: string | null;
   }>;
   smartAssistEnabled: boolean;
+  participationMode?: RoomStewardParticipationMode | "silent_observation" | "smart_assist_lite";
+  topicState?: TopicOrchestrationState;
   isDm?: boolean;
   /** DM counterpart when `isDm` — used to auto-select the employee who should reply. */
   dmEmployeeId?: string | null;

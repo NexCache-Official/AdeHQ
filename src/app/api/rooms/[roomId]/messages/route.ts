@@ -22,6 +22,11 @@ import {
   persistOrchestrationPlan,
   persistTopicSuggestions,
 } from "@/lib/orchestration/persistence";
+import {
+  applyRoomStewardDecisionToState,
+  loadTopicOrchestrationState,
+  persistTopicOrchestrationState,
+} from "@/lib/orchestration/room-steward";
 import { filterTopicSuggestionsByGovernance } from "@/lib/orchestration/topic-governance";
 import { suggestTopics } from "@/lib/orchestration/topic-steward";
 import type { OrchestratorInput } from "@/lib/orchestration/types";
@@ -229,7 +234,7 @@ export async function POST(
       });
     }
 
-    const [recentMessagesResult, topicsResult] = await Promise.all([
+    const [recentMessagesResult, topicsResult, topicOrchestrationState] = await Promise.all([
       client
         .from("messages")
         .select("id, sender_type, sender_id, content, created_at, topic_id")
@@ -243,6 +248,11 @@ export async function POST(
         .eq("workspace_id", workspaceId)
         .eq("room_id", params.roomId)
         .neq("status", "archived"),
+      loadTopicOrchestrationState(client, {
+        workspaceId,
+        roomId: params.roomId,
+        topicId,
+      }),
     ]);
 
     const recentMessages = ((recentMessagesResult.data ?? []) as Record<string, unknown>[])
@@ -287,6 +297,8 @@ export async function POST(
       recentMessages,
       existingTopics,
       smartAssistEnabled,
+      participationMode: participation,
+      topicState: topicOrchestrationState,
       isDm: respondersCtx.room.kind === "dm",
       dmEmployeeId: respondersCtx.room.dmEmployeeId,
       isMayaDm,
@@ -307,6 +319,15 @@ export async function POST(
       orchestratorInput,
       governance,
     );
+
+    if (orchestrationPlan.stewardDecision) {
+      const nextState = applyRoomStewardDecisionToState(
+        topicOrchestrationState,
+        orchestrationPlan.stewardDecision,
+        { messageId: humanMessage.id, messageContent: trimmed },
+      );
+      await persistTopicOrchestrationState(client, nextState);
+    }
 
     let orchestrationId: string | null = null;
     let topicSuggestions: Record<string, unknown>[] = [];
@@ -415,6 +436,24 @@ export async function POST(
             confidence: orchestrationPlan.confidence,
             reason: orchestrationPlan.reason,
             selectedEmployeeIds: orchestrationPlan.selectedEmployeeIds,
+            offerOnlyEmployeeIds: orchestrationPlan.offerOnlyEmployeeIds ?? [],
+            responseStyle: orchestrationPlan.responseStyle,
+            participation: orchestrationPlan.participation,
+            pendingQuestionUpdates: orchestrationPlan.pendingQuestionUpdates ?? [],
+            costPolicy: orchestrationPlan.costPolicy,
+            roomSteward: orchestrationPlan.stewardDecision
+              ? {
+                  intent: orchestrationPlan.stewardDecision.intent,
+                  reason: orchestrationPlan.stewardDecision.reason,
+                  selectedEmployeeIds: orchestrationPlan.stewardDecision.selectedEmployeeIds,
+                  offerOnlyEmployeeIds: orchestrationPlan.stewardDecision.offerOnlyEmployeeIds,
+                  suppressedEmployeeCount:
+                    orchestrationPlan.stewardDecision.costPolicy.suppressedEmployeeCount,
+                  mode: orchestrationPlan.stewardDecision.participation,
+                  estimatedEmployeeCalls:
+                    orchestrationPlan.stewardDecision.costPolicy.estimatedEmployeeCalls,
+                }
+              : undefined,
             orchestrationId,
           }
         : undefined;
@@ -464,11 +503,22 @@ export async function POST(
         }
       } else if (respondersCtx.room.kind === "dm") {
         hint = "No AI reply was queued for this DM. Try sending the message again.";
-      } else if (participationMode === "manual_only" || participationMode === "silent_observation") {
+      } else if (orchestrationPlan.intent === "answer_to_pending_question") {
+        hint = undefined;
+      } else if (
+        orchestrationPlan.intent === "work_update" ||
+        orchestrationPlan.intent === "social_ack" ||
+        orchestrationPlan.intent === "silent_note"
+      ) {
+        hint = "No AI response needed - saved as context.";
+      } else if (
+        participationMode === "manual_only" ||
+        participationMode === "silent_observation" ||
+        participationMode === "talent_observation"
+      ) {
         hint = "Mention an employee with @ to get a response";
       } else if (isSmartAssistMode(participationMode) || participationMode === "active_team") {
-        hint =
-          "No employee joined automatically. Mention someone with @ or switch this topic to Active Team.";
+        hint = "No AI response needed - saved as context.";
       }
     }
 

@@ -18,6 +18,15 @@ function labelForPlan(
       ? `Collaboration · lead + ${collabCount} collaborator${collabCount === 1 ? "" : "s"}`
       : "Collaboration";
   }
+  if (orchestration?.intent === "answer_to_pending_question" && orchestration.leadEmployeeId) {
+    return "Continuing active thread";
+  }
+  if (orchestration?.intent === "employee_followup_needed" && orchestration.leadEmployeeId) {
+    return "Following up on new context";
+  }
+  if (orchestration?.intent === "multi_employee_collaboration" && orchestration.selectedEmployeeIds.length >= 2) {
+    return `Panel response · ${orchestration.selectedEmployeeIds.length} employees`;
+  }
   if (orchestration?.intent === "handoff") return "Handoff in progress";
   if (orchestration?.intent === "ambient_smart_assist" && orchestration.shouldRespond) {
     return "Smart Assist selected relevant employees";

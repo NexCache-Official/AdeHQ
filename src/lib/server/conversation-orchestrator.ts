@@ -313,7 +313,7 @@ export function planConversation(
     };
   }
 
-  if (participation === "silent_observation" || participation === "manual_only") {
+  if (participation === "silent_observation" || participation === "talent_observation" || participation === "manual_only") {
     if (isDM && isGeneralTopic(topic)) {
       const dmEmployee = allowed.find((e) => e.id === room.dmEmployeeId) ?? allowed[0];
       if (dmEmployee) {

@@ -11,7 +11,7 @@ function mapParticipantRole(
   role: OrchestrationResponseRole,
   intent: OrchestrationPlan["intent"],
 ): "lead" | "collaborator" | "reviewer" | "observer" {
-  if (intent === "panel_response" && role === "panelist") return "reviewer";
+  if ((intent === "panel_response" || intent === "multi_employee_collaboration") && role === "panelist") return "reviewer";
   if (intent === "handoff" && role === "direct") return "collaborator";
   if (role === "collaborator") return "collaborator";
   if (role === "lead") return "lead";
@@ -23,12 +23,21 @@ function mapIntentToMode(intent: OrchestrationPlan["intent"]): ConversationMode 
     case "social_broadcast":
       return "broadcast_social";
     case "panel_response":
+    case "multi_employee_collaboration":
       return "panel_response";
     case "lead_collaborator":
+    case "answer_to_pending_question":
+    case "employee_followup_needed":
+    case "handoff_response":
+    case "correction_or_clarification":
+    case "offer_help":
       return "lead_collaborator";
     case "handoff":
       return "handoff";
     case "ambient_smart_assist":
+    case "direct_question":
+    case "task_request":
+    case "ask_for_opinion":
       return "ambient_collaboration";
     case "direct_reply":
       return "direct_reply";
@@ -42,13 +51,25 @@ function mapRoleToReason(
   intent: OrchestrationPlan["intent"],
 ): ResponseReason {
   if (intent === "social_broadcast") return "group_greeting";
-  if (intent === "panel_response") return "panel_response";
-  if (intent === "lead_collaborator") {
+  if (intent === "panel_response" || intent === "multi_employee_collaboration") return "panel_response";
+  if (
+    intent === "lead_collaborator" ||
+    intent === "answer_to_pending_question" ||
+    intent === "employee_followup_needed" ||
+    intent === "handoff_response" ||
+    intent === "correction_or_clarification" ||
+    intent === "offer_help"
+  ) {
     return role === "lead" ? "collaboration_lead" : "collaboration_collaborator";
   }
   if (intent === "handoff") return role === "lead" ? "collaboration_lead" : "handoff";
-  if (intent === "ambient_smart_assist") {
-    return role === "lead" ? "ambient_collaboration_lead" : "ambient_collaboration_collaborator";
+  if (
+    intent === "ambient_smart_assist" ||
+    intent === "direct_question" ||
+    intent === "task_request" ||
+    intent === "ask_for_opinion"
+  ) {
+    return role === "collaborator" ? "ambient_collaboration_collaborator" : "ambient_collaboration_lead";
   }
   if (role === "collaborator") return "collaboration_collaborator";
   return "explicit_mention";
@@ -126,6 +147,11 @@ export function orchestrationPlanToLegacyResult(
     "handoff",
     "ambient_smart_assist",
     "panel_response",
+    "answer_to_pending_question",
+    "employee_followup_needed",
+    "handoff_response",
+    "correction_or_clarification",
+    "multi_employee_collaboration",
   ];
 
   if (
