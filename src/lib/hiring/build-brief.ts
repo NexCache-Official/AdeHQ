@@ -7,9 +7,17 @@ import {
   synthesizeSuccessMetrics,
 } from "./brief-synthesis";
 import { applyRoleFocusAnswer } from "./role-focus-answers";
+import { shouldSkipBriefMutationForMessage } from "./recruiter-intents";
 import { synthesizeRoleTitle } from "./role-title-synthesizer";
 import { getRoleByKey, legacyDepartmentIdForRole } from "./role-library";
 import type { AiEmployeeJobBrief, RecruiterMessage } from "./types";
+
+function substantiveUserLinesFromMessages(messages: RecruiterMessage[]): string[] {
+  return messages
+    .filter((m) => m.role === "user")
+    .map((m) => m.text)
+    .filter((line) => !shouldSkipBriefMutationForMessage(line));
+}
 
 const DEPT_NAMES: Record<string, string> = {
   product: "Product",
@@ -235,7 +243,7 @@ export function synthesizeBriefFromRole(
     return synthesizeBriefFromConversation(existing?.roleTitle ?? "", messages, "custom", existing);
   }
 
-  const userLines = messages.filter((m) => m.role === "user").map((m) => m.text);
+  const userLines = substantiveUserLinesFromMessages(messages);
   const base = emptyBrief(role.title, role.legacyDepartmentId ?? "custom");
 
   const brief: AiEmployeeJobBrief = {
@@ -325,7 +333,7 @@ export function synthesizeBriefFromConversation(
   roleKey?: string | null,
 ): AiEmployeeJobBrief {
   const dept = departmentId ?? "custom";
-  const userLines = messages.filter((m) => m.role === "user").map((m) => m.text);
+  const userLines = substantiveUserLinesFromMessages(messages);
   const allUserText = userLines.join(" ").toLowerCase();
   const combined = [roleSeed, ...userLines].join(" ");
   const role = getRoleByKey(roleKey ?? undefined);

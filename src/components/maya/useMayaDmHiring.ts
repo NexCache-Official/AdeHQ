@@ -27,7 +27,9 @@ import { classifyMayaDmIntent, workspaceGuideReply } from "@/lib/hiring/maya-dm-
 import {
   detectRecruiterUserIntent,
   mayaReplyForRecruiterIntent,
-  shouldSkipBriefUpdateIntent,
+  mayaReplyForHiringFlowMeta,
+  isHiringFlowMetaReply,
+  shouldSkipBriefMutationForMessage,
 } from "@/lib/hiring/recruiter-intents";
 import type { HiringSurface } from "@/lib/hiring/hiring-session-service";
 import {
@@ -736,6 +738,15 @@ export function useMayaDmHiring({
         return;
       }
 
+      if (isHiringFlowMetaReply(trimmed)) {
+        syncMessageToRoom("human", trimmed, userClientId);
+        dispatch({ type: "ADD_MESSAGE", message: { role: "user", text: trimmed } });
+        const reply = mayaReplyForHiringFlowMeta(trimmed)!;
+        dispatch({ type: "ADD_MESSAGE", message: { role: "ade", text: reply } });
+        syncMessageToRoom("ai", reply, createClientMessageId("maya-a"));
+        return;
+      }
+
       if (isHireRecommended && visibleCandidates.length) {
         const rec =
           visibleCandidates.find((c) => c.recommended) ?? visibleCandidates[1] ?? visibleCandidates[0];
@@ -789,7 +800,7 @@ export function useMayaDmHiring({
       }
 
       const nextMessages = [...session.recruiterMessages, { role: "user" as const, text: trimmed }];
-      const skipBriefUi = shouldSkipBriefUpdateIntent(userIntent);
+      const skipBriefUi = shouldSkipBriefMutationForMessage(trimmed);
       const optimisticAck = pickOptimisticAck(trimmed);
       const sectionsUpdating = skipBriefUi ? [] : inferSectionsUpdating(trimmed);
       const composeSection = briefSectionToComposeKey(sectionsUpdating[0]) ?? null;

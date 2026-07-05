@@ -14,6 +14,9 @@ import { applyRoleFocusAnswer } from "@/lib/hiring/role-focus-answers";
 import {
   detectRecruiterUserIntent,
   mayaReplyForRecruiterIntent,
+  mayaReplyForHiringFlowMeta,
+  isHiringFlowMetaReply,
+  shouldSkipBriefMutationForMessage,
   shouldSkipBriefUpdateIntent,
 } from "@/lib/hiring/recruiter-intents";
 import { getRoleByKey } from "@/lib/hiring/role-library";
@@ -235,7 +238,7 @@ function buildResponse(input: {
 }) {
   const lastUser = [...input.conversation].reverse().find((m) => m.role === "user")?.text ?? "";
   const userIntent = detectRecruiterUserIntent(lastUser);
-  const skipBriefMutation = shouldSkipBriefUpdateIntent(userIntent);
+  const skipBriefMutation = shouldSkipBriefMutationForMessage(lastUser);
   const chipMutation =
     !skipBriefMutation && lastUser ? applyChipMutation(lastUser, input.brief) : null;
   let brief = { ...(chipMutation?.brief ?? input.brief), openQuestions: [] };
@@ -262,6 +265,8 @@ function buildResponse(input: {
   if (userIntent !== "gathering") {
     const intentReply = mayaReplyForRecruiterIntent(userIntent);
     if (intentReply) message = intentReply;
+  } else if (isHiringFlowMetaReply(lastUser)) {
+    message = mayaReplyForHiringFlowMeta(lastUser) ?? message;
   } else if (!message && chipMutation) {
     message = chipMutation.message;
   } else if (!message) {

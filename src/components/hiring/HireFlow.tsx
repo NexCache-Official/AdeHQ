@@ -11,7 +11,6 @@ import {
   welcomeMessage,
 } from "@/lib/hiring/build-brief";
 import {
-  INTERVIEW_ANSWERS,
   clearOnboardingDrafts,
   readOnboardingContext,
 } from "@/lib/hiring/data";
@@ -25,6 +24,10 @@ import {
 } from "@/lib/hiring/session";
 import { useHiringSessionSync } from "@/lib/hiring/use-hiring-session-sync";
 import { useHiringCandidateIntegrity } from "@/lib/hiring/use-hiring-candidate-integrity";
+import {
+  initialInterviewMessages,
+  useCandidateInterview,
+} from "@/lib/hiring/use-candidate-interview";
 import {
   completeHireFromSession,
   generateCandidatesForSession,
@@ -48,7 +51,9 @@ import {
   detectRecruiterUserIntent,
   isProceedToBriefAction,
   mayaReplyForRecruiterIntent,
-  shouldSkipBriefUpdateIntent,
+  mayaReplyForHiringFlowMeta,
+  isHiringFlowMetaReply,
+  shouldSkipBriefMutationForMessage,
 } from "@/lib/hiring/recruiter-intents";
 import {
   MAYA_EMPLOYEE_NAME,
@@ -114,6 +119,18 @@ export function HireFlow({ onboarding = false, entrySource = "hire_route" }: Hir
     dispatch,
     onStaleCleared: (note) => {
       dispatch({ type: "ADD_MESSAGE", message: { role: "ade", text: note } });
+    },
+  });
+  const getInterviewBrief = useCallback(
+    () => session.brief ?? session.briefPartial as AiEmployeeJobBrief | undefined,
+    [session.brief, session.briefPartial],
+  );
+  const { askInterviewQuestion, interviewBusy } = useCandidateInterview({
+    getBrief: getInterviewBrief,
+    hiringContext: {
+      workspaceId: appState.workspace?.id,
+      hiringSessionId: sessionId,
+      mayaRoomId,
     },
   });
   const sucTimer = useRef<ReturnType<typeof setInterval>>();
@@ -487,8 +504,17 @@ export function HireFlow({ onboarding = false, entrySource = "hire_route" }: Hir
       return;
     }
 
+    if (isHiringFlowMetaReply(trimmed)) {
+      dispatch({ type: "ADD_MESSAGE", message: { role: "user", text: trimmed } });
+      dispatch({
+        type: "ADD_MESSAGE",
+        message: { role: "ade", text: mayaReplyForHiringFlowMeta(trimmed)! },
+      });
+      return;
+    }
+
     const nextMessages = [...session.recruiterMessages, { role: "user" as const, text: trimmed }];
-    const skipBriefUi = shouldSkipBriefUpdateIntent(userIntent);
+    const skipBriefUi = shouldSkipBriefMutationForMessage(trimmed);
     const optimisticAck = pickOptimisticAck(trimmed);
     const sectionsUpdating = skipBriefUi ? [] : inferSectionsUpdating(trimmed);
     const composeSection = briefSectionToComposeKey(sectionsUpdating[0]) ?? null;
@@ -991,12 +1017,8 @@ export function HireFlow({ onboarding = false, entrySource = "hire_route" }: Hir
                   advOpen={!!session.advOpen[a.id]}
                   onToggleAdv={() => dispatch({ type: "TOGGLE_ADV", id: a.id })}
                   onInterview={() => {
-                    const cur = session.interviewMsgs[a.id] ?? [
-                      {
-                        role: "ade",
-                        text: `Hi — I'm ${a.name}. Ask me anything about how I'd work with you.`,
-                      },
-                    ];
+                    const cur =
+                      session.interviewMsgs[a.id] ?? initialInterviewMessages(a);
                     dispatch({ type: "SET_INTERVIEW_MSGS", id: a.id, messages: cur });
                     dispatch({ type: "SET_INTERVIEW", id: a.id });
                   }}
@@ -1059,26 +1081,17 @@ export function HireFlow({ onboarding = false, entrySource = "hire_route" }: Hir
         <InterviewOverlay
           applicant={ivApplicant}
           messages={session.interviewMsgs[session.interviewWith] ?? []}
+          busy={interviewBusy}
           onClose={() => dispatch({ type: "SET_INTERVIEW", id: null })}
           onHire={() => dispatch({ type: "SELECT_CANDIDATE", id: ivApplicant.id })}
-          onAsk={(qid) => {
-            const q = INTERVIEW_ANSWERS[ivApplicant.id]?.[qid];
-            const label =
-              qid === "week"
-                ? "What would your first week look like?"
-                : qid;
-            const answer =
-              q ??
-              "That's a great question — I'd tailor my approach to your goals and check in before anything goes external.";
-            const cur = session.interviewMsgs[ivApplicant.id] ?? [];
-            dispatch({
-              type: "SET_INTERVIEW_MSGS",
-              id: ivApplicant.id,
-              messages: [
-                ...cur,
-                { role: "user", text: label },
-                { role: "ade", text: answer },
-              ],
+          onAsk={(question) => {
+            const cur = session.interviewMsgs[ivApplicant.id] ?? initialInterviewMessages(ivApplicant);
+            void askInterviewQuestion(ivApplicant, question, cur, (next) => {
+              dispatch({
+                type: "SET_INTERVIEW_MSGS",
+                id: ivApplicant.id,
+                messages: next,
+              });
             });
           }}
         />

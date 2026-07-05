@@ -1,5 +1,6 @@
 import type { RoleLibraryEntry } from "./role-library-types";
 import type { AiEmployeeJobBrief } from "./types";
+import { shouldSkipBriefMutationForMessage } from "./recruiter-intents";
 
 export type BriefSynthesisInput = {
   roleTitle: string;
@@ -42,6 +43,7 @@ export function missionNeedsRefresh(mission: string | undefined, input: BriefSyn
 function substantiveUserLines(userLines: string[]): string[] {
   return userLines.filter((line) => {
     const trimmed = line.trim();
+    if (shouldSkipBriefMutationForMessage(trimmed)) return false;
     return trimmed.length > 8 && !/^(yes|no|ok|okay|sure|thanks|great|perfect)$/i.test(trimmed);
   });
 }

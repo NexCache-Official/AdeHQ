@@ -16,8 +16,11 @@ import {
 } from "@/lib/hiring/hiring-topic-utils";
 import { mayaHiringTopicReadyMessage, type MayaHiringProposal } from "@/lib/hiring/maya-hiring-proposal";
 import { MAYA_EMPLOYEE_ID, MAYA_EMPLOYEE_NAME } from "@/lib/hiring/maya";
-import { INTERVIEW_ANSWERS, INTERVIEW_QUESTIONS } from "@/lib/hiring/data";
-import type { AiEmployeeApplicant, RecruiterMessage } from "@/lib/hiring/types";
+import {
+  initialInterviewMessages,
+  useCandidateInterview,
+} from "@/lib/hiring/use-candidate-interview";
+import type { AiEmployeeApplicant, AiEmployeeJobBrief, RecruiterMessage } from "@/lib/hiring/types";
 import { generalTopicForRoom, isGeneralTopic, isHiringTopic } from "@/lib/topics";
 import type { RoomTopic } from "@/lib/types";
 import { FileText, X } from "lucide-react";
@@ -78,19 +81,36 @@ function DuplicateHiringTopicPrompt({
   );
 }
 
-function MayaHiringTopicView({ firstName }: { firstName?: string }) {
+function MayaHiringTopicView({
+  firstName,
+  mayaRoomId,
+  mayaTopicId,
+}: {
+  firstName?: string;
+  mayaRoomId: string;
+  mayaTopicId: string;
+}) {
   const hiring = useMayaDmHiringContext();
+  const { state: appState } = useStore();
   const [interviewWith, setInterviewWith] = useState<AiEmployeeApplicant | null>(null);
   const [interviewMsgs, setInterviewMsgs] = useState<RecruiterMessage[]>([]);
 
+  const getInterviewBrief = useCallback(
+    () => hiring.session.brief ?? (hiring.previewBrief as AiEmployeeJobBrief | undefined),
+    [hiring.session.brief, hiring.previewBrief],
+  );
+  const { askInterviewQuestion, interviewBusy } = useCandidateInterview({
+    getBrief: getInterviewBrief,
+    hiringContext: {
+      workspaceId: appState.workspace?.id,
+      mayaRoomId,
+      topicId: mayaTopicId,
+    },
+  });
+
   const openInterview = (applicant: AiEmployeeApplicant) => {
     setInterviewWith(applicant);
-    setInterviewMsgs([
-      {
-        role: "ade",
-        text: `Hi — I'm ${applicant.name}, ${applicant.title}. Happy to give you a quick taste of how I'd work. What would you like to know?`,
-      },
-    ]);
+    setInterviewMsgs(initialInterviewMessages(applicant));
   };
 
   return (
@@ -112,23 +132,14 @@ function MayaHiringTopicView({ firstName }: { firstName?: string }) {
         <InterviewOverlay
           applicant={interviewWith}
           messages={interviewMsgs}
+          busy={interviewBusy}
           onClose={() => setInterviewWith(null)}
           onHire={() => {
             void hiring.hireCandidate(interviewWith);
             setInterviewWith(null);
           }}
-          onAsk={(qid) => {
-            const q = INTERVIEW_QUESTIONS.find((item) => item.id === qid);
-            if (!q) return;
-            const answers =
-              INTERVIEW_ANSWERS[interviewWith.id] ??
-              INTERVIEW_ANSWERS[interviewWith.tier] ??
-              INTERVIEW_ANSWERS.recommended;
-            setInterviewMsgs((prev) => [
-              ...prev,
-              { role: "user", text: q.label },
-              { role: "ade", text: answers[qid] ?? "I'd focus on clear, actionable output for your team." },
-            ]);
+          onAsk={(question) => {
+            void askInterviewQuestion(interviewWith, question, interviewMsgs, setInterviewMsgs);
           }}
         />
       )}
@@ -208,7 +219,7 @@ function MayaHiringTopicShell({
           </div>
         )}
         <div className="relative flex min-h-0 flex-1 overflow-hidden">
-          <MayaHiringTopicView firstName={firstName} />
+          <MayaHiringTopicView firstName={firstName} mayaRoomId={mayaRoomId} mayaTopicId={mayaTopicId} />
         </div>
       </div>
       <button

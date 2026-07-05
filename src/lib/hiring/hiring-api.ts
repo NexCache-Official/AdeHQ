@@ -59,3 +59,30 @@ export async function callCandidates(
   if (!res.ok) throw new Error("Could not generate candidates");
   return res.json();
 }
+
+export type CandidateInterviewResponse = {
+  reply: string;
+  usedFallback?: boolean;
+};
+
+export async function callCandidateInterview(
+  payload: {
+    applicant: import("./types").AiEmployeeApplicant;
+    brief: AiEmployeeJobBrief;
+    conversation: import("./types").RecruiterMessage[];
+    question: string;
+  },
+  context?: HiringApiContext,
+): Promise<CandidateInterviewResponse> {
+  const headers = await authHeaders();
+  const res = await fetch("/api/hiring/interview", {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ ...payload, ...hiringContextPayload(context) }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error ?? "Interview unavailable");
+  }
+  return res.json();
+}

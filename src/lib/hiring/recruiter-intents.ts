@@ -14,16 +14,42 @@ export function isProceedToBriefAction(text: string): boolean {
   if (!lower) return false;
 
   if (
-    /\b(review (the )?job brief|review (the )?brief|show (me )?(the )?brief|open (the )?brief)\b/i.test(
+    /\b(review (the )?(full )?job brief|review (the )?(full )?brief|want to review (the )?(full )?brief|show (me )?(the )?(full )?brief|open (the )?brief)\b/i.test(
       lower,
     )
   ) {
     return true;
   }
 
-  return /\b(go ahead and hire|ready to hire|let'?s hire|proceed to hire|hire now|start hiring|finalize (the )?brief|move to (the )?brief)\b/i.test(
+  return /\b(go ahead and hire|jump straight (to|into) hiring|straight to hiring|ready to hire|let'?s hire|proceed to hire|hire now|start hiring|skip to hiring|move on to hiring|begin hiring|finalize (the )?brief|move to (the )?brief)\b/i.test(
     lower,
   );
+}
+
+/** Flow-control chip/reply — not substantive role content for the brief. */
+export function isHiringFlowMetaReply(text: string): boolean {
+  const lower = text.trim().toLowerCase();
+  if (!lower) return false;
+  if (/^not sure — help me decide$/i.test(lower)) return true;
+  if (/^help me decide$/i.test(lower)) return true;
+  if (
+    /\b(tweak|adjust|change|update|refine|edit|modify)\s+(anything|something)\s+else\b/i.test(lower)
+  ) {
+    return true;
+  }
+  return false;
+}
+
+/** True when the user's message should not mutate brief fields (navigation, approval, meta chips). */
+export function shouldSkipBriefMutationForMessage(text: string): boolean {
+  return (
+    shouldSkipBriefUpdateIntent(detectRecruiterUserIntent(text)) || isHiringFlowMetaReply(text)
+  );
+}
+
+export function mayaReplyForHiringFlowMeta(text: string): string | null {
+  if (!isHiringFlowMetaReply(text)) return null;
+  return "Sure — what would you like to change? Mission, responsibilities, focus areas, or something else?";
 }
 
 export function detectRecruiterUserIntent(text: string): RecruiterUserIntent {

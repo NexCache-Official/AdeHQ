@@ -303,16 +303,27 @@ export function GeneratingScreen({ genStep }: { genStep: number }) {
 export function InterviewOverlay({
   applicant: a,
   messages,
+  busy = false,
   onClose,
   onHire,
   onAsk,
 }: {
   applicant: AiEmployeeApplicant;
   messages: RecruiterMessage[];
+  busy?: boolean;
   onClose: () => void;
   onHire: () => void;
-  onAsk: (qid: string) => void;
+  onAsk: (question: string) => void;
 }) {
+  const [input, setInput] = useState("");
+
+  const submitQuestion = (text: string) => {
+    const trimmed = text.trim();
+    if (!trimmed || busy) return;
+    setInput("");
+    onAsk(trimmed);
+  };
+
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-ink/45 p-6 backdrop-blur-sm">
       <div className="grid h-[78vh] w-full max-w-[960px] grid-cols-1 overflow-hidden rounded-[20px] bg-surface shadow-2xl md:grid-cols-[300px_1fr]">
@@ -348,6 +359,7 @@ export function InterviewOverlay({
                     m.role === "ade"
                       ? "rounded-[4px_14px_14px_14px] border border-border bg-muted"
                       : "rounded-[14px_14px_4px_14px] bg-ink text-white",
+                    m.isOptimistic && "animate-pulse text-ink-3",
                   )}
                 >
                   {m.text}
@@ -360,13 +372,36 @@ export function InterviewOverlay({
               <button
                 key={q.id}
                 type="button"
-                onClick={() => onAsk(q.id)}
-                className="rounded-full border border-border bg-surface px-3 py-2 text-[12.5px] transition hover:border-ink"
+                disabled={busy}
+                onClick={() => submitQuestion(q.label)}
+                className="rounded-full border border-border bg-surface px-3 py-2 text-[12.5px] transition hover:border-ink disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {q.label}
               </button>
             ))}
           </div>
+          <form
+            className="flex gap-2 border-t border-border p-4"
+            onSubmit={(event) => {
+              event.preventDefault();
+              submitQuestion(input);
+            }}
+          >
+            <input
+              value={input}
+              onChange={(event) => setInput(event.target.value)}
+              disabled={busy}
+              placeholder={busy ? `${a.first} is thinking…` : "Ask your own question…"}
+              className="min-w-0 flex-1 rounded-xl border border-border bg-surface px-3.5 py-2.5 text-sm outline-none focus:border-ink disabled:opacity-60"
+            />
+            <button
+              type="submit"
+              disabled={busy || !input.trim()}
+              className="rounded-xl bg-ink px-4 py-2.5 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              Send
+            </button>
+          </form>
         </div>
       </div>
     </div>

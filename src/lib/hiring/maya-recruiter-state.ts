@@ -3,7 +3,8 @@ import { normalizeRecruiterAnswer } from "./normalize-recruiter-answer";
 import {
   detectRecruiterUserIntent,
   mayaReplyForRecruiterIntent,
-  shouldSkipBriefUpdateIntent,
+  mayaReplyForHiringFlowMeta,
+  shouldSkipBriefMutationForMessage,
 } from "./recruiter-intents";
 
 export type MayaRecruiterState =
@@ -55,7 +56,9 @@ const OPTIMISTIC_ACKS = [
 
 export function pickOptimisticAck(seed?: string): string {
   const trimmed = normalizeRecruiterAnswer(seed ?? "");
-  const intentReply = mayaReplyForRecruiterIntent(detectRecruiterUserIntent(trimmed));
+  const intentReply =
+    mayaReplyForRecruiterIntent(detectRecruiterUserIntent(trimmed)) ??
+    mayaReplyForHiringFlowMeta(trimmed);
   if (intentReply) return intentReply;
 
   if (trimmed) {
@@ -75,7 +78,7 @@ export function pickOptimisticAck(seed?: string): string {
 }
 
 export function inferSectionsUpdating(message: string): BriefUpdateSection[] {
-  if (shouldSkipBriefUpdateIntent(detectRecruiterUserIntent(message))) {
+  if (shouldSkipBriefMutationForMessage(message)) {
     return [];
   }
 
