@@ -9,6 +9,67 @@ import type {
 
 const NOT_SURE = "Not sure — help me decide";
 
+const ASSISTANT_VOICE_CHIP_PATTERNS = [
+  /^i can\b/i,
+  /^i'll\b/i,
+  /^i will\b/i,
+  /^if it's good/i,
+  /^if it is good/i,
+  /^let me know/i,
+  /^take a look/i,
+  /^here's the brief/i,
+  /^here is the brief/i,
+  /^maya\b/i,
+  /\bstart the hiring process$/i,
+  /^or if\b/i,
+  /^you want to tweak/i,
+];
+
+const BRIEF_REVIEW_CLOSING_PATTERNS = [
+  /\bgood to go\b/i,
+  /\bstart the hiring process\b/i,
+  /\btake a look\b/i,
+  /\blet me know if you want to tweak\b/i,
+  /\bhere'?s the brief\b/i,
+  /\bbrief i'?ve drafted\b/i,
+];
+
+export function isAssistantVoiceChip(text: string): boolean {
+  const trimmed = text.trim();
+  if (!trimmed) return true;
+  return ASSISTANT_VOICE_CHIP_PATTERNS.some((pattern) => pattern.test(trimmed));
+}
+
+export function isBriefReviewClosingMessage(text: string): boolean {
+  return BRIEF_REVIEW_CLOSING_PATTERNS.some((pattern) => pattern.test(text));
+}
+
+export function areValidUserResponseChips(
+  chips: RecruiterSuggestionChip[],
+  lastAdeMessage: string,
+): boolean {
+  const answerChips = chips.filter(
+    (chip) => chip.label !== NOT_SURE && chip.intent !== "review_brief",
+  );
+  if (answerChips.length === 0) return false;
+  if (answerChips.some((chip) => isAssistantVoiceChip(chip.label) || isAssistantVoiceChip(chip.value))) {
+    return false;
+  }
+
+  const lastAde = lastAdeMessage.trim();
+  if (!lastAde) return false;
+  if (isBriefReviewClosingMessage(lastAde)) return false;
+
+  const hasQuestion = lastAde.includes("?");
+  const topic = inferQuestionTopicFromRecruiterMessage(lastAde);
+  if (!hasQuestion && !topic) {
+    const fromExamples = extractExamplesFromRecruiterMessage(lastAde);
+    if (fromExamples.length < 2) return false;
+  }
+
+  return true;
+}
+
 function pushChip(
   chips: RecruiterSuggestionChip[],
   label: string,
@@ -249,22 +310,26 @@ function buildChipsFromLastRecruiterMessage(
   lastAde: string,
   lastUser: string,
 ): RecruiterSuggestionChip[] | null {
+  if (isBriefReviewClosingMessage(lastAde)) return null;
+
   const fromExamples = extractExamplesFromRecruiterMessage(lastAde);
   const fromOptionList = extractOptionListBeforeQuestion(lastAde);
   const inlineLabels = uniqueLabels(
     [...fromExamples, ...fromOptionList]
       .filter((label) => isValidChipLabel(label, lastAde))
+      .filter((label) => !isAssistantVoiceChip(label))
       .filter((label) => !matchesUserAnswer(label, lastUser)),
   );
 
   if (inlineLabels.length >= 2) {
     const chips = chipsFromLabels(inlineLabels, "answer_question", 4);
     pushChip(chips, NOT_SURE, NOT_SURE);
-    return chips;
+    return areValidUserResponseChips(chips, lastAde) ? chips : null;
   }
 
   if (inlineLabels.length === 1) {
-    return chipsFromLabels([inlineLabels[0], NOT_SURE], "answer_question", 2);
+    const chips = chipsFromLabels([inlineLabels[0], NOT_SURE], "answer_question", 2);
+    return areValidUserResponseChips(chips, lastAde) ? chips : null;
   }
 
   return null;
@@ -284,6 +349,28 @@ export function parseRecruiterSuggestionChips(
   return chipsFromLabels([NOT_SURE]);
 }
 
+export function fallbackRecruiterSuggestionChips(input: {
+  conversation: RecruiterMessage[];
+  roleKey?: string | null;
+  readiness: RecruiterReadiness;
+  brief: AiEmployeeJobBrief | Partial<AiEmployeeJobBrief>;
+  canReviewBrief?: boolean;
+}): RecruiterSuggestionChip[] {
+  const lastAde =
+    [...input.conversation].reverse().find((message) => message.role === "ade")?.text ?? "";
+  const parsed = parseRecruiterSuggestionChips(input.conversation, input.roleKey);
+  if (parsed.length >= 2 && areValidUserResponseChips(parsed, lastAde)) {
+    return parsed;
+  }
+  return generateSuggestionChips(
+    input.readiness,
+    input.brief as AiEmployeeJobBrief,
+    input.conversation,
+    input.roleKey,
+    input.canReviewBrief,
+  );
+}
+
 export function generateSuggestionChips(
   readiness: RecruiterReadiness,
   _currentBrief: AiEmployeeJobBrief,
@@ -294,21 +381,21 @@ export function generateSuggestionChips(
   if (readiness.ready || canReviewBrief) {
     const chips: RecruiterSuggestionChip[] = [
       {
+        id: "approve-brief",
+        label: "Looks good — start hiring",
+        value: "This looks good — go ahead and start the hiring process.",
+        intent: "answer_question",
+      },
+      {
         id: "review-brief",
         label: "Review job brief",
         value: "Review job brief",
         intent: "review_brief",
       },
       {
-        id: "gen-candidates",
-        label: "Generate candidates",
-        value: "Generate candidates",
-        intent: "answer_question",
-      },
-      {
         id: "refine-responsibilities",
-        label: "Refine responsibilities",
-        value: "Refine responsibilities",
+        label: "Tweak the brief",
+        value: "I'd like to tweak a few things in the brief before we continue.",
         intent: "refine_more",
       },
     ];

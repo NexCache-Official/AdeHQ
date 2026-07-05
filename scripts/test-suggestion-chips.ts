@@ -3,7 +3,9 @@ import { normalizeRecruiterAnswer } from "../src/lib/hiring/normalize-recruiter-
 import {
   extractExamplesFromRecruiterMessage,
   extractOptionListBeforeQuestion,
+  fallbackRecruiterSuggestionChips,
   inferQuestionTopicFromRecruiterMessage,
+  isAssistantVoiceChip,
   parseRecruiterSuggestionChips,
 } from "../src/lib/hiring/suggestion-chips";
 
@@ -77,6 +79,35 @@ assert.ok(
 assert.ok(
   !socialChips.some((chip) => /react|node\.js|tech stack|frontend and backend/i.test(chip.label)),
   `should not show engineering chips for social media: ${socialChips.map((c) => c.label).join(", ")}`,
+);
+
+const briefClosing =
+  "Here's the brief I've drafted. Take a look and let me know if you want to tweak anything — or if it's good to go, I can start the hiring process.";
+
+assert.ok(isAssistantVoiceChip("I can start the hiring process"));
+assert.ok(isAssistantVoiceChip("if it's good to go"));
+
+const closingChips = parseRecruiterSuggestionChips([{ role: "ade", text: briefClosing }]);
+assert.ok(
+  !closingChips.some((chip) => /if it's good to go|i can start the hiring process/i.test(chip.label)),
+  `should not copy Maya closing prose into chips: ${closingChips.map((c) => c.label).join(", ")}`,
+);
+
+const readyFallback = fallbackRecruiterSuggestionChips({
+  conversation: [{ role: "ade", text: briefClosing }],
+  roleKey: "business_analyst",
+  readiness: { ready: true, score: 0.82, missing: [], confidence: "high", reason: "Brief ready" } as import("../src/lib/hiring/types").RecruiterReadiness,
+  brief: { roleTitle: "Business Analyst", department: "Operations" } as import("../src/lib/hiring/types").AiEmployeeJobBrief,
+  canReviewBrief: true,
+});
+
+assert.ok(
+  readyFallback.some((chip) => /looks good|start hiring/i.test(chip.label)),
+  `expected user-facing approval chip, got ${readyFallback.map((c) => c.label).join(", ")}`,
+);
+assert.ok(
+  !readyFallback.some((chip) => isAssistantVoiceChip(chip.label)),
+  `ready fallback should not include assistant-voice chips: ${readyFallback.map((c) => c.label).join(", ")}`,
 );
 
 console.log("suggestion-chips: ok");

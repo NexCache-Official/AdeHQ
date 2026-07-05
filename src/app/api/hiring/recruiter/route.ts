@@ -31,6 +31,7 @@ import {
   inferDepartmentId,
   isEngineeringBrief,
 } from "@/lib/hiring/recruiter-brain";
+import { isAssistantVoiceChip } from "@/lib/hiring/suggestion-chips";
 import { resolveRecruiterSuggestionChips } from "@/lib/hiring/resolve-suggestion-chips";
 import { normalizeRecruiterAnswer } from "@/lib/hiring/normalize-recruiter-answer";
 import {
@@ -100,6 +101,7 @@ function sanitizeSuggestionChips(chips: RecruiterSuggestionChip[] = []): Recruit
     const label = normalizeRecruiterAnswer(chip.label);
     const value = normalizeRecruiterAnswer(chip.value);
     if (!label || !value) continue;
+    if (isAssistantVoiceChip(label) || isAssistantVoiceChip(value)) continue;
 
     const key = `${chip.intent}:${label.toLowerCase()}:${value.toLowerCase()}`;
     if (seen.has(key)) continue;

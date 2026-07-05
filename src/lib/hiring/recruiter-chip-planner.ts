@@ -78,21 +78,23 @@ export async function planRecruiterSuggestionChips(input: {
       schema: chipPlannerSchema,
       system:
         mode === "ready_to_review"
-          ? `You suggest tap-to-answer chips for Maya (AI workforce manager) when the job brief is nearly ready.
+          ? `You suggest tap-to-answer chips for the USER replying to Maya (AI workforce manager) when the job brief is nearly ready.
 
 Rules:
-1. Propose 3–4 natural next steps based on the role and conversation (e.g. review brief, generate candidates, refine responsibilities).
-2. Include "Review job brief" with intent review_brief when appropriate.
-3. Labels short (1–5 words). Values can be natural reply text the user would send.
-4. Match the hired role domain — never default to engineering stacks for non-technical roles.`
-          : `You suggest tap-to-answer chips for Maya (AI workforce manager) during hiring discovery for ANY role.
+1. Chips are what the USER would tap to reply — never copy phrases from Maya's message.
+2. Propose 3–4 natural user replies (e.g. "Looks good — start hiring", "Review job brief", "Tweak the brief").
+3. Include "Review job brief" with intent review_brief when appropriate.
+4. Labels short (1–5 words). Values are full natural reply text the user would send.
+5. Match the hired role domain — never default to engineering stacks for non-technical roles.`
+          : `You suggest tap-to-answer chips for the USER replying to Maya (AI workforce manager) during hiring discovery for ANY role.
 
 Rules:
-1. Chips must DIRECTLY answer Maya's latest question — extract options she listed, or natural one-tap replies.
-2. Analyze the question semantically. Social channels → channel chips. Legal scope → legal chips. Engineering stack → stack chips. Never cross domains.
-3. Labels short (1–5 words). Values can be slightly longer natural replies.
-4. Do NOT invent generic templates unrelated to the question.
-5. Return 3–4 chips. Add "Not sure — help me decide" only when the question is genuinely open-ended.`,
+1. Chips are what the USER would tap to reply — never copy Maya's wording or assistant offers (e.g. never "I can start the hiring process").
+2. Chips must DIRECTLY answer Maya's latest question — extract listed options as user-facing answers, or natural one-tap replies.
+3. Analyze the question semantically. Social channels → channel chips. Legal scope → legal chips. Engineering stack → stack chips. Never cross domains.
+4. Labels short (1–5 words). Values can be slightly longer natural user replies.
+5. Do NOT invent generic templates unrelated to the question.
+6. Return 3–4 chips. Add "Not sure — help me decide" only when the question is genuinely open-ended.`,
       prompt: [
         `Hiring mode: ${mode}`,
         `Role: ${input.roleTitle || "AI employee"}`,

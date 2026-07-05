@@ -17,7 +17,7 @@ import {
   toolsOrSkipped,
 } from "./recruiter-readiness-engineering";
 
-export { generateSuggestionChips, inferDepartmentId, isEngineeringBrief, parseRecruiterSuggestionChips } from "./suggestion-chips";
+export { generateSuggestionChips, inferDepartmentId, isEngineeringBrief, parseRecruiterSuggestionChips, fallbackRecruiterSuggestionChips } from "./suggestion-chips";
 
 function hasRealValue(value?: string) {
   if (!value?.trim()) return false;

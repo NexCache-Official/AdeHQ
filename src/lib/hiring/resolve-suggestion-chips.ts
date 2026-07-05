@@ -1,4 +1,9 @@
-import { generateSuggestionChips, parseRecruiterSuggestionChips } from "./suggestion-chips";
+import {
+  areValidUserResponseChips,
+  fallbackRecruiterSuggestionChips,
+  generateSuggestionChips,
+  parseRecruiterSuggestionChips,
+} from "./suggestion-chips";
 import { planRecruiterSuggestionChips } from "./recruiter-chip-planner";
 import type {
   AiEmployeeJobBrief,
@@ -35,10 +40,32 @@ export async function resolveRecruiterSuggestionChips(input: {
   );
   const mode =
     input.canReviewBrief || input.readiness.ready ? "ready_to_review" : "gathering";
+  const lastAde = input.lastAdeMessage.trim();
 
-  const parsed = parseRecruiterSuggestionChips(chipConversation, input.roleKey);
-  if (parsed.length >= 2) {
-    return parsed;
+  if (mode === "ready_to_review") {
+    const planned = await planRecruiterSuggestionChips({
+      lastAdeMessage: input.lastAdeMessage,
+      roleTitle: input.brief.roleTitle,
+      department: input.brief.department,
+      domain: input.brief.domain,
+      mission: input.brief.mission,
+      businessFocus: input.brief.businessFocus,
+      technicalFocus: input.brief.technicalFocus,
+      lastUserMessage: input.lastUserMessage,
+      recentConversation: chipConversation,
+      roleKey: input.roleKey,
+      mode,
+    });
+    if (planned?.length && areValidUserResponseChips(planned, lastAde)) {
+      return planned;
+    }
+    return generateSuggestionChips(
+      input.readiness,
+      input.brief,
+      chipConversation,
+      input.roleKey,
+      true,
+    );
   }
 
   const planned = await planRecruiterSuggestionChips({
@@ -54,15 +81,20 @@ export async function resolveRecruiterSuggestionChips(input: {
     roleKey: input.roleKey,
     mode,
   });
-  if (planned?.length) {
+  if (planned?.length && areValidUserResponseChips(planned, lastAde)) {
     return planned;
   }
 
-  return generateSuggestionChips(
-    input.readiness,
-    input.brief,
-    chipConversation,
-    input.roleKey,
-    input.canReviewBrief,
-  );
+  const parsed = parseRecruiterSuggestionChips(chipConversation, input.roleKey);
+  if (parsed.length >= 2 && areValidUserResponseChips(parsed, lastAde)) {
+    return parsed;
+  }
+
+  return fallbackRecruiterSuggestionChips({
+    conversation: chipConversation,
+    roleKey: input.roleKey,
+    readiness: input.readiness,
+    brief: input.brief,
+    canReviewBrief: input.canReviewBrief,
+  });
 }

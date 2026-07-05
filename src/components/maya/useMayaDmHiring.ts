@@ -21,7 +21,7 @@ import { normalizeRecruiterAnswer } from "@/lib/hiring/normalize-recruiter-answe
 import {
   assessRecruiterReadiness,
   finalizeReadinessScore,
-  parseRecruiterSuggestionChips,
+  fallbackRecruiterSuggestionChips,
 } from "@/lib/hiring/recruiter-brain";
 import { classifyMayaDmIntent, workspaceGuideReply } from "@/lib/hiring/maya-dm-intent";
 import {
@@ -279,7 +279,13 @@ export function useMayaDmHiring({
       } else if (chipBrief?.roleTitle && chipReadiness && messagesForChips.length) {
         dispatch({
           type: "SET_SUGGESTION_CHIPS",
-          chips: parseRecruiterSuggestionChips(messagesForChips, session.roleKey),
+          chips: fallbackRecruiterSuggestionChips({
+            conversation: messagesForChips,
+            roleKey: session.roleKey,
+            readiness: chipReadiness,
+            brief: chipBrief,
+            canReviewBrief: Boolean(res.canReviewBrief ?? res.briefReady),
+          }),
         });
       }
 
@@ -345,7 +351,13 @@ export function useMayaDmHiring({
       dispatch({ type: "SET_READINESS", readiness: localReadiness });
       dispatch({
         type: "SET_SUGGESTION_CHIPS",
-        chips: parseRecruiterSuggestionChips(openingConversation, roleKey),
+        chips: fallbackRecruiterSuggestionChips({
+          conversation: openingConversation,
+          roleKey,
+          readiness: localReadiness,
+          brief: localBrief,
+          canReviewBrief: false,
+        }),
       });
       prevBriefRef.current = { ...localBrief };
       dispatch({ type: "SET_BRIEF_PARTIAL", briefPartial: localBrief });

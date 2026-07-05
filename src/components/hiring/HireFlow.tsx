@@ -60,7 +60,7 @@ import {
   MAYA_EMPLOYEE_TITLE,
   MAYA_RECRUITER_TAGLINE,
 } from "@/lib/hiring/maya";
-import { assessRecruiterReadiness, finalizeReadinessScore, parseRecruiterSuggestionChips } from "@/lib/hiring/recruiter-brain";
+import { assessRecruiterReadiness, finalizeReadinessScore, fallbackRecruiterSuggestionChips } from "@/lib/hiring/recruiter-brain";
 import type {
   AiEmployeeApplicant,
   AiEmployeeJobBrief,
@@ -289,7 +289,13 @@ export function HireFlow({ onboarding = false, entrySource = "hire_route" }: Hir
       } else if (chipBrief?.roleTitle && chipReadiness && messagesForChips.length) {
         dispatch({
           type: "SET_SUGGESTION_CHIPS",
-          chips: parseRecruiterSuggestionChips(messagesForChips, session.roleKey),
+          chips: fallbackRecruiterSuggestionChips({
+            conversation: messagesForChips,
+            roleKey: session.roleKey,
+            readiness: chipReadiness,
+            brief: chipBrief,
+            canReviewBrief: Boolean(res.canReviewBrief ?? res.briefReady),
+          }),
         });
       }
 
@@ -361,7 +367,13 @@ export function HireFlow({ onboarding = false, entrySource = "hire_route" }: Hir
     dispatch({ type: "SET_READINESS", readiness: localReadiness });
     dispatch({
       type: "SET_SUGGESTION_CHIPS",
-      chips: parseRecruiterSuggestionChips(openingConversation, roleKey),
+      chips: fallbackRecruiterSuggestionChips({
+        conversation: openingConversation,
+        roleKey,
+        readiness: localReadiness,
+        brief: localBrief,
+        canReviewBrief: false,
+      }),
     });
     prevBriefRef.current = { ...localBrief };
     dispatch({ type: "SET_BRIEF_READY", briefReady: false });
