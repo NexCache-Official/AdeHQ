@@ -456,7 +456,10 @@ export function shouldWarnBeforeHiringExit(state: HiringSessionState): boolean {
   return hasMeaningfulHiringProgress(state);
 }
 
-export function hiringExitWarningCopy(state: HiringSessionState): {
+export function hiringExitWarningCopy(
+  state: HiringSessionState,
+  intent: "workspace" | "role" = "workspace",
+): {
   title: string;
   body: string;
   confirmLabel: string;
@@ -466,6 +469,14 @@ export function hiringExitWarningCopy(state: HiringSessionState): {
     state.briefPartial?.roleTitle ??
     state.customRoleTitle ??
     (state.roleInput.trim() || "this role");
+
+  if (intent === "role") {
+    return {
+      title: "Start over with a new role?",
+      body: `Going back will clear your progress on ${roleLabel}. You'll pick a role from a clean slate.`,
+      confirmLabel: "Clear session and go back",
+    };
+  }
 
   return {
     title: "Leave hiring?",

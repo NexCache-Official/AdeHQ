@@ -127,7 +127,7 @@ export function HireFlow({ onboarding = false, entrySource = "hire_route" }: Hir
   }>({ active: false, section: null });
   const [mayaState, setMayaState] = useState<MayaRecruiterState>("idle");
   const [briefUpdateState, setBriefUpdateState] = useState<BriefUpdateState>(INITIAL_BRIEF_UPDATE_STATE);
-  const [exitDialogOpen, setExitDialogOpen] = useState(false);
+  const [exitIntent, setExitIntent] = useState<"workspace" | "role" | null>(null);
   const [leavingHiring, setLeavingHiring] = useState(false);
 
   const roleSeed = useMemo(() => {
@@ -228,6 +228,16 @@ export function HireFlow({ onboarding = false, entrySource = "hire_route" }: Hir
     const prev = hiringBackStep(session.step);
     if (prev) dispatch({ type: "SET_STEP", step: prev });
   }, [session.step]);
+
+  const requestBack = useCallback(() => {
+    const prev = hiringBackStep(session.step);
+    if (!prev) return;
+    if (prev === "role" && shouldWarnBeforeHiringExit(session)) {
+      setExitIntent("role");
+      return;
+    }
+    goBack();
+  }, [session, goBack]);
 
   const applyRecruiterResponse = useCallback(
     (res: RecruiterApiResponse, conversationBase?: { role: "ade" | "user"; text: string; isOptimistic?: boolean }[], appendMaya = true) => {
@@ -795,38 +805,41 @@ export function HireFlow({ onboarding = false, entrySource = "hire_route" }: Hir
 
   const requestLeaveHiring = () => {
     if (shouldWarnBeforeHiringExit(session)) {
-      setExitDialogOpen(true);
+      setExitIntent("workspace");
       return;
     }
     goToWorkspace();
   };
 
   const confirmLeaveHiring = async () => {
+    const intent = exitIntent;
     setLeavingHiring(true);
     try {
       await abandonSession();
-      setExitDialogOpen(false);
-      goToWorkspace();
+      setExitIntent(null);
+      if (intent === "workspace") {
+        goToWorkspace();
+      }
     } finally {
       setLeavingHiring(false);
     }
   };
 
-  const exitCopy = hiringExitWarningCopy(session);
+  const exitCopy = hiringExitWarningCopy(session, exitIntent ?? "workspace");
 
   return (
     <div className="flex min-h-screen flex-col bg-canvas text-ink">
       <HireExitConfirmDialog
-        open={exitDialogOpen}
+        open={exitIntent !== null}
         title={exitCopy.title}
         body={exitCopy.body}
         confirmLabel={exitCopy.confirmLabel}
         busy={leavingHiring}
         onConfirm={() => void confirmLeaveHiring()}
-        onCancel={() => setExitDialogOpen(false)}
+        onCancel={() => setExitIntent(null)}
       />
       <HireHeader
-        onBack={hiringBackStep(session.step) ? goBack : undefined}
+        onBack={hiringBackStep(session.step) ? requestBack : undefined}
         backLabel={backLabel ? `← ${backLabel}` : undefined}
         onGoToWorkspace={requestLeaveHiring}
       />
