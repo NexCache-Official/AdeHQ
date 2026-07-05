@@ -81,10 +81,12 @@ async function persistGatewaySearchChatReply(
     sender_id: params.employeeId,
     sender_name: params.employeeName,
     content: aiMessage.content,
-    created_at: aiMessage.createdAt,
+    mentions: [],
+    mentions_json: [],
     agent_run_id: params.agentRunId ?? null,
-    reply_to_message_id: params.triggerMessageId ?? null,
-    metadata: { quickWebSearch: true },
+    trigger_message_id: params.triggerMessageId ?? null,
+    pending: false,
+    created_at: aiMessage.createdAt,
   });
   if (error) throw error;
 

@@ -37,7 +37,7 @@ import {
   filterDmMessageArtifacts,
 } from "@/lib/topic-summary/message-artifacts";
 import type { PersistedOrchestrationEmployeeStatus } from "@/lib/orchestration/types";
-import { serializeUnknownError } from "@/lib/server/message-errors";
+import { serializeUnknownError, toUserFacingToolError } from "@/lib/server/message-errors";
 import { roomIdFromRow } from "@/lib/server/db-row";
 import {
   buildFileContextPrompt,
@@ -70,13 +70,7 @@ import {
 import { cancelActiveTopicWork } from "@/lib/server/cancel-active-topic-work";
 
 function formatResearchError(error: unknown): string {
-  if (error instanceof Error) return error.message;
-  if (typeof error === "object" && error && "message" in error) {
-    const message = (error as { message?: unknown }).message;
-    if (typeof message === "string" && message.trim()) return message;
-  }
-  if (typeof error === "string" && error.trim()) return error;
-  return "Research failed";
+  return serializeUnknownError(error);
 }
 
 async function persistRunOrchestrationPhase(
@@ -763,6 +757,7 @@ export async function processQueuedAgentRun(
         } catch (researchError) {
           console.warn("[AdeHQ research planner]", researchError);
           const researchErrorMessage = formatResearchError(researchError);
+          const userFacingError = toUserFacingToolError(researchError);
           await appendRunStep(client, {
             workspaceId,
             agentRunId: runId,
@@ -775,7 +770,8 @@ export async function processQueuedAgentRun(
             status: "failed",
           }).catch(() => undefined);
 
-          const fallbackReply = `I tried to search for that but ran into a problem (${researchErrorMessage}). Want me to try again?`;
+          const normalizedUserError = userFacingError.replace(/\.$/, "");
+          const fallbackReply = `I tried to look that up, but ${normalizedUserError.charAt(0).toLowerCase()}${normalizedUserError.slice(1)}. Want me to try again?`;
           const { aiMessage, artifacts } = await persistEmployeeEffects(
             client,
             workspaceId,

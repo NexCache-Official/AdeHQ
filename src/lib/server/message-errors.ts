@@ -36,6 +36,44 @@ export function serializeUnknownError(error: unknown): string {
   return String(error ?? "Unknown error");
 }
 
+/** Map internal tool failures to employee-safe chat copy (no schema/API leakage). */
+export function toUserFacingToolError(error: unknown): string {
+  const internal = serializeUnknownError(error).toLowerCase();
+
+  if (
+    internal.includes("schema cache") ||
+    internal.includes("could not find") ||
+    internal.includes("column") ||
+    internal.includes("does not exist") ||
+    internal.includes("23503") ||
+    internal.includes("23505")
+  ) {
+    return "I couldn't save the answer to chat just now.";
+  }
+
+  if (
+    internal.includes("not configured") ||
+    internal.includes("api_key") ||
+    internal.includes("missing env")
+  ) {
+    return "Web search isn't available on my side yet.";
+  }
+
+  if (internal.includes("timeout") || internal.includes("timed out") || internal.includes("abort")) {
+    return "The search took too long.";
+  }
+
+  if (internal.includes("rate limit") || internal.includes("429") || internal.includes("too many")) {
+    return "Search is busy right now — try again in a moment.";
+  }
+
+  if (internal.includes("cancelled") || internal.includes("canceled")) {
+    return "That search was stopped.";
+  }
+
+  return "Something went wrong while searching.";
+}
+
 export function debugErrorPayload(error: unknown) {
   if (error instanceof Error) {
     return {
