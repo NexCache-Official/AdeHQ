@@ -54,7 +54,11 @@ export function useTopicSummary(topicId: string | undefined) {
       setError(null);
       try {
         const result = await refreshTopicSummaryClient(topicId, manual);
-        if (result.summary) setSummary(result.summary);
+        if (result.summary) {
+          setSummary(result.summary);
+        } else if (result.skippedReason === "chat_cleared") {
+          setSummary(null);
+        }
         return result;
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to refresh summary");

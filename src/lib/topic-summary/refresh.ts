@@ -7,7 +7,7 @@ import {
   generateTopicSummaryPayload,
   loadTopicSummaryGenerationContext,
 } from "./generate";
-import { fetchTopicSummary, upsertTopicSummary } from "./persistence";
+import { fetchTopicSummary, suppressSummaryIfChatCleared, upsertTopicSummary } from "./persistence";
 import { fetchTopicChatClearedAtColumn } from "@/lib/conversation-context/epochs";
 import { reconcileTopicSummarySuggestionLifecycle } from "./reconcile-suggestion-lifecycle";
 import {
@@ -99,6 +99,7 @@ export async function refreshTopicSummary(
 
   const chatClearedAt = await fetchTopicChatClearedAtColumn(client, params.workspaceId, params.topicId);
   if (chatClearedAt && ctx.messages.length === 0) {
+    await suppressSummaryIfChatCleared(client, params.workspaceId, params.topicId);
     return { summary: null, refreshed: false, skippedReason: "chat_cleared" };
   }
 
@@ -130,11 +131,11 @@ export async function refreshTopicSummary(
   });
 
   if (generated.isCasualConversation && !manual) {
-    return { summary: existing, refreshed: false, skippedReason: "casual_conversation" };
+    return { summary: existingForContext, refreshed: false, skippedReason: "casual_conversation" };
   }
 
   if (generated.isCasualConversation && manual && !generated.summary.trim()) {
-    return { summary: existing, refreshed: false, skippedReason: "casual_conversation" };
+    return { summary: existingForContext, refreshed: false, skippedReason: "casual_conversation" };
   }
 
   const nextSummary: TopicSummary = {
@@ -164,7 +165,12 @@ export async function refreshTopicSummary(
 
   const changed = summariesMeaningfullyChanged(existing, reconciledSummary);
   if (!manual && !changed) {
-    return { summary: existing, refreshed: false, skippedReason: "no_meaningful_change" };
+    return { summary: existingForContext, refreshed: false, skippedReason: "no_meaningful_change" };
+  }
+
+  if (chatClearedAt && ctx.messages.length === 0) {
+    await suppressSummaryIfChatCleared(client, params.workspaceId, params.topicId);
+    return { summary: null, refreshed: false, skippedReason: "chat_cleared" };
   }
 
   const saved = await upsertTopicSummary(client, reconciledSummary);

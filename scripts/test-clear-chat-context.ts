@@ -52,9 +52,11 @@ function createFakeClient(state: {
       let patch: Record<string, unknown> | null = null;
       let insertRow: Record<string, unknown> | null = null;
       let deleteMode = false;
+      let countMode = false;
 
       const api = {
-        select() {
+        select(_cols?: string, opts?: { count?: string; head?: boolean }) {
+          countMode = opts?.count === "exact" && opts?.head === true;
           return api;
         },
         eq(col: string, val: unknown) {
@@ -109,11 +111,17 @@ function createFakeClient(state: {
           return api;
         },
         then: (
-          resolve: (value: { error: null }) => void,
+          resolve: (value: { error: null; count?: number }) => void,
         ) => {
+          if (countMode) {
+            const matched = rows.filter((row) => filters.every((f) => f(row)));
+            resolve({ count: matched.length, error: null });
+            return;
+          }
           if (deleteMode) {
-            const keep = rows.filter((row) => !filters.every((f) => f(row)));
-            tables[table] = keep;
+            for (let i = rows.length - 1; i >= 0; i -= 1) {
+              if (filters.every((f) => f(rows[i]))) rows.splice(i, 1);
+            }
             resolve({ error: null });
             return;
           }
@@ -182,7 +190,14 @@ async function main() {
           suggested_memory: [],
         },
       ],
-      messages: [{ id: "msg_new", workspace_id: "ws_1", topic_id: "topic_1" }],
+      messages: [
+        {
+          id: "msg_new",
+          workspace_id: "ws_1",
+          topic_id: "topic_1",
+          created_at: "2026-07-05T13:00:00.000Z",
+        },
+      ],
       epochs: [],
     });
 
@@ -231,6 +246,77 @@ async function main() {
     const epochId = await fetchTopicContextEpochId(client, "ws_1", "topic_1");
     expectTrue(clearedAt === "2026-07-05T12:00:00.000Z");
     expectTrue(epochId === "epoch_1");
+  });
+
+  await test("fetchTopicSummary purges summary after clear with no post-clear messages", async () => {
+    const clearedAt = "2026-07-05T12:00:00.000Z";
+    const topicSummaries: Record<string, unknown>[] = [
+      {
+        id: "sum_1",
+        workspace_id: "ws_1",
+        topic_id: "topic_1",
+        room_id: "room_1",
+        summary: "Stale DM brief",
+        what_happened: "Discussed funding",
+        last_refreshed_at: "2026-07-05T13:30:00.000Z",
+        open_questions: [{ text: "Open question" }],
+        key_facts: [{ text: "Key fact" }],
+        next_actions: [{ title: "Follow up" }],
+        suggested_memory: [{ text: "Remember this" }],
+      },
+    ];
+    const client = createFakeClient({
+      topics: [
+        {
+          id: "topic_1",
+          workspace_id: "ws_1",
+          chat_cleared_at: clearedAt,
+          metadata: {},
+        },
+      ],
+      topicSummaries,
+      messages: [],
+      epochs: [],
+    });
+
+    const summary = await fetchTopicSummary(client, "ws_1", "topic_1");
+    expectTrue(summary === null, "summary should be hidden after clear with no messages");
+    expectTrue(topicSummaries.length === 0, "stale summary row should be deleted");
+  });
+
+  await test("fetchTopicSummary purges summary with missing last_refreshed_at after clear", async () => {
+    const clearedAt = "2026-07-05T12:00:00.000Z";
+    const topicSummaries: Record<string, unknown>[] = [
+      {
+        id: "sum_1",
+        workspace_id: "ws_1",
+        topic_id: "topic_1",
+        room_id: "room_1",
+        summary: "Brief without refresh timestamp",
+        what_happened: "Discussed funding",
+        open_questions: [],
+        key_facts: [],
+        next_actions: [],
+        suggested_memory: [],
+      },
+    ];
+    const client = createFakeClient({
+      topics: [
+        {
+          id: "topic_1",
+          workspace_id: "ws_1",
+          chat_cleared_at: clearedAt,
+          metadata: {},
+        },
+      ],
+      topicSummaries,
+      messages: [],
+      epochs: [],
+    });
+
+    const summary = await fetchTopicSummary(client, "ws_1", "topic_1");
+    expectTrue(summary === null, "summary without lastRefreshedAt should be hidden after clear");
+    expectTrue(topicSummaries.length === 0, "summary row should be deleted");
   });
 
   console.log("\nAll clear chat context tests passed.");

@@ -125,9 +125,57 @@ export async function fetchTopicChatClearedAt(
   workspaceId: string,
   topicId: string,
 ): Promise<string | null> {
-  const metadata = await fetchTopicMetadataRecord(client, workspaceId, topicId);
-  const value = metadata[CHAT_CLEARED_METADATA_KEY];
-  return typeof value === "string" && value.trim() ? value : null;
+  return fetchTopicChatClearedAtColumn(client, workspaceId, topicId);
+}
+
+export async function countTopicMessagesSince(
+  client: SupabaseClient,
+  workspaceId: string,
+  topicId: string,
+  sinceIso: string | null,
+): Promise<number> {
+  let query = client
+    .from("messages")
+    .select("id", { count: "exact", head: true })
+    .eq("workspace_id", workspaceId)
+    .eq("topic_id", topicId);
+  if (sinceIso) {
+    query = query.gte("created_at", sinceIso);
+  }
+  const { count, error } = await query;
+  if (error) throw error;
+  return count ?? 0;
+}
+
+export function isTopicSummaryStaleAfterClear(
+  summary: TopicSummary,
+  chatClearedAt: string,
+  messagesSinceClear: number,
+): boolean {
+  if (messagesSinceClear === 0) return true;
+  if (!summary.lastRefreshedAt) return true;
+  return +new Date(summary.lastRefreshedAt) < +new Date(chatClearedAt);
+}
+
+async function purgeTopicSummaryRecord(
+  client: SupabaseClient,
+  workspaceId: string,
+  topicId: string,
+): Promise<void> {
+  await client
+    .from("topic_summaries")
+    .delete()
+    .eq("workspace_id", workspaceId)
+    .eq("topic_id", topicId)
+    .then(({ error }) => {
+      if (error && !String(error.message).includes("does not exist")) throw error;
+    });
+
+  await client
+    .from("topics")
+    .update({ summary: null, pinned_summary: null, updated_at: nowISO() })
+    .eq("workspace_id", workspaceId)
+    .eq("id", topicId);
 }
 
 export async function markTopicChatCleared(
@@ -162,32 +210,23 @@ export async function countTopicMessages(
   return count ?? 0;
 }
 
-/** When chat was cleared and no messages remain, suppress stale summary rows. */
+/** When chat was cleared and no post-clear messages remain, purge stale summary rows. */
 export async function suppressSummaryIfChatCleared(
   client: SupabaseClient,
   workspaceId: string,
   topicId: string,
 ): Promise<boolean> {
-  const chatClearedAt = await fetchTopicChatClearedAt(client, workspaceId, topicId);
+  const chatClearedAt = await fetchTopicChatClearedAtColumn(client, workspaceId, topicId);
   if (!chatClearedAt) return false;
-  const messageCount = await countTopicMessages(client, workspaceId, topicId);
+  const messageCount = await countTopicMessagesSince(
+    client,
+    workspaceId,
+    topicId,
+    chatClearedAt,
+  );
   if (messageCount > 0) return false;
 
-  await client
-    .from("topic_summaries")
-    .delete()
-    .eq("workspace_id", workspaceId)
-    .eq("topic_id", topicId)
-    .then(({ error }) => {
-      if (error && !String(error.message).includes("does not exist")) throw error;
-    });
-
-  await client
-    .from("topics")
-    .update({ summary: null, pinned_summary: null, updated_at: nowISO() })
-    .eq("workspace_id", workspaceId)
-    .eq("id", topicId);
-
+  await purgeTopicSummaryRecord(client, workspaceId, topicId);
   return true;
 }
 
@@ -216,12 +255,17 @@ export async function fetchTopicSummary(
   if (!summaryResult.data) return null;
 
   const summary = topicSummaryFromRow(summaryResult.data as DbRow);
-  if (
-    chatClearedAt &&
-    summary.lastRefreshedAt &&
-    +new Date(summary.lastRefreshedAt) < +new Date(chatClearedAt)
-  ) {
-    return null;
+  if (chatClearedAt) {
+    const messagesSinceClear = await countTopicMessagesSince(
+      client,
+      workspaceId,
+      topicId,
+      chatClearedAt,
+    );
+    if (isTopicSummaryStaleAfterClear(summary, chatClearedAt, messagesSinceClear)) {
+      await purgeTopicSummaryRecord(client, workspaceId, topicId);
+      return null;
+    }
   }
 
   const metadataLifecycle = parseLifecycle(metadata[LIFECYCLE_METADATA_KEY]);
@@ -238,6 +282,24 @@ export async function upsertTopicSummary(
   client: SupabaseClient,
   summary: TopicSummary,
 ): Promise<TopicSummary> {
+  const chatClearedAt = await fetchTopicChatClearedAtColumn(
+    client,
+    summary.workspaceId,
+    summary.topicId,
+  );
+  if (chatClearedAt) {
+    const messagesSinceClear = await countTopicMessagesSince(
+      client,
+      summary.workspaceId,
+      summary.topicId,
+      chatClearedAt,
+    );
+    if (messagesSinceClear === 0) {
+      await purgeTopicSummaryRecord(client, summary.workspaceId, summary.topicId);
+      throw new Error("Cannot persist topic summary while chat is cleared with no messages.");
+    }
+  }
+
   const timestamp = nowISO();
   const metadata = await fetchTopicMetadataRecord(
     client,
