@@ -82,6 +82,7 @@ const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
       { href: "/admin/runtime", label: "Runtime", icon: Cpu },
       { href: "/admin/browser-research", label: "Browser Research", icon: Globe },
       { href: "/admin/ai-employees", label: "AI Employees", icon: Bot },
+      { href: "/admin/tool-runs", label: "Tool Runs", icon: Wrench },
       { href: "/admin/files-storage", label: "Files & Storage", icon: HardDrive },
     ],
   },

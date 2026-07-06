@@ -1,0 +1,68 @@
+// ===========================================================================
+// Capability domains — map tool domains to the internal AdeHQ catalog tools
+// used for per-employee grants (tools + employee_tools tables).
+// ===========================================================================
+
+import type { CapabilityDomain } from "@/lib/integrations/types";
+
+export type CapabilityDomainInfo = {
+  domain: CapabilityDomain;
+  label: string;
+  description: string;
+  /** Catalog tool id (public.tools) that gates this domain per employee. */
+  catalogToolId: string;
+};
+
+export const CAPABILITY_DOMAINS: Record<CapabilityDomain, CapabilityDomainInfo> = {
+  crm: {
+    domain: "crm",
+    label: "CRM",
+    description: "Contacts, companies, deals, and pipeline inside AdeHQ.",
+    catalogToolId: "adehq-crm",
+  },
+  email: {
+    domain: "email",
+    label: "Email drafts",
+    description: "Draft outreach and follow-up emails as reviewable artifacts.",
+    catalogToolId: "adehq-email",
+  },
+  tasks: {
+    domain: "tasks",
+    label: "Tasks",
+    description: "Create and manage follow-up tasks inside AdeHQ.",
+    catalogToolId: "adehq-tasks",
+  },
+  drive: {
+    domain: "drive",
+    label: "Drive",
+    description: "Save generated files and artifacts to workspace Drive.",
+    catalogToolId: "adehq-drive",
+  },
+  // Registered now for extensibility; tools ship in later phases.
+  artifact: {
+    domain: "artifact",
+    label: "Artifacts",
+    description: "Generate spreadsheets, PDF reports, and exports to Drive.",
+    catalogToolId: "adehq-drive",
+  },
+  social: {
+    domain: "social",
+    label: "Social",
+    description: "Draft and publish social posts (Phase 4 — approval gated).",
+    catalogToolId: "adehq-email",
+  },
+};
+
+export function capabilityDomainForTool(toolName: string): CapabilityDomain | null {
+  const prefix = toolName.split(".")[0] as CapabilityDomain;
+  return prefix && prefix in CAPABILITY_DOMAINS ? prefix : null;
+}
+
+export function catalogToolIdForDomain(domain: CapabilityDomain): string {
+  return CAPABILITY_DOMAINS[domain].catalogToolId;
+}
+
+/** All internal AdeHQ capability catalog tool ids. */
+export const INTERNAL_CAPABILITY_TOOL_IDS = [
+  ...new Set(Object.values(CAPABILITY_DOMAINS).map((c) => c.catalogToolId)),
+];

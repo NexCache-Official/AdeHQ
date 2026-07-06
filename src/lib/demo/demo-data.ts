@@ -23,6 +23,11 @@ export const DEMO_VERSION = 3;
 // ---------------------------------------------------------------------------
 
 export const TOOL_CATALOG: Tool[] = [
+  // Internal AdeHQ capability tools — always available, no OAuth needed.
+  { id: "adehq-crm", name: "AdeHQ CRM", category: "Business", description: "Create and manage contacts, companies, and deals inside AdeHQ.", status: "connected" },
+  { id: "adehq-email", name: "AdeHQ Email Drafts", category: "Communication", description: "Draft outreach and follow-up emails as reviewable artifacts.", status: "connected" },
+  { id: "adehq-tasks", name: "AdeHQ Tasks", category: "Productivity", description: "Create and manage follow-up tasks inside AdeHQ.", status: "connected" },
+  { id: "adehq-drive", name: "AdeHQ Drive", category: "Storage", description: "Save generated files and artifacts to workspace Drive.", status: "connected" },
   { id: "web-search", name: "Web Search", category: "Research", description: "Search the live web for fresh information and sources.", status: "mock" },
   { id: "browser", name: "Browser", category: "Research", description: "Open and read web pages like a human researcher.", status: "mock" },
   { id: "perplexity", name: "Perplexity", category: "Research", description: "Answer engine for deep, cited research.", status: "mock" },

@@ -198,6 +198,8 @@ type StoreActions = {
   // approvals
   createApproval: (a: Partial<Approval> & { title: string; roomId: string; requestedBy: string }) => Approval;
   resolveApproval: (id: string, approved: boolean) => void;
+  /** Merge a server-resolved approval into local state (real workspaces). */
+  mergeApproval: (approval: Approval) => void;
 
   // work log
   addWorkLog: (e: Partial<WorkLogEvent> & { action: string; roomId: string; employeeId: string }) => WorkLogEvent;
@@ -1604,6 +1606,23 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         set((s) => ({ ...s, approvals: [created, ...s.approvals] }));
         runRemote((workspaceId) => persistApproval(workspaceId, created));
         return created;
+      },
+
+      mergeApproval: (approval) => {
+        set((s) => {
+          const exists = s.approvals.some((a) => a.id === approval.id);
+          const approvals = exists
+            ? s.approvals.map((a) => (a.id === approval.id ? { ...a, ...approval } : a))
+            : [approval, ...s.approvals];
+          const employees = s.employees.map((e) =>
+            e.id === approval.requestedBy &&
+            approval.status !== "pending" &&
+            e.status === "waiting_approval"
+              ? { ...e, status: "idle" as const }
+              : e,
+          );
+          return { ...s, approvals, employees };
+        });
       },
 
       resolveApproval: (id, approved) => {

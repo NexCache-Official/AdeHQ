@@ -66,6 +66,7 @@ export function sanitizeEffects(
       memory: [],
       approvals: [],
       emailDrafts: [],
+      toolCalls: [],
       statusChange: effect.statusChange,
       handoffTo: effect.handoffTo,
       currentTask: effect.currentTask,

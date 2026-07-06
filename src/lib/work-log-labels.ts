@@ -39,6 +39,24 @@ const ACTION_LABELS: Record<string, string> = {
   suggested_memory_from_file: "suggested memory from file",
   saved_file_memory: "saved memory from file",
   read_context: "read context",
+  // Integration Layer — Tool Execution Core actions
+  crm_contact_created: "added a CRM contact",
+  crm_contact_reused: "matched an existing CRM contact",
+  crm_company_created: "added a CRM company",
+  crm_company_reused: "matched an existing CRM company",
+  crm_deal_created: "created a deal",
+  crm_deal_stage_updated: "moved a deal to a new stage",
+  created_email_draft: "drafted an email",
+  task_created: "created a follow-up task",
+  integration_tool_failed: "integration tool failed",
+  integration_tool_executed: "ran an integration tool",
+  tool_call_blocked: "was blocked from running a tool",
+  artifact_spreadsheet_created: "generated a spreadsheet",
+  artifact_pdf_created: "generated a PDF report",
+  approval_requested: "requested approval",
+  approval_granted: "approval granted",
+  approval_rejected: "approval rejected",
+  approval_revision_requested: "revision requested on approval",
   model_error: "hit a model error",
   model_fallback: "used fallback response",
   repeated_message_with_mention: "repeated message with mention after request",
@@ -46,6 +64,13 @@ const ACTION_LABELS: Record<string, string> = {
 };
 
 const ACTION_CATEGORIES: Record<string, string> = {
+  crm_contact_created: "Sales",
+  crm_company_created: "Sales",
+  crm_deal_created: "Sales",
+  crm_contact_reused: "Sales",
+  crm_company_reused: "Sales",
+  created_email_draft: "Sales",
+  task_created: "Tasks",
   coordinated_team_response: "Coordination",
   collaboration_completed: "Coordination",
   accepted_research_ownership: "Research",
@@ -59,6 +84,8 @@ const ACTION_CATEGORIES: Record<string, string> = {
   generated_artifact: "Artifacts",
   created_prd: "Artifacts",
   created_report: "Artifacts",
+  artifact_spreadsheet_created: "Artifacts",
+  artifact_pdf_created: "Artifacts",
   task_suggested: "Tasks",
 };
 
@@ -261,6 +288,9 @@ const ENTITY_SOURCE_LABELS: Record<string, string> = {
   file: "Open file",
   artifact: "Open artifact",
   approval: "Open approval",
+  contact: "Open contact",
+  deal: "Open deal",
+  company: "Open company",
 };
 
 function topicChatLabel(topicId: string | undefined, ctx?: WorkLogSourceContext): string {
@@ -325,6 +355,15 @@ export function workLogCanJump(event: {
 }): boolean {
   if (event.relatedEntityType === "message" && event.relatedEntityId) return true;
   if (event.relatedEntityType === "topic" && event.topicId) return true;
+  if (
+    event.relatedEntityId &&
+    (event.relatedEntityType === "contact" ||
+      event.relatedEntityType === "deal" ||
+      event.relatedEntityType === "company" ||
+      event.relatedEntityType === "artifact")
+  ) {
+    return true;
+  }
   if (event.relatedEntityType === "memory" && event.relatedEntityId) return false;
   if (event.topicId) return true;
   return false;

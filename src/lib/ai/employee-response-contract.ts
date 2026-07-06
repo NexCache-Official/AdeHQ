@@ -120,6 +120,7 @@ export function mapModelSchemaToEmployeeResponse(
       citations: object.effects.citations ?? [],
       artifacts: object.effects.artifacts ?? [],
       memorySuggestions: object.effects.memorySuggestions ?? [],
+      toolCalls: object.effects.toolCalls ?? [],
       statusChange: object.effects.statusChange,
       handoffTo: object.effects.handoffTo,
       currentTask: object.effects.currentTask,
@@ -150,6 +151,7 @@ export function toEmployeeResponseFromReplyAndEffect(
       citations: effects.citations ?? [],
       artifacts: effects.artifacts ?? [],
       memorySuggestions: effects.memorySuggestions ?? [],
+      toolCalls: effects.toolCalls ?? [],
     },
   };
 }

@@ -17,6 +17,8 @@ import { LoadingState } from "./States";
 import { DebugProvider, useDebugTraceListener } from "./DebugProvider";
 import { cn } from "@/lib/utils";
 import { DebugTerminal } from "./DebugTerminal";
+import { JUMP_TO_SOURCE_EVENT, type JumpSource } from "@/lib/navigation/jump-to-source";
+import { crmEntityHref } from "@/lib/crm/client";
 
 type ShellUI = {
   openCommand: () => void;
@@ -90,6 +92,21 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
   }, []);
+
+  useEffect(() => {
+    const onJump = (event: Event) => {
+      const source = (event as CustomEvent<JumpSource>).detail;
+      if (source.type === "crm" && source.crmEntity && source.entityId) {
+        router.push(crmEntityHref(source.crmEntity, source.entityId));
+        return;
+      }
+      if (source.type === "artifact" && source.entityId) {
+        router.push(`/drive?artifact=${encodeURIComponent(source.entityId)}`);
+      }
+    };
+    window.addEventListener(JUMP_TO_SOURCE_EVENT, onJump);
+    return () => window.removeEventListener(JUMP_TO_SOURCE_EVENT, onJump);
+  }, [router]);
 
   const ui = useMemo<ShellUI>(
     () => ({

@@ -899,6 +899,12 @@ function approvalFromRow(row: DbRow): Approval {
     risk: row.risk,
     status: row.status,
     actionType: row.action_type,
+    actionPayload: row.action_payload ?? undefined,
+    previewSnapshot: row.preview_snapshot ?? undefined,
+    revisionCount: row.revision_count != null ? Number(row.revision_count) : undefined,
+    resolutionNote: row.resolution_note ?? undefined,
+    resolvedBy: row.resolved_by ?? undefined,
+    executedToolRunId: row.executed_tool_run_id ?? undefined,
     createdAt: row.created_at ?? nowISO(),
     resolvedAt: row.resolved_at ?? undefined,
   };

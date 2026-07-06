@@ -1,4 +1,5 @@
 import { ROLE_TEMPLATES, TOOL_CATALOG, defaultPermissions } from "@/lib/demo";
+import { suggestedCapabilityToolIds } from "@/lib/integrations/registry/prefab-toolsets";
 import type { AiEmployeeApplicant, AiEmployeeJobBrief } from "./types";
 import type { AIEmployee, EmployeeRoleKey } from "@/lib/types";
 import { buildIntelligencePolicyForHire } from "@/lib/ai/intelligence-policy";
@@ -72,16 +73,30 @@ export function candidateToEmployee(
     instructions: briefToInstructions(brief),
     communicationStyle: candidate.communicationStyle ?? brief.communicationStyle,
     successCriteria: brief.successMetrics.join("; "),
-    tools: template.suggestedTools.map((toolId) => {
-      const meta = TOOL_CATALOG.find((t) => t.id === toolId)!;
-      return {
-        toolId,
-        name: meta.name,
-        category: meta.category,
-        status: meta.status === "not_connected" ? ("not_connected" as const) : meta.status,
-        permission: "read" as const,
-      };
-    }),
+    tools: [
+      // Maya-suggested internal capability grants (crm/email/tasks/drive) —
+      // editable per employee after hire; write access so tools can act.
+      ...suggestedCapabilityToolIds(employeeRoleKey).map((toolId) => {
+        const meta = TOOL_CATALOG.find((t) => t.id === toolId)!;
+        return {
+          toolId,
+          name: meta.name,
+          category: meta.category,
+          status: "connected" as const,
+          permission: "write" as const,
+        };
+      }),
+      ...template.suggestedTools.map((toolId) => {
+        const meta = TOOL_CATALOG.find((t) => t.id === toolId)!;
+        return {
+          toolId,
+          name: meta.name,
+          category: meta.category,
+          status: meta.status === "not_connected" ? ("not_connected" as const) : meta.status,
+          permission: "read" as const,
+        };
+      }),
+    ],
     permissions: {
       ...defaultPermissions(),
       approvalBeforeExternal: true,

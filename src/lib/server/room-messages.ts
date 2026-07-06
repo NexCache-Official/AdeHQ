@@ -43,6 +43,8 @@ import {
   type EmailDraftJson,
 } from "@/lib/artifacts/intelligence";
 import { recordAiMessageInTopicOrchestrationState } from "@/lib/orchestration/room-steward";
+import { executeEmployeeToolCalls } from "@/lib/integrations/manager";
+import type { ToolCallEffectItem } from "@/lib/types";
 import { extractMentions, nowISO, uid } from "@/lib/utils";
 
 type DbRow = Record<string, unknown>;
@@ -604,6 +606,7 @@ export async function persistEmployeeEffects(
     citations?: FileCitationEffect[];
     artifacts?: ArtifactEffect[];
     memorySuggestions?: MemorySuggestionEffect[];
+    toolCalls?: ToolCallEffectItem[];
     statusChange?: AIEmployee["status"];
     currentTask?: string;
   },
@@ -963,6 +966,37 @@ export async function persistEmployeeEffects(
       agent_run_id: agentRunId ?? null,
       created_at: nowISO(),
     });
+  }
+
+  // Integration tool calls — the Tool Execution Core runs each call through
+  // grant checks, the preview/approval gate, tool runs, and work logs, and
+  // returns chat chips (approval cards, created records) for this message.
+  if (effect.toolCalls?.length) {
+    try {
+      const toolOutcome = await executeEmployeeToolCalls(client, {
+        workspaceId,
+        employee,
+        roomId,
+        topicId,
+        agentRunId,
+        triggerMessageId,
+        toolCalls: effect.toolCalls,
+      });
+      artifacts.push(...toolOutcome.messageArtifacts);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Tool execution failed.";
+      console.error("[AdeHQ room-messages] tool call execution failed", error);
+      artifacts.push({
+        type: "tool_result",
+        id: `tool-err-${triggerMessageId ?? uid("tr")}`,
+        label: "Could not complete requested actions",
+        meta: {
+          toolStatus: "failed",
+          error: message,
+          subtitle: message,
+        },
+      });
+    }
   }
 
   for (const draft of effect.approvals) {

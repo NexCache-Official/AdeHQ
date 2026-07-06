@@ -26,6 +26,8 @@ import {
 } from "@/lib/message-actions";
 import { ArtifactCard, FileArtifactCard } from "./ArtifactCard";
 import { EmailArtifactInlineCard } from "@/components/artifacts/ArtifactViewerModal";
+import { CrmInlineCard } from "@/components/crm/CrmInlineCard";
+import { ToolResultInlineCard } from "@/components/integrations/ToolResultInlineCard";
 import { SearchSourceCards } from "@/components/search/SearchSourceCards";
 import { MessageMarkdown } from "./MessageMarkdown";
 import {
@@ -646,6 +648,11 @@ export function RoomMessageItem({
   const workLogArtifacts = message.artifacts?.filter((a) => a.type === "work_log") ?? [];
   const searchSourceArtifacts =
     message.artifacts?.filter((a) => a.type === "search_sources") ?? [];
+  const crmArtifacts =
+    message.artifacts?.filter(
+      (a) => a.type === "crm_contact" || a.type === "crm_deal" || a.type === "crm_company",
+    ) ?? [];
+  const toolResultArtifacts = message.artifacts?.filter((a) => a.type === "tool_result") ?? [];
   const otherArtifacts = (message.artifacts ?? []).filter(
     (
       a,
@@ -658,6 +665,10 @@ export function RoomMessageItem({
       a.type !== "file" &&
       a.type !== "work_log" &&
       a.type !== "search_sources" &&
+      a.type !== "crm_contact" &&
+      a.type !== "crm_deal" &&
+      a.type !== "crm_company" &&
+      a.type !== "tool_result" &&
       (a.type === "task" || a.type === "memory" || a.type === "approval"),
   );
   const debugWorkLogArtifacts = debugEnabled ? workLogArtifacts : [];
@@ -750,6 +761,14 @@ export function RoomMessageItem({
 
         {emailDrafts.map((draft) => (
           <EmailDraftCard key={draft.id} label={draft.label} meta={draft.meta} />
+        ))}
+
+        {crmArtifacts.map((artifact) => (
+          <CrmInlineCard key={`${artifact.type}-${artifact.id}`} artifact={artifact} />
+        ))}
+
+        {toolResultArtifacts.map((artifact) => (
+          <ToolResultInlineCard key={`tool-${artifact.id}`} artifact={artifact} />
         ))}
 
         {memorySuggestions.map((artifact) => (

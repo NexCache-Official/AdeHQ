@@ -2,6 +2,7 @@ import type { AIEmployee, MemoryEntry, ProjectRoom, RoomMessage, RoomTopic, Save
 import type { EmployeeRoleKey } from "@/lib/types";
 import type { BrowserAccess } from "@/lib/ai/intelligence-policy";
 import { isMayaEmployee } from "@/lib/maya-employee";
+import { buildIntegrationToolsPrompt } from "@/lib/integrations/prompt";
 import type { TopicSummary } from "@/lib/topic-summary/types";
 
 export type ResearchCapabilitiesPrompt = {
@@ -188,14 +189,18 @@ function roleWorkflowRules(roleKey: EmployeeRoleKey): string {
   switch (roleKey) {
     case "sales":
       return `Sales employee workflow — you create work objects, not just chat:
-- When you learn lead details (name, role, company, referral source), add effects.memory.
-- When drafting outreach, put the full email in effects.artifacts as artifactType "email_draft" with contentJson {subject, body, recipientName, recipientOrganization} AND keep reply to 1–3 sentences pointing at the draft.
-- You may also use effects.emailDrafts as a fallback, but prefer effects.artifacts for durable email drafts.
-- After drafting, create effects.tasks for follow-ups (e.g. "Follow up with Neil if no reply by Friday") with assigneeType "ai".
-- Log only meaningful business work in effects.workLog (e.g. "created_email_draft") — not greetings or acknowledgements.
-- Offer 2–3 subject line options in reply when helpful; full email body goes in the artifact only.
+- When Integration tools are available (see above), use effects.toolCalls to do the actual work:
+  1. New lead mentioned → crm.createContact (execute) with name, email, company.
+  2. Opportunity discussed → crm.createDeal — execute for small/routine deals, preview for significant amounts (~$1,000+) so the user approves it.
+  3. Outreach needed → email.createDraft (execute) with the full subject and body. It saves a reviewable draft — never sends.
+  4. Follow-up needed → tasks.createTask (execute), e.g. "Follow up with Neil if no reply by Friday".
+- When you learn lead details (name, role, company, referral source), also add effects.memory.
+- If Integration tools are NOT listed above, fall back to effects.artifacts (artifactType "email_draft" with contentJson {subject, body, recipientName, recipientOrganization}) and effects.tasks.
+- Keep reply to 1–3 sentences summarizing what you did ("Added Neil to the CRM, opened a £5k deal for approval, and drafted the intro email.").
+- Log only meaningful business work in effects.workLog — tool calls log themselves, so do not duplicate them.
+- Offer 2–3 subject line options in reply when helpful; full email body goes in the draft only.
 - For health/supplement businesses, keep copy compliant and avoid treatment/cure claims.
-- Do not claim you sent the email or that it was delivered. Draft only unless Gmail/send is connected with approval.`;
+- Do not claim you sent the email or that it was delivered. Draft only unless an email integration is connected with approval.`;
     case "research":
       return `Research workflow: save findings to effects.memory, create tasks for deeper dives, log meaningful research work only.
 - A planning step decides whether to search; when Browse/Agent mode is on, search always runs for that message.
@@ -343,6 +348,8 @@ If you create tasks, memory, approvals, or logs, attach them to this topic.` : "
 Your available tools:
 ${toolList}
 
+${buildIntegrationToolsPrompt(ctx.employee)}
+
 Your permissions:
 ${permissionList || "- Default employee permissions"}
 
@@ -384,6 +391,7 @@ Internal JSON format (reply = human speech, effects = backend only):
     "citations": [{ "fileId": "...", "chunkId": "...", "label": "Pricing.csv · rows 20–40", "quote": "..." }],
     "artifacts": [{ "title": "Q1 PRD", "artifactType": "prd", "contentMarkdown": "# Overview\\n...", "status": "saved", "sourceFileIds": ["..."], "sourceChunkIds": ["..."], "sourceCitations": [] }],
     "emailDrafts": [{ "subject": "...", "body": "...", "recipient": "Neil", "company": "Green Cutting Inc." }],
+    "toolCalls": [{ "tool": "crm.createContact", "mode": "execute", "args": { "firstName": "Neil", "companyName": "Green Cutting Inc." } }],
     "approvals": [],
     "statusChange": "working",
     "handoffTo": [],

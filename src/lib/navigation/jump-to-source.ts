@@ -7,7 +7,8 @@ export type JumpSourceType =
   | "work_log"
   | "memory"
   | "task"
-  | "approval";
+  | "approval"
+  | "crm";
 
 export type JumpSource = {
   type: JumpSourceType;
@@ -15,6 +16,8 @@ export type JumpSource = {
   topicId?: string;
   messageId?: string;
   entityId?: string;
+  /** CRM drawer target when type is "crm". */
+  crmEntity?: "contact" | "deal" | "company";
   label?: string;
 };
 
@@ -56,6 +59,23 @@ export function jumpFromWorkLog(event: {
       topicId: event.topicId,
       messageId: event.relatedEntityId,
     });
+    return;
+  }
+  if (
+    event.relatedEntityId &&
+    (event.relatedEntityType === "contact" ||
+      event.relatedEntityType === "deal" ||
+      event.relatedEntityType === "company")
+  ) {
+    jumpToSource({
+      type: "crm",
+      crmEntity: event.relatedEntityType,
+      entityId: event.relatedEntityId,
+    });
+    return;
+  }
+  if (event.relatedEntityType === "artifact" && event.relatedEntityId) {
+    jumpToSource({ type: "artifact", entityId: event.relatedEntityId, roomId: event.roomId });
     return;
   }
   if (event.topicId) {

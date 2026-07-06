@@ -72,6 +72,12 @@ export const ArtifactEffectSchema = z.object({
   sourceCitations: z.array(CitationEffectSchema).optional(),
 });
 
+export const ToolCallEffectSchema = z.object({
+  tool: z.string(),
+  mode: z.enum(["preview", "execute"]).optional(),
+  args: z.record(z.string(), z.unknown()).default({}),
+});
+
 export const MemorySuggestionEffectSchema = z.object({
   text: z.string(),
   reason: z.string().optional(),
@@ -89,6 +95,7 @@ export const EmployeeEffectsSchema = z.object({
   citations: z.array(CitationEffectSchema).default([]),
   artifacts: z.array(ArtifactEffectSchema).default([]),
   memorySuggestions: z.array(MemorySuggestionEffectSchema).default([]),
+  toolCalls: z.array(ToolCallEffectSchema).default([]),
   statusChange: z.enum(["idle", "working", "waiting_approval", "on_call", "blocked"]).optional(),
   handoffTo: z.array(z.string()).optional(),
   currentTask: z.string().optional(),

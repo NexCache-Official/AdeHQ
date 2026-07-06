@@ -139,11 +139,13 @@ export function AdminDataTable<T>({
   rows,
   rowKey,
   emptyLabel = "No data.",
+  onRowClick,
 }: {
   columns: AdminColumn<T>[];
   rows: T[];
   rowKey: (row: T) => string;
   emptyLabel?: string;
+  onRowClick?: (row: T) => void;
 }) {
   return (
     <Card className="overflow-hidden">
@@ -175,7 +177,11 @@ export function AdminDataTable<T>({
               rows.map((row) => (
                 <tr
                   key={rowKey(row)}
-                  className="border-b border-border-2 last:border-0 hover:bg-muted/50"
+                  className={cn(
+                    "border-b border-border-2 last:border-0 hover:bg-muted/50",
+                    onRowClick && "cursor-pointer",
+                  )}
+                  onClick={onRowClick ? () => onRowClick(row) : undefined}
                 >
                   {columns.map((col) => (
                     <td

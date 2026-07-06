@@ -192,7 +192,11 @@ export type MessageArtifact = {
     | "memory_suggestion"
     | "artifact"
     | "file"
-    | "search_sources";
+    | "search_sources"
+    | "crm_contact"
+    | "crm_deal"
+    | "crm_company"
+    | "tool_result";
   id: string;
   label: string;
   meta?: {
@@ -210,6 +214,9 @@ export type MessageArtifact = {
     sourceCount?: number;
     usedSourceCount?: number;
     excludedSourceCount?: number;
+    href?: string;
+    subtitle?: string;
+    email?: string;
     searchSources?: Array<{
       id: string;
       title: string;
@@ -233,6 +240,9 @@ export type MessageArtifact = {
     sourceArtifactId?: string;
     suggestionKey?: string;
     mayaArtifactKind?: string;
+    toolName?: string;
+    toolStatus?: "queued" | "failed" | "blocked" | "success";
+    error?: string;
   };
 };
 
@@ -648,12 +658,22 @@ export type MemoryEntry = {
 };
 
 export type ApprovalRisk = "low" | "medium" | "high";
-export type ApprovalStatus = "pending" | "approved" | "rejected";
+export type ApprovalStatus = "pending" | "approved" | "rejected" | "revision_requested";
 export type ApprovalActionType =
   | "tool_access"
   | "memory_pin"
   | "task_creation"
-  | "external_action";
+  | "external_action"
+  | "tool_execution";
+
+/** Human-readable preview stored on tool-execution approvals. */
+export type ApprovalPreviewSnapshot = {
+  title: string;
+  summary: string;
+  fields: Array<{ label: string; value: string }>;
+  risk: ApprovalRisk;
+  toolName?: string;
+};
 
 export type Approval = {
   id: string;
@@ -665,6 +685,13 @@ export type Approval = {
   risk: ApprovalRisk;
   status: ApprovalStatus;
   actionType: ApprovalActionType;
+  /** Tool-execution approvals: { tool, args, employeeId, roomId, topicId }. */
+  actionPayload?: Record<string, unknown>;
+  previewSnapshot?: ApprovalPreviewSnapshot;
+  revisionCount?: number;
+  resolutionNote?: string;
+  resolvedBy?: string;
+  executedToolRunId?: string;
   createdByRunId?: string;
   createdAt: string;
   resolvedAt?: string;
@@ -681,7 +708,7 @@ export type WorkLogEvent = {
   summary: string;
   toolUsed?: string;
   status: WorkLogStatus;
-  relatedEntityType?: "task" | "memory" | "approval" | "message" | "topic" | "file" | "artifact";
+  relatedEntityType?: "task" | "memory" | "approval" | "message" | "topic" | "file" | "artifact" | "contact" | "deal" | "company";
   relatedEntityId?: string;
   agentRunId?: string;
   createdAt: string;
@@ -885,6 +912,15 @@ export type MemorySuggestionEffect = {
   sourceArtifactId?: string;
 };
 
+/** Integration tool call emitted by an employee (Tool Execution Core). */
+export type ToolCallEffectItem = {
+  /** Fully-qualified tool name, e.g. "crm.createDeal". */
+  tool: string;
+  /** "execute" runs internal tools immediately; "preview" creates an approval card. */
+  mode?: "preview" | "execute";
+  args: Record<string, unknown>;
+};
+
 export type EmployeeResponseEffect = {
   workLog: Array<Partial<WorkLogEvent>>;
   tasks: Array<Partial<Task>>;
@@ -899,6 +935,7 @@ export type EmployeeResponseEffect = {
   citations?: FileCitationEffect[];
   artifacts?: ArtifactEffect[];
   memorySuggestions?: MemorySuggestionEffect[];
+  toolCalls?: ToolCallEffectItem[];
   statusChange?: EmployeeStatus;
   handoffTo?: string[];
   currentTask?: string;

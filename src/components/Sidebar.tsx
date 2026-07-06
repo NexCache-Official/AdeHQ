@@ -24,6 +24,7 @@ import {
 } from "./SidebarCollapsibleSection";
 import {
   Bot,
+  Briefcase,
   CheckSquare,
   Brain,
   ClipboardCheck,
@@ -48,6 +49,7 @@ import { useTheme } from "./ThemeProvider";
 
 const WORKFORCE_NAV = [
   { href: "/workforce", label: "AI Workforce", icon: Bot },
+  { href: "/crm", label: "CRM", icon: Briefcase },
   { href: "/tasks", label: "Tasks", icon: CheckSquare, badgeKey: "tasks" as const },
   { href: "/memory", label: "Memory", icon: Brain },
   { href: "/approvals", label: "Approvals", icon: ClipboardCheck, badgeKey: "approvals" as const },

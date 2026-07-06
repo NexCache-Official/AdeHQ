@@ -18,6 +18,7 @@ import {
   finalizeUsage,
 } from "@/lib/supabase/ai-runtime";
 import { loadTopicContext, persistEmployeeEffects } from "@/lib/server/room-messages";
+import { ensureDefaultEmployeeToolGrants } from "@/lib/integrations/permissions";
 import { assertTopicInRoom } from "@/lib/server/topic-helpers";
 import { assertRoomActive } from "@/lib/server/room-helpers";
 import {
@@ -210,8 +211,10 @@ export async function processQueuedAgentRun(
     const ctx = await loadTopicContext(client, workspaceId, roomId, topicId, {
       lean: true,
     });
-    const employee = ctx.employees.find((e) => e.id === employeeId);
-    if (!employee) throw new Error("Employee not found in this room.");
+    const roomEmployee = ctx.employees.find((e) => e.id === employeeId);
+    if (!roomEmployee) throw new Error("Employee not found in this room.");
+    // Seed default integration tool grants so the prompt lists usable tools.
+    const employee = await ensureDefaultEmployeeToolGrants(client, workspaceId, roomEmployee);
 
     const { data: triggerMsg } = await client
       .from("messages")

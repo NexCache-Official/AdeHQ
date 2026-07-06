@@ -19,6 +19,7 @@ import {
 } from "@/lib/server/file-context";
 import { inferArtifactsFromReply } from "@/lib/artifacts/intelligence";
 import { resolveRunModelMode } from "@/lib/ai/resolve-run-model-mode";
+import { ensureDefaultEmployeeToolGrants } from "@/lib/integrations/permissions";
 import {
   planEmployeeReplyShadowRun,
   recordEmployeeReplyShadowResult,
@@ -38,14 +39,18 @@ export async function processEmployeeResponse(
   content: string,
   options: ProcessEmployeeOptions = {},
 ): Promise<EmployeeResponse & { aiMessageId: string; aiMode: string; agentRunId?: string }> {
-  const employee = ctx.employees.find((e) => e.id === employeeId);
-  if (!employee) {
+  const roomEmployee = ctx.employees.find((e) => e.id === employeeId);
+  if (!roomEmployee) {
     throw new Error("Employee not found in this room.");
   }
 
   if (!ctx.room.aiEmployees.includes(employeeId)) {
     throw new Error("Employee is not a member of this room.");
   }
+
+  // Seed default integration tool grants for employees hired before the
+  // Integration Layer, so the prompt lists the tools they can actually use.
+  const employee = await ensureDefaultEmployeeToolGrants(client, ctx.workspaceId, roomEmployee);
 
   await client
     .from("ai_employees")

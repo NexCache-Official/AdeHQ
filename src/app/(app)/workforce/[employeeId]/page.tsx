@@ -16,6 +16,7 @@ import { cn, timeAgo } from "@/lib/utils";
 import { ENABLE_DEMO_MODE, normalizeLiveProvider } from "@/lib/config/features";
 import { EmployeeStatus } from "@/lib/types";
 import { EmployeeIntelligencePanel } from "@/components/workforce/EmployeeIntelligencePanel";
+import { EmployeeCapabilitiesPanel } from "@/components/workforce/EmployeeCapabilitiesPanel";
 import {
   applyIntelligencePolicyUpdate,
   formatEmployeeIntelligenceSummary,
@@ -39,7 +40,7 @@ export default function EmployeeProfilePage() {
   const params = useParams();
   const router = useRouter();
   const employeeId = params.employeeId as string;
-  const { state, actions } = useStore();
+  const { state, actions, backend } = useStore();
   const [editOpen, setEditOpen] = useState(false);
   const [taskOpen, setTaskOpen] = useState(false);
 
@@ -198,9 +199,21 @@ export default function EmployeeProfilePage() {
             />
           )}
 
-          {/* Tool backpack */}
+          {/* Tool capabilities */}
+          {!isMayaEmployee(employee) && (
+            <Card className="p-5">
+              <EmployeeCapabilitiesPanel
+                employee={employee}
+                workspaceId={state.workspace.id}
+                backend={backend}
+                onSave={(updated) => actions.updateEmployee(employee.id, { tools: updated.tools })}
+              />
+            </Card>
+          )}
+
+          {/* Tool backpack (read-only snapshot) */}
           <Card className="p-5">
-            <h2 className="mb-3 text-sm font-semibold text-slate-900">Tool backpack ({employee.tools.length})</h2>
+            <h2 className="mb-3 text-sm font-semibold text-slate-900">Connected tools ({employee.tools.length})</h2>
             {employee.tools.length === 0 ? (
               <p className="text-sm text-slate-500">No tools assigned yet.</p>
             ) : (
