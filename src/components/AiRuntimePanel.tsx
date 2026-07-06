@@ -96,12 +96,16 @@ type RuntimeSnapshot = {
     syncRuns: Array<Record<string, unknown>>;
   };
   routingPreview?: Array<{
+    label?: string;
     capability: string;
     providerRoute: string;
     modelId?: string;
+    gatewayProviderSlug?: string;
+    endpointKey?: string;
     runtimeMode: string;
     estimatedWorkMinutes: number;
     estimatedCostUsd?: number;
+    pinnedPolicy?: { policyKey: string; reason: string; gatewayFallbackApplied?: boolean };
     fallbackCandidates: string[];
     routeOptimizer?: Record<string, unknown>;
   }>;
@@ -603,18 +607,29 @@ export function AiRuntimePanel() {
       {snapshot?.routingPreview && snapshot.routingPreview.length > 0 && (
         <div className="mt-4">
           <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
-            Routing preview (admin)
+            Pinned route preview (V20.1.2)
           </h3>
           <div className="space-y-2 rounded-xl border border-slate-200 bg-slate-50 p-3">
             {snapshot.routingPreview.map((row) => (
-              <div key={row.capability} className="text-xs text-slate-600">
-                <span className="font-medium text-slate-800">{row.capability}</span>
-                {" · "}
-                route {row.providerRoute} · mode {row.runtimeMode} · ~
-                {row.estimatedWorkMinutes} shadow min
-                {row.fallbackCandidates.length
-                  ? ` · fallbacks ${row.fallbackCandidates.join(", ")}`
+              <div key={`${row.label ?? row.capability}-${row.modelId}`} className="text-xs text-slate-600">
+                <span className="font-medium text-slate-800">{row.label ?? row.capability}</span>
+                {" → "}
+                {row.providerRoute} / {row.modelId}
+                {row.gatewayProviderSlug && row.gatewayProviderSlug !== "default"
+                  ? ` / ${row.gatewayProviderSlug}`
                   : ""}
+                {row.pinnedPolicy?.reason && (
+                  <span className="ml-1 text-[11px] text-emerald-700">· {row.pinnedPolicy.reason}</span>
+                )}
+                {row.pinnedPolicy?.gatewayFallbackApplied && (
+                  <span className="ml-1 text-[11px] text-amber-700">· gateway fallback</span>
+                )}
+                {row.routeOptimizer && (row.routeOptimizer as { shadowOnly?: boolean }).shadowOnly && (
+                  <span className="ml-1 text-[11px] text-indigo-600">
+                    · optimizer shadow: would choose{" "}
+                    {(row.routeOptimizer as { selectedModelId?: string }).selectedModelId ?? "?"}
+                  </span>
+                )}
               </div>
             ))}
           </div>

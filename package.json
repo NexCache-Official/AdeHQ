@@ -33,6 +33,7 @@
     "test:route-optimizer": "tsx scripts/test-route-optimizer.ts",
     "test:provider-endpoint-pricing": "tsx scripts/test-provider-endpoint-pricing.ts",
     "test:vercel-gateway-provider-pin": "tsx scripts/test-vercel-gateway-provider-pin.ts",
+    "test:pinned-provider-policy": "tsx scripts/test-pinned-provider-policy.ts",
     "verify:model-capabilities": "tsx scripts/verify-model-capabilities.ts",
     "test:room-steward": "tsx scripts/test-room-steward.ts",
     "test:dm-steward": "tsx scripts/test-dm-steward-routing.ts",

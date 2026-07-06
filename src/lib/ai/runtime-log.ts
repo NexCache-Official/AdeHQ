@@ -4,7 +4,8 @@ import { routeCapability } from "@/lib/ai/runtime/capability-router";
 import { getRuntimeFlags } from "@/lib/ai/runtime/flags";
 import { readPriceMaxAgeHours } from "@/lib/ai/runtime/route-optimizer";
 import type { ModelEndpointOffer } from "@/lib/ai/runtime/pricing/types";
-import type { AiCapability } from "@/lib/ai/runtime/types";
+import type { AiCapability, RuntimeMode } from "@/lib/ai/runtime/types";
+import type { ModelMode } from "@/lib/ai/model-catalog";
 import {
   DEFAULT_PROVIDER,
   DEFAULT_SILICONFLOW_MODEL,
@@ -71,27 +72,46 @@ export function recordAiRuntime(entry: Omit<AiRuntimeLogEntry, "id" | "at">) {
   });
 }
 
-function buildRoutingPreview() {
+function buildRoutingPreview(catalogOffers?: ModelEndpointOffer[]) {
   const flags = getRuntimeFlags();
-  const capabilities: AiCapability[] = [
-    "structured_chat",
-    "summarization",
-    "embedding",
-    "classification",
+  const offers = catalogOffers?.length ? catalogOffers : staticCatalogOffers();
+
+  const scenarios: Array<{
+    label: string;
+    capability: AiCapability;
+    runtimeMode?: RuntimeMode;
+    modelMode?: ModelMode;
+  }> = [
+    { label: "cheap", capability: "quick_reply", runtimeMode: "efficient", modelMode: "cheap" },
+    { label: "balanced", capability: "structured_chat", runtimeMode: "balanced", modelMode: "balanced" },
+    { label: "strong", capability: "deep_reasoning", runtimeMode: "strong", modelMode: "strong" },
+    { label: "long_context", capability: "long_context", runtimeMode: "long_context", modelMode: "long_context" },
+    { label: "coding", capability: "coding", runtimeMode: "coding", modelMode: "coding" },
+    { label: "embedding", capability: "embedding", runtimeMode: "embedding" },
+    { label: "classification", capability: "classification", runtimeMode: "efficient", modelMode: "cheap" },
+    { label: "summarization", capability: "summarization", runtimeMode: "balanced", modelMode: "balanced" },
   ];
 
-  return capabilities.map((capability) => {
-    const route = routeCapability({ capability, catalogOffers: staticCatalogOffers() }, flags.providerPref);
+  return scenarios.map(({ label, capability, runtimeMode, modelMode }) => {
+    const route = routeCapability(
+      { capability, runtimeMode, modelMode, catalogOffers: offers },
+      flags.providerPref,
+    );
     return {
+      label,
       capability,
       providerRoute: route.providerRoute,
       modelId: route.modelId,
+      gatewayProviderSlug: route.gatewayProviderSlug,
+      endpointKey: route.endpointKey,
       runtimeMode: route.runtimeMode,
       estimatedWorkMinutes: route.estimatedWorkMinutes,
       estimatedCostUsd: route.estimatedCostUsd,
-      fallbackCandidates: route.fallbackCandidates.map(
-        (candidate) => `${candidate.providerRoute}/${candidate.modelId}`,
-      ),
+      pinnedPolicy: route.pinnedPolicy,
+      fallbackCandidates: route.fallbackCandidates.map((candidate) => {
+        const slug = candidate.gatewayProviderSlug ? `:${candidate.gatewayProviderSlug}` : "";
+        return `${candidate.providerRoute}/${candidate.modelId}${slug}`;
+      }),
       routeOptimizer: route.routeOptimizer,
     };
   });
@@ -163,19 +183,23 @@ function enrichStaticPreview(
   });
 
   if (!offer || !catalogMatch.found) {
+    const pinnedReason = route.pinnedPolicy?.reason;
     return {
-      reason: "static route (optimizer off); no catalog match",
+      reason: pinnedReason ?? "static route (optimizer off); no catalog match",
       priceSource: "manual_seed",
       priceFreshness: "missing",
       catalogMatch: { found: false },
     };
   }
 
+  const baseReason =
+    route.pinnedPolicy?.reason ??
+    (ambiguousCount > 1
+      ? `static route (optimizer off); catalog price matched (${ambiguousCount} endpoints, showing primary)`
+      : "static route (optimizer off); catalog price matched");
+
   return {
-    reason:
-      ambiguousCount > 1
-        ? `static route (optimizer off); catalog price matched (${ambiguousCount} endpoints, showing primary)`
-        : "static route (optimizer off); catalog price matched",
+    reason: baseReason,
     priceSource: offer.source,
     priceFreshness: catalogPriceFreshness(offer, maxAgeHours),
     catalogMatch,
@@ -286,7 +310,7 @@ export function getAiRuntimeSnapshot(catalogOffers?: ModelEndpointOffer[]) {
     employeeDirectExecution: flags.employeeDirectExecution,
     employeeQueuedExecution: flags.employeeQueuedExecution,
     priceMaxAgeHours: readPriceMaxAgeHours(),
-    routingPreview: buildRoutingPreview(),
+    routingPreview: buildRoutingPreview(catalogOffersResolved),
     optimizerPreview: buildOptimizerPreview(undefined, catalogOffersResolved),
     catalogSummary: {
       offerCount: catalogOffersResolved.length,

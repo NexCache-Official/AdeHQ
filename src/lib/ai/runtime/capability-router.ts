@@ -1,7 +1,6 @@
 import {
   estimateCost,
   normalizeModelMode,
-  resolveModel,
   type ModelMode,
 } from "@/lib/ai/model-catalog";
 import { isSiliconFlowConfigured } from "@/lib/config/features";
@@ -11,9 +10,13 @@ import {
 } from "./adapters/vercel-models";
 import { resolveSiliconFlowRuntimeModel } from "./adapters/siliconflow";
 import { staticCatalogOffers } from "./catalog/loader";
-import { findCatalogModelsForCapability } from "./catalog/seed";
 import { getRuntimeFlags, isRouteOptimizerOn, isRouteOptimizerShadow } from "./flags";
 import type { ModelEndpointOffer } from "./pricing/types";
+import {
+  buildPinnedFallbackCandidates,
+  pinnedPolicyKeyForCapability,
+  resolvePinnedPolicyRouteByKey,
+} from "./provider-policy";
 import { isMockFallbackAllowed, selectBestModelOffer } from "./route-optimizer";
 import { buildTaskRoutingBrief } from "./task-routing-brief";
 import { estimateWorkMinutesFromCost } from "../work-hours/estimate";
@@ -113,30 +116,6 @@ function pickProviderRoute(
   if (isSiliconFlowConfigured()) return "siliconflow_direct";
   if (isVercelGatewayConfigured()) return "vercel_gateway";
   return "mock";
-}
-
-function pickModelId(
-  capability: AiCapability,
-  runtimeMode: RuntimeMode,
-  modelMode: ModelMode,
-  providerRoute: ProviderRoute,
-  explicitModel?: string,
-): string {
-  if (explicitModel?.trim()) return explicitModel.trim();
-
-  if (providerRoute === "vercel_gateway") {
-    return resolveVercelGatewayModelId({ runtimeMode, capability });
-  }
-
-  const catalogMatches = findCatalogModelsForCapability(
-    capability,
-    providerRoute === "mock" ? undefined : providerRoute,
-  );
-  if (catalogMatches.length > 0) {
-    return catalogMatches[0]!.modelId;
-  }
-
-  return resolveModel(providerRoute === "mock" ? "mock" : "siliconflow", modelMode);
 }
 
 function providerNameForRoute(
@@ -306,6 +285,47 @@ function mapFallbackCandidate(o: ModelEndpointOffer): CapabilityRouteDecision["f
   };
 }
 
+function buildPinnedBaseDecision(
+  input: CapabilityRouteInput,
+  providerPref: RuntimeProviderPref,
+): CapabilityRouteDecision {
+  const runtimeMode = input.runtimeMode ?? capabilityDefaultRuntimeMode(input.capability);
+  const modelMode = runtimeModeToModelMode(runtimeMode, input.modelMode);
+  const policyKey = pinnedPolicyKeyForCapability(input.capability, modelMode, runtimeMode);
+  const pinned = resolvePinnedPolicyRouteByKey(policyKey, { providerPref });
+  const reasoningProfile = reasoningForCapability(input.capability);
+
+  const inputTokens = inputTokensFromInput(input);
+  const outputTokens = outputTokensFromInput(input);
+  const estimatedCostUsd = estimateCost(pinned.modelId, inputTokens, outputTokens);
+  const estimatedWorkMinutes = estimateWorkMinutes(estimatedCostUsd);
+
+  const fallbackCandidates = buildPinnedFallbackCandidates(policyKey, pinned);
+
+  return {
+    providerRoute: pinned.providerRoute,
+    providerName: providerNameForRoute(
+      pinned.providerRoute,
+      input.capability,
+      input.researchProvider,
+    ),
+    modelId: pinned.modelId,
+    gatewayProviderSlug: pinned.gatewayProviderSlug ?? undefined,
+    endpointKey: pinned.endpointKey,
+    runtimeMode,
+    capability: input.capability,
+    reasoningProfile,
+    estimatedCostUsd,
+    estimatedWorkMinutes,
+    fallbackCandidates,
+    pinnedPolicy: {
+      policyKey,
+      reason: pinned.reason,
+      gatewayFallbackApplied: pinned.gatewayFallbackApplied,
+    },
+  };
+}
+
 function applyRouteOptimizer(
   decision: CapabilityRouteDecision,
   input: CapabilityRouteInput,
@@ -405,58 +425,6 @@ export function routeCapability(
     return routeBrowserResearchCapability(input, providerPref);
   }
 
-  const runtimeMode = input.runtimeMode ?? capabilityDefaultRuntimeMode(input.capability);
-  const modelMode = runtimeModeToModelMode(runtimeMode, input.modelMode);
-  const providerRoute = pickProviderRoute(providerPref, input.capability);
-  const modelId = pickModelId(
-    input.capability,
-    runtimeMode,
-    modelMode,
-    providerRoute,
-  );
-  const reasoningProfile = reasoningForCapability(input.capability);
-
-  const promptLen = input.message?.length ?? 256;
-  const inputTokens = Math.max(50, Math.ceil(promptLen / 4));
-  const outputTokens = input.needsLongContext ? 2000 : 800;
-  const estimatedCostUsd = estimateCost(modelId, inputTokens, outputTokens);
-
-  const estimatedWorkMinutes = estimateWorkMinutes(estimatedCostUsd);
-
-  const fallbackCandidates: CapabilityRouteDecision["fallbackCandidates"] = [];
-  if (providerRoute === "siliconflow_direct") {
-    if (isVercelGatewayConfigured()) {
-      fallbackCandidates.push({
-        providerRoute: "vercel_gateway",
-        modelId: resolveVercelGatewayModelId({ runtimeMode, capability: input.capability }),
-      });
-    }
-    if (isMockFallbackAllowed()) {
-      fallbackCandidates.push({ providerRoute: "mock", modelId: "mock/runtime-v2" });
-    }
-  } else if (providerRoute === "vercel_gateway") {
-    if (isSiliconFlowConfigured()) {
-      fallbackCandidates.push({
-        providerRoute: "siliconflow_direct",
-        modelId: resolveModel("siliconflow", modelMode),
-      });
-    }
-    if (isMockFallbackAllowed()) {
-      fallbackCandidates.push({ providerRoute: "mock", modelId: "mock/runtime-v2" });
-    }
-  }
-
-  const baseDecision: CapabilityRouteDecision = {
-    providerRoute,
-    providerName: providerNameForRoute(providerRoute, input.capability, input.researchProvider),
-    modelId,
-    runtimeMode,
-    capability: input.capability,
-    reasoningProfile,
-    estimatedCostUsd,
-    estimatedWorkMinutes,
-    fallbackCandidates,
-  };
-
+  const baseDecision = buildPinnedBaseDecision(input, providerPref);
   return applyRouteOptimizer(baseDecision, input, providerPref);
 }

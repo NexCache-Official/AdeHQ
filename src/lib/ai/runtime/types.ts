@@ -187,6 +187,11 @@ export type CapabilityRouteDecision = {
     gatewayProviderSlug?: string;
     endpointKey?: string;
   }>;
+  pinnedPolicy?: {
+    policyKey: string;
+    reason: string;
+    gatewayFallbackApplied?: boolean;
+  };
   routeOptimizer?: {
     selectedProviderRoute: ProviderRoute;
     selectedModelId: string;
