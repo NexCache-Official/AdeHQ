@@ -90,14 +90,16 @@ export async function ensureGeneralTopic(
   workspaceId: string,
   roomId: string,
 ): Promise<RoomTopic> {
-  const { data: existing, error: findError } = await client
+  const { data: existingRows, error: findError } = await client
     .from("topics")
     .select("*")
     .eq("workspace_id", workspaceId)
     .eq("room_id", roomId)
     .ilike("title", "general")
-    .maybeSingle();
+    .neq("status", "archived")
+    .limit(1);
   if (findError) throw findError;
+  const existing = existingRows?.[0];
   if (existing) {
     const topic = topicFromRow(existing as DbRow);
     await ensureTopicMembersFromRoom(client, workspaceId, roomId, topic.id);
@@ -116,7 +118,29 @@ export async function ensureGeneralTopic(
     })
     .select("*")
     .single();
-  if (createError) throw createError;
+
+  if (createError) {
+    // Race or legacy global unique index — re-fetch if another row won the insert.
+    if (createError.code === "23505") {
+      const { data: raced, error: racedError } = await client
+        .from("topics")
+        .select("*")
+        .eq("workspace_id", workspaceId)
+        .eq("room_id", roomId)
+        .ilike("title", "general")
+        .neq("status", "archived")
+        .limit(1)
+        .maybeSingle();
+      if (racedError) throw racedError;
+      if (raced) {
+        const topic = topicFromRow(raced as DbRow);
+        await ensureTopicMembersFromRoom(client, workspaceId, roomId, topic.id);
+        return topic;
+      }
+    }
+    throw createError;
+  }
+
   const topic = topicFromRow(created as DbRow);
   await ensureTopicMembersFromRoom(client, workspaceId, roomId, topic.id);
   return topic;

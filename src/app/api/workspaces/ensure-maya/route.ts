@@ -54,6 +54,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: error.status });
     }
     console.error("[AdeHQ ensure-maya]", error);
-    return NextResponse.json({ error: "Unable to ensure Maya." }, { status: 500 });
+    const detail =
+      error &&
+      typeof error === "object" &&
+      "message" in error &&
+      typeof (error as { message: string }).message === "string"
+        ? (error as { message: string }).message
+        : undefined;
+    return NextResponse.json(
+      { error: "Unable to ensure Maya.", detail: process.env.NODE_ENV === "development" ? detail : undefined },
+      { status: 500 },
+    );
   }
 }
