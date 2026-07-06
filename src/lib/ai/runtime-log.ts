@@ -1,7 +1,9 @@
-import { staticCatalogOffers } from "@/lib/ai/runtime/catalog/loader";
+import { staticCatalogOffers, resolveCatalogOfferForRoute, catalogPriceFreshness } from "@/lib/ai/runtime/catalog/loader";
+import { buildCatalogMatchPreview } from "@/lib/ai/runtime/catalog/preview-match";
 import { routeCapability } from "@/lib/ai/runtime/capability-router";
 import { getRuntimeFlags } from "@/lib/ai/runtime/flags";
 import { readPriceMaxAgeHours } from "@/lib/ai/runtime/route-optimizer";
+import type { ModelEndpointOffer } from "@/lib/ai/runtime/pricing/types";
 import type { AiCapability } from "@/lib/ai/runtime/types";
 import {
   DEFAULT_PROVIDER,
@@ -95,38 +97,181 @@ function buildRoutingPreview() {
   });
 }
 
-export function buildOptimizerPreview(params?: {
-  capability?: AiCapability;
-  runtimeMode?: string;
-  routingPreference?: "auto" | "cost_saver" | "quality_first" | "fastest";
-}) {
+export type OptimizerPreviewSnapshot = {
+  selected: string;
+  reason: string;
+  estimatedCostUsd: number;
+  fallbacks: Array<{ providerRoute: string; modelId: string; gatewayProviderSlug?: string; endpointKey?: string }>;
+  priceSource: string;
+  priceFreshness: string;
+  healthNote?: string;
+  shadowOnly?: boolean;
+  optimizerWouldChoose?: string;
+  optimizerReason?: string;
+  optimizerEstimatedCostUsd?: number;
+  catalogMatch?: {
+    found: boolean;
+    endpointKey?: string;
+    inputCostPerMillion?: number;
+    outputCostPerMillion?: number;
+    source?: string;
+    verifiedAt?: string;
+    priceFetchedAt?: string | null;
+    ambiguousEndpointCount?: number;
+  };
+  optimizerCatalogMatch?: OptimizerPreviewSnapshot["catalogMatch"];
+  decisionFactors?: {
+    costRank: number;
+    qualityRank: number;
+    latencyRank: number;
+    reliabilityRank: number;
+    healthPenalty: number;
+    stalePricePenalty: number;
+    antiFlapApplied: boolean;
+  };
+};
+
+function formatRouteLabel(
+  providerRoute: string,
+  modelId: string,
+  gatewayProviderSlug?: string,
+): string {
+  const slug = gatewayProviderSlug && gatewayProviderSlug !== "default" ? ` (${gatewayProviderSlug})` : "";
+  return `${providerRoute} / ${modelId}${slug}`;
+}
+
+function enrichStaticPreview(
+  route: ReturnType<typeof routeCapability>,
+  offers: ModelEndpointOffer[],
+  maxAgeHours: number,
+): Pick<
+  OptimizerPreviewSnapshot,
+  "reason" | "priceSource" | "priceFreshness" | "catalogMatch"
+> {
+  const { offer, ambiguousCount } = resolveCatalogOfferForRoute(offers, {
+    providerRoute: route.providerRoute,
+    modelId: route.modelId,
+    gatewayProviderSlug: route.gatewayProviderSlug,
+    endpointKey: route.endpointKey,
+  });
+
+  const catalogMatch = buildCatalogMatchPreview(offers, {
+    providerRoute: route.providerRoute,
+    modelId: route.modelId,
+    gatewayProviderSlug: route.gatewayProviderSlug,
+    endpointKey: route.endpointKey,
+  });
+
+  if (!offer || !catalogMatch.found) {
+    return {
+      reason: "static route (optimizer off); no catalog match",
+      priceSource: "manual_seed",
+      priceFreshness: "missing",
+      catalogMatch: { found: false },
+    };
+  }
+
+  return {
+    reason:
+      ambiguousCount > 1
+        ? `static route (optimizer off); catalog price matched (${ambiguousCount} endpoints, showing primary)`
+        : "static route (optimizer off); catalog price matched",
+    priceSource: offer.source,
+    priceFreshness: catalogPriceFreshness(offer, maxAgeHours),
+    catalogMatch,
+  };
+}
+
+export function buildOptimizerPreview(
+  params?: {
+    capability?: AiCapability;
+    runtimeMode?: string;
+    routingPreference?: "auto" | "cost_saver" | "quality_first" | "fastest";
+  },
+  catalogOffers?: ModelEndpointOffer[],
+): OptimizerPreviewSnapshot {
   const capability = params?.capability ?? "structured_chat";
+  const offers = catalogOffers?.length ? catalogOffers : staticCatalogOffers();
+  const maxAgeHours = readPriceMaxAgeHours();
   const route = routeCapability(
     {
       capability,
       runtimeMode: (params?.runtimeMode as "balanced") ?? "balanced",
       routingPreference: params?.routingPreference ?? "auto",
-      catalogOffers: staticCatalogOffers(),
+      catalogOffers: offers,
     },
     getRuntimeFlags().providerPref,
   );
 
-  return {
-    selected: `${route.providerRoute} / ${route.modelId}`,
-    reason: route.routeOptimizer?.reason ?? "static route (optimizer off)",
+  const opt = route.routeOptimizer;
+  const base = {
+    selected: formatRouteLabel(route.providerRoute, route.modelId, route.gatewayProviderSlug),
     estimatedCostUsd: route.estimatedCostUsd,
-    fallbacks: route.routeOptimizer?.fallbackCandidates ?? route.fallbackCandidates,
-    decisionFactors: route.routeOptimizer?.decisionFactors,
-    priceSource: route.routeOptimizer?.priceSource ?? "manual_seed",
-    priceFreshness: route.routeOptimizer?.priceFreshness ?? "missing",
-    healthNote: route.routeOptimizer?.healthNote,
-    shadowOnly: route.routeOptimizer?.shadowOnly ?? false,
+    fallbacks: (opt?.fallbackCandidates ?? route.fallbackCandidates) as OptimizerPreviewSnapshot["fallbacks"],
+    decisionFactors: opt?.decisionFactors,
+    healthNote: opt?.healthNote,
+    shadowOnly: opt?.shadowOnly ?? false,
+  };
+
+  if (opt?.shadowOnly) {
+    const staticEnriched = enrichStaticPreview(route, offers, maxAgeHours);
+    const optimizerCatalogMatch = buildCatalogMatchPreview(offers, {
+      providerRoute: opt.selectedProviderRoute,
+      modelId: opt.selectedModelId,
+      gatewayProviderSlug: opt.selectedGatewayProviderSlug,
+      endpointKey: opt.selectedEndpointKey,
+    });
+    return {
+      ...base,
+      reason: "static route (optimizer shadow)",
+      priceSource: staticEnriched.priceSource,
+      priceFreshness: staticEnriched.priceFreshness,
+      catalogMatch: staticEnriched.catalogMatch,
+      optimizerWouldChoose: formatRouteLabel(
+        opt.selectedProviderRoute,
+        opt.selectedModelId,
+        opt.selectedGatewayProviderSlug,
+      ),
+      optimizerReason: opt.reason,
+      optimizerEstimatedCostUsd: opt.estimatedCostUsd,
+      optimizerCatalogMatch,
+    };
+  }
+
+  if (opt && !opt.shadowOnly) {
+    return {
+      ...base,
+      selected: formatRouteLabel(
+        opt.selectedProviderRoute,
+        opt.selectedModelId,
+        opt.selectedGatewayProviderSlug,
+      ),
+      reason: opt.reason,
+      estimatedCostUsd: opt.estimatedCostUsd,
+      priceSource: opt.priceSource,
+      priceFreshness: opt.priceFreshness,
+      catalogMatch: buildCatalogMatchPreview(offers, {
+        providerRoute: opt.selectedProviderRoute,
+        modelId: opt.selectedModelId,
+        gatewayProviderSlug: opt.selectedGatewayProviderSlug,
+        endpointKey: opt.selectedEndpointKey,
+      }),
+    };
+  }
+
+  const staticEnriched = enrichStaticPreview(route, offers, maxAgeHours);
+  return {
+    ...base,
+    reason: staticEnriched.reason,
+    priceSource: staticEnriched.priceSource,
+    priceFreshness: staticEnriched.priceFreshness,
+    catalogMatch: staticEnriched.catalogMatch,
   };
 }
 
-export function getAiRuntimeSnapshot() {
+export function getAiRuntimeSnapshot(catalogOffers?: ModelEndpointOffer[]) {
   const flags = getRuntimeFlags();
-  const catalogOffers = staticCatalogOffers();
+  const catalogOffersResolved = catalogOffers?.length ? catalogOffers : staticCatalogOffers();
 
   return {
     siliconflowConfigured: isSiliconFlowConfigured(),
@@ -142,10 +287,10 @@ export function getAiRuntimeSnapshot() {
     employeeQueuedExecution: flags.employeeQueuedExecution,
     priceMaxAgeHours: readPriceMaxAgeHours(),
     routingPreview: buildRoutingPreview(),
-    optimizerPreview: buildOptimizerPreview(),
+    optimizerPreview: buildOptimizerPreview(undefined, catalogOffersResolved),
     catalogSummary: {
-      offerCount: catalogOffers.length,
-      enabledCount: catalogOffers.filter((o) => o.enabled).length,
+      offerCount: catalogOffersResolved.length,
+      enabledCount: catalogOffersResolved.filter((o) => o.enabled).length,
     },
     last: lastEntry,
     recent: entries.slice(0, 12),

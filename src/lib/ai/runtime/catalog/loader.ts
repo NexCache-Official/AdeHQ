@@ -4,7 +4,7 @@ import { withEndpointKey } from "../pricing/endpoint-key";
 import { buildVercelEndpointOverrides } from "../pricing/vercel-endpoint-overrides";
 import { STATIC_MODEL_CATALOG, type CatalogModelEntry } from "./seed";
 import { listCatalogOffersFromDb } from "@/lib/supabase/model-catalog";
-import type { ModelEndpointOffer } from "../pricing/types";
+import type { ModelEndpointOffer, PriceSource } from "../pricing/types";
 
 const DEFAULT_TTL_MS = 300_000;
 
@@ -90,6 +90,82 @@ export async function loadEnabledOffers(client?: SupabaseClient | null): Promise
   cachedOffers = fallback;
   cachedAt = now;
   return fallback;
+}
+
+const SOURCE_PRIORITY: Record<PriceSource, number> = {
+  manual_override: 4,
+  vercel_api: 3,
+  siliconflow_api: 3,
+  manual_seed: 1,
+};
+
+export type CatalogRouteMatch = {
+  offer: ModelEndpointOffer | null;
+  ambiguousCount: number;
+};
+
+/** Resolve a static route against catalog offers for admin preview (does not affect routing). */
+export function resolveCatalogOfferForRoute(
+  offers: ModelEndpointOffer[],
+  route: {
+    providerRoute: string;
+    modelId: string;
+    gatewayProviderSlug?: string;
+    endpointKey?: string;
+  },
+): CatalogRouteMatch {
+  if (!offers.length) return { offer: null, ambiguousCount: 0 };
+
+  if (route.endpointKey) {
+    const exact = offers.find((o) => o.endpointKey === route.endpointKey);
+    if (exact) return { offer: exact, ambiguousCount: 1 };
+  }
+
+  if (route.gatewayProviderSlug) {
+    const slugMatch = getOfferFromCache(
+      route.providerRoute,
+      route.modelId,
+      offers,
+      route.gatewayProviderSlug,
+    );
+    if (slugMatch) return { offer: slugMatch, ambiguousCount: 1 };
+  }
+
+  const matches = offers.filter(
+    (o) =>
+      o.providerRoute === route.providerRoute &&
+      o.modelId === route.modelId &&
+      o.enabled !== false,
+  );
+  if (matches.length === 0) return { offer: null, ambiguousCount: 0 };
+  if (matches.length === 1) return { offer: matches[0]!, ambiguousCount: 1 };
+
+  const defaultMatch = matches.find((o) => (o.gatewayProviderSlug ?? "default") === "default");
+  if (defaultMatch) return { offer: defaultMatch, ambiguousCount: matches.length };
+
+  const sorted = [...matches].sort((a, b) => {
+    const pa = SOURCE_PRIORITY[a.source] ?? 0;
+    const pb = SOURCE_PRIORITY[b.source] ?? 0;
+    if (pb !== pa) return pb - pa;
+    return (a.inputCostPerMillion ?? 999) - (b.inputCostPerMillion ?? 999);
+  });
+  return { offer: sorted[0]!, ambiguousCount: matches.length };
+}
+
+export function catalogPriceFreshness(
+  offer: ModelEndpointOffer,
+  maxAgeHours: number,
+): "fresh" | "stale" | "missing" {
+  if (offer.inputCostPerMillion == null || offer.outputCostPerMillion == null) return "missing";
+  if (!offer.priceFetchedAt) {
+    return offer.source === "manual_override" ||
+      offer.source === "vercel_api" ||
+      offer.source === "siliconflow_api"
+      ? "fresh"
+      : "stale";
+  }
+  const ageMs = Date.now() - new Date(offer.priceFetchedAt).getTime();
+  return ageMs <= maxAgeHours * 3_600_000 ? "fresh" : "stale";
 }
 
 export function getOfferFromCache(

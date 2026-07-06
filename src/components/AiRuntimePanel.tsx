@@ -27,11 +27,32 @@ type RuntimeSnapshot = {
     selected: string;
     reason: string;
     estimatedCostUsd: number;
-    fallbacks: Array<{ providerRoute: string; modelId: string }>;
+    fallbacks: Array<{ providerRoute: string; modelId: string; gatewayProviderSlug?: string; endpointKey?: string }>;
     priceSource: string;
     priceFreshness: string;
     healthNote?: string;
     shadowOnly?: boolean;
+    optimizerWouldChoose?: string;
+    optimizerReason?: string;
+    optimizerEstimatedCostUsd?: number;
+    catalogMatch?: {
+      found: boolean;
+      endpointKey?: string;
+      inputCostPerMillion?: number;
+      outputCostPerMillion?: number;
+      source?: string;
+      verifiedAt?: string;
+      priceFetchedAt?: string | null;
+      ambiguousEndpointCount?: number;
+    };
+    optimizerCatalogMatch?: {
+      found: boolean;
+      endpointKey?: string;
+      inputCostPerMillion?: number;
+      outputCostPerMillion?: number;
+      source?: string;
+      verifiedAt?: string;
+    };
     decisionFactors?: {
       costRank: number;
       qualityRank: number;
@@ -124,6 +145,28 @@ export function AiRuntimePanel() {
   const [providerTestBusy, setProviderTestBusy] = useState(false);
   const [syncBusy, setSyncBusy] = useState(false);
   const [syncResult, setSyncResult] = useState<string | null>(null);
+  const [catalogFilter, setCatalogFilter] = useState("");
+
+  const filteredCatalogOffers = useMemo(() => {
+    const offers = snapshot?.catalog?.offers ?? [];
+    const q = catalogFilter.trim().toLowerCase();
+    if (!q) return offers;
+    return offers.filter((offer) => {
+      const haystack = [
+        offer.endpointKey,
+        offer.providerRoute,
+        offer.gatewayProviderSlug,
+        offer.modelId,
+        offer.displayName,
+        offer.providerDisplayName,
+        offer.source,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      return haystack.includes(q);
+    });
+  }, [snapshot?.catalog?.offers, catalogFilter]);
 
   const canAdmin =
     backend === "supabase" &&
@@ -322,14 +365,73 @@ export function AiRuntimePanel() {
               <span className="font-medium text-slate-800">Reason:</span>{" "}
               {snapshot.optimizerPreview.reason}
             </div>
+            {snapshot.optimizerPreview.optimizerWouldChoose && (
+              <>
+                <div>
+                  <span className="font-medium text-slate-800">Optimizer would choose:</span>{" "}
+                  {snapshot.optimizerPreview.optimizerWouldChoose}
+                </div>
+                {snapshot.optimizerPreview.optimizerReason && (
+                  <div>
+                    <span className="font-medium text-slate-800">Optimizer reason:</span>{" "}
+                    {snapshot.optimizerPreview.optimizerReason}
+                  </div>
+                )}
+                {snapshot.optimizerPreview.optimizerEstimatedCostUsd != null && (
+                  <div>
+                    <span className="font-medium text-slate-800">Optimizer est. cost:</span> $
+                    {snapshot.optimizerPreview.optimizerEstimatedCostUsd.toFixed(6)}
+                  </div>
+                )}
+              </>
+            )}
             <div>
               <span className="font-medium text-slate-800">Est. cost:</span> $
               {snapshot.optimizerPreview.estimatedCostUsd.toFixed(6)}
             </div>
             <div>
-              <span className="font-medium text-slate-800">Price:</span>{" "}
+              <span className="font-medium text-slate-800">Price source:</span>{" "}
               {snapshot.optimizerPreview.priceSource} ({snapshot.optimizerPreview.priceFreshness})
             </div>
+            {snapshot.optimizerPreview.catalogMatch?.found ? (
+              <div className="mt-1 rounded-lg border border-emerald-200 bg-emerald-50 p-2 text-emerald-900">
+                <div className="font-medium">Catalog match</div>
+                <div>
+                  {snapshot.optimizerPreview.catalogMatch.endpointKey}
+                </div>
+                <div>
+                  ${snapshot.optimizerPreview.catalogMatch.inputCostPerMillion ?? "?"} / $
+                  {snapshot.optimizerPreview.catalogMatch.outputCostPerMillion ?? "?"} ·{" "}
+                  {snapshot.optimizerPreview.catalogMatch.source}
+                </div>
+                {snapshot.optimizerPreview.catalogMatch.verifiedAt && (
+                  <div>verified {snapshot.optimizerPreview.catalogMatch.verifiedAt}</div>
+                )}
+                {snapshot.optimizerPreview.catalogMatch.ambiguousEndpointCount != null && (
+                  <div>
+                    {snapshot.optimizerPreview.catalogMatch.ambiguousEndpointCount} endpoints share
+                    this model — showing primary row
+                  </div>
+                )}
+              </div>
+            ) : (
+              snapshot.optimizerPreview.catalogMatch && (
+                <div className="mt-1 text-[11px] text-slate-500">
+                  No matching catalog endpoint row for this static route.
+                </div>
+              )
+            )}
+            {snapshot.optimizerPreview.optimizerCatalogMatch?.found && (
+              <div className="mt-1 rounded-lg border border-indigo-200 bg-indigo-50 p-2 text-indigo-900">
+                <div className="font-medium">Optimizer catalog match</div>
+                <div>{snapshot.optimizerPreview.optimizerCatalogMatch.endpointKey}</div>
+                <div>
+                  ${snapshot.optimizerPreview.optimizerCatalogMatch.inputCostPerMillion ?? "?"} / $
+                  {snapshot.optimizerPreview.optimizerCatalogMatch.outputCostPerMillion ?? "?"} ·{" "}
+                  {snapshot.optimizerPreview.optimizerCatalogMatch.source}
+                </div>
+              </div>
+            )}
             {snapshot.optimizerPreview.healthNote && (
               <div>
                 <span className="font-medium text-slate-800">Health:</span>{" "}
@@ -396,6 +498,18 @@ export function AiRuntimePanel() {
             </Button>
           </div>
           {syncResult && <p className="mb-2 text-xs text-slate-500">{syncResult}</p>}
+          <input
+            type="search"
+            className="input-field mb-2 text-xs"
+            placeholder="Filter endpoints (e.g. vercel_gateway, deepseek-v4-pro, blackbox)"
+            value={catalogFilter}
+            onChange={(e) => setCatalogFilter(e.target.value)}
+          />
+          {catalogFilter.trim() && (
+            <p className="mb-2 text-[11px] text-slate-500">
+              Showing {filteredCatalogOffers.length} of {snapshot.catalog.offers.length} endpoints
+            </p>
+          )}
           {snapshot.catalog.syncRuns?.length > 0 && (
             <div className="mb-2 text-[11px] text-slate-500">
               Last sync:{" "}
@@ -417,7 +531,7 @@ export function AiRuntimePanel() {
                 </tr>
               </thead>
               <tbody>
-                {snapshot.catalog.offers.slice(0, 48).map((offer) => {
+                {filteredCatalogOffers.slice(0, 80).map((offer) => {
                   const key = offer.endpointKey ?? `${offer.providerRoute}:${offer.modelId}`;
                   return (
                     <tr key={key} className="border-t border-slate-200">
