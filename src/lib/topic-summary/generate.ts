@@ -438,27 +438,37 @@ export async function loadTopicSummaryGenerationContext(
     workLogsQuery = workLogsQuery.gte("created_at", chatClearedAt);
   }
 
+  let tasksQuery = client
+    .from("tasks")
+    .select("title, status, priority, created_at")
+    .eq("workspace_id", workspaceId)
+    .eq("topic_id", topicId)
+    .limit(20);
+  let memoryQuery = client
+    .from("memory_entries")
+    .select("title, content, status, created_at")
+    .eq("workspace_id", workspaceId)
+    .eq("topic_id", topicId)
+    .limit(12);
+  let approvalsQuery = client
+    .from("approvals")
+    .select("title, status, risk, created_at")
+    .eq("workspace_id", workspaceId)
+    .eq("topic_id", topicId)
+    .limit(10);
+
+  if (chatClearedAt) {
+    tasksQuery = tasksQuery.gte("created_at", chatClearedAt);
+    memoryQuery = memoryQuery.gte("created_at", chatClearedAt);
+    approvalsQuery = approvalsQuery.gte("created_at", chatClearedAt);
+  }
+
   const [messagesResult, tasksResult, memoryResult, approvalsResult, logsResult, employeesResult] =
     await Promise.all([
       messagesQuery,
-      client
-        .from("tasks")
-        .select("title, status, priority")
-        .eq("workspace_id", workspaceId)
-        .eq("topic_id", topicId)
-        .limit(20),
-      client
-        .from("memory_entries")
-        .select("title, content, status")
-        .eq("workspace_id", workspaceId)
-        .eq("topic_id", topicId)
-        .limit(12),
-      client
-        .from("approvals")
-        .select("title, status, risk")
-        .eq("workspace_id", workspaceId)
-        .eq("topic_id", topicId)
-        .limit(10),
+      tasksQuery,
+      memoryQuery,
+      approvalsQuery,
       workLogsQuery,
       client
         .from("ai_employees")

@@ -162,20 +162,55 @@ async function purgeTopicSummaryRecord(
   workspaceId: string,
   topicId: string,
 ): Promise<void> {
-  await client
-    .from("topic_summaries")
-    .delete()
-    .eq("workspace_id", workspaceId)
-    .eq("topic_id", topicId)
-    .then(({ error }) => {
-      if (error && !String(error.message).includes("does not exist")) throw error;
-    });
+  const { error: rpcError } = await client.rpc("purge_topic_workstream_summary", {
+    p_workspace_id: workspaceId,
+    p_topic_id: topicId,
+  });
+  if (!rpcError) return;
 
-  await client
+  const rpcMissing =
+    rpcError.message.includes("does not exist") ||
+    rpcError.message.includes("Could not find the function");
+  if (!rpcMissing) throw rpcError;
+
+  const { error: deleteError, count } = await client
+    .from("topic_summaries")
+    .delete({ count: "exact" })
+    .eq("workspace_id", workspaceId)
+    .eq("topic_id", topicId);
+  if (deleteError && !String(deleteError.message).includes("does not exist")) {
+    throw deleteError;
+  }
+
+  const { error: topicError } = await client
     .from("topics")
     .update({ summary: null, pinned_summary: null, updated_at: nowISO() })
     .eq("workspace_id", workspaceId)
     .eq("id", topicId);
+  if (topicError) throw topicError;
+
+  if ((count ?? 0) > 0) {
+    const { count: remaining, error: verifyError } = await client
+      .from("topic_summaries")
+      .select("id", { count: "exact", head: true })
+      .eq("workspace_id", workspaceId)
+      .eq("topic_id", topicId);
+    if (verifyError) throw verifyError;
+    if ((remaining ?? 0) > 0) {
+      throw new Error(
+        `Failed to purge topic summary for topic ${topicId}: ${remaining} row(s) remain.`,
+      );
+    }
+  }
+}
+
+/** Hard-delete durable summary state for a topic (topic_summaries + legacy topics.summary). */
+export async function purgeTopicSummaryForTopic(
+  client: SupabaseClient,
+  workspaceId: string,
+  topicId: string,
+): Promise<void> {
+  await purgeTopicSummaryRecord(client, workspaceId, topicId);
 }
 
 export async function markTopicChatCleared(

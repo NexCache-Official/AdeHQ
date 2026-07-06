@@ -46,6 +46,30 @@ function createFakeClient(state: {
   };
 
   const client = {
+    rpc(fn: string, args: Record<string, unknown>) {
+      if (fn === "purge_topic_workstream_summary") {
+        const workspaceId = String(args.p_workspace_id);
+        const topicId = String(args.p_topic_id);
+        const summaryRows = tables.topic_summaries ?? [];
+        for (let i = summaryRows.length - 1; i >= 0; i -= 1) {
+          const row = summaryRows[i];
+          if (row.workspace_id === workspaceId && String(row.topic_id) === topicId) {
+            summaryRows.splice(i, 1);
+          }
+        }
+        for (const topic of tables.topics ?? []) {
+          if (topic.workspace_id === workspaceId && String(topic.id) === topicId) {
+            topic.summary = null;
+            topic.pinned_summary = null;
+            const metadata = (topic.metadata as Record<string, unknown>) ?? {};
+            delete metadata.memorySuggestionLifecycle;
+            topic.metadata = metadata;
+          }
+        }
+        return Promise.resolve({ data: null, error: null });
+      }
+      return Promise.resolve({ data: null, error: { message: "unknown rpc" } });
+    },
     from(table: string) {
       const rows = tables[table] ?? [];
       const filters: Array<(row: Record<string, unknown>) => boolean> = [];

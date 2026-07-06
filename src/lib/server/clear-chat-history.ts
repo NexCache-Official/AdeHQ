@@ -5,6 +5,7 @@ import { isGeneralTopic } from "@/lib/topics";
 import {
   clearTopicMemorySuggestionLifecycle,
   countTopicMessages,
+  purgeTopicSummaryForTopic,
 } from "@/lib/topic-summary/persistence";
 import { markTopicConversationCleared } from "@/lib/conversation-context/epochs";
 import { cancelActiveTopicWork } from "@/lib/server/cancel-active-topic-work";
@@ -172,14 +173,7 @@ export async function clearTopicChatHistory(
   );
   await deleteMessageGraph(client, workspaceId, messageIds);
 
-  await client
-    .from("topic_summaries")
-    .delete()
-    .eq("workspace_id", workspaceId)
-    .eq("topic_id", topicId)
-    .then(({ error }) => {
-      if (error && !isMissingRelationError(error)) throw error;
-    });
+  await purgeTopicSummaryForTopic(client, workspaceId, topicId);
 
   await client
     .from("browser_research_runs")
@@ -195,6 +189,15 @@ export async function clearTopicChatHistory(
     .update({ summary: null, pinned_summary: null, updated_at: nowISO() })
     .eq("workspace_id", workspaceId)
     .eq("id", topicId);
+
+  await client
+    .from("topic_orchestration_state")
+    .delete()
+    .eq("workspace_id", workspaceId)
+    .eq("topic_id", topicId)
+    .then(({ error }) => {
+      if (error && !isMissingRelationError(error)) throw error;
+    });
 
   await clearTopicMemorySuggestionLifecycle(client, workspaceId, topicId);
   await refreshTopicStats(client, topicId);
