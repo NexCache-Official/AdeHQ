@@ -297,6 +297,15 @@ function stripMockFallbacks(
   return candidates.filter((c) => c.providerRoute !== "mock");
 }
 
+function mapFallbackCandidate(o: ModelEndpointOffer): CapabilityRouteDecision["fallbackCandidates"][number] {
+  return {
+    providerRoute: o.providerRoute,
+    modelId: o.modelId,
+    gatewayProviderSlug: o.gatewayProviderSlug,
+    endpointKey: o.endpointKey,
+  };
+}
+
 function applyRouteOptimizer(
   decision: CapabilityRouteDecision,
   input: CapabilityRouteInput,
@@ -331,16 +340,15 @@ function applyRouteOptimizer(
   const optimizerMeta: CapabilityRouteDecision["routeOptimizer"] = {
     selectedProviderRoute: optimized.selected.providerRoute,
     selectedModelId: optimized.selected.modelId,
+    selectedGatewayProviderSlug: optimized.selected.gatewayProviderSlug,
+    selectedEndpointKey: optimized.selected.endpointKey,
     reason: optimized.reason,
     estimatedCostUsd: optimized.estimatedCostUsd,
     decisionFactors: optimized.decisionFactors,
     priceSource: optimized.priceSource,
     priceFreshness: optimized.priceFreshness,
     healthNote: optimized.healthNote,
-    fallbackCandidates: optimized.fallbackCandidates.map((o) => ({
-      providerRoute: o.providerRoute,
-      modelId: o.modelId,
-    })),
+    fallbackCandidates: optimized.fallbackCandidates.map(mapFallbackCandidate),
     shadowOnly: isRouteOptimizerShadow(flags.routeOptimizer),
     usedStaticFallback: optimized.usedStaticFallback,
   };
@@ -353,12 +361,9 @@ function applyRouteOptimizer(
     };
   }
 
-  const promptLen = input.message?.length ?? 256;
-  const inputTokens = Math.max(50, Math.ceil(promptLen / 4));
-  const outputTokens = input.needsLongContext ? 2000 : 800;
   const estimatedCostUsd =
     optimized.estimatedCostUsd ||
-    estimateCost(optimized.selected.modelId, inputTokens, outputTokens);
+    estimateCost(optimized.selected.modelId, inputTokensFromInput(input), outputTokensFromInput(input));
 
   return {
     providerRoute: optimized.selected.providerRoute,
@@ -368,19 +373,27 @@ function applyRouteOptimizer(
       input.researchProvider,
     ),
     modelId: optimized.selected.modelId,
+    gatewayProviderSlug: optimized.selected.gatewayProviderSlug,
+    endpointKey: optimized.selected.endpointKey,
     runtimeMode: decision.runtimeMode,
     capability: decision.capability,
     reasoningProfile: decision.reasoningProfile,
     estimatedCostUsd,
     estimatedWorkMinutes: estimateWorkMinutes(estimatedCostUsd),
     fallbackCandidates: stripMockFallbacks(
-      optimized.fallbackCandidates.map((o) => ({
-        providerRoute: o.providerRoute,
-        modelId: o.modelId,
-      })),
+      optimized.fallbackCandidates.map(mapFallbackCandidate),
     ),
     routeOptimizer: optimizerMeta,
   };
+}
+
+function inputTokensFromInput(input: CapabilityRouteInput): number {
+  const promptLen = input.message?.length ?? 256;
+  return Math.max(50, Math.ceil(promptLen / 4));
+}
+
+function outputTokensFromInput(input: CapabilityRouteInput): number {
+  return input.needsLongContext ? 2000 : 800;
 }
 
 /** Capability router — planning only in V19.9.0a (not wired to callers yet). */

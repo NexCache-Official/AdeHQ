@@ -245,6 +245,8 @@ export async function generateEmployeeQueuedResponseRuntime(
     await recordRouteOutcome(ctx.client ?? null, {
       providerRoute: result.usage.providerRoute,
       modelId: result.usage.modelId,
+      gatewayProviderSlug: result.routing?.gatewayProviderSlug,
+      endpointKey: result.routing?.endpointKey,
       success: true,
       latencyMs: result.usage.latencyMs,
       estimatedCostUsd: result.routing?.estimatedCostUsd,

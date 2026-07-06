@@ -68,6 +68,8 @@ export type RuntimeBaseParams = {
   metadata?: Record<string, unknown>;
   routingPreference?: RoutingPreference;
   requiresJson?: boolean;
+  gatewayProviderSlug?: string;
+  endpointKey?: string;
   /** Override env flag for tests only. */
   forceMode?: RuntimeV2Mode;
 };
@@ -160,22 +162,36 @@ export type CapabilityRouteInput = {
   catalogOffers?: ModelEndpointOffer[];
   routingPreference?: RoutingPreference;
   requiresJson?: boolean;
-  currentRoute?: { providerRoute: ProviderRoute; modelId: string };
+  currentRoute?: {
+    providerRoute: ProviderRoute;
+    modelId: string;
+    gatewayProviderSlug?: string;
+    endpointKey?: string;
+  };
 };
 
 export type CapabilityRouteDecision = {
   providerRoute: ProviderRoute;
   providerName: string;
   modelId: string;
+  gatewayProviderSlug?: string;
+  endpointKey?: string;
   runtimeMode: RuntimeMode;
   capability: AiCapability;
   reasoningProfile: ReasoningProfile;
   estimatedCostUsd: number;
   estimatedWorkMinutes: number;
-  fallbackCandidates: Array<{ providerRoute: ProviderRoute; modelId: string }>;
+  fallbackCandidates: Array<{
+    providerRoute: ProviderRoute;
+    modelId: string;
+    gatewayProviderSlug?: string;
+    endpointKey?: string;
+  }>;
   routeOptimizer?: {
     selectedProviderRoute: ProviderRoute;
     selectedModelId: string;
+    selectedGatewayProviderSlug?: string;
+    selectedEndpointKey?: string;
     reason: string;
     estimatedCostUsd: number;
     decisionFactors: {
@@ -190,7 +206,12 @@ export type CapabilityRouteDecision = {
     priceSource: string;
     priceFreshness: "fresh" | "stale" | "missing";
     healthNote?: string;
-    fallbackCandidates: Array<{ providerRoute: ProviderRoute; modelId: string }>;
+    fallbackCandidates: Array<{
+      providerRoute: ProviderRoute;
+      modelId: string;
+      gatewayProviderSlug?: string;
+      endpointKey?: string;
+    }>;
     shadowOnly?: boolean;
     usedStaticFallback?: boolean;
   };

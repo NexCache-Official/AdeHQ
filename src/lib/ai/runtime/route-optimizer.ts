@@ -1,7 +1,9 @@
+import { DEFAULT_EMBEDDING_MODEL } from "@/lib/config/features";
 import type { RoutingPreference } from "@/lib/ai/intelligence-policy";
 import { estimateCost } from "@/lib/ai/model-catalog";
 import { staticCatalogOffers } from "./catalog/loader";
-import type { ModelEndpointOffer } from "./pricing/types";
+import { resolveEndpointKey } from "./pricing/endpoint-key";
+import type { EmbeddingProfile, ModelEndpointOffer } from "./pricing/types";
 import { getRouteHealth, healthPenaltyScore, type RouteHealthSnapshot } from "./route-health";
 import type { AiCapability, ProviderRoute, RuntimeMode, RuntimeProviderPref } from "./types";
 
@@ -15,9 +17,15 @@ export type OptimizerInput = {
   requiresTools?: boolean;
   requiresEmbedding?: boolean;
   riskLevel?: "low" | "medium" | "high";
-  currentRoute?: { providerRoute: ProviderRoute; modelId: string };
+  currentRoute?: {
+    providerRoute: ProviderRoute;
+    modelId: string;
+    gatewayProviderSlug?: string;
+    endpointKey?: string;
+  };
   promptTokenEstimate?: number;
   maxOutputTokens?: number;
+  embeddingProfile?: EmbeddingProfile;
 };
 
 export type ScoredOffer = {
@@ -56,6 +64,8 @@ export type RouteOptimizerDecision = {
   usedStaticFallback: boolean;
 };
 
+const BLACKBOX_MAX_CONTEXT = 128_000;
+
 export function readPriceMaxAgeHours(): number {
   const raw = Number(process.env.AI_MODEL_PRICE_MAX_AGE_HOURS);
   return Number.isFinite(raw) && raw > 0 ? raw : 72;
@@ -74,7 +84,9 @@ export function isMockFallbackAllowed(): boolean {
 }
 
 function isPriceFresh(offer: ModelEndpointOffer): boolean {
-  if (!offer.priceFetchedAt) return offer.source === "manual_seed" || offer.source === "manual_override";
+  if (!offer.priceFetchedAt) {
+    return offer.source === "manual_override" || offer.source === "vercel_api" || offer.source === "siliconflow_api";
+  }
   const ageMs = Date.now() - new Date(offer.priceFetchedAt).getTime();
   return ageMs <= readPriceMaxAgeHours() * 3_600_000;
 }
@@ -84,11 +96,13 @@ function priceFreshness(offer: ModelEndpointOffer): RouteOptimizerDecision["pric
   return isPriceFresh(offer) ? "fresh" : "stale";
 }
 
-function stalePricePenalty(offer: ModelEndpointOffer): number {
+function stalePricePenalty(offer: ModelEndpointOffer, hasFresherEndpointRows: boolean): number {
   const freshness = priceFreshness(offer);
-  if (freshness === "fresh") return 0;
-  if (freshness === "stale") return 0.12;
-  return 0.2;
+  let penalty = 0;
+  if (freshness === "stale") penalty += 0.12;
+  if (freshness === "missing") penalty += 0.2;
+  if (offer.source === "manual_seed" && hasFresherEndpointRows) penalty += 0.15;
+  return penalty;
 }
 
 function unverifiedCapabilityPenalty(offer: ModelEndpointOffer, requiresJson: boolean): number {
@@ -97,7 +111,8 @@ function unverifiedCapabilityPenalty(offer: ModelEndpointOffer, requiresJson: bo
   return 0.08;
 }
 
-function estimateOfferCost(offer: ModelEndpointOffer, input: number, output: number): number {
+/** Cost estimate uses input + output only — never assumes cache pricing. */
+export function estimateOfferCost(offer: ModelEndpointOffer, input: number, output: number): number {
   if (offer.inputCostPerMillion != null && offer.outputCostPerMillion != null) {
     return (
       (input / 1_000_000) * offer.inputCostPerMillion +
@@ -107,11 +122,49 @@ function estimateOfferCost(offer: ModelEndpointOffer, input: number, output: num
   return estimateCost(offer.modelId, input, output);
 }
 
+function hasFresherEndpointRows(offers: ModelEndpointOffer[]): boolean {
+  return offers.some(
+    (o) =>
+      o.source === "manual_override" ||
+      o.source === "vercel_api" ||
+      o.source === "siliconflow_api",
+  );
+}
+
+function passesContextEligibility(offer: ModelEndpointOffer, input: OptimizerInput): boolean {
+  const required = input.requiredContextTokens;
+  const maxOut = input.maxOutputTokens ?? 800;
+
+  if (required != null && required > 0) {
+    if (offer.contextWindow == null) return false;
+    if (offer.contextWindow < required + maxOut) return false;
+  }
+
+  if (input.capability === "long_context" || input.runtimeMode === "long_context") {
+    if (offer.gatewayProviderSlug === "blackbox" && required != null && required > BLACKBOX_MAX_CONTEXT) {
+      return false;
+    }
+    if (!offer.supportsLongContext && (offer.contextWindow ?? 0) < 128_000) return false;
+  }
+
+  return true;
+}
+
+function passesEmbeddingLock(offer: ModelEndpointOffer, input: OptimizerInput): boolean {
+  if (input.capability !== "embedding" && !input.requiresEmbedding) return true;
+
+  const profile = input.embeddingProfile ?? "pinned_bge";
+  if (profile === "allow_gateway") return true;
+
+  return offer.modelId === DEFAULT_EMBEDDING_MODEL;
+}
+
 export function listCandidateOffers(
   offers: ModelEndpointOffer[],
   input: OptimizerInput,
 ): ModelEndpointOffer[] {
   const allowMock = isMockFallbackAllowed();
+  const fresherRows = hasFresherEndpointRows(offers);
 
   return offers.filter((offer) => {
     if (!offer.enabled) return false;
@@ -125,12 +178,12 @@ export function listCandidateOffers(
     }
     if (input.providerPreference === "mock" && offer.providerRoute !== "mock") return false;
 
+    if (!passesEmbeddingLock(offer, input)) return false;
+
     if (!offer.capabilities.includes(input.capability)) return false;
     if (!offer.runtimeModes.includes(input.runtimeMode)) return false;
 
-    if (input.requiredContextTokens && offer.contextWindow) {
-      if (offer.contextWindow < input.requiredContextTokens) return false;
-    }
+    if (!passesContextEligibility(offer, input)) return false;
 
     if (input.requiresJson && !offer.supportsJson) return false;
     if (input.requiresTools && !offer.supportsTools) return false;
@@ -139,6 +192,17 @@ export function listCandidateOffers(
     if (input.riskLevel === "high") {
       const quality = offer.qualityScore ?? 0;
       if (quality < 8) return false;
+    }
+
+    // Deprioritize stale manual_seed when fresher endpoint rows exist (filter only if alternatives exist)
+    if (offer.source === "manual_seed" && fresherRows) {
+      const sameFamily = offers.some(
+        (o) =>
+          o.normalizedModelFamily === offer.normalizedModelFamily &&
+          o.endpointKey !== offer.endpointKey &&
+          (o.source === "manual_override" || o.source === "vercel_api" || o.source === "siliconflow_api"),
+      );
+      if (sameFamily) return false;
     }
 
     return true;
@@ -162,13 +226,14 @@ export function scoreModelOffer(
     latencyRank: number;
     reliabilityRank: number;
   },
+  allOffers: ModelEndpointOffer[],
 ): ScoredOffer {
   const inputTokens = input.promptTokenEstimate ?? 256;
   const outputTokens = input.maxOutputTokens ?? 800;
   const estimatedCostUsd = estimateOfferCost(offer, inputTokens, outputTokens);
-  const health = getRouteHealth(offer.providerRoute, offer.modelId);
+  const health = getRouteHealth(resolveEndpointKey(offer));
   const hPenalty = healthPenaltyScore(health, input.requiresJson);
-  const sPenalty = stalePricePenalty(offer);
+  const sPenalty = stalePricePenalty(offer, hasFresherEndpointRows(allOffers));
   const uPenalty = unverifiedCapabilityPenalty(offer, input.requiresJson ?? false);
 
   const costNorm = 1 / Math.max(ranks.costRank, 1);
@@ -211,7 +276,7 @@ export function scoreModelOffer(
   };
 }
 
-function scoreAllOffers(candidates: ModelEndpointOffer[], input: OptimizerInput): ScoredOffer[] {
+function scoreAllOffers(candidates: ModelEndpointOffer[], input: OptimizerInput, allOffers: ModelEndpointOffer[]): ScoredOffer[] {
   const inputTokens = input.promptTokenEstimate ?? 256;
   const outputTokens = input.maxOutputTokens ?? 800;
 
@@ -229,7 +294,19 @@ function scoreAllOffers(candidates: ModelEndpointOffer[], input: OptimizerInput)
       qualityRank: qualityRank.get(offer) ?? candidates.length,
       latencyRank: latencyRank.get(offer) ?? candidates.length,
       reliabilityRank: reliabilityRank.get(offer) ?? candidates.length,
-    }),
+    }, allOffers),
+  );
+}
+
+function routesMatch(
+  a: { endpointKey?: string; providerRoute: ProviderRoute; modelId: string; gatewayProviderSlug?: string },
+  b: ModelEndpointOffer,
+): boolean {
+  if (a.endpointKey && b.endpointKey) return a.endpointKey === b.endpointKey;
+  return (
+    a.providerRoute === b.providerRoute &&
+    a.modelId === b.modelId &&
+    (a.gatewayProviderSlug ?? "default") === (b.gatewayProviderSlug ?? "default")
   );
 }
 
@@ -242,15 +319,11 @@ function applyAntiFlapping(
     return { selected: best, antiFlapApplied: false };
   }
 
-  const current = scored.find(
-    (s) =>
-      s.offer.providerRoute === input.currentRoute!.providerRoute &&
-      s.offer.modelId === input.currentRoute!.modelId,
-  );
+  const current = scored.find((s) => routesMatch(input.currentRoute!, s.offer));
   const best = [...scored].sort((a, b) => b.score - a.score)[0]!;
 
   if (!current) return { selected: best, antiFlapApplied: false };
-  if (current.offer.providerRoute === best.offer.providerRoute && current.offer.modelId === best.offer.modelId) {
+  if (routesMatch(input.currentRoute!, best.offer)) {
     return { selected: best, antiFlapApplied: false };
   }
 
@@ -264,10 +337,7 @@ function applyAntiFlapping(
   const latencyGain =
     (current.offer.latencyP95Ms ?? 99999) - (best.offer.latencyP95Ms ?? 99999);
 
-  if (
-    input.routingPreference === "fastest" &&
-    latencyGain > 200
-  ) {
+  if (input.routingPreference === "fastest" && latencyGain > 200) {
     return { selected: best, antiFlapApplied: false };
   }
 
@@ -285,11 +355,12 @@ function applyAntiFlapping(
 function buildReason(selected: ScoredOffer, input: OptimizerInput, antiFlap: boolean): string {
   const parts: string[] = [];
   if (antiFlap) parts.push("kept current route (anti-flapping)");
-  else if (input.routingPreference === "cost_saver") parts.push("cheapest capable offer");
-  else if (input.routingPreference === "quality_first") parts.push("highest quality capable offer");
-  else if (input.routingPreference === "fastest") parts.push("fastest capable offer");
+  else if (input.routingPreference === "cost_saver") parts.push("cheapest capable endpoint");
+  else if (input.routingPreference === "quality_first") parts.push("highest quality capable endpoint");
+  else if (input.routingPreference === "fastest") parts.push("fastest capable endpoint");
   else parts.push("balanced weighted score");
 
+  if (selected.offer.endpointKey) parts.push(`endpoint ${selected.offer.endpointKey}`);
   if (input.requiresJson) parts.push("JSON support required");
   if (selected.healthPenalty > 0.1) parts.push("health penalty applied to alternatives");
   if (selected.stalePricePenalty > 0) parts.push("stale pricing penalized on some candidates");
@@ -319,18 +390,11 @@ export function selectBestModelOffer(
     if (!candidates.length) return null;
   }
 
-  const inputTokens = input.promptTokenEstimate ?? 256;
-  const outputTokens = input.maxOutputTokens ?? 800;
-
-  const sorted = scoreAllOffers(candidates, input).sort((a, b) => b.score - a.score);
+  const sorted = scoreAllOffers(candidates, input, pool).sort((a, b) => b.score - a.score);
   const { selected, antiFlapApplied } = applyAntiFlapping(sorted, input);
 
   const fallbacks = sorted
-    .filter(
-      (s) =>
-        s.offer.providerRoute !== selected.offer.providerRoute ||
-        s.offer.modelId !== selected.offer.modelId,
-    )
+    .filter((s) => s.offer.endpointKey !== selected.offer.endpointKey)
     .map((s) => s.offer)
     .filter((o) => o.providerRoute !== "mock" || isMockFallbackAllowed())
     .slice(0, 5);

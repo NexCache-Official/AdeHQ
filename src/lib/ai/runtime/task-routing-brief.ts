@@ -1,6 +1,7 @@
 import type { RoutingPreference } from "@/lib/ai/intelligence-policy";
 import { resolveEmployeeIntelligencePolicy } from "@/lib/ai/intelligence-policy";
 import type { AIEmployee } from "@/lib/types";
+import type { EmbeddingProfile } from "./pricing/types";
 import type {
   AiCapability,
   CapabilityRouteInput,
@@ -21,9 +22,15 @@ export type TaskRoutingBrief = {
   routingPreference: RoutingPreference;
   providerPreference: RuntimeProviderPref;
   riskLevel?: "low" | "medium" | "high";
-  currentRoute?: { providerRoute: ProviderRoute; modelId: string };
+  currentRoute?: {
+    providerRoute: ProviderRoute;
+    modelId: string;
+    gatewayProviderSlug?: string;
+    endpointKey?: string;
+  };
   promptTokenEstimate?: number;
   maxOutputTokens?: number;
+  embeddingProfile?: EmbeddingProfile;
 };
 
 function capabilityNeedsJson(capability: AiCapability): boolean {
@@ -48,6 +55,7 @@ export function buildTaskRoutingBrief(
     providerPreference?: RuntimeProviderPref;
     requiresJson?: boolean;
     currentRoute?: TaskRoutingBrief["currentRoute"];
+    embeddingProfile?: EmbeddingProfile;
   },
 ): TaskRoutingBrief {
   const policy = options?.employee
@@ -56,22 +64,27 @@ export function buildTaskRoutingBrief(
 
   const runtimeMode = input.runtimeMode ?? "balanced";
   const capability = input.capability;
+  const maxOutput = input.needsLongContext ? 2000 : 800;
+  const contextEstimate = estimateContextTokens(input);
 
   return {
     capability,
     runtimeMode,
     reasoningProfile: input.needsReasoning ? "medium" : undefined,
     requiredContextTokens: input.needsLongContext
-      ? Math.max(estimateContextTokens(input) ?? 8000, 8000)
-      : estimateContextTokens(input),
+      ? Math.max(contextEstimate ?? 8000, 8000)
+      : contextEstimate,
     requiresJson: options?.requiresJson ?? capabilityNeedsJson(capability),
     requiresTools: input.needsTools,
     requiresEmbedding: capability === "embedding",
     routingPreference: (policy?.routingPreference ?? input.routingPreference ?? "auto") as RoutingPreference,
     providerPreference: options?.providerPreference ?? "auto",
     riskLevel: input.riskLevel,
-    currentRoute: options?.currentRoute,
-    promptTokenEstimate: estimateContextTokens(input),
-    maxOutputTokens: input.needsLongContext ? 2000 : 800,
+    currentRoute: options?.currentRoute ?? input.currentRoute,
+    promptTokenEstimate: contextEstimate,
+    maxOutputTokens: maxOutput,
+    embeddingProfile:
+      options?.embeddingProfile ??
+      (capability === "embedding" ? "pinned_bge" : undefined),
   };
 }

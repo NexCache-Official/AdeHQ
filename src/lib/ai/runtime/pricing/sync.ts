@@ -1,4 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { invalidateCatalogCache } from "../catalog/loader";
+import { resolveEndpointKey } from "./endpoint-key";
 import { offerToCatalogRow } from "./normalize";
 import { syncSiliconFlowModels } from "./siliconflow-sync";
 import type { ModelEndpointOffer, PriceSnapshotInput, ProviderSyncResult, SyncOptions, SyncRunSummary } from "./types";
@@ -8,7 +10,7 @@ const MISS_THRESHOLD = 2;
 const missCounts = new Map<string, number>();
 
 function offerKey(offer: ModelEndpointOffer): string {
-  return `${offer.providerRoute}:${offer.modelId}`;
+  return resolveEndpointKey(offer);
 }
 
 async function upsertOffers(
@@ -26,6 +28,7 @@ async function upsertOffers(
     missCounts.set(key, 0);
 
     if (dryRun) {
+      console.log(`  [dry-run] ${key} source=${offer.source} in=${offer.inputCostPerMillion} out=${offer.outputCostPerMillion}`);
       updated += 1;
       continue;
     }
@@ -33,15 +36,14 @@ async function upsertOffers(
     const { data: existing } = await client
       .from("ai_model_catalog")
       .select("id")
-      .eq("provider_route", offer.providerRoute)
-      .eq("model_id", offer.modelId)
+      .eq("endpoint_key", key)
       .maybeSingle();
 
     const { error } = await client.from("ai_model_catalog").upsert(row, {
-      onConflict: "provider_route,model_id",
+      onConflict: "endpoint_key",
     });
 
-    if (error) throw new Error(`Catalog upsert failed for ${offer.modelId}: ${error.message}`);
+    if (error) throw new Error(`Catalog upsert failed for ${key}: ${error.message}`);
     if (existing?.id) updated += 1;
     else added += 1;
   }
@@ -64,7 +66,7 @@ async function insertSnapshots(
     cached_input_cost_per_million: s.cachedInputCostPerMillion ?? null,
     cache_write_cost_per_million: s.cacheWriteCostPerMillion ?? null,
     source: s.source,
-    raw_payload: s.rawPayload ?? {},
+    raw_payload: { ...(s.rawPayload ?? {}), endpoint_key: s.endpointKey, gateway_provider_slug: s.gatewayProviderSlug },
     fetched_at: new Date().toISOString(),
   }));
 
@@ -104,7 +106,7 @@ async function disableMissingOffers(
   const providerRoute = provider === "vercel" ? "vercel_gateway" : "siliconflow_direct";
   const { data: existing, error } = await client
     .from("ai_model_catalog")
-    .select("provider_route, model_id, enabled, source")
+    .select("endpoint_key, provider_route, model_id, enabled, source")
     .eq("provider_route", providerRoute)
     .eq("enabled", true);
 
@@ -112,7 +114,7 @@ async function disableMissingOffers(
 
   let disabled = 0;
   for (const row of existing) {
-    const key = `${row.provider_route}:${row.model_id}`;
+    const key = String(row.endpoint_key ?? `${row.provider_route}:${row.model_id}:default`);
     if (seenKeys.has(key)) continue;
     if (row.source === "manual_seed" || row.source === "manual_override") continue;
 
@@ -124,8 +126,7 @@ async function disableMissingOffers(
       await client
         .from("ai_model_catalog")
         .update({ enabled: false, updated_at: new Date().toISOString() })
-        .eq("provider_route", row.provider_route)
-        .eq("model_id", row.model_id);
+        .eq("endpoint_key", key);
     }
     disabled += 1;
   }
@@ -168,6 +169,10 @@ export async function syncModelPricing(
 
   for (const provider of providers) {
     results.push(await runProviderSync(client, provider, dryRun));
+  }
+
+  if (!dryRun && client) {
+    invalidateCatalogCache();
   }
 
   return {

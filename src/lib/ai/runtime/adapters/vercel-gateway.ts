@@ -64,6 +64,15 @@ function resolveGatewayModel(params: {
   });
 }
 
+/** Pin Vercel AI Gateway to a specific upstream provider slug (e.g. blackbox, deepinfra). */
+export function buildGatewayProviderOptions(
+  gatewayProviderSlug?: string,
+): { gateway: { only: string[] } } | undefined {
+  const slug = gatewayProviderSlug?.trim();
+  if (!slug || slug === "default") return undefined;
+  return { gateway: { only: [slug] } };
+}
+
 function usageFromTokens(
   modelId: string,
   inputTokens: number,
@@ -130,6 +139,7 @@ export function createVercelGatewayAdapter(
       }
 
       try {
+        const providerOptions = buildGatewayProviderOptions(params.gatewayProviderSlug);
         const result = await generateText({
           model: gateway(modelId),
           system,
@@ -137,6 +147,7 @@ export function createVercelGatewayAdapter(
           temperature,
           maxOutputTokens: maxTokens,
           abortSignal: AbortSignal.timeout(timeoutMs),
+          ...(providerOptions ? { providerOptions } : {}),
         });
 
         const inputTokens = result.usage?.inputTokens ?? 0;
@@ -190,6 +201,7 @@ export function createVercelGatewayAdapter(
       }
 
       try {
+        const providerOptions = buildGatewayProviderOptions(params.gatewayProviderSlug);
         const result = await generateObject({
           model: gateway(modelId),
           schema: params.schema,
@@ -198,6 +210,7 @@ export function createVercelGatewayAdapter(
           temperature,
           maxOutputTokens: maxTokens,
           abortSignal: AbortSignal.timeout(timeoutMs),
+          ...(providerOptions ? { providerOptions } : {}),
         });
 
         const inputTokens = result.usage?.inputTokens ?? 0;

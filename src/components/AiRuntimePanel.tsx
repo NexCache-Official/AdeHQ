@@ -46,14 +46,31 @@ type RuntimeSnapshot = {
   employeeQueuedExecution?: boolean;
   catalog?: {
     offers: Array<{
+      endpointKey?: string;
       providerRoute: string;
+      gatewayProviderSlug?: string;
+      providerDisplayName?: string;
       modelId: string;
       displayName: string;
+      contextWindow?: number;
+      maxOutputTokens?: number;
       inputCostPerMillion?: number;
       outputCostPerMillion?: number;
+      cachedInputCostPerMillion?: number;
+      originalInputCostPerMillion?: number;
+      originalOutputCostPerMillion?: number;
+      pricingDiscountActive?: boolean;
+      pricingNotes?: string;
       source: string;
       priceFetchedAt?: string | null;
       enabled: boolean;
+      metadata?: {
+        verifiedAt?: string;
+        verifiedBy?: string;
+        sourceUrl?: string;
+        notes?: string;
+        priceSource?: string;
+      };
     }>;
     syncRuns: Array<Record<string, unknown>>;
   };
@@ -332,9 +349,20 @@ export function AiRuntimePanel() {
 
       {snapshot?.catalog?.offers && snapshot.catalog.offers.length > 0 && (
         <div className="mt-4">
+          <div className="mb-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+            Manual seed prices are fallback only. Live provider-endpoint pricing is preferred.
+            Changing embedding model requires reindexing file chunks.
+          </div>
+          {snapshot.catalog.offers.some(
+            (o) => o.source === "manual_seed" || !o.priceFetchedAt,
+          ) && (
+            <div className="mb-2 rounded-xl border border-orange-200 bg-orange-50 px-3 py-2 text-xs text-orange-800">
+              Stale or manual prices shown — run Refresh model pricing.
+            </div>
+          )}
           <div className="mb-2 flex items-center justify-between gap-2">
             <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-              Model catalog ({snapshot.catalog.offers.length})
+              Model catalog ({snapshot.catalog.offers.length} endpoints)
             </h3>
             <Button
               type="button"
@@ -368,16 +396,93 @@ export function AiRuntimePanel() {
             </Button>
           </div>
           {syncResult && <p className="mb-2 text-xs text-slate-500">{syncResult}</p>}
-          <div className="max-h-48 space-y-1 overflow-y-auto rounded-xl border border-slate-200 bg-slate-50 p-2 text-xs text-slate-600">
-            {snapshot.catalog.offers.slice(0, 24).map((offer) => (
-              <div key={`${offer.providerRoute}:${offer.modelId}`}>
-                <span className="font-medium text-slate-800">{offer.displayName}</span> ·{" "}
-                {offer.providerRoute} · ${offer.inputCostPerMillion ?? "?"} / $
-                {offer.outputCostPerMillion ?? "?"} · {offer.source}
-                {!offer.enabled ? " · disabled" : ""}
-              </div>
-            ))}
+          {snapshot.catalog.syncRuns?.length > 0 && (
+            <div className="mb-2 text-[11px] text-slate-500">
+              Last sync:{" "}
+              {String(snapshot.catalog.syncRuns[0]?.started_at ?? snapshot.catalog.syncRuns[0]?.startedAt ?? "—")}
+              {" · "}
+              {String(snapshot.catalog.syncRuns[0]?.status ?? "—")}
+            </div>
+          )}
+          <div className="max-h-64 overflow-x-auto overflow-y-auto rounded-xl border border-slate-200 bg-slate-50">
+            <table className="min-w-full text-left text-[11px] text-slate-600">
+              <thead className="sticky top-0 bg-slate-100 text-[10px] uppercase tracking-wide text-slate-500">
+                <tr>
+                  <th className="px-2 py-1.5 font-medium">Endpoint</th>
+                  <th className="px-2 py-1.5 font-medium">Model</th>
+                  <th className="px-2 py-1.5 font-medium">Context</th>
+                  <th className="px-2 py-1.5 font-medium">In / Out</th>
+                  <th className="px-2 py-1.5 font-medium">Cache*</th>
+                  <th className="px-2 py-1.5 font-medium">Source</th>
+                </tr>
+              </thead>
+              <tbody>
+                {snapshot.catalog.offers.slice(0, 48).map((offer) => {
+                  const key = offer.endpointKey ?? `${offer.providerRoute}:${offer.modelId}`;
+                  return (
+                    <tr key={key} className="border-t border-slate-200">
+                      <td className="px-2 py-1.5 align-top">
+                        <div className="font-medium text-slate-800">{offer.providerDisplayName ?? offer.gatewayProviderSlug ?? "default"}</div>
+                        <div className="text-[10px] text-slate-400">{offer.endpointKey ?? key}</div>
+                        {offer.pricingDiscountActive && (
+                          <span className="mt-0.5 inline-block rounded bg-emerald-100 px-1 py-0.5 text-[9px] font-medium text-emerald-700">
+                            discount
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-2 py-1.5 align-top">
+                        <div>{offer.displayName}</div>
+                        <div className="text-[10px] text-slate-400">{offer.providerRoute}</div>
+                        {!offer.enabled && (
+                          <span className="text-[10px] text-red-600">disabled</span>
+                        )}
+                      </td>
+                      <td className="px-2 py-1.5 align-top whitespace-nowrap">
+                        {offer.contextWindow != null
+                          ? `${Math.round(offer.contextWindow / 1000)}K`
+                          : "—"}
+                        {offer.maxOutputTokens != null && (
+                          <div className="text-[10px] text-slate-400">
+                            max out {Math.round(offer.maxOutputTokens / 1000)}K
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-2 py-1.5 align-top whitespace-nowrap">
+                        ${offer.inputCostPerMillion ?? "?"} / ${offer.outputCostPerMillion ?? "?"}
+                        {offer.pricingDiscountActive &&
+                          offer.originalInputCostPerMillion != null && (
+                            <div className="text-[10px] text-slate-400 line-through">
+                              ${offer.originalInputCostPerMillion} / $
+                              {offer.originalOutputCostPerMillion ?? "?"}
+                            </div>
+                          )}
+                      </td>
+                      <td className="px-2 py-1.5 align-top whitespace-nowrap text-slate-400">
+                        {offer.cachedInputCostPerMillion != null
+                          ? `$${offer.cachedInputCostPerMillion}`
+                          : "—"}
+                        <div className="text-[9px]">not in estimates</div>
+                      </td>
+                      <td className="px-2 py-1.5 align-top">
+                        <div>{offer.source}</div>
+                        {offer.metadata?.verifiedAt && (
+                          <div className="text-[10px] text-slate-400">
+                            verified {offer.metadata.verifiedAt}
+                          </div>
+                        )}
+                        {offer.metadata?.notes && (
+                          <div className="max-w-[140px] truncate text-[10px] text-slate-400" title={offer.metadata.notes}>
+                            {offer.metadata.notes}
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
+          <p className="mt-1 text-[10px] text-slate-400">* Cached input price stored but not used in optimizer cost estimates.</p>
         </div>
       )}
 

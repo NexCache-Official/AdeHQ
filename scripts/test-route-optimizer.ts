@@ -3,8 +3,11 @@
  */
 
 import { staticCatalogOffers } from "@/lib/ai/runtime/catalog/loader";
+import { buildVercelEndpointOverrides } from "@/lib/ai/runtime/pricing/vercel-endpoint-overrides";
+import { MANUAL_MODEL_OVERRIDES } from "@/lib/ai/runtime/pricing/manual-overrides";
 import { setRouteHealthCache, type RouteHealthSnapshot } from "@/lib/ai/runtime/route-health";
 import {
+  estimateOfferCost,
   isMockFallbackAllowed,
   listCandidateOffers,
   selectBestModelOffer,
@@ -156,6 +159,8 @@ async function main() {
     const unhealthy: RouteHealthSnapshot = {
       providerRoute: "siliconflow_direct",
       modelId: "deepseek-ai/DeepSeek-V3",
+      gatewayProviderSlug: "default",
+      endpointKey: "siliconflow_direct:deepseek-ai/DeepSeek-V3:default",
       successCount: 2,
       failureCount: 18,
       fallbackCount: 5,
@@ -191,6 +196,132 @@ async function main() {
   await run("static catalog offers load", () => {
     const staticOffers = staticCatalogOffers();
     assert(staticOffers.length >= 10, "static seed should have multiple offers");
+  });
+
+  await run("V20.1.1 — rejects Blackbox when context > 128K", () => {
+    const offers = buildVercelEndpointOverrides();
+    const candidates = listCandidateOffers(offers, {
+      capability: "long_context",
+      runtimeMode: "long_context",
+      routingPreference: "cost_saver",
+      providerPreference: "vercel",
+      requiredContextTokens: 150_000,
+      maxOutputTokens: 2000,
+    });
+    assert(
+      !candidates.some((o) => o.gatewayProviderSlug === "blackbox"),
+      "blackbox should be ineligible above 128K",
+    );
+    assert(
+      candidates.some((o) => o.gatewayProviderSlug === "deepinfra"),
+      "deepinfra should remain eligible",
+    );
+  });
+
+  await run("V20.1.1 — picks Blackbox for long_context ≤128K + cost_saver", () => {
+    const offers = buildVercelEndpointOverrides();
+    const decision = selectBestModelOffer(
+      {
+        capability: "long_context",
+        runtimeMode: "long_context",
+        routingPreference: "cost_saver",
+        providerPreference: "vercel",
+        requiredContextTokens: 100_000,
+        maxOutputTokens: 2000,
+      },
+      offers,
+    );
+    assert(decision != null, "decision required");
+    assert(
+      decision!.selected.gatewayProviderSlug === "blackbox",
+      `expected blackbox, got ${decision!.selected.gatewayProviderSlug}`,
+    );
+  });
+
+  await run("V20.1.1 — picks DeepInfra for 128K–197K long_context", () => {
+    const offers = buildVercelEndpointOverrides();
+    const decision = selectBestModelOffer(
+      {
+        capability: "long_context",
+        runtimeMode: "long_context",
+        routingPreference: "cost_saver",
+        providerPreference: "vercel",
+        requiredContextTokens: 160_000,
+        maxOutputTokens: 4000,
+      },
+      offers,
+    );
+    assert(decision != null, "decision required");
+    assert(
+      decision!.selected.gatewayProviderSlug === "deepinfra",
+      `expected deepinfra, got ${decision!.selected.gatewayProviderSlug}`,
+    );
+  });
+
+  await run("V20.1.1 — picks Vercel DeepSeek V4 Pro for strong + cost_saver", () => {
+    const offers = [
+      ...buildVercelEndpointOverrides(),
+      ...MANUAL_MODEL_OVERRIDES.filter((o) => o.modelId === "deepseek-ai/DeepSeek-V4-Pro"),
+    ];
+    const decision = selectBestModelOffer(
+      {
+        capability: "deep_reasoning",
+        runtimeMode: "strong",
+        routingPreference: "cost_saver",
+        providerPreference: "auto",
+        requiresJson: true,
+      },
+      offers,
+    );
+    assert(decision != null, "decision required");
+    assert(
+      decision!.selected.modelId === "deepseek/deepseek-v4-pro",
+      `expected vercel deepseek v4 pro, got ${decision!.selected.modelId}`,
+    );
+    assert(
+      decision!.selected.gatewayProviderSlug === "deepseek",
+      `expected deepseek slug, got ${decision!.selected.gatewayProviderSlug}`,
+    );
+  });
+
+  await run("V20.1.1 — fail-closed when contextWindow missing", () => {
+    const offers = sampleOffers();
+    const candidates = listCandidateOffers(offers, {
+      capability: "long_context",
+      runtimeMode: "long_context",
+      routingPreference: "auto",
+      providerPreference: "auto",
+      requiredContextTokens: 200_000,
+    });
+    assert(candidates.length === 0, "offers without contextWindow should be rejected");
+  });
+
+  await run("V20.1.1 — embedding optimizer refuses switch without allow_gateway", () => {
+    const offers = MANUAL_MODEL_OVERRIDES.filter((o) => o.capabilities.includes("embedding"));
+    const candidates = listCandidateOffers(offers, {
+      capability: "embedding",
+      runtimeMode: "embedding",
+      routingPreference: "cost_saver",
+      providerPreference: "auto",
+      requiresEmbedding: true,
+      embeddingProfile: "pinned_bge",
+    });
+    assert(candidates.length === 1, "only pinned embedding model allowed");
+    assert(
+      candidates[0]!.modelId.includes("bge") || candidates[0]!.modelId.includes("BGE"),
+      "expected BGE pinned model",
+    );
+  });
+
+  await run("V20.1.1 — cache price stored but not used in estimate", () => {
+    const sfMinimax = MANUAL_MODEL_OVERRIDES.find((o) => o.modelId === "MiniMaxAI/MiniMax-M2.5")!;
+    const withCacheOnly = estimateOfferCost(sfMinimax, 1_000_000, 1_000_000);
+    const withoutCache = (sfMinimax.inputCostPerMillion! + sfMinimax.outputCostPerMillion!) ;
+    assert(
+      Math.abs(withCacheOnly - withoutCache) < 0.001,
+      "estimate should use input+output only, not cache",
+    );
+    assert(sfMinimax.cachedInputCostPerMillion === 0.03, "cache still stored on offer");
   });
 
   console.log("\nAll route optimizer tests passed.");

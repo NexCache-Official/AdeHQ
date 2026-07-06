@@ -1,6 +1,12 @@
 import { SILICONFLOW_API_BASE_URL, isSiliconFlowConfigured } from "@/lib/config/features";
+import { withEndpointKey } from "./endpoint-key";
 import { MANUAL_MODEL_OVERRIDES } from "./manual-overrides";
 import { normalizeApiModel } from "./normalize";
+import {
+  aggregateSiliconFlowSkuRows,
+  applySkuPricesToOffer,
+  shouldSkipSiliconFlowRow,
+} from "./siliconflow-sku-parser";
 import type { ModelEndpointOffer, PriceSnapshotInput, ProviderSyncResult } from "./types";
 
 type SiliconFlowModelRow = {
@@ -49,13 +55,14 @@ export async function syncSiliconFlowModels(): Promise<ProviderSyncResult> {
     const payload = (await response.json()) as { data?: SiliconFlowModelRow[] };
     const rows = payload.data ?? [];
 
+    const skuAggregated = aggregateSiliconFlowSkuRows(rows);
     const offers: ModelEndpointOffer[] = [];
     const snapshots: PriceSnapshotInput[] = [];
     const seen = new Set<string>();
 
     for (const row of rows) {
       const modelId = row.id?.trim();
-      if (!modelId) continue;
+      if (!modelId || shouldSkipSiliconFlowRow(modelId)) continue;
       seen.add(modelId);
 
       const subtype = (row.subtype ?? row.type ?? "").toLowerCase();
@@ -69,18 +76,25 @@ export async function syncSiliconFlowModels(): Promise<ProviderSyncResult> {
       const outputCost = parsePrice(row.pricing?.output);
       const hasApiPricing = inputCost != null && outputCost != null;
 
-      const offer = normalizeApiModel({
-        providerRoute: "siliconflow_direct",
-        providerName: "siliconflow",
-        modelId,
-        displayName: modelId.split("/").pop() ?? modelId,
-        modelType,
-        inputCostPerMillion: inputCost,
-        outputCostPerMillion: outputCost,
-        contextWindow: row.context_length,
-        source: hasApiPricing ? "siliconflow_api" : "manual_override",
-        raw: row as Record<string, unknown>,
-      });
+      let offer = withEndpointKey(
+        normalizeApiModel({
+          providerRoute: "siliconflow_direct",
+          providerName: "siliconflow",
+          modelId,
+          displayName: modelId.split("/").pop() ?? modelId,
+          modelType,
+          inputCostPerMillion: inputCost,
+          outputCostPerMillion: outputCost,
+          contextWindow: row.context_length,
+          source: hasApiPricing ? "siliconflow_api" : "manual_override",
+          raw: row as Record<string, unknown>,
+        }),
+      );
+
+      const skuParts = skuAggregated.get(modelId);
+      if (skuParts) {
+        offer = applySkuPricesToOffer(offer, skuParts);
+      }
 
       if (modelType === "embedding") {
         offer.capabilities = ["embedding"];
@@ -94,24 +108,49 @@ export async function syncSiliconFlowModels(): Promise<ProviderSyncResult> {
 
       offers.push(offer);
       snapshots.push({
-        providerRoute: "siliconflow_direct",
-        modelId,
+        providerRoute: offer.providerRoute,
+        modelId: offer.modelId,
+        gatewayProviderSlug: offer.gatewayProviderSlug,
+        endpointKey: offer.endpointKey,
         inputCostPerMillion: offer.inputCostPerMillion,
         outputCostPerMillion: offer.outputCostPerMillion,
+        cachedInputCostPerMillion: offer.cachedInputCostPerMillion,
         source: offer.source,
         rawPayload: row as Record<string, unknown>,
       });
     }
 
-    // Ensure manual overrides for known models are present even if API list differs
+    // Apply SKU-only models not in main model list
+    for (const [modelId, skuParts] of skuAggregated) {
+      if (seen.has(modelId)) continue;
+      const manual = MANUAL_MODEL_OVERRIDES.find(
+        (o) => o.providerRoute === "siliconflow_direct" && o.modelId === modelId,
+      );
+      if (!manual) continue;
+      const offer = applySkuPricesToOffer(manual, skuParts);
+      offers.push(offer);
+      snapshots.push({
+        providerRoute: offer.providerRoute,
+        modelId: offer.modelId,
+        endpointKey: offer.endpointKey,
+        inputCostPerMillion: offer.inputCostPerMillion,
+        outputCostPerMillion: offer.outputCostPerMillion,
+        cachedInputCostPerMillion: offer.cachedInputCostPerMillion,
+        source: offer.source,
+        rawPayload: { sku_only: true },
+      });
+    }
+
     for (const manual of MANUAL_MODEL_OVERRIDES.filter((o) => o.providerRoute === "siliconflow_direct")) {
-      if (!seen.has(manual.modelId)) {
+      if (!seen.has(manual.modelId) && !offers.some((o) => o.endpointKey === manual.endpointKey)) {
         offers.push({ ...manual, source: "manual_override" });
         snapshots.push({
           providerRoute: manual.providerRoute,
           modelId: manual.modelId,
+          endpointKey: manual.endpointKey,
           inputCostPerMillion: manual.inputCostPerMillion,
           outputCostPerMillion: manual.outputCostPerMillion,
+          cachedInputCostPerMillion: manual.cachedInputCostPerMillion,
           source: "manual_override",
           rawPayload: { manual: true },
         });
@@ -128,7 +167,6 @@ export async function syncSiliconFlowModels(): Promise<ProviderSyncResult> {
       snapshots,
     };
   } catch (error) {
-    // Fall back to manual overrides only
     const manualOffers = MANUAL_MODEL_OVERRIDES.filter((o) => o.providerRoute === "siliconflow_direct");
     return {
       provider: "siliconflow",
@@ -141,6 +179,7 @@ export async function syncSiliconFlowModels(): Promise<ProviderSyncResult> {
       snapshots: manualOffers.map((o) => ({
         providerRoute: o.providerRoute,
         modelId: o.modelId,
+        endpointKey: o.endpointKey,
         inputCostPerMillion: o.inputCostPerMillion,
         outputCostPerMillion: o.outputCostPerMillion,
         source: "manual_override",

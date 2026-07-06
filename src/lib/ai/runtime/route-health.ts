@@ -1,8 +1,11 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { buildEndpointKey, resolveEndpointKey } from "./pricing/endpoint-key";
 
 export type RouteHealthSnapshot = {
   providerRoute: string;
   modelId: string;
+  gatewayProviderSlug?: string;
+  endpointKey: string;
   successCount: number;
   failureCount: number;
   fallbackCount: number;
@@ -24,6 +27,8 @@ export type RouteHealthSnapshot = {
 export type RouteOutcomeEvent = {
   providerRoute: string;
   modelId: string;
+  gatewayProviderSlug?: string;
+  endpointKey?: string;
   success: boolean;
   usedFallback?: boolean;
   timedOut?: boolean;
@@ -35,14 +40,27 @@ export type RouteOutcomeEvent = {
 
 const healthCache = new Map<string, RouteHealthSnapshot>();
 
-function healthKey(providerRoute: string, modelId: string): string {
-  return `${providerRoute}:${modelId}`;
+function healthKey(
+  providerRoute: string,
+  modelId: string,
+  gatewayProviderSlug?: string,
+  endpointKey?: string,
+): string {
+  return endpointKey ?? buildEndpointKey(providerRoute, modelId, gatewayProviderSlug);
 }
 
-function emptyHealth(providerRoute: string, modelId: string): RouteHealthSnapshot {
+function emptyHealth(
+  providerRoute: string,
+  modelId: string,
+  gatewayProviderSlug?: string,
+  endpointKey?: string,
+): RouteHealthSnapshot {
+  const key = healthKey(providerRoute, modelId, gatewayProviderSlug, endpointKey);
   return {
     providerRoute,
     modelId,
+    gatewayProviderSlug: gatewayProviderSlug ?? "default",
+    endpointKey: key,
     successCount: 0,
     failureCount: 0,
     fallbackCount: 0,
@@ -86,11 +104,15 @@ export function readHealthMinSamples(): number {
 }
 
 export function setRouteHealthCache(snapshot: RouteHealthSnapshot): void {
-  healthCache.set(healthKey(snapshot.providerRoute, snapshot.modelId), computeRates(snapshot));
+  healthCache.set(snapshot.endpointKey, computeRates(snapshot));
 }
 
-export function getRouteHealth(providerRoute: string, modelId: string): RouteHealthSnapshot {
-  return healthCache.get(healthKey(providerRoute, modelId)) ?? emptyHealth(providerRoute, modelId);
+export function getRouteHealth(endpointKeyOrRoute: string, modelId?: string): RouteHealthSnapshot {
+  if (modelId == null) {
+    return healthCache.get(endpointKeyOrRoute) ?? emptyHealth("unknown", "unknown", "default", endpointKeyOrRoute);
+  }
+  const key = healthKey(endpointKeyOrRoute, modelId);
+  return healthCache.get(key) ?? emptyHealth(endpointKeyOrRoute, modelId);
 }
 
 export async function loadRouteHealthFromDb(
@@ -103,9 +125,19 @@ export async function loadRouteHealthFromDb(
   }
 
   const snapshots = (data ?? []).map((row) => {
+    const endpointKey = String(
+      row.endpoint_key ??
+        buildEndpointKey(
+          String(row.provider_route),
+          String(row.model_id),
+          row.gateway_provider_slug as string | undefined,
+        ),
+    );
     const snapshot = computeRates({
       providerRoute: String(row.provider_route),
       modelId: String(row.model_id),
+      gatewayProviderSlug: String(row.gateway_provider_slug ?? "default"),
+      endpointKey,
       successCount: Number(row.success_count ?? 0),
       failureCount: Number(row.failure_count ?? 0),
       fallbackCount: Number(row.fallback_count ?? 0),
@@ -157,11 +189,14 @@ export async function recordRouteOutcome(
   client: SupabaseClient | null,
   event: RouteOutcomeEvent,
 ): Promise<void> {
-  const key = healthKey(event.providerRoute, event.modelId);
-  const current = getRouteHealth(event.providerRoute, event.modelId);
+  const endpointKey =
+    event.endpointKey ?? buildEndpointKey(event.providerRoute, event.modelId, event.gatewayProviderSlug);
+  const current = getRouteHealth(endpointKey);
 
   const next = computeRates({
     ...current,
+    gatewayProviderSlug: event.gatewayProviderSlug ?? current.gatewayProviderSlug,
+    endpointKey,
     successCount: current.successCount + (event.success ? 1 : 0),
     failureCount: current.failureCount + (event.success ? 0 : 1),
     fallbackCount: current.fallbackCount + (event.usedFallback ? 1 : 0),
@@ -182,6 +217,8 @@ export async function recordRouteOutcome(
       {
         provider_route: event.providerRoute,
         model_id: event.modelId,
+        gateway_provider_slug: event.gatewayProviderSlug ?? "default",
+        endpoint_key: endpointKey,
         success_count: next.successCount,
         failure_count: next.failureCount,
         fallback_count: next.fallbackCount,
@@ -194,7 +231,7 @@ export async function recordRouteOutcome(
         window_hours: next.windowHours,
         computed_at: next.computedAt,
       },
-      { onConflict: "provider_route,model_id" },
+      { onConflict: "endpoint_key" },
     );
 
     if (error) console.warn("[AdeHQ route health] upsert failed:", error.message);

@@ -31,6 +31,8 @@
     "sync:model-pricing": "tsx scripts/sync-model-pricing.ts",
     "test:model-pricing": "tsx scripts/test-model-pricing-sync.ts",
     "test:route-optimizer": "tsx scripts/test-route-optimizer.ts",
+    "test:provider-endpoint-pricing": "tsx scripts/test-provider-endpoint-pricing.ts",
+    "test:vercel-gateway-provider-pin": "tsx scripts/test-vercel-gateway-provider-pin.ts",
     "verify:model-capabilities": "tsx scripts/verify-model-capabilities.ts",
     "test:room-steward": "tsx scripts/test-room-steward.ts",
     "test:dm-steward": "tsx scripts/test-dm-steward-routing.ts",

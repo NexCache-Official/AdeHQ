@@ -9,21 +9,43 @@ export type PriceSource =
 
 export type ModelType = "language" | "embedding" | "reranker";
 
+export type PriceProvenance = {
+  sourceUrl?: string;
+  verifiedAt: string;
+  verifiedBy: "manual_page_check";
+  priceSource?: "vercel_page_manual" | "siliconflow_page_manual";
+  notes: string;
+};
+
+export type EmbeddingProfile = "pinned_bge" | "allow_gateway";
+
 export type ModelEndpointOffer = {
   id?: string;
   providerRoute: ProviderRoute;
   providerName: string;
   modelId: string;
+  gatewayProviderSlug?: string;
+  endpointKey?: string;
+  providerDisplayName?: string;
   normalizedModelFamily: string;
   displayName: string;
   modelType: ModelType;
   capabilities: AiCapability[];
   runtimeModes: string[];
   contextWindow?: number;
+  maxOutputTokens?: number;
   inputCostPerMillion?: number;
   outputCostPerMillion?: number;
   cacheReadCostPerMillion?: number;
   cacheWriteCostPerMillion?: number;
+  cachedInputCostPerMillion?: number;
+  pricingUnit?: string;
+  throughputTps?: number;
+  latencySeconds?: number;
+  pricingDiscountActive?: boolean;
+  originalInputCostPerMillion?: number;
+  originalOutputCostPerMillion?: number;
+  pricingNotes?: string;
   currency: string;
   latencyP50Ms?: number;
   latencyP95Ms?: number;
@@ -39,12 +61,14 @@ export type ModelEndpointOffer = {
   enabled: boolean;
   source: PriceSource;
   priceFetchedAt?: string | null;
-  metadata?: Record<string, unknown>;
+  metadata?: Record<string, unknown> & Partial<PriceProvenance>;
 };
 
 export type PriceSnapshotInput = {
   providerRoute: string;
   modelId: string;
+  gatewayProviderSlug?: string;
+  endpointKey?: string;
   inputCostPerMillion?: number;
   outputCostPerMillion?: number;
   cachedInputCostPerMillion?: number;

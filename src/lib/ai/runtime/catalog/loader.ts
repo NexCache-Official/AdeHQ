@@ -1,4 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { normalizeModelFamily } from "../model-aliases";
+import { withEndpointKey } from "../pricing/endpoint-key";
+import { buildVercelEndpointOverrides } from "../pricing/vercel-endpoint-overrides";
 import { STATIC_MODEL_CATALOG, type CatalogModelEntry } from "./seed";
 import { listCatalogOffersFromDb } from "@/lib/supabase/model-catalog";
 import type { ModelEndpointOffer } from "../pricing/types";
@@ -14,11 +17,11 @@ function readCacheTtlMs(): number {
 }
 
 function catalogEntryToOffer(entry: CatalogModelEntry): ModelEndpointOffer {
-  return {
+  return withEndpointKey({
     providerRoute: entry.providerRoute,
     providerName: entry.providerName,
     modelId: entry.modelId,
-    normalizedModelFamily: entry.modelId.toLowerCase().replace(/[^a-z0-9]+/g, "-"),
+    normalizedModelFamily: normalizeModelFamily(entry.modelId),
     displayName: entry.displayName,
     modelType: entry.capabilities.includes("embedding") ? "embedding" : "language",
     capabilities: entry.capabilities,
@@ -42,14 +45,20 @@ function catalogEntryToOffer(entry: CatalogModelEntry): ModelEndpointOffer {
     supportsJson: !entry.capabilities.includes("embedding"),
     supportsTools: entry.providerRoute === "vercel_gateway",
     supportsEmbeddings: entry.capabilities.includes("embedding"),
-    supportsLongContext: entry.contextWindow >= 200_000,
+    supportsLongContext: entry.contextWindow >= 128_000,
     enabled: entry.enabled,
     source: "manual_seed",
-  };
+  });
 }
 
 export function staticCatalogOffers(): ModelEndpointOffer[] {
-  return STATIC_MODEL_CATALOG.map(catalogEntryToOffer);
+  const base = STATIC_MODEL_CATALOG.map(catalogEntryToOffer);
+  const endpoints = buildVercelEndpointOverrides();
+  const byKey = new Map(base.map((o) => [o.endpointKey!, o]));
+  for (const ep of endpoints) {
+    byKey.set(ep.endpointKey!, ep);
+  }
+  return [...byKey.values()];
 }
 
 export function invalidateCatalogCache(): void {
@@ -87,7 +96,14 @@ export function getOfferFromCache(
   providerRoute: string,
   modelId: string,
   offers?: ModelEndpointOffer[],
+  gatewayProviderSlug?: string,
 ): ModelEndpointOffer | undefined {
   const list = offers ?? cachedOffers ?? staticCatalogOffers();
-  return list.find((o) => o.providerRoute === providerRoute && o.modelId === modelId);
+  const slug = gatewayProviderSlug ?? "default";
+  return list.find(
+    (o) =>
+      o.providerRoute === providerRoute &&
+      o.modelId === modelId &&
+      (o.gatewayProviderSlug ?? "default") === slug,
+  );
 }

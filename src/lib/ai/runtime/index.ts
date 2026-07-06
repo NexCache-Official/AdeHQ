@@ -1,3 +1,4 @@
+import { loadEnabledOffers } from "./catalog/loader";
 import { routeCapability } from "./capability-router";
 import {
   getRuntimeFlags,
@@ -32,6 +33,16 @@ export type RuntimeInvokeOptions = {
   forceMode?: RuntimeV2Mode;
   forceProviderPref?: RuntimeProviderPref;
 };
+
+async function resolveCatalogOffers(): Promise<import("./pricing/types").ModelEndpointOffer[] | undefined> {
+  try {
+    const { createServiceRoleClient } = await import("@/lib/supabase/server");
+    const client = createServiceRoleClient();
+    return await loadEnabledOffers(client);
+  } catch {
+    return undefined;
+  }
+}
 
 function selectAdapter(
   route: ProviderRoute,
@@ -94,6 +105,7 @@ async function invokeWithRouting<T>(
     providerPref: options?.forceProviderPref,
   });
 
+  const catalogOffers = await resolveCatalogOffers();
   const routing = routeCapability(
     {
       workspaceId: params.workspaceId,
@@ -105,6 +117,7 @@ async function invokeWithRouting<T>(
       routingPreference: params.routingPreference,
       requiresJson: params.requiresJson ?? ("schema" in params),
       needsLongContext: Boolean(params.metadata?.needsLongContext),
+      catalogOffers,
     },
     flags.providerPref,
   );
@@ -126,6 +139,8 @@ async function invokeWithRouting<T>(
     ...params,
     modelId: params.modelId ?? routing.modelId,
     runtimeMode: params.runtimeMode ?? routing.runtimeMode,
+    gatewayProviderSlug: params.gatewayProviderSlug ?? routing.gatewayProviderSlug,
+    endpointKey: params.endpointKey ?? routing.endpointKey,
   };
 
   const result =
@@ -166,6 +181,7 @@ export async function embed(
     providerPref: options?.forceProviderPref,
   });
 
+  const catalogOffers = await resolveCatalogOffers();
   const routing = routeCapability(
     {
       workspaceId: params.workspaceId,
@@ -174,6 +190,7 @@ export async function embed(
       runtimeMode: params.runtimeMode ?? "embedding",
       modelMode: params.modelMode,
       message: params.texts.join("\n").slice(0, 500),
+      catalogOffers,
     },
     flags.providerPref,
   );
@@ -214,6 +231,8 @@ export async function embed(
     ...params,
     modelId: params.modelId ?? routing.modelId,
     runtimeMode: params.runtimeMode ?? routing.runtimeMode,
+    gatewayProviderSlug: params.gatewayProviderSlug ?? routing.gatewayProviderSlug,
+    endpointKey: params.endpointKey ?? routing.endpointKey,
   };
 
   const result = await adapter.embed(merged);
