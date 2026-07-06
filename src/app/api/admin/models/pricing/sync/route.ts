@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { syncModelPricing } from "@/lib/ai/runtime/pricing";
-import { AuthError, requireAuthUser, requireWorkspaceMembership } from "@/lib/supabase/auth-server";
+import { AuthError } from "@/lib/supabase/auth-server";
 import { createServiceRoleClient } from "@/lib/supabase/server";
+import { requirePlatformAdmin } from "@/lib/admin/require-platform-admin";
+import { writeAuditLog } from "@/lib/admin/audit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -22,19 +24,10 @@ export async function POST(request: NextRequest) {
         ? ([providerParam] as const)
         : (["vercel", "siliconflow"] as const);
 
+    let adminUserId: string | null = null;
     if (!isCronAuthorized(request)) {
-      const { user, client } = await requireAuthUser(request);
-      const workspaceId = request.nextUrl.searchParams.get("workspaceId");
-      if (!workspaceId) {
-        return NextResponse.json({ error: "workspaceId is required." }, { status: 400 });
-      }
-      const { role } = await requireWorkspaceMembership(client, workspaceId, user.id);
-      if (role !== "owner" && role !== "admin") {
-        return NextResponse.json(
-          { error: "Only workspace owners and admins can sync model pricing." },
-          { status: 403 },
-        );
-      }
+      const { admin } = await requirePlatformAdmin(request);
+      adminUserId = admin.userId;
     }
 
     const serviceClient = createServiceRoleClient();
@@ -42,6 +35,17 @@ export async function POST(request: NextRequest) {
       providers: [...providers],
       dryRun,
     });
+
+    if (adminUserId && !dryRun) {
+      await writeAuditLog(serviceClient, {
+        adminUserId,
+        action: "model_pricing_synced",
+        targetType: "ai_model_catalog",
+        targetId: providers.join(","),
+        after: summary as unknown,
+        request,
+      });
+    }
 
     return NextResponse.json(summary);
   } catch (error) {

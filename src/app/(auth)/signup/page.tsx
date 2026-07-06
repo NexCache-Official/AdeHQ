@@ -22,10 +22,28 @@ export default function SignupPage() {
   const [confirmationSent, setConfirmationSent] = useState(false);
   const [confirmationEmail, setConfirmationEmail] = useState("");
   const [repeatedSignup, setRepeatedSignup] = useState(false);
+  const [signupsDisabled, setSignupsDisabled] = useState(false);
 
   useEffect(() => {
     actions.clearError();
   }, [actions]);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/platform/status");
+        if (!res.ok || cancelled) return;
+        const body = await res.json();
+        if (!body.signupsEnabled) setSignupsDisabled(true);
+      } catch {
+        // fail open
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const create = async () => {
     setError(null);
@@ -78,6 +96,12 @@ export default function SignupPage() {
         We&apos;ll save your workspace name for onboarding — nothing is created until you finish
         setup.
       </p>
+
+      {signupsDisabled && (
+        <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          New signups are temporarily disabled. Please check back later or contact support.
+        </div>
+      )}
 
       {confirmationSent ? (
         <div className="mt-7 rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-4 text-left">
@@ -165,8 +189,9 @@ export default function SignupPage() {
             />
           </label>
         </div>
-        <Button type="submit" size="lg" className="w-full">
-          {loading ? "Creating..." : "Create account"} <ArrowRight className="h-4 w-4" />
+        <Button type="submit" size="lg" className="w-full" disabled={loading || signupsDisabled}>
+          {loading ? "Creating..." : signupsDisabled ? "Signups disabled" : "Create account"}{" "}
+          <ArrowRight className="h-4 w-4" />
         </Button>
       </form>
 

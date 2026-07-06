@@ -8,6 +8,7 @@ import { authHeaders } from "@/lib/api/auth-client";
 import { AiRuntimePanel } from "@/components/AiRuntimePanel";
 import { WorkHoursShadowPanel } from "@/components/work-hours/WorkHoursShadowPanel";
 import { AccountDangerZone } from "@/components/AccountDangerZone";
+import { PlatformAdminLink } from "@/components/admin/PlatformAdminLink";
 import { PageContainer, PageHeader } from "@/components/Page";
 import { Card, Button, Toggle } from "@/components/ui";
 import { HumanAvatar } from "@/components/EmployeeAvatar";
@@ -75,7 +76,12 @@ export default function SettingsPage() {
 
   return (
     <PageContainer>
-      <PageHeader title="Settings" subtitle="Manage your workspace, profile, people, and model providers." icon={<SettingsIcon className="h-5 w-5" />} />
+      <PageHeader
+        title="Settings"
+        subtitle="Manage your workspace, profile, people, and model providers."
+        icon={<SettingsIcon className="h-5 w-5" />}
+        actions={<PlatformAdminLink />}
+      />
 
       <div className="space-y-6">
         {/* Workspace + profile */}

@@ -480,10 +480,10 @@ export function AiRuntimePanel() {
                 setSyncBusy(true);
                 setSyncResult(null);
                 try {
-                  const res = await fetch(
-                    `/api/admin/model-pricing/sync?workspaceId=${encodeURIComponent(state.workspace.id)}`,
-                    { method: "POST", headers: await authHeaders() },
-                  );
+                  const res = await fetch("/api/admin/models/pricing/sync", {
+                    method: "POST",
+                    headers: await authHeaders(),
+                  });
                   const data = await res.json();
                   if (!res.ok) throw new Error(data.error ?? "Sync failed");
                   setSyncResult(

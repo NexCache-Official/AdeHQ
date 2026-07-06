@@ -3,16 +3,25 @@ import { AuthError, requireAuthUser } from "@/lib/supabase/auth-server";
 import { createServiceRoleClient } from "@/lib/supabase/server";
 import { AccountLifecycleError } from "@/lib/server/account-lifecycle";
 import { bootstrapWorkspaceForUser } from "@/lib/server/workspace-bootstrap";
+import { isPlatformFlagEnabled, preloadPlatformFlags } from "@/lib/admin/platform-flags";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function POST(request: NextRequest) {
   try {
+    const serviceClient = createServiceRoleClient();
+    await preloadPlatformFlags(serviceClient);
+
+    if (!(await isPlatformFlagEnabled("signups_enabled", serviceClient))) {
+      return NextResponse.json(
+        { error: "New signups are temporarily disabled." },
+        { status: 503 },
+      );
+    }
+
     const { user } = await requireAuthUser(request);
     const body = (await request.json().catch(() => ({}))) as { workspaceName?: string };
-
-    const serviceClient = createServiceRoleClient();
     const result = await bootstrapWorkspaceForUser(
       serviceClient,
       user,

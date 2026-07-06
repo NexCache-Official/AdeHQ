@@ -48,6 +48,28 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
 
   const [commandOpen, setCommandOpen] = useState(false);
   const [roomOpen, setRoomOpen] = useState(false);
+  const [maintenanceMessage, setMaintenanceMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/platform/status");
+        if (!res.ok || cancelled) return;
+        const body = await res.json();
+        if (body.maintenanceMode && body.maintenanceMessage) {
+          setMaintenanceMessage(String(body.maintenanceMessage));
+        } else if (body.maintenanceMode) {
+          setMaintenanceMessage("AdeHQ is in maintenance mode. Some features may be unavailable.");
+        }
+      } catch {
+        // ignore — fail open for banner
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     if (!hydrated) return;
@@ -89,6 +111,11 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
         <Sidebar />
         <div className="flex min-w-0 flex-1 flex-col">
           <Topbar />
+          {maintenanceMessage && (
+            <div className="border-b border-amber-200 bg-amber-50 px-4 py-2 text-center text-sm text-amber-900">
+              {maintenanceMessage}
+            </div>
+          )}
           <main key={pathname} className="min-h-0 flex-1 overflow-hidden">
             <div
               className={cn(

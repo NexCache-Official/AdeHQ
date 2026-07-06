@@ -1,4 +1,5 @@
 import type { RuntimeProviderPref, RuntimeV2Mode, RouteOptimizerMode } from "./types";
+import { getCachedPlatformFlag } from "@/lib/admin/platform-flags";
 
 const VALID_MODES: RuntimeV2Mode[] = ["off", "shadow", "on"];
 const VALID_PREFS: RuntimeProviderPref[] = ["auto", "siliconflow", "vercel", "mock"];
@@ -56,7 +57,20 @@ function normalizeBooleanFlag(raw: string | undefined, defaultValue = false): bo
   return value === "true" || value === "1" || value === "yes";
 }
 
-/** Read runtime feature flags from environment. Default: off / auto / direct execution false. */
+function readPlatformOrEnv(
+  platformKey: string,
+  envValue: string | undefined,
+  normalize: (raw: string | undefined) => string,
+): string {
+  const cached = getCachedPlatformFlag(platformKey);
+  if (cached !== undefined && cached !== null) {
+    const raw = typeof cached === "string" ? cached : String(cached);
+    if (raw.trim()) return normalize(raw);
+  }
+  return normalize(envValue);
+}
+
+/** Read runtime feature flags: platform DB cache (if warmed) → env → default. */
 export function getRuntimeFlags(overrides?: {
   mode?: RuntimeV2Mode;
   providerPref?: RuntimeProviderPref;
@@ -65,22 +79,45 @@ export function getRuntimeFlags(overrides?: {
   employeeQueuedExecution?: boolean;
 }): RuntimeFlagSnapshot {
   return {
-    mode: overrides?.mode ?? normalizeMode(process.env.AI_RUNTIME_V2_MODE),
+    mode:
+      overrides?.mode ??
+      (readPlatformOrEnv(
+        "runtime_v2_mode",
+        process.env.AI_RUNTIME_V2_MODE,
+        (v) => normalizeMode(v),
+      ) as RuntimeV2Mode),
     providerPref:
       overrides?.providerPref ??
       normalizeProviderPref(process.env.AI_RUNTIME_V2_PROVIDER_PREF),
     routeOptimizer:
       overrides?.routeOptimizer ??
-      normalizeRouteOptimizerMode(process.env.AI_RUNTIME_ROUTE_OPTIMIZER),
+      (readPlatformOrEnv(
+        "route_optimizer_mode",
+        process.env.AI_RUNTIME_ROUTE_OPTIMIZER,
+        (v) => normalizeRouteOptimizerMode(v),
+      ) as RouteOptimizerMode),
     employeeDirectExecution:
       overrides?.employeeDirectExecution ??
-      normalizeBooleanFlag(process.env.AI_RUNTIME_V2_EMPLOYEE_DIRECT_EXECUTION, false),
+      readPlatformBoolean("employee_direct_execution", process.env.AI_RUNTIME_V2_EMPLOYEE_DIRECT_EXECUTION, false),
     employeeQueuedExecution:
       overrides?.employeeQueuedExecution ??
-      normalizeBooleanFlag(process.env.AI_RUNTIME_V2_EMPLOYEE_QUEUED_EXECUTION, false),
+      readPlatformBoolean("employee_queued_execution", process.env.AI_RUNTIME_V2_EMPLOYEE_QUEUED_EXECUTION, false),
     legacyEnabled: process.env.AI_RUNTIME_V2_ENABLED,
     legacyShadow: process.env.AI_RUNTIME_V2_SHADOW_MODE,
   };
+}
+
+function readPlatformBoolean(
+  platformKey: string,
+  envValue: string | undefined,
+  defaultValue: boolean,
+): boolean {
+  const cached = getCachedPlatformFlag(platformKey);
+  if (cached === true || cached === false) return cached;
+  if (typeof cached === "string") {
+    return cached === "true" || cached === "1";
+  }
+  return normalizeBooleanFlag(envValue, defaultValue);
 }
 
 /** True only when direct employee replies may execute Runtime V2 (hot-path gated). */

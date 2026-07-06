@@ -11,6 +11,7 @@ import {
 } from "@/lib/ai/browser-research/server";
 import { AuthError, requireAuthUser, requireWorkspaceMembership } from "@/lib/supabase/auth-server";
 import { createServiceRoleClient } from "@/lib/supabase/server";
+import { isPlatformFlagEnabled, preloadPlatformFlags } from "@/lib/admin/platform-flags";
 import type { RoomMessage } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -84,6 +85,15 @@ export async function POST(request: NextRequest) {
     }
 
     const serviceClient = createServiceRoleClient();
+    await preloadPlatformFlags(serviceClient);
+
+    if (!(await isPlatformFlagEnabled("browser_research_enabled", serviceClient))) {
+      return NextResponse.json(
+        { error: "Browser research is temporarily disabled." },
+        { status: 503 },
+      );
+    }
+
     const { run, chatReply, async: isAsync } = await createAndRunBrowserResearch(serviceClient, {
       workspaceId,
       roomId: body.roomId?.trim() || undefined,

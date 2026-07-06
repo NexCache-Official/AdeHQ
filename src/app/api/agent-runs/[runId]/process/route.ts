@@ -6,6 +6,7 @@ import { createServiceRoleClient } from "@/lib/supabase/server";
 import { debugErrorPayload, serializeUnknownError } from "@/lib/server/message-errors";
 import { roomIdFromRow } from "@/lib/server/db-row";
 import { nowISO } from "@/lib/utils";
+import { isPlatformFlagEnabled, preloadPlatformFlags } from "@/lib/admin/platform-flags";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -57,6 +58,15 @@ export async function POST(
           debug: debug ? { step: "createServiceRoleClient", detail: String(err) } : undefined,
         },
         { status: 500 },
+      );
+    }
+
+    await preloadPlatformFlags(serviceClient);
+
+    if (!(await isPlatformFlagEnabled("ai_runs_enabled", serviceClient))) {
+      return NextResponse.json(
+        { error: "AI runs are temporarily disabled for maintenance." },
+        { status: 503 },
       );
     }
 
