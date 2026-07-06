@@ -110,6 +110,19 @@ I help you:
 What job do you need done first?`;
 }
 
+const MAYA_WELCOME_GREETING_RE =
+  /^Hi (.+?) — I'm Maya, your AI Workforce Manager\./;
+
+/** True when content is Maya's standard DM bootstrap greeting (not a later reply). */
+export function isMayaBootstrapWelcome(content: string): boolean {
+  return MAYA_WELCOME_GREETING_RE.test(content.trim());
+}
+
+export function greetingFirstNameFromWelcome(content: string): string | null {
+  const match = content.trim().match(MAYA_WELCOME_GREETING_RE);
+  return match?.[1] ?? null;
+}
+
 export function mayaOnboardingWelcomeMessage(
   firstName: string,
   workspaceName: string,

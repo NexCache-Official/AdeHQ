@@ -739,10 +739,14 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 
           const { authHeaders } = await import("@/lib/api/auth-client");
           const headers = await authHeaders();
+          const profileFirstName = stateRef.current.user?.name?.split(/\s+/)[0];
           const mayaRes = await fetch("/api/workspaces/ensure-maya", {
             method: "POST",
             headers,
-            body: JSON.stringify({ workspaceId: bootstrapped.workspaceId }),
+            body: JSON.stringify({
+              workspaceId: bootstrapped.workspaceId,
+              ...(profileFirstName ? { firstName: profileFirstName } : {}),
+            }),
           });
           const mayaPayload = await mayaRes.json().catch(() => ({}));
           if (!mayaRes.ok) {

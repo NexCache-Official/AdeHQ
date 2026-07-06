@@ -6,6 +6,8 @@ import {
   MAYA_EMPLOYEE_NAME,
   MAYA_EMPLOYEE_TITLE,
   MAYA_SYSTEM_EMPLOYEE_KEY,
+  greetingFirstNameFromWelcome,
+  isMayaBootstrapWelcome,
   mayaWelcomeMessage,
 } from "@/lib/hiring/maya";
 import {
@@ -153,10 +155,11 @@ export async function ensureMayaDM(
 
     const { data: messages, error: messagesError } = await client
       .from("messages")
-      .select("id")
+      .select("id, content, sender_id")
       .eq("workspace_id", workspaceId)
       .eq("room_id", roomId)
-      .limit(1);
+      .order("created_at", { ascending: true })
+      .limit(5);
     if (messagesError) throw messagesError;
 
     if (!messages?.length) {
@@ -174,6 +177,18 @@ export async function ensureMayaDM(
       };
       const { error: welcomeError } = await client.from("messages").insert(welcomeMessage);
       if (welcomeError) throw welcomeError;
+    } else if (
+      messages.length === 1 &&
+      String(messages[0].sender_id) === MAYA_EMPLOYEE_ID &&
+      isMayaBootstrapWelcome(String(messages[0].content ?? "")) &&
+      greetingFirstNameFromWelcome(String(messages[0].content ?? "")) !== (firstName ?? "there")
+    ) {
+      const { error: welcomeUpdateError } = await client
+        .from("messages")
+        .update({ content: welcome })
+        .eq("workspace_id", workspaceId)
+        .eq("id", messages[0].id);
+      if (welcomeUpdateError) throw welcomeUpdateError;
     }
 
     return buildMayaDmRoom(userId, welcome);
