@@ -1,4 +1,4 @@
-import type { RuntimeProviderPref, RuntimeV2Mode } from "./types";
+import type { RuntimeProviderPref, RuntimeV2Mode, RouteOptimizerMode } from "./types";
 
 const VALID_MODES: RuntimeV2Mode[] = ["off", "shadow", "on"];
 const VALID_PREFS: RuntimeProviderPref[] = ["auto", "siliconflow", "vercel", "mock"];
@@ -28,9 +28,20 @@ function normalizeProviderPref(raw: string | undefined): RuntimeProviderPref {
   return "auto";
 }
 
+const VALID_ROUTE_OPTIMIZER: RouteOptimizerMode[] = ["off", "shadow", "on"];
+
+function normalizeRouteOptimizerMode(raw: string | undefined): RouteOptimizerMode {
+  const value = (raw ?? "off").trim().toLowerCase();
+  if (VALID_ROUTE_OPTIMIZER.includes(value as RouteOptimizerMode)) {
+    return value as RouteOptimizerMode;
+  }
+  return "off";
+}
+
 export type RuntimeFlagSnapshot = {
   mode: RuntimeV2Mode;
   providerPref: RuntimeProviderPref;
+  routeOptimizer: RouteOptimizerMode;
   /** Direct employee respond path — requires AI_RUNTIME_V2_MODE=on. Default false. */
   employeeDirectExecution: boolean;
   /** Queued orchestration employee runs — requires AI_RUNTIME_V2_MODE=on. Default false. */
@@ -49,6 +60,7 @@ function normalizeBooleanFlag(raw: string | undefined, defaultValue = false): bo
 export function getRuntimeFlags(overrides?: {
   mode?: RuntimeV2Mode;
   providerPref?: RuntimeProviderPref;
+  routeOptimizer?: RouteOptimizerMode;
   employeeDirectExecution?: boolean;
   employeeQueuedExecution?: boolean;
 }): RuntimeFlagSnapshot {
@@ -57,6 +69,9 @@ export function getRuntimeFlags(overrides?: {
     providerPref:
       overrides?.providerPref ??
       normalizeProviderPref(process.env.AI_RUNTIME_V2_PROVIDER_PREF),
+    routeOptimizer:
+      overrides?.routeOptimizer ??
+      normalizeRouteOptimizerMode(process.env.AI_RUNTIME_ROUTE_OPTIMIZER),
     employeeDirectExecution:
       overrides?.employeeDirectExecution ??
       normalizeBooleanFlag(process.env.AI_RUNTIME_V2_EMPLOYEE_DIRECT_EXECUTION, false),
@@ -103,6 +118,14 @@ export function isRuntimeExecutionAllowed(mode: RuntimeV2Mode): boolean {
 }
 
 export function isRuntimeShadowMode(mode: RuntimeV2Mode): boolean {
+  return mode === "shadow";
+}
+
+export function isRouteOptimizerOn(mode: RouteOptimizerMode = getRuntimeFlags().routeOptimizer): boolean {
+  return mode === "on";
+}
+
+export function isRouteOptimizerShadow(mode: RouteOptimizerMode = getRuntimeFlags().routeOptimizer): boolean {
   return mode === "shadow";
 }
 

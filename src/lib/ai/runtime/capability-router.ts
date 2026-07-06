@@ -10,7 +10,12 @@ import {
   resolveVercelGatewayModelId,
 } from "./adapters/vercel-models";
 import { resolveSiliconFlowRuntimeModel } from "./adapters/siliconflow";
+import { staticCatalogOffers } from "./catalog/loader";
 import { findCatalogModelsForCapability } from "./catalog/seed";
+import { getRuntimeFlags, isRouteOptimizerOn, isRouteOptimizerShadow } from "./flags";
+import type { ModelEndpointOffer } from "./pricing/types";
+import { isMockFallbackAllowed, selectBestModelOffer } from "./route-optimizer";
+import { buildTaskRoutingBrief } from "./task-routing-brief";
 import { estimateWorkMinutesFromCost } from "../work-hours/estimate";
 import { getWorkMinuteUsdRate } from "../work-hours/constants";
 import type {
@@ -285,6 +290,99 @@ function routeBrowserResearchCapability(
   };
 }
 
+function stripMockFallbacks(
+  candidates: CapabilityRouteDecision["fallbackCandidates"],
+): CapabilityRouteDecision["fallbackCandidates"] {
+  if (isMockFallbackAllowed()) return candidates;
+  return candidates.filter((c) => c.providerRoute !== "mock");
+}
+
+function applyRouteOptimizer(
+  decision: CapabilityRouteDecision,
+  input: CapabilityRouteInput,
+  providerPref: RuntimeProviderPref,
+): CapabilityRouteDecision {
+  const flags = getRuntimeFlags();
+  if (!isRouteOptimizerOn(flags.routeOptimizer) && !isRouteOptimizerShadow(flags.routeOptimizer)) {
+    return {
+      ...decision,
+      fallbackCandidates: stripMockFallbacks(decision.fallbackCandidates),
+    };
+  }
+
+  const offers = input.catalogOffers ?? staticCatalogOffers();
+  const brief = buildTaskRoutingBrief(input, {
+    providerPreference: providerPref,
+    requiresJson: input.requiresJson,
+    currentRoute: input.currentRoute,
+  });
+  if (input.routingPreference) {
+    brief.routingPreference = input.routingPreference;
+  }
+
+  const optimized = selectBestModelOffer(brief, offers);
+  if (!optimized) {
+    return {
+      ...decision,
+      fallbackCandidates: stripMockFallbacks(decision.fallbackCandidates),
+    };
+  }
+
+  const optimizerMeta: CapabilityRouteDecision["routeOptimizer"] = {
+    selectedProviderRoute: optimized.selected.providerRoute,
+    selectedModelId: optimized.selected.modelId,
+    reason: optimized.reason,
+    estimatedCostUsd: optimized.estimatedCostUsd,
+    decisionFactors: optimized.decisionFactors,
+    priceSource: optimized.priceSource,
+    priceFreshness: optimized.priceFreshness,
+    healthNote: optimized.healthNote,
+    fallbackCandidates: optimized.fallbackCandidates.map((o) => ({
+      providerRoute: o.providerRoute,
+      modelId: o.modelId,
+    })),
+    shadowOnly: isRouteOptimizerShadow(flags.routeOptimizer),
+    usedStaticFallback: optimized.usedStaticFallback,
+  };
+
+  if (isRouteOptimizerShadow(flags.routeOptimizer)) {
+    return {
+      ...decision,
+      fallbackCandidates: stripMockFallbacks(decision.fallbackCandidates),
+      routeOptimizer: optimizerMeta,
+    };
+  }
+
+  const promptLen = input.message?.length ?? 256;
+  const inputTokens = Math.max(50, Math.ceil(promptLen / 4));
+  const outputTokens = input.needsLongContext ? 2000 : 800;
+  const estimatedCostUsd =
+    optimized.estimatedCostUsd ||
+    estimateCost(optimized.selected.modelId, inputTokens, outputTokens);
+
+  return {
+    providerRoute: optimized.selected.providerRoute,
+    providerName: providerNameForRoute(
+      optimized.selected.providerRoute,
+      input.capability,
+      input.researchProvider,
+    ),
+    modelId: optimized.selected.modelId,
+    runtimeMode: decision.runtimeMode,
+    capability: decision.capability,
+    reasoningProfile: decision.reasoningProfile,
+    estimatedCostUsd,
+    estimatedWorkMinutes: estimateWorkMinutes(estimatedCostUsd),
+    fallbackCandidates: stripMockFallbacks(
+      optimized.fallbackCandidates.map((o) => ({
+        providerRoute: o.providerRoute,
+        modelId: o.modelId,
+      })),
+    ),
+    routeOptimizer: optimizerMeta,
+  };
+}
+
 /** Capability router — planning only in V19.9.0a (not wired to callers yet). */
 export function routeCapability(
   input: CapabilityRouteInput,
@@ -320,7 +418,9 @@ export function routeCapability(
         modelId: resolveVercelGatewayModelId({ runtimeMode, capability: input.capability }),
       });
     }
-    fallbackCandidates.push({ providerRoute: "mock", modelId: "mock/runtime-v2" });
+    if (isMockFallbackAllowed()) {
+      fallbackCandidates.push({ providerRoute: "mock", modelId: "mock/runtime-v2" });
+    }
   } else if (providerRoute === "vercel_gateway") {
     if (isSiliconFlowConfigured()) {
       fallbackCandidates.push({
@@ -328,10 +428,12 @@ export function routeCapability(
         modelId: resolveModel("siliconflow", modelMode),
       });
     }
-    fallbackCandidates.push({ providerRoute: "mock", modelId: "mock/runtime-v2" });
+    if (isMockFallbackAllowed()) {
+      fallbackCandidates.push({ providerRoute: "mock", modelId: "mock/runtime-v2" });
+    }
   }
 
-  return {
+  const baseDecision: CapabilityRouteDecision = {
     providerRoute,
     providerName: providerNameForRoute(providerRoute, input.capability, input.researchProvider),
     modelId,
@@ -342,4 +444,6 @@ export function routeCapability(
     estimatedWorkMinutes,
     fallbackCandidates,
   };
+
+  return applyRouteOptimizer(baseDecision, input, providerPref);
 }

@@ -29,6 +29,8 @@ import {
 } from "@/lib/supabase/ai-work-units";
 import { inferEmployeeReplyCapability } from "@/lib/ai/runtime/hot-path-shadow";
 import type { ModelMode } from "@/lib/ai/model-catalog";
+import { resolveEmployeeIntelligencePolicy } from "@/lib/ai/intelligence-policy";
+import { recordRouteOutcome } from "@/lib/ai/runtime/route-health";
 
 export type EmployeeQueuedRuntimeDispatch = "old" | "shadow" | "legacy-guarded" | "runtime-on";
 
@@ -134,6 +136,7 @@ export async function generateEmployeeQueuedResponseRuntime(
     isGreetingRun: options.isGreetingRun,
     conversationMode: options.conversationMode ?? meta.conversationMode,
   });
+  const intelligencePolicy = resolveEmployeeIntelligencePolicy(input.employee);
 
   let workUnitId: string | undefined;
 
@@ -199,6 +202,8 @@ export async function generateEmployeeQueuedResponseRuntime(
       workUnitId,
       capability,
       modelMode,
+      routingPreference: intelligencePolicy.routingPreference as import("@/lib/ai/intelligence-policy").RoutingPreference,
+      requiresJson: true,
       reasoningProfile: reasoningProfileForCapability(capability),
       schema: ModelResponseSchema,
       system,
@@ -232,9 +237,19 @@ export async function generateEmployeeQueuedResponseRuntime(
           workMinutesEstimated: result.workMinutesEstimated,
           inputTokens: result.usage.inputTokens,
           outputTokens: result.usage.outputTokens,
+          routeOptimizer: result.routing?.routeOptimizer,
         },
       });
     }
+
+    await recordRouteOutcome(ctx.client ?? null, {
+      providerRoute: result.usage.providerRoute,
+      modelId: result.usage.modelId,
+      success: true,
+      latencyMs: result.usage.latencyMs,
+      estimatedCostUsd: result.routing?.estimatedCostUsd,
+      actualCostUsd: result.usage.totalCostUsd,
+    });
 
     recordAiRuntime({
       workspaceId: ctx.workspaceId,
@@ -267,6 +282,12 @@ export async function generateEmployeeQueuedResponseRuntime(
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
+    await recordRouteOutcome(ctx.client ?? null, {
+      providerRoute: "siliconflow_direct",
+      modelId: input.employee.model ?? "unknown",
+      success: false,
+      jsonFailure: message.includes("schema"),
+    });
     if (ctx.client && ctx.workspaceId && workUnitId) {
       try {
         await failAiWorkUnit(ctx.client, ctx.workspaceId, workUnitId, message);

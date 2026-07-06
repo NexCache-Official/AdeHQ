@@ -20,14 +20,52 @@ type RuntimeSnapshot = {
   demoModeEnabled: boolean;
   runtimeV2Mode?: string;
   providerPref?: string;
+  routeOptimizerMode?: string;
+  priceMaxAgeHours?: number;
+  catalogSummary?: { offerCount: number; enabledCount: number };
+  optimizerPreview?: {
+    selected: string;
+    reason: string;
+    estimatedCostUsd: number;
+    fallbacks: Array<{ providerRoute: string; modelId: string }>;
+    priceSource: string;
+    priceFreshness: string;
+    healthNote?: string;
+    shadowOnly?: boolean;
+    decisionFactors?: {
+      costRank: number;
+      qualityRank: number;
+      latencyRank: number;
+      reliabilityRank: number;
+      healthPenalty: number;
+      stalePricePenalty: number;
+      antiFlapApplied: boolean;
+    };
+  };
   employeeDirectExecution?: boolean;
   employeeQueuedExecution?: boolean;
+  catalog?: {
+    offers: Array<{
+      providerRoute: string;
+      modelId: string;
+      displayName: string;
+      inputCostPerMillion?: number;
+      outputCostPerMillion?: number;
+      source: string;
+      priceFetchedAt?: string | null;
+      enabled: boolean;
+    }>;
+    syncRuns: Array<Record<string, unknown>>;
+  };
   routingPreview?: Array<{
     capability: string;
     providerRoute: string;
+    modelId?: string;
     runtimeMode: string;
     estimatedWorkMinutes: number;
+    estimatedCostUsd?: number;
     fallbackCandidates: string[];
+    routeOptimizer?: Record<string, unknown>;
   }>;
   last?: {
     at: string;
@@ -67,6 +105,8 @@ export function AiRuntimePanel() {
   const [providerTestPrompt, setProviderTestPrompt] = useState("Reply with one short sentence.");
   const [providerTestResult, setProviderTestResult] = useState<string | null>(null);
   const [providerTestBusy, setProviderTestBusy] = useState(false);
+  const [syncBusy, setSyncBusy] = useState(false);
+  const [syncResult, setSyncResult] = useState<string | null>(null);
 
   const canAdmin =
     backend === "supabase" &&
@@ -216,6 +256,7 @@ export function AiRuntimePanel() {
       ) : (
         <dl className="grid gap-2 text-sm sm:grid-cols-2">
           <Stat label="Runtime mode" value={snapshot?.runtimeV2Mode ?? "off"} />
+          <Stat label="Route optimizer" value={snapshot?.routeOptimizerMode ?? "off"} />
           <Stat label="Provider preference" value={snapshot?.providerPref ?? "auto"} />
           <Stat label="SiliconFlow available" value={snapshot?.siliconflowConfigured ? "Yes" : "No"} />
           <Stat label="Gateway available" value={snapshot?.gatewayAvailable ? "Yes" : "No"} />
@@ -248,6 +289,96 @@ export function AiRuntimePanel() {
           )}
           {snapshot?.last?.error && <Stat label="Last error" value={snapshot.last.error} />}
         </dl>
+      )}
+
+      {snapshot?.optimizerPreview && (
+        <div className="mt-4">
+          <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
+            Why this route?
+          </h3>
+          <div className="space-y-1 rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600">
+            <div>
+              <span className="font-medium text-slate-800">Selected:</span>{" "}
+              {snapshot.optimizerPreview.selected}
+            </div>
+            <div>
+              <span className="font-medium text-slate-800">Reason:</span>{" "}
+              {snapshot.optimizerPreview.reason}
+            </div>
+            <div>
+              <span className="font-medium text-slate-800">Est. cost:</span> $
+              {snapshot.optimizerPreview.estimatedCostUsd.toFixed(6)}
+            </div>
+            <div>
+              <span className="font-medium text-slate-800">Price:</span>{" "}
+              {snapshot.optimizerPreview.priceSource} ({snapshot.optimizerPreview.priceFreshness})
+            </div>
+            {snapshot.optimizerPreview.healthNote && (
+              <div>
+                <span className="font-medium text-slate-800">Health:</span>{" "}
+                {snapshot.optimizerPreview.healthNote}
+              </div>
+            )}
+            {snapshot.optimizerPreview.decisionFactors && (
+              <div className="mt-1 text-[11px] text-slate-500">
+                cost #{snapshot.optimizerPreview.decisionFactors.costRank} · quality #
+                {snapshot.optimizerPreview.decisionFactors.qualityRank} · latency #
+                {snapshot.optimizerPreview.decisionFactors.latencyRank}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {snapshot?.catalog?.offers && snapshot.catalog.offers.length > 0 && (
+        <div className="mt-4">
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+              Model catalog ({snapshot.catalog.offers.length})
+            </h3>
+            <Button
+              type="button"
+              variant="secondary"
+              className="text-xs"
+              disabled={syncBusy || !state.workspace?.id}
+              onClick={async () => {
+                if (!state.workspace?.id) return;
+                setSyncBusy(true);
+                setSyncResult(null);
+                try {
+                  const res = await fetch(
+                    `/api/admin/model-pricing/sync?workspaceId=${encodeURIComponent(state.workspace.id)}`,
+                    { method: "POST", headers: await authHeaders() },
+                  );
+                  const data = await res.json();
+                  if (!res.ok) throw new Error(data.error ?? "Sync failed");
+                  setSyncResult(
+                    `Synced: +${data.totalAdded} / ~${data.totalUpdated} updated / ${data.totalDisabled} disabled`,
+                  );
+                  const snap = await refreshSnapshot();
+                  setSnapshot(snap ?? null);
+                } catch (err) {
+                  setSyncResult(err instanceof Error ? err.message : "Sync failed");
+                } finally {
+                  setSyncBusy(false);
+                }
+              }}
+            >
+              {syncBusy ? "Refreshing…" : "Refresh model pricing"}
+            </Button>
+          </div>
+          {syncResult && <p className="mb-2 text-xs text-slate-500">{syncResult}</p>}
+          <div className="max-h-48 space-y-1 overflow-y-auto rounded-xl border border-slate-200 bg-slate-50 p-2 text-xs text-slate-600">
+            {snapshot.catalog.offers.slice(0, 24).map((offer) => (
+              <div key={`${offer.providerRoute}:${offer.modelId}`}>
+                <span className="font-medium text-slate-800">{offer.displayName}</span> ·{" "}
+                {offer.providerRoute} · ${offer.inputCostPerMillion ?? "?"} / $
+                {offer.outputCostPerMillion ?? "?"} · {offer.source}
+                {!offer.enabled ? " · disabled" : ""}
+              </div>
+            ))}
+          </div>
+        </div>
       )}
 
       {snapshot?.routingPreview && snapshot.routingPreview.length > 0 && (

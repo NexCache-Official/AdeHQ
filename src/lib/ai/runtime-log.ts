@@ -1,12 +1,14 @@
+import { staticCatalogOffers } from "@/lib/ai/runtime/catalog/loader";
+import { routeCapability } from "@/lib/ai/runtime/capability-router";
+import { getRuntimeFlags } from "@/lib/ai/runtime/flags";
+import { readPriceMaxAgeHours } from "@/lib/ai/runtime/route-optimizer";
+import type { AiCapability } from "@/lib/ai/runtime/types";
 import {
   DEFAULT_PROVIDER,
   DEFAULT_SILICONFLOW_MODEL,
   isSiliconFlowConfigured,
 } from "@/lib/config/features";
-import { routeCapability } from "@/lib/ai/runtime/capability-router";
-import { getRuntimeFlags } from "@/lib/ai/runtime/flags";
 import { isVercelGatewayConfigured } from "@/lib/ai/runtime/adapters/vercel-models";
-import type { AiCapability } from "@/lib/ai/runtime/types";
 
 export type AiRuntimeLogEntry = {
   id: string;
@@ -77,19 +79,55 @@ function buildRoutingPreview() {
   ];
 
   return capabilities.map((capability) => {
-    const route = routeCapability({ capability }, flags.providerPref);
+    const route = routeCapability({ capability, catalogOffers: staticCatalogOffers() }, flags.providerPref);
     return {
       capability,
       providerRoute: route.providerRoute,
+      modelId: route.modelId,
       runtimeMode: route.runtimeMode,
       estimatedWorkMinutes: route.estimatedWorkMinutes,
-      fallbackCandidates: route.fallbackCandidates.map((candidate) => candidate.providerRoute),
+      estimatedCostUsd: route.estimatedCostUsd,
+      fallbackCandidates: route.fallbackCandidates.map(
+        (candidate) => `${candidate.providerRoute}/${candidate.modelId}`,
+      ),
+      routeOptimizer: route.routeOptimizer,
     };
   });
 }
 
+export function buildOptimizerPreview(params?: {
+  capability?: AiCapability;
+  runtimeMode?: string;
+  routingPreference?: "auto" | "cost_saver" | "quality_first" | "fastest";
+}) {
+  const capability = params?.capability ?? "structured_chat";
+  const route = routeCapability(
+    {
+      capability,
+      runtimeMode: (params?.runtimeMode as "balanced") ?? "balanced",
+      routingPreference: params?.routingPreference ?? "auto",
+      catalogOffers: staticCatalogOffers(),
+    },
+    getRuntimeFlags().providerPref,
+  );
+
+  return {
+    selected: `${route.providerRoute} / ${route.modelId}`,
+    reason: route.routeOptimizer?.reason ?? "static route (optimizer off)",
+    estimatedCostUsd: route.estimatedCostUsd,
+    fallbacks: route.routeOptimizer?.fallbackCandidates ?? route.fallbackCandidates,
+    decisionFactors: route.routeOptimizer?.decisionFactors,
+    priceSource: route.routeOptimizer?.priceSource ?? "manual_seed",
+    priceFreshness: route.routeOptimizer?.priceFreshness ?? "missing",
+    healthNote: route.routeOptimizer?.healthNote,
+    shadowOnly: route.routeOptimizer?.shadowOnly ?? false,
+  };
+}
+
 export function getAiRuntimeSnapshot() {
   const flags = getRuntimeFlags();
+  const catalogOffers = staticCatalogOffers();
+
   return {
     siliconflowConfigured: isSiliconFlowConfigured(),
     gatewayAvailable: isVercelGatewayConfigured(),
@@ -99,9 +137,16 @@ export function getAiRuntimeSnapshot() {
     demoModeEnabled: process.env.NEXT_PUBLIC_ENABLE_DEMO_MODE === "true",
     runtimeV2Mode: flags.mode,
     providerPref: flags.providerPref,
+    routeOptimizerMode: flags.routeOptimizer,
     employeeDirectExecution: flags.employeeDirectExecution,
     employeeQueuedExecution: flags.employeeQueuedExecution,
+    priceMaxAgeHours: readPriceMaxAgeHours(),
     routingPreview: buildRoutingPreview(),
+    optimizerPreview: buildOptimizerPreview(),
+    catalogSummary: {
+      offerCount: catalogOffers.length,
+      enabledCount: catalogOffers.filter((o) => o.enabled).length,
+    },
     last: lastEntry,
     recent: entries.slice(0, 12),
   };

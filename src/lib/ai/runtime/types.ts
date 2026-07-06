@@ -1,5 +1,7 @@
 import type { z } from "zod";
 import type { ModelMode } from "@/lib/ai/model-catalog";
+import type { RoutingPreference } from "@/lib/ai/intelligence-policy";
+import type { ModelEndpointOffer } from "./pricing/types";
 
 /** Internal capability categories for routing (Runtime V2). */
 export type AiCapability =
@@ -40,6 +42,8 @@ export type ProviderRoute = "vercel_gateway" | "siliconflow_direct" | "mock";
 
 export type RuntimeV2Mode = "off" | "shadow" | "on";
 
+export type RouteOptimizerMode = "off" | "shadow" | "on";
+
 export type RuntimeProviderPref = "auto" | "siliconflow" | "vercel" | "mock";
 
 export type RuntimeMessage = {
@@ -62,6 +66,8 @@ export type RuntimeBaseParams = {
   reasoningProfile?: ReasoningProfile;
   budgetPolicy?: RuntimeBudgetPolicy;
   metadata?: Record<string, unknown>;
+  routingPreference?: RoutingPreference;
+  requiresJson?: boolean;
   /** Override env flag for tests only. */
   forceMode?: RuntimeV2Mode;
 };
@@ -150,6 +156,11 @@ export type CapabilityRouteInput = {
   runtimeMode?: RuntimeMode;
   /** V20.0.1b+ — browser research provider (mock, Tavily, Browserbase). */
   researchProvider?: "mock" | "tavily" | "browserbase";
+  /** Preloaded catalog offers (tests); defaults to static seed in optimizer path. */
+  catalogOffers?: ModelEndpointOffer[];
+  routingPreference?: RoutingPreference;
+  requiresJson?: boolean;
+  currentRoute?: { providerRoute: ProviderRoute; modelId: string };
 };
 
 export type CapabilityRouteDecision = {
@@ -162,6 +173,27 @@ export type CapabilityRouteDecision = {
   estimatedCostUsd: number;
   estimatedWorkMinutes: number;
   fallbackCandidates: Array<{ providerRoute: ProviderRoute; modelId: string }>;
+  routeOptimizer?: {
+    selectedProviderRoute: ProviderRoute;
+    selectedModelId: string;
+    reason: string;
+    estimatedCostUsd: number;
+    decisionFactors: {
+      costRank: number;
+      qualityRank: number;
+      latencyRank: number;
+      reliabilityRank: number;
+      healthPenalty: number;
+      stalePricePenalty: number;
+      antiFlapApplied: boolean;
+    };
+    priceSource: string;
+    priceFreshness: "fresh" | "stale" | "missing";
+    healthNote?: string;
+    fallbackCandidates: Array<{ providerRoute: ProviderRoute; modelId: string }>;
+    shadowOnly?: boolean;
+    usedStaticFallback?: boolean;
+  };
 };
 
 export class RuntimeDisabledError extends Error {

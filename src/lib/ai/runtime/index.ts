@@ -102,6 +102,9 @@ async function invokeWithRouting<T>(
       runtimeMode: params.runtimeMode,
       modelMode: params.modelMode,
       message: "prompt" in params ? params.prompt : undefined,
+      routingPreference: params.routingPreference,
+      requiresJson: params.requiresJson ?? ("schema" in params),
+      needsLongContext: Boolean(params.metadata?.needsLongContext),
     },
     flags.providerPref,
   );
