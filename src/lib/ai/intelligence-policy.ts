@@ -191,6 +191,8 @@ export function buildIntelligencePolicyForHire(params: {
   roleKey?: EmployeeRoleKey;
   browserAccess?: BrowserAccess;
   workHourProfile?: WorkHourProfile;
+  routingPreference?: RoutingPreference;
+  notes?: string;
 }): EmployeeIntelligencePolicy {
   const defaultMode = intelligenceModeFromModelMode(params.modelMode);
   const browserAccess =
@@ -202,9 +204,10 @@ export function buildIntelligencePolicyForHire(params: {
     allowedModes: ["efficient", "balanced", "strong", "long_context", "coding"].includes(defaultMode)
       ? [defaultMode, "balanced", "efficient"]
       : DEFAULT_POLICY.allowedModes,
-    routingPreference: "auto",
+    routingPreference: params.routingPreference ?? "auto",
     browserAccess,
     workHourProfile: params.workHourProfile ?? "moderate",
+    notes: params.notes,
   });
 }
 

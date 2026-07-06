@@ -92,6 +92,54 @@ export function completeHireFromCandidate(params: {
   return { employeeId: employee.id, dmRoomId: dm.id };
 }
 
+export function completeHiresFromCandidates(params: {
+  actions: HireActions;
+  userName?: string;
+  candidates: AiEmployeeApplicant[];
+  brief: AiEmployeeJobBrief;
+  departmentId: string | null;
+  roleKey: string | null;
+  mayaRoomId?: string;
+  mayaTopicId?: string;
+  allTopics?: RoomTopic[];
+  defaultRoomId?: string;
+  skipWorkLog?: boolean;
+}): { employeeIds: string[]; dmRoomId: string } {
+  const employeeIds: string[] = [];
+  let primaryDmRoomId = "";
+
+  for (const candidate of params.candidates) {
+    const result = completeHireFromCandidate({
+      actions: params.actions,
+      userName: params.userName,
+      candidate,
+      brief: params.brief,
+      departmentId: params.departmentId,
+      roleKey: params.roleKey,
+      mayaRoomId: params.candidates.length === 1 ? params.mayaRoomId : undefined,
+      mayaTopicId: params.candidates.length === 1 ? params.mayaTopicId : undefined,
+      allTopics: params.allTopics,
+      defaultRoomId: params.defaultRoomId,
+      skipWorkLog: params.skipWorkLog,
+    });
+    employeeIds.push(result.employeeId);
+    if (!primaryDmRoomId) primaryDmRoomId = result.dmRoomId;
+  }
+
+  if (params.mayaRoomId && params.candidates.length > 1) {
+    const names = params.candidates.map((c) => c.name).join(", ");
+    params.actions.addMessage(params.mayaRoomId, {
+      senderType: "ai",
+      senderId: MAYA_EMPLOYEE_ID,
+      senderName: MAYA_EMPLOYEE_NAME,
+      content: `Done — I hired ${names}. Each has their own DM so you can give them their first tasks.`,
+      topicId: params.mayaTopicId,
+    });
+  }
+
+  return { employeeIds, dmRoomId: primaryDmRoomId };
+}
+
 export function logCandidatesGenerated(
   actions: HireActions,
   roomId: string,

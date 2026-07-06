@@ -71,10 +71,14 @@ export async function generateCandidateCopiesOld(
     model: siliconFlowChatModel(modelId),
     schema: copyOnlySchema,
     system: `Generate ONLY applicant copy (names, titles, personality tags, strengths, watch-outs, bestFor, whyThisCandidate, candidatePitch, howIWork).
-Do NOT change model modes, hours, quality, speed, or cost — those are set by the system.
-Create 3 distinct personas for tiers: high_capacity (fast/cheap), recommended (balanced), premium (senior/deep).
+Do NOT change model modes, routing, or intelligence tiers — those are set by the system.
+Create 3 distinct personas for tiers:
+- high_capacity = Fast Executor (efficient, practical, fast-moving)
+- recommended = Balanced Partner (collaborative, reliable, organized)
+- premium = Senior Strategist (thoughtful, precise, strategic)
+Each name must be a unique realistic full name (first + last). Never reuse names across tiers.
 Match the job brief domain and role.
-Keep copy scannable: candidatePitch max 18 words; bestFor one short sentence; strengths max 3 items; watchOuts max 2; howIWork max 3 short bullets; whyThisCandidate max 14 words.`,
+Keep copy scannable: candidatePitch max 22 words; bestFor one short sentence; strengths max 3 items; watchOuts max 2; howIWork max 3 short bullets.`,
     prompt: JSON.stringify(brief),
     maxOutputTokens: 1500,
     providerOptions: siliconFlowProviderOptions(modelId),

@@ -24,7 +24,7 @@ import {
   type HiringBackendMode,
 } from "./hiring-persistence";
 import {
-  completeHireFromCandidate,
+  completeHiresFromCandidates,
   logCandidatesGenerated,
   type HireActions,
 } from "./hire-completion";
@@ -311,6 +311,7 @@ export type CompleteHireFromSessionParams = {
     }) => Promise<{ dmRoomId: string }>;
   };
   candidate: AiEmployeeApplicant;
+  candidatesToHire?: AiEmployeeApplicant[];
   session: HiringSessionState;
   sessionCandidates: AiEmployeeApplicant[];
   ctx: CandidateSessionContext;
@@ -340,7 +341,7 @@ export type CompleteHireFromSessionParams = {
 };
 
 export type CompleteHireResult =
-  | { ok: true; employeeId: string; dmRoomId: string }
+  | { ok: true; employeeId: string; dmRoomId: string; employeeIds?: string[] }
   | { ok: false; message: string };
 
 export async function completeHireFromSession(
@@ -367,10 +368,11 @@ export async function completeHireFromSession(
   }
 
   try {
-    const { employeeId, dmRoomId } = completeHireFromCandidate({
+    const hires = params.candidatesToHire ?? [params.candidate];
+    const { employeeIds, dmRoomId } = completeHiresFromCandidates({
       actions: params.actions,
       userName: params.userName,
-      candidate: params.candidate,
+      candidates: hires,
       brief: params.brief,
       departmentId: params.departmentId,
       roleKey: params.roleKey,
@@ -380,11 +382,12 @@ export async function completeHireFromSession(
       defaultRoomId: params.onboarding?.defaultRoomId,
       skipWorkLog: Boolean(params.onboarding),
     });
+    const employeeId = employeeIds[0]!;
 
-    if (params.onboarding && params.actions.completeFirstHire) {
+    if (params.onboarding && params.actions.completeFirstHire && hires.length === 1) {
       const { candidateToEmployee } = await import("./map-candidate");
       const employee = candidateToEmployee(
-        params.candidate,
+        hires[0]!,
         params.brief,
         params.departmentId,
         params.roleKey,
@@ -400,7 +403,7 @@ export async function completeHireFromSession(
         roomId: params.onboarding.defaultRoomId ?? params.mayaRoomId ?? dmRoomId,
         employeeId,
         action: "Employee hired",
-        summary: `Hired ${employee.name} as ${params.candidate.title}.`,
+        summary: `Hired ${employee.name} as ${hires[0]!.title}.`,
         status: "success" as const,
         createdAt: nowISO(),
       };
@@ -421,21 +424,25 @@ export async function completeHireFromSession(
     });
 
     if (params.actions.createMemory) {
-      persistHiringSessionMemories({
-        workspaceId: params.workspaceId,
-        userId: params.userId,
-        sessionId: params.sessionId,
-        candidate: params.candidate,
-        brief: params.brief,
-        employeeId,
-        employeeName: params.candidate.name,
-        dmRoomId,
-        existingMemory: params.existingMemory,
-        createMemory: params.actions.createMemory,
-      });
+      for (let i = 0; i < hires.length; i += 1) {
+        const hire = hires[i]!;
+        const eid = employeeIds[i]!;
+        persistHiringSessionMemories({
+          workspaceId: params.workspaceId,
+          userId: params.userId,
+          sessionId: params.sessionId,
+          candidate: hire,
+          brief: params.brief,
+          employeeId: eid,
+          employeeName: hire.name,
+          dmRoomId,
+          existingMemory: params.existingMemory,
+          createMemory: params.actions.createMemory,
+        });
+      }
     }
 
-    return { ok: true, employeeId, dmRoomId };
+    return { ok: true, employeeId, dmRoomId, employeeIds };
   } catch (error) {
     params.releaseHireLock();
     throw error;

@@ -77,7 +77,7 @@ export async function generateRecruiterResponseOld(
     throw new Error("SILICONFLOW_API_KEY is not configured.");
   }
 
-  const modelId = resolveModel("siliconflow", "balanced");
+  const modelId = resolveModel("siliconflow", "cheap");
   const { object } = await generateObject({
     model: siliconFlowChatModel(modelId),
     schema: recruiterResponseSchema,
@@ -189,7 +189,7 @@ export async function generateRecruiterResponseRuntime(
       workUnitId,
       capability: "structured_chat",
       runtimeMode: "efficient",
-      modelMode: "balanced",
+      modelMode: "cheap",
       reasoningProfile: "none",
       schema: recruiterResponseSchema,
       system: params.system,

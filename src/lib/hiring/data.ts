@@ -53,19 +53,19 @@ export const DEPARTMENT_CARDS = [
 export const GEN_STEPS = [
   "Reading job brief",
   "Matching role requirements",
-  "Comparing model strengths",
-  "Estimating weekly capacity",
+  "Shaping operating styles",
+  "Calibrating intelligence bias",
   "Designing employee personalities",
   "Preparing applicants",
 ];
 
 export const MATCH_BARS = [
   { label: "Role fit", w: 92 },
-  { label: "Writing strength", w: 84 },
-  { label: "Reasoning strength", w: 78 },
-  { label: "Cost efficiency", w: 70 },
-  { label: "Capacity", w: 88 },
-  { label: "Personality match", w: 80 },
+  { label: "Working style", w: 86 },
+  { label: "Personality match", w: 84 },
+  { label: "Intelligence fit", w: 80 },
+  { label: "Routing alignment", w: 76 },
+  { label: "Tools & access", w: 72 },
 ];
 
 /** @deprecated Static demo data — shortlist uses candidate-engine at runtime */

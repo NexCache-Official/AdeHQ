@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { DRIVE_BUCKETS } from "@/lib/drive/constants";
-import { checkUploadQuota, recordStorageUsage } from "@/lib/drive/quota";
+import { checkUploadQuota, recordStorageUsage } from "@/lib/drive/quota-server";
 import { evidenceStoragePath } from "@/lib/drive/storage-sync";
 import { browserEvidenceFromRow } from "@/lib/server/drive-list";
 import { sanitizeFileName } from "@/lib/files/sanitize-file-name";
@@ -27,7 +27,7 @@ export async function persistBrowserEvidence(
 ): Promise<BrowserEvidence> {
   const mimeType = params.mimeType ?? "image/png";
   const sizeBytes = params.screenshot.byteLength;
-  const quotaCheck = await checkUploadQuota(params.client, params.workspaceId, sizeBytes);
+  const quotaCheck = await checkUploadQuota(params.workspaceId, sizeBytes);
   if (!quotaCheck.ok) {
     throw new Error(quotaCheck.error ?? "Evidence upload exceeds quota.");
   }
@@ -66,7 +66,7 @@ export async function persistBrowserEvidence(
     .single();
   if (insertError) throw insertError;
 
-  await recordStorageUsage(params.client, {
+  await recordStorageUsage({
     workspaceId: params.workspaceId,
     userId: params.createdByUserId ?? undefined,
     eventType: "upload",

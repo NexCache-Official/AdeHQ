@@ -66,7 +66,9 @@ export type HiringAction =
   | { type: "SET_BRIEF_READY"; briefReady: boolean }
   | { type: "SET_CANDIDATES"; candidates: AiEmployeeApplicant[] }
   | { type: "SELECT_CANDIDATE"; id: string }
-  | { type: "COMPLETE_HIRE"; employeeId: string; dmRoomId: string }
+  | { type: "TOGGLE_CANDIDATE_SELECT"; id: string }
+  | { type: "SELECT_CANDIDATES"; ids: string[] }
+  | { type: "COMPLETE_HIRE"; employeeId: string; dmRoomId: string; employeeIds?: string[] }
   | { type: "SET_PENDING_ROOM"; roomId: string }
   | { type: "SET_GEN_STEP"; genStep: number }
   | { type: "SET_SUCCESS_STEP"; successStep: number }
@@ -166,11 +168,31 @@ export function hiringReducer(state: HiringSessionState, action: HiringAction): 
     case "SET_CANDIDATES":
       return { ...state, candidates: action.candidates };
     case "SELECT_CANDIDATE":
-      return { ...state, selectedCandidateId: action.id, step: "offer" };
+      return {
+        ...state,
+        selectedCandidateId: action.id,
+        selectedCandidateIds: [action.id],
+        step: "offer",
+      };
+    case "TOGGLE_CANDIDATE_SELECT": {
+      const current = state.selectedCandidateIds ?? [];
+      const exists = current.includes(action.id);
+      let next = exists ? current.filter((id) => id !== action.id) : [...current, action.id];
+      if (next.length > 3) next = next.slice(-3);
+      return { ...state, selectedCandidateIds: next };
+    }
+    case "SELECT_CANDIDATES":
+      return {
+        ...state,
+        selectedCandidateIds: action.ids.slice(0, 3),
+        selectedCandidateId: action.ids[0],
+        step: "offer",
+      };
     case "COMPLETE_HIRE":
       return {
         ...state,
         hiredEmployeeId: action.employeeId,
+        hiredEmployeeIds: action.employeeIds ?? [action.employeeId],
         dmRoomId: action.dmRoomId,
         step: "success",
       };

@@ -765,6 +765,17 @@ export function useMayaDmHiring({
         return;
       }
 
+      if (userIntent === "approve_brief") {
+        dispatch({ type: "ADD_MESSAGE", message: { role: "user", text: trimmed } });
+        const reply = mayaReplyForRecruiterIntent("approve_brief")!;
+        dispatch({ type: "ADD_MESSAGE", message: { role: "ade", text: reply } });
+        if (session.brief || session.briefPartial) {
+          dispatch({ type: "SET_BRIEF_READY", briefReady: true });
+          setMayaState("ready_to_review");
+        }
+        return;
+      }
+
       if (isHiringFlowMetaReply(trimmed)) {
         dispatch({ type: "ADD_MESSAGE", message: { role: "user", text: trimmed } });
         const reply = mayaReplyForHiringFlowMeta(trimmed)!;
@@ -821,14 +832,7 @@ export function useMayaDmHiring({
       const sectionsUpdating = skipBriefUi ? [] : inferSectionsUpdating(trimmed);
       const composeSection = briefSectionToComposeKey(sectionsUpdating[0]) ?? null;
 
-      const localBrief = synthesizeBriefForHiringContext({
-        roleSeed,
-        messages: nextMessages,
-        departmentId: effectiveDepartmentId,
-        roleKey: session.roleKey,
-        existing: session.brief ?? session.briefPartial,
-      });
-      dispatch({ type: "SET_BRIEF_PARTIAL", briefPartial: localBrief });
+      const existingBrief = session.brief ?? session.briefPartial;
 
       dispatch({
         type: "SET_MESSAGES",
@@ -857,15 +861,19 @@ export function useMayaDmHiring({
           }),
         );
         setMayaState("updating_brief");
-        const nextBrief = res.brief ?? res.briefPartial ?? localBrief;
+        const nextBrief = res.brief ?? res.briefPartial ?? existingBrief;
         const briefSection = detectBriefChange(prevBriefRef.current, nextBrief);
+        if (nextBrief) {
+          prevBriefRef.current = { ...nextBrief };
+          dispatch({ type: "SET_BRIEF_PARTIAL", briefPartial: nextBrief });
+        }
         applyRecruiterResponse(res, nextMessages);
         maybeLogBriefUpdated(
           actions,
           mayaRoomId,
           trimmed,
           briefSection,
-          res.brief?.roleTitle ?? localBrief.roleTitle,
+          res.brief?.roleTitle ?? existingBrief?.roleTitle,
           lastBriefLogRef,
         );
         if (res.brief) dispatch({ type: "SET_BRIEF", brief: res.brief });

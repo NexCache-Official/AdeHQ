@@ -126,6 +126,60 @@ export async function exportArtifactToDriveClient(payload: {
   return parseJson(res);
 }
 
+export type UploadProgress = {
+  fileName: string;
+  percent: number;
+  index: number;
+  total: number;
+};
+
+function uploadFormWithProgress<T>(
+  url: string,
+  form: FormData,
+  onProgress: ((progress: UploadProgress) => void) | undefined,
+  meta: { fileName: string; index: number; total: number },
+): Promise<T> {
+  return new Promise((resolve, reject) => {
+    void authHeaders().then((auth) => {
+      const headers = auth as Record<string, string>;
+      const xhr = new XMLHttpRequest();
+      xhr.open("POST", url);
+
+      for (const [key, value] of Object.entries(headers)) {
+        if (key.toLowerCase() === "content-type") continue;
+        xhr.setRequestHeader(key, value);
+      }
+
+      xhr.upload.addEventListener("progress", (event) => {
+        if (!onProgress || !event.lengthComputable) return;
+        onProgress({
+          fileName: meta.fileName,
+          index: meta.index,
+          total: meta.total,
+          percent: Math.min(100, Math.round((event.loaded / event.total) * 100)),
+        });
+      });
+
+      xhr.addEventListener("load", () => {
+        let payload: unknown = {};
+        try {
+          payload = xhr.responseText ? JSON.parse(xhr.responseText) : {};
+        } catch {
+          payload = {};
+        }
+        if (xhr.status >= 200 && xhr.status < 300) {
+          resolve(payload as T);
+          return;
+        }
+        reject(new Error((payload as { error?: string }).error ?? "Upload failed."));
+      });
+
+      xhr.addEventListener("error", () => reject(new Error("Upload failed.")));
+      xhr.send(form);
+    }).catch(reject);
+  });
+}
+
 export async function uploadToDrive(
   file: File,
   payload: {
@@ -134,9 +188,12 @@ export async function uploadToDrive(
     roomId?: string | null;
     topicId?: string | null;
   },
+  options?: {
+    onProgress?: (progress: UploadProgress) => void;
+    index?: number;
+    total?: number;
+  },
 ): Promise<WorkspaceFile> {
-  const auth = (await authHeaders()) as Record<string, string>;
-  const { "Content-Type": _contentType, ...headers } = auth;
   const form = new FormData();
   form.set("file", file);
   form.set("workspaceId", payload.workspaceId);
@@ -144,8 +201,16 @@ export async function uploadToDrive(
   if (payload.roomId) form.set("roomId", payload.roomId);
   if (payload.topicId) form.set("topicId", payload.topicId);
 
-  const res = await fetch("/api/drive/upload", { method: "POST", headers, body: form });
-  const body = await parseJson<{ file: WorkspaceFile }>(res);
+  const body = await uploadFormWithProgress<{ file: WorkspaceFile }>(
+    "/api/drive/upload",
+    form,
+    options?.onProgress,
+    {
+      fileName: file.name,
+      index: options?.index ?? 1,
+      total: options?.total ?? 1,
+    },
+  );
   return body.file;
 }
 
@@ -157,9 +222,12 @@ export async function uploadEvidenceToDrive(
     title?: string;
     sourceUrl?: string;
   },
+  options?: {
+    onProgress?: (progress: UploadProgress) => void;
+    index?: number;
+    total?: number;
+  },
 ): Promise<BrowserEvidence> {
-  const auth = (await authHeaders()) as Record<string, string>;
-  const { "Content-Type": _contentType, ...headers } = auth;
   const form = new FormData();
   form.set("file", file);
   form.set("workspaceId", payload.workspaceId);
@@ -167,8 +235,16 @@ export async function uploadEvidenceToDrive(
   if (payload.title) form.set("title", payload.title);
   if (payload.sourceUrl) form.set("sourceUrl", payload.sourceUrl);
 
-  const res = await fetch("/api/drive/evidence/upload", { method: "POST", headers, body: form });
-  const body = await parseJson<{ evidence: BrowserEvidence }>(res);
+  const body = await uploadFormWithProgress<{ evidence: BrowserEvidence }>(
+    "/api/drive/evidence/upload",
+    form,
+    options?.onProgress,
+    {
+      fileName: file.name,
+      index: options?.index ?? 1,
+      total: options?.total ?? 1,
+    },
+  );
   return body.evidence;
 }
 

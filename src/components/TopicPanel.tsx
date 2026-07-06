@@ -194,8 +194,8 @@ export function TopicPanel({
   const { enabled: debugEnabled } = useDebugTrace();
   const [tab, setTab] = useState<(typeof TABS)[number]["id"]>("overview");
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const [confirmClearChat, setConfirmClearChat] = useState(false);
-  const [confirmClearRoomChat, setConfirmClearRoomChat] = useState(false);
+  const [clearChatMenuOpen, setClearChatMenuOpen] = useState(false);
+  const [clearChatPending, setClearChatPending] = useState<"topic" | "room" | null>(null);
   const [topicFiles, setTopicFiles] = useState<WorkspaceFile[]>([]);
   const [topicArtifacts, setTopicArtifacts] = useState<SavedArtifact[]>([]);
   const [filesLoading, setFilesLoading] = useState(false);
@@ -217,6 +217,9 @@ export function TopicPanel({
   const participation = getAiParticipationMode(topic);
   const aiControl = getTopicAiControlState(topic);
   const isArchived = topic.status === "archived";
+  const canClearTopicChat = !isArchived && Boolean(onClearTopicChat);
+  const canClearRoomChat = !isArchived && Boolean(onClearRoomChat) && !isDm;
+  const showClearChatActions = canClearTopicChat || canClearRoomChat;
   const {
     summary: topicSummary,
     loading: summaryLoading,
@@ -610,33 +613,75 @@ export function TopicPanel({
                     )}
                   </div>
                 ))}
-              {!isArchived && onClearTopicChat && !confirmClearChat && (
-                <button
-                  type="button"
-                  onClick={() => setConfirmClearChat(true)}
-                  disabled={topicActionBusy}
-                  className="text-xs text-ink-3 underline-offset-2 hover:text-ink hover:underline"
-                >
-                  Clear chat history…
-                </button>
+              {showClearChatActions && !clearChatPending && (
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (canClearTopicChat && !canClearRoomChat) {
+                        setClearChatPending("topic");
+                        return;
+                      }
+                      setClearChatMenuOpen((open) => !open);
+                    }}
+                    disabled={topicActionBusy}
+                    className="inline-flex items-center gap-1 text-xs text-ink-3 underline-offset-2 hover:text-ink hover:underline"
+                  >
+                    Clear messages…
+                    {canClearRoomChat ? <ChevronDown className="h-3 w-3" /> : null}
+                  </button>
+                  {clearChatMenuOpen && (
+                    <>
+                      <button
+                        type="button"
+                        aria-label="Close clear messages menu"
+                        className="fixed inset-0 z-10"
+                        onClick={() => setClearChatMenuOpen(false)}
+                      />
+                      <div className="absolute left-0 top-full z-20 mt-1 w-64 overflow-hidden rounded-xl border border-border bg-surface shadow-lg">
+                        {canClearTopicChat && (
+                          <button
+                            type="button"
+                            disabled={topicActionBusy}
+                            onClick={() => {
+                              setClearChatPending("topic");
+                              setClearChatMenuOpen(false);
+                            }}
+                            className="flex w-full flex-col items-start gap-0.5 px-3 py-2.5 text-left hover:bg-muted"
+                          >
+                            <span className="text-sm font-medium text-ink">This topic only</span>
+                            <span className="text-xs text-ink-3">
+                              Clear messages in <strong>{displayTitle}</strong>
+                            </span>
+                          </button>
+                        )}
+                        {canClearRoomChat && (
+                          <button
+                            type="button"
+                            disabled={topicActionBusy}
+                            onClick={() => {
+                              setClearChatPending("room");
+                              setClearChatMenuOpen(false);
+                            }}
+                            className="flex w-full flex-col items-start gap-0.5 border-t border-border px-3 py-2.5 text-left hover:bg-amber-50"
+                          >
+                            <span className="text-sm font-medium text-amber-950">Entire room</span>
+                            <span className="text-xs text-amber-900/80">
+                              Clear messages in every topic (admin)
+                            </span>
+                          </button>
+                        )}
+                      </div>
+                    </>
+                  )}
+                </div>
               )}
-              {!isArchived && onClearRoomChat && !isDm && !confirmClearRoomChat && (
-                <button
-                  type="button"
-                  onClick={() => setConfirmClearRoomChat(true)}
-                  disabled={topicActionBusy}
-                  className="text-xs text-ink-3 underline-offset-2 hover:text-amber-700 hover:underline"
-                >
-                  Clear all chat in this room…
-                </button>
-              )}
-              {!isArchived && confirmClearChat && onClearTopicChat && (
+              {clearChatPending === "topic" && onClearTopicChat && (
                 <div className="rounded-xl border border-border bg-muted/40 p-3">
                   <p className="text-sm text-ink">
                     Clear all messages in <strong>{displayTitle}</strong>? The{" "}
                     {isMainChat ? "conversation" : "topic"} stays — chat history and the workstream
-                    summary (brief summary, direction, key facts, and open questions) are removed.
-                    Saved memory, tasks, files, and work log are kept.
+                    summary are removed. Saved memory, tasks, files, and work log are kept.
                   </p>
                   <div className="mt-3 flex flex-wrap gap-2">
                     <Button
@@ -645,23 +690,22 @@ export function TopicPanel({
                       disabled={topicActionBusy}
                       onClick={() => {
                         void onClearTopicChat();
-                        setConfirmClearChat(false);
+                        setClearChatPending(null);
                       }}
                     >
-                      Clear chat history
+                      Clear this topic
                     </Button>
-                    <Button variant="ghost" size="sm" onClick={() => setConfirmClearChat(false)}>
+                    <Button variant="ghost" size="sm" onClick={() => setClearChatPending(null)}>
                       Cancel
                     </Button>
                   </div>
                 </div>
               )}
-              {!isArchived && confirmClearRoomChat && onClearRoomChat && (
+              {clearChatPending === "room" && onClearRoomChat && (
                 <div className="rounded-xl border border-amber-200 bg-amber-50 p-3">
                   <p className="text-sm text-amber-950">
-                    Clear chat history for <strong>every topic</strong> in this room? Topics, saved
-                    memory, tasks, and files stay — messages and workstream summaries are permanently
-                    removed.
+                    Clear messages in <strong>every topic</strong> in this room? Topics, saved memory,
+                    tasks, and files stay — only chat history and workstream summaries are removed.
                   </p>
                   <div className="mt-3 flex flex-wrap gap-2">
                     <Button
@@ -670,12 +714,12 @@ export function TopicPanel({
                       disabled={topicActionBusy}
                       onClick={() => {
                         void onClearRoomChat();
-                        setConfirmClearRoomChat(false);
+                        setClearChatPending(null);
                       }}
                     >
-                      Clear entire room chat
+                      Clear entire room
                     </Button>
-                    <Button variant="ghost" size="sm" onClick={() => setConfirmClearRoomChat(false)}>
+                    <Button variant="ghost" size="sm" onClick={() => setClearChatPending(null)}>
                       Cancel
                     </Button>
                   </div>

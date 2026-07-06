@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { AuthError, requireAuthUser, requireWorkspaceMembership } from "@/lib/supabase/auth-server";
-import { checkUploadQuota, recordStorageUsage } from "@/lib/drive/quota";
+import { checkUploadQuota, recordStorageUsage } from "@/lib/drive/quota-server";
 import { DRIVE_BUCKETS } from "@/lib/drive/constants";
 import { evidenceStoragePath } from "@/lib/drive/storage-sync";
 import { browserEvidenceFromRow } from "@/lib/server/drive-list";
@@ -40,7 +40,7 @@ export async function POST(request: NextRequest) {
 
     await requireWorkspaceMembership(client, workspaceId, user.id);
 
-    const quotaCheck = await checkUploadQuota(client, workspaceId, file.size);
+    const quotaCheck = await checkUploadQuota(workspaceId, file.size);
     if (!quotaCheck.ok) {
       return NextResponse.json({ error: quotaCheck.error }, { status: 413 });
     }
@@ -88,7 +88,7 @@ export async function POST(request: NextRequest) {
       .single();
     if (insertError) throw insertError;
 
-    await recordStorageUsage(client, {
+    await recordStorageUsage({
       workspaceId,
       userId: user.id,
       eventType: "upload",

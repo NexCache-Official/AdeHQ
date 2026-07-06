@@ -200,6 +200,17 @@ export function HireFlow({ onboarding = false, entrySource = "hire_route" }: Hir
     visibleCandidates.find((c) => c.id === session.selectedCandidateId) ??
     visibleCandidates.find((c) => c.recommended) ??
     visibleCandidates[1];
+  const selectedCandidates = useMemo(() => {
+    const ids =
+      session.selectedCandidateIds?.length
+        ? session.selectedCandidateIds
+        : session.selectedCandidateId
+          ? [session.selectedCandidateId]
+          : hired
+            ? [hired.id]
+            : [];
+    return visibleCandidates.filter((c) => ids.includes(c.id));
+  }, [session.selectedCandidateId, session.selectedCandidateIds, visibleCandidates, hired]);
   const ivApplicant = session.interviewWith
     ? visibleCandidates.find((c) => c.id === session.interviewWith)
     : null;
@@ -517,6 +528,22 @@ export function HireFlow({ onboarding = false, entrySource = "hire_route" }: Hir
       return;
     }
 
+    if (userIntent === "approve_brief") {
+      dispatch({ type: "ADD_MESSAGE", message: { role: "user", text: trimmed } });
+      dispatch({
+        type: "ADD_MESSAGE",
+        message: {
+          role: "ade",
+          text: mayaReplyForRecruiterIntent("approve_brief")!,
+        },
+      });
+      if (session.brief || session.briefPartial) {
+        dispatch({ type: "SET_BRIEF_READY", briefReady: true });
+        setMayaState("ready_to_review");
+      }
+      return;
+    }
+
     if (isHiringFlowMetaReply(trimmed)) {
       dispatch({ type: "ADD_MESSAGE", message: { role: "user", text: trimmed } });
       dispatch({
@@ -532,18 +559,18 @@ export function HireFlow({ onboarding = false, entrySource = "hire_route" }: Hir
     const sectionsUpdating = skipBriefUi ? [] : inferSectionsUpdating(trimmed);
     const composeSection = briefSectionToComposeKey(sectionsUpdating[0]) ?? null;
 
-    const localBrief = synthesizeBriefForHiringContext({
-      roleSeed,
-      messages: nextMessages,
-      departmentId: effectiveDepartmentId,
-      roleKey: session.roleKey,
-      existing: session.brief ?? session.briefPartial,
-    });
-    const localSection = detectBriefChange(prevBriefRef.current, localBrief);
-    if (localSection) {
-      prevBriefRef.current = { ...localBrief };
+    const existingBrief = session.brief ?? session.briefPartial;
+    if (!skipBriefUi) {
+      setMayaState("acknowledging");
+      setBriefUpdateState({ status: "updating", sectionsUpdating });
+      setBriefCompose({ active: true, section: composeSection });
+      if (composeTimerRef.current) clearTimeout(composeTimerRef.current);
+      composeTimerRef.current = setTimeout(() => {
+        setBriefCompose({ active: false, section: null });
+      }, 3200);
+    } else {
+      setMayaState(userIntent === "generate_candidates" ? "ready_to_review" : "thinking");
     }
-    dispatch({ type: "SET_BRIEF_PARTIAL", briefPartial: localBrief });
 
     dispatch({
       type: "SET_MESSAGES",
@@ -552,17 +579,6 @@ export function HireFlow({ onboarding = false, entrySource = "hire_route" }: Hir
         { role: "ade", text: optimisticAck, isOptimistic: true },
       ],
     });
-    if (!skipBriefUi) {
-      setMayaState("acknowledging");
-      setBriefUpdateState({ status: "updating", sectionsUpdating });
-      setBriefCompose({ active: true, section: localSection ?? composeSection });
-      if (composeTimerRef.current) clearTimeout(composeTimerRef.current);
-      composeTimerRef.current = setTimeout(() => {
-        setBriefCompose({ active: false, section: null });
-      }, 3200);
-    } else {
-      setMayaState(userIntent === "generate_candidates" ? "ready_to_review" : "thinking");
-    }
     dispatch({ type: "SET_BUSY", busy: true });
 
     try {
@@ -577,15 +593,19 @@ export function HireFlow({ onboarding = false, entrySource = "hire_route" }: Hir
         }),
       );
       setMayaState("updating_brief");
-      const nextBrief = res.brief ?? res.briefPartial ?? localBrief;
+      const nextBrief = res.brief ?? res.briefPartial ?? existingBrief;
       const briefSection = detectBriefChange(prevBriefRef.current, nextBrief);
+      if (nextBrief) {
+        prevBriefRef.current = { ...nextBrief };
+        dispatch({ type: "SET_BRIEF_PARTIAL", briefPartial: nextBrief });
+      }
       applyRecruiterResponse(res, nextMessages);
       maybeLogBriefUpdated(
         actions,
         mayaRoomId,
         trimmed,
         briefSection,
-        res.brief?.roleTitle ?? localBrief.roleTitle,
+        res.brief?.roleTitle ?? existingBrief?.roleTitle,
         lastBriefLogRef,
       );
       if (res.brief) {
@@ -748,7 +768,8 @@ export function HireFlow({ onboarding = false, entrySource = "hire_route" }: Hir
   }, [session.step, session.genStep, visibleCandidates.length]);
 
   const confirmHire = async () => {
-    if (!hired || !session.brief || !appState.user || session.busy) return;
+    const toHire = selectedCandidates.length ? selectedCandidates : hired ? [hired] : [];
+    if (!toHire.length || !session.brief || !appState.user || session.busy) return;
 
     dispatch({ type: "SET_BUSY", busy: true });
     try {
@@ -758,7 +779,8 @@ export function HireFlow({ onboarding = false, entrySource = "hire_route" }: Hir
 
       const result = await completeHireFromSession({
         actions,
-        candidate: hired,
+        candidate: toHire[0]!,
+        candidatesToHire: toHire,
         session,
         sessionCandidates: visibleCandidates,
         ctx: candidateContext,
@@ -790,6 +812,7 @@ export function HireFlow({ onboarding = false, entrySource = "hire_route" }: Hir
       dispatch({
         type: "COMPLETE_HIRE",
         employeeId: result.employeeId,
+        employeeIds: result.employeeIds ?? [result.employeeId],
         dmRoomId: result.dmRoomId,
       });
       runSuccessAnimation();
@@ -817,9 +840,15 @@ export function HireFlow({ onboarding = false, entrySource = "hire_route" }: Hir
   };
 
   const finishAssign = (roomId?: string) => {
-    if (roomId && session.hiredEmployeeId) {
-      actions.updateEmployee(session.hiredEmployeeId, { defaultRoomId: roomId });
-      actions.addEmployeeToRoom(roomId, session.hiredEmployeeId);
+    const hiredIds =
+      session.hiredEmployeeIds?.length
+        ? session.hiredEmployeeIds
+        : session.hiredEmployeeId
+          ? [session.hiredEmployeeId]
+          : [];
+    if (roomId && hiredIds[0]) {
+      actions.updateEmployee(hiredIds[0], { defaultRoomId: roomId });
+      actions.addEmployeeToRoom(roomId, hiredIds[0]);
     }
     router.replace(session.dmRoomId ? `/rooms/${session.dmRoomId}` : "/workforce");
   };
@@ -1018,9 +1047,24 @@ export function HireFlow({ onboarding = false, entrySource = "hire_route" }: Hir
               <div>
                 <h1 className="text-[32px] font-semibold tracking-tight">3 candidates are ready</h1>
                 <p className="max-w-[560px] text-[15px] text-ink-2">
-                  Compare quality, speed, cost, and weekly capacity.
+                  Same job brief — three different working styles. Select up to 3 to hire together.
                 </p>
               </div>
+              {(session.selectedCandidateIds?.length ?? 0) > 0 && (
+                <button
+                  type="button"
+                  disabled={session.busy}
+                  onClick={() =>
+                    dispatch({
+                      type: "SELECT_CANDIDATES",
+                      ids: session.selectedCandidateIds ?? [],
+                    })
+                  }
+                  className="rounded-xl bg-ink px-4 py-2.5 text-sm font-medium text-white hover:bg-ink/90 disabled:opacity-50"
+                >
+                  Hire {session.selectedCandidateIds!.length} selected
+                </button>
+              )}
             </div>
             <div className="grid grid-cols-[repeat(auto-fit,minmax(320px,1fr))] gap-[18px]">
               {visibleCandidates.map((a) => (
@@ -1029,6 +1073,8 @@ export function HireFlow({ onboarding = false, entrySource = "hire_route" }: Hir
                   applicant={a}
                   advOpen={!!session.advOpen[a.id]}
                   onToggleAdv={() => dispatch({ type: "TOGGLE_ADV", id: a.id })}
+                  selected={session.selectedCandidateIds?.includes(a.id) ?? false}
+                  onToggleSelect={() => dispatch({ type: "TOGGLE_CANDIDATE_SELECT", id: a.id })}
                   onInterview={() => {
                     const cur =
                       session.interviewMsgs[a.id] ?? initialInterviewMessages(a);
@@ -1055,22 +1101,23 @@ export function HireFlow({ onboarding = false, entrySource = "hire_route" }: Hir
           </div>
         )}
 
-        {session.step === "offer" && hired && session.brief && (
+        {session.step === "offer" && selectedCandidates.length > 0 && session.brief && (
           <OfferScreen
-            applicant={hired}
+            applicants={selectedCandidates}
             brief={session.brief}
             onBack={() => dispatch({ type: "SET_STEP", step: "shortlist" })}
             onConfirm={confirmHire}
           />
         )}
 
-        {session.step === "success" && hired && (
-          <SuccessScreen applicant={hired} successStep={session.successStep} />
+        {session.step === "success" && selectedCandidates.length > 0 && (
+          <SuccessScreen applicants={selectedCandidates} successStep={session.successStep} />
         )}
 
         {session.step === "assign_optional" && (
           <AssignScreen
             rooms={rooms}
+            hireCount={session.hiredEmployeeIds?.length ?? (session.hiredEmployeeId ? 1 : 0)}
             onAssignLater={() => finishAssign()}
             onAssign={(roomId) => finishAssign(roomId)}
           />

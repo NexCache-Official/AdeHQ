@@ -4,7 +4,7 @@ import { AuthError, requireAuthUser, requireWorkspaceMembership } from "@/lib/su
 import { assertCanAccessRoom } from "@/lib/server/room-access";
 import { assertTopicInRoom, ensureGeneralTopic } from "@/lib/server/topic-helpers";
 import { embedFileChunks } from "@/lib/server/file-embeddings";
-import { checkUploadQuota, recordStorageUsage } from "@/lib/drive/quota";
+import { checkUploadQuota, recordStorageUsage } from "@/lib/drive/quota-server";
 import { workspaceFileFromRow } from "@/lib/files/records";
 import {
   fileChecksum,
@@ -84,7 +84,7 @@ export async function POST(request: NextRequest) {
     const { role } = await requireWorkspaceMembership(client, workspaceId, user.id);
     await assertCanAccessRoom(client, workspaceId, roomId, user.id, role);
 
-    const quotaCheck = await checkUploadQuota(client, workspaceId, file.size);
+    const quotaCheck = await checkUploadQuota(workspaceId, file.size);
     if (!quotaCheck.ok) {
       return NextResponse.json({ error: quotaCheck.error }, { status: 413 });
     }
@@ -160,7 +160,7 @@ export async function POST(request: NextRequest) {
       .single();
     if (insertError) throw insertError;
 
-    await recordStorageUsage(client, {
+    await recordStorageUsage({
       workspaceId,
       userId: user.id,
       eventType: "upload",

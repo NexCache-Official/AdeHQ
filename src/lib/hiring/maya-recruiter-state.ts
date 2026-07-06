@@ -61,18 +61,8 @@ export function pickOptimisticAck(seed?: string): string {
     mayaReplyForHiringFlowMeta(trimmed);
   if (intentReply) return intentReply;
 
-  if (trimmed) {
-    const short = trimmed.length > 48 ? `${trimmed.slice(0, 45)}…` : trimmed;
-    const contextual = [
-      `Got it — ${short}. Updating the brief.`,
-      `${short} — noted. I'll fold that into the brief.`,
-      `Makes sense — ${short}. One sec while I update the brief.`,
-    ];
-    let hash = 0;
-    for (let i = 0; i < trimmed.length; i += 1) {
-      hash = (hash + trimmed.charCodeAt(i) * (i + 1)) % contextual.length;
-    }
-    return contextual[hash];
+  if (trimmed && !shouldSkipBriefMutationForMessage(trimmed)) {
+    return OPTIMISTIC_ACKS[Math.abs(trimmed.length) % OPTIMISTIC_ACKS.length];
   }
   return OPTIMISTIC_ACKS[0];
 }

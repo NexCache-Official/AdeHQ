@@ -105,6 +105,13 @@ export type AiEmployeeApplicant = {
   modelMode: ModelMode;
   resolvedModelId: string;
   engineLabel: string;
+  /** User-facing operating style label — Fast Executor, Balanced Partner, etc. */
+  operatingStyle: string;
+  defaultIntelligence: string;
+  routingPreference: import("@/lib/ai/intelligence-policy").RoutingPreference;
+  routingBehavior: string;
+  commonModels: string;
+  /** @deprecated Workspace Work Hours are pooled — not shown in hiring UI */
   weeklyWorkHours: number;
   costIntensity: "low" | "medium" | "high";
   speed: "fast" | "standard" | "slower";
@@ -126,6 +133,7 @@ export type AiEmployeeApplicant = {
   grad: string;
   badge: string;
   badgeKind: "rec" | "neutral";
+  /** @deprecated Not shown in hiring UI */
   cap: number;
   /** Snapshot at generation time — used to detect stale cross-role reuse */
   roleKey?: string;
@@ -176,7 +184,9 @@ export type HiringSessionState = {
   briefReady: boolean;
   candidates: AiEmployeeApplicant[];
   selectedCandidateId?: string;
+  selectedCandidateIds?: string[];
   hiredEmployeeId?: string;
+  hiredEmployeeIds?: string[];
   dmRoomId?: string;
   pendingRoomAssignment?: string;
   genStep: number;

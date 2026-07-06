@@ -500,7 +500,7 @@ export type DriveExport = {
   updatedAt: string;
 };
 
-export type StoragePlanTier = "free" | "pro" | "team" | "enterprise";
+export type StoragePlanTier = "free" | "pro" | "team" | "business" | "enterprise";
 
 export type WorkspaceStorageQuota = {
   workspaceId: string;

@@ -140,18 +140,8 @@ export function applyRoleFocusAnswer(
       return { brief: next, focusLabel: label };
     }
 
-    const words = trimmed.split(/\s+/).filter(Boolean);
-    if (words.length >= 2 && words.length <= 16) {
-      const next = cloneBrief(brief);
-      const label = trimmed.charAt(0).toUpperCase() + trimmed.slice(1);
-      pushUnique(next.businessFocus, label);
-      pushUnique(next.coreResponsibilities, `Own ${trimmed.toLowerCase()} work for the team`);
-      next.openQuestions = next.openQuestions.filter(
-        (q) => !/focus areas matter most|what should this employee own/i.test(q),
-      );
-      return { brief: next, focusLabel: label };
-    }
-
+    // Unmatched free text is not copied verbatim into the brief — the recruiter LLM
+    // interprets semantics; rule-based fallback only maps known chips/keywords above.
     return null;
   }
 

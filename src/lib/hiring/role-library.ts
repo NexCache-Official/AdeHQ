@@ -118,8 +118,8 @@ const ROLE_ENTRIES: RoleLibraryEntry[] = [
     defaultApprovalRules: ["Escalate release-blocking issues immediately"],
     seniorityVariants: { assistant: "QA Assistant", specialist: "QA Test Engineer", advisor: "Senior QA Automation Architect" },
     candidatePersonas: {
-      high_capacity: { title: "Test Operations Assistant", strengths: ["Fast bug triage", "Manual QA checklists", "High weekly capacity", "Routine regression runs"], bestFor: "High-volume testing and first-pass bug reports" },
-      recommended: { title: "QA Test Engineer", strengths: ["Balanced test strategy", "Clear bug reports", "Acceptance criteria", "Structured regression"], bestFor: "Day-to-day QA for most product teams", whyRecommended: "Best balance of test depth and weekly capacity for ongoing quality work." },
+      high_capacity: { title: "Test Operations Assistant", strengths: ["Fast bug triage", "Manual QA checklists", "Quick regression runs", "Practical test notes"], bestFor: "High-volume testing and first-pass bug reports" },
+      recommended: { title: "QA Test Engineer", strengths: ["Balanced test strategy", "Clear bug reports", "Acceptance criteria", "Structured regression"], bestFor: "Day-to-day QA for most product teams", whyRecommended: "Best balance of test depth and dependable execution for ongoing quality work." },
       premium: { title: "Senior QA Automation Architect", strengths: ["Test architecture", "Edge case analysis", "Automation strategy", "Release risk assessment"], bestFor: "Complex quality strategy and high-risk releases" },
     },
     questionTemplates: {

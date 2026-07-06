@@ -9,17 +9,9 @@ import {
   candidateOneLineSummary,
   limitBullets,
 } from "@/lib/hiring/candidate-display";
-import {
-  CONTEXT_PROFILE_LABELS,
-  displayEngineModel,
-  RUNTIME_MODE_LABELS,
-} from "@/lib/hiring/intelligence-labels";
-import {
-  buildIntelligencePolicyForHire,
-  formatIntelligencePolicyLines,
-} from "@/lib/ai/intelligence-policy";
+import { commonModelFamiliesLabel } from "@/lib/hiring/intelligence-labels";
 import { MAYA_INTELLIGENCE_ROUTING_COPY } from "@/lib/hiring/maya";
-import { AdeOrb, MetricDots } from "./HireChrome";
+import { AdeOrb } from "./HireChrome";
 
 export function initials(name: string) {
   return name
@@ -35,6 +27,8 @@ export function ApplicantCard({
   onInterview,
   onHire,
   hireDisabled = false,
+  selected = false,
+  onToggleSelect,
 }: {
   applicant: AiEmployeeApplicant;
   advOpen: boolean;
@@ -42,28 +36,41 @@ export function ApplicantCard({
   onInterview: () => void;
   onHire: () => void;
   hireDisabled?: boolean;
+  selected?: boolean;
+  onToggleSelect?: () => void;
 }) {
   const [detailsOpen, setDetailsOpen] = useState(false);
   const summary = candidateOneLineSummary(a);
-  const workStyle = limitBullets(a.howIWork ?? [], 3);
   const strengths = limitBullets(a.strengths, 3);
   const watchOuts = limitBullets(a.watchOuts, 2);
   const traits = limitBullets(a.personalityTags, 4);
-  const aiSetup = formatIntelligencePolicyLines(
-    buildIntelligencePolicyForHire({ modelMode: a.modelMode }),
-  );
+  const modelsLabel = a.commonModels || commonModelFamiliesLabel(a.modelMode);
 
   return (
     <div
       className={cn(
         "relative flex flex-col rounded-[18px] border bg-surface p-5 transition hover:-translate-y-1 hover:shadow-xl",
-        a.recommended
-          ? "border-accent/40 shadow-[0_20px_44px_-28px_rgba(47,111,237,0.35)]"
-          : "border-border",
+        selected
+          ? "border-accent ring-2 ring-accent/30"
+          : a.recommended
+            ? "border-accent/40 shadow-[0_20px_44px_-28px_rgba(47,111,237,0.35)]"
+            : "border-border",
       )}
     >
       {a.recommended && (
         <div className="absolute inset-x-0 top-0 h-[3px] bg-gradient-to-r from-accent to-amber" />
+      )}
+      {onToggleSelect && (
+        <label className="mb-3 flex cursor-pointer items-center gap-2 text-xs text-ink-2">
+          <input
+            type="checkbox"
+            checked={selected}
+            onChange={onToggleSelect}
+            disabled={hireDisabled}
+            className="h-4 w-4 rounded border-border accent-accent"
+          />
+          Include in batch hire
+        </label>
       )}
       <div className="mb-3 flex items-start justify-between gap-2">
         <div className="flex items-center gap-3">
@@ -95,38 +102,20 @@ export function ApplicantCard({
         ))}
       </div>
 
-      <div className="mb-3.5 space-y-2">
-        {(
-          [
-            ["Quality", a.qualityLevel, a.quality],
-            ["Speed", a.speedLevel, a.speed],
-            ["Cost", a.costLevel, a.costIntensity],
-          ] as const
-        ).map(([label, level, text]) => (
-          <div key={label} className="flex items-center gap-2.5">
-            <span className="w-[46px] text-[12.5px] text-ink-2">{label}</span>
-            <MetricDots level={level} />
-            <span className="w-[74px] text-right text-[12.5px] font-medium capitalize">{text}</span>
-          </div>
-        ))}
-      </div>
-
-      <div className="mb-3.5 rounded-xl border border-border bg-muted/40 px-3.5 py-3">
-        <div className="mb-1.5 flex items-baseline justify-between gap-2">
+      <div className="mb-3.5 space-y-2 rounded-xl border border-border bg-muted/40 px-3.5 py-3">
+        <div className="flex items-baseline justify-between gap-2">
           <span className="text-[11px] font-semibold uppercase tracking-wide text-ink-3">
-            Weekly capacity
+            Working style
           </span>
-          <span className="text-[12.5px] text-ink-2">{a.engineLabel}</span>
+          <span className="text-[12.5px] font-medium text-ink">{a.operatingStyle}</span>
         </div>
-        <div className="flex items-baseline gap-1.5">
-          <span className="text-[22px] font-semibold tracking-tight">{a.weeklyWorkHours}</span>
-          <span className="text-[12.5px] text-ink-2">hrs / week</span>
-        </div>
-        <div className="mt-2 h-[6px] overflow-hidden rounded-full bg-ink/10">
-          <div
-            className="h-full rounded-full bg-gradient-to-r from-ink to-ink/60"
-            style={{ width: `${Math.round(a.cap * 100)}%` }}
-          />
+        <div className="border-t border-border/60 pt-2">
+          <div className="text-[11px] font-semibold uppercase tracking-wide text-ink-3">
+            Default intelligence
+          </div>
+          <p className="mt-0.5 text-[13px] text-ink-2">
+            {a.defaultIntelligence} by default. {a.routingBehavior}
+          </p>
         </div>
       </div>
 
@@ -144,13 +133,13 @@ export function ApplicantCard({
       </button>
       {detailsOpen && (
         <div className="mt-3 space-y-3.5 border-b border-border pb-3.5">
-          {workStyle.length > 0 && (
+          {limitBullets(a.howIWork ?? [], 3).length > 0 && (
             <div>
               <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-ink-3">
-                Work style
+                How they work
               </div>
               <ul className="space-y-1">
-                {workStyle.map((line) => (
+                {limitBullets(a.howIWork ?? [], 3).map((line) => (
                   <li key={line} className="flex gap-2 text-[13px] leading-snug text-ink-2">
                     <span className="text-accent">•</span>
                     {line}
@@ -189,21 +178,6 @@ export function ApplicantCard({
               </ul>
             </div>
           )}
-          {aiSetup.length > 0 && (
-            <div className="rounded-[10px] bg-muted/40 p-3">
-              <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-ink-3">
-                AI setup
-              </div>
-              <div className="space-y-1.5">
-                {aiSetup.map((line) => (
-                  <div key={line.label} className="flex justify-between gap-3 text-[12.5px]">
-                    <span className="text-ink-3">{line.label}</span>
-                    <span className="text-right text-ink-2">{line.value}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
         </div>
       )}
 
@@ -216,28 +190,26 @@ export function ApplicantCard({
         <span className={cn("transition", advOpen && "rotate-180")}>⌄</span>
       </button>
       {advOpen && (
-        <div className="mt-2.5 rounded-[10px] bg-ink p-3.5 font-mono text-xs">
+        <div className="mt-2.5 rounded-[10px] bg-ink p-3.5 text-xs">
           <div className="flex justify-between py-1 text-white/55">
-            <span>Last resolved model</span>
-            <span className="max-w-[55%] truncate text-right text-white/80">
-              {displayEngineModel(a.resolvedModelId)}
-            </span>
+            <span>Default intelligence</span>
+            <span className="text-white/80">{a.defaultIntelligence}</span>
           </div>
           <div className="flex justify-between py-1 text-white/55">
-            <span>Provider route</span>
-            <span className="text-white/80">Auto (shadow estimate)</span>
+            <span>Routing preference</span>
+            <span className="text-right text-white/80 capitalize">{a.routingPreference.replace("_", " ")}</span>
           </div>
           <div className="flex justify-between py-1 text-white/55">
-            <span>Runtime mode</span>
-            <span className="text-accent-soft">{RUNTIME_MODE_LABELS[a.modelMode]}</span>
+            <span>Common models</span>
+            <span className="text-right text-white/80">{modelsLabel}</span>
           </div>
           <div className="flex justify-between py-1 text-white/55">
-            <span>Fallback candidate</span>
-            <span className="text-white/80">Balanced upgrade path</span>
+            <span>Browser / tools</span>
+            <span className="text-white/80">Per job brief</span>
           </div>
           <div className="flex justify-between py-1 text-white/55">
-            <span>Context profile</span>
-            <span className="text-white/80">{CONTEXT_PROFILE_LABELS[a.modelMode]}</span>
+            <span>Work profile</span>
+            <span className="text-white/80 capitalize">{a.operatingStyle}</span>
           </div>
         </div>
       )}
@@ -273,7 +245,7 @@ export function GeneratingScreen({ genStep }: { genStep: number }) {
           Finding your best AI employee candidates
         </h1>
         <p className="mx-auto max-w-[480px] text-[14.5px] text-ink-2">
-          Matching candidates based on role fit, work style, intelligence mode, and weekly capacity.
+          Matching candidates by role fit, working style, and default intelligence bias.
         </p>
       </div>
       <div className="relative grid w-full max-w-[760px] grid-cols-1 items-start gap-8 md:grid-cols-[1.1fr_1fr]">
@@ -357,7 +329,7 @@ export function InterviewOverlay({
           <div className="mt-4 text-[19px] font-semibold tracking-tight">{a.name}</div>
           <div className="mb-3.5 text-[13px] text-ink-2">{a.title}</div>
           <p className="border-t border-border pt-3.5 text-[12.5px] leading-relaxed text-ink-3">
-            {a.engineLabel} · estimated {a.weeklyWorkHours} hrs/week capacity
+            {a.operatingStyle} · {a.defaultIntelligence} intelligence · {a.commonModels || commonModelFamiliesLabel(a.modelMode)}
           </p>
           <div className="mt-auto flex flex-col gap-2 pt-6">
             <button type="button" onClick={onHire} className="rounded-[10px] bg-ink py-2.5 text-sm text-white">
@@ -434,16 +406,22 @@ export function InterviewOverlay({
 }
 
 export function OfferScreen({
-  applicant: a,
+  applicants,
   brief,
   onBack,
   onConfirm,
 }: {
-  applicant: AiEmployeeApplicant;
+  applicants: AiEmployeeApplicant[];
   brief: AiEmployeeJobBrief;
   onBack: () => void;
   onConfirm: () => void;
 }) {
+  const count = applicants.length;
+  const title =
+    count === 1
+      ? `Hire ${applicants[0].name}?`
+      : `Hire ${count} AI employees?`;
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 14 }}
@@ -451,31 +429,36 @@ export function OfferScreen({
       className="w-full max-w-[720px]"
     >
       <div className="mb-6 text-center">
-        <AdeOrb grad={a.grad} size={76} initials={initials(a.name)} />
-        <h1 className="mt-4 text-[32px] font-semibold tracking-tight">Hire {a.name}?</h1>
-        <p className="text-[15px] text-ink-2">Review the offer before adding them to your workforce.</p>
+        {count === 1 ? (
+          <AdeOrb grad={applicants[0].grad} size={76} initials={initials(applicants[0].name)} />
+        ) : (
+          <div className="flex justify-center gap-2">
+            {applicants.map((a) => (
+              <AdeOrb key={a.id} grad={a.grad} size={56} initials={initials(a.name)} />
+            ))}
+          </div>
+        )}
+        <h1 className="mt-4 text-[32px] font-semibold tracking-tight">{title}</h1>
+        <p className="text-[15px] text-ink-2">
+          {count === 1
+            ? "Review the offer before adding them to your workforce."
+            : `You're hiring ${applicants.map((a) => a.name).join(", ")} with the same job brief.`}
+        </p>
       </div>
       <div className="rounded-2xl border border-border bg-surface p-6 shadow-md">
+        {applicants.map((a) => (
+          <div key={a.id} className="mb-4 border-b border-border/60 pb-4 last:mb-0 last:border-none last:pb-0">
+            <div className="mb-2 font-medium text-ink">
+              {a.name} · <span className="text-ink-2">{a.badge}</span>
+            </div>
+            <p className="text-sm text-ink-2">{a.title}</p>
+            <p className="mt-1 text-xs text-ink-3">
+              {a.defaultIntelligence} · {a.routingBehavior}
+            </p>
+          </div>
+        ))}
         {[
           { label: "Mission", value: brief.mission, serif: true },
-          {
-            label: "Personality",
-            value: [
-              a.personalityTags.join(", "),
-              a.communicationStyle ? `Communication: ${a.communicationStyle}` : "",
-              a.autonomyLevel ? `Autonomy: ${a.autonomyLevel}` : "",
-              a.proactivityLevel ? `Proactivity: ${a.proactivityLevel}` : "",
-            ]
-              .filter(Boolean)
-              .join(" · "),
-          },
-          {
-            label: "Weekly capacity",
-            value: `${a.weeklyWorkHours} hrs / week estimated`,
-          },
-          ...formatIntelligencePolicyLines(
-            buildIntelligencePolicyForHire({ modelMode: a.modelMode }),
-          ).map((line) => ({ label: line.label, value: line.value })),
           { label: "Approval rules", value: brief.approvalRules.join(" · ") || "Ask before high-risk actions" },
           { label: "Start location", value: "Direct Message (default)" },
           {
@@ -516,22 +499,29 @@ export function OfferScreen({
 
 export function AssignScreen({
   rooms,
+  hireCount = 1,
   onAssignLater,
   onAssign,
 }: {
   rooms: { id: string; name: string }[];
+  hireCount?: number;
   onAssignLater: () => void;
   onAssign: (roomId: string) => void;
 }) {
+  const plural = hireCount > 1;
   return (
     <motion.div
       initial={{ opacity: 0, y: 14 }}
       animate={{ opacity: 1, y: 0 }}
       className="w-full max-w-[520px] text-center"
     >
-      <h1 className="text-2xl font-semibold tracking-tight">Employee hired</h1>
+      <h1 className="text-2xl font-semibold tracking-tight">
+        {plural ? `${hireCount} employees hired` : "Employee hired"}
+      </h1>
       <p className="mt-2 text-[15px] text-ink-2">
-        DM created and welcome message sent. Would you like to assign them to a room?
+        {plural
+          ? "DMs created and welcome messages sent. Assign the first hire to a room, or open their DMs directly."
+          : "DM created and welcome message sent. Would you like to assign them to a room?"}
       </p>
       <div className="mt-6 space-y-3">
         <button
@@ -564,29 +554,57 @@ export function AssignScreen({
 }
 
 export function SuccessScreen({
-  applicant: a,
+  applicants,
   successStep,
 }: {
-  applicant: AiEmployeeApplicant;
+  applicants: AiEmployeeApplicant[];
   successStep: number;
 }) {
-  const labels = [
-    "Employee profile created",
-    "Job brief saved",
-    "DM created",
-    "Welcome message sent",
-    "Approval rules enabled",
-    "Ready to collaborate",
-  ];
+  const count = applicants.length;
+  const labels =
+    count === 1
+      ? [
+          "Employee profile created",
+          "Job brief saved",
+          "DM created",
+          "Welcome message sent",
+          "Approval rules enabled",
+          "Ready to collaborate",
+        ]
+      : [
+          `${count} employee profiles created`,
+          "Shared job brief saved",
+          "DMs created",
+          "Welcome messages sent",
+          "Approval rules enabled",
+          "Ready to collaborate",
+        ];
+
   return (
     <motion.div
       initial={{ opacity: 0, scale: 0.97 }}
       animate={{ opacity: 1, scale: 1 }}
       className="w-full max-w-[520px] text-center"
     >
-      <AdeOrb grad={a.grad} size={72} initials={initials(a.name)} />
-      <h1 className="mt-5 text-[28px] font-semibold tracking-tight">{a.name} is on your team</h1>
-      <p className="mt-2 text-[15px] text-ink-2">Setting up their profile and workspace access…</p>
+      {count === 1 ? (
+        <AdeOrb grad={applicants[0].grad} size={72} initials={initials(applicants[0].name)} />
+      ) : (
+        <div className="flex justify-center gap-2">
+          {applicants.map((a) => (
+            <AdeOrb key={a.id} grad={a.grad} size={48} initials={initials(a.name)} />
+          ))}
+        </div>
+      )}
+      <h1 className="mt-5 text-[28px] font-semibold tracking-tight">
+        {count === 1
+          ? `${applicants[0].name} is on your team`
+          : `${count} new teammates are on your team`}
+      </h1>
+      <p className="mt-2 text-[15px] text-ink-2">
+        {count === 1
+          ? "Setting up their profile and workspace access…"
+          : `${applicants.map((a) => a.first).join(", ")} — setting up profiles and workspace access…`}
+      </p>
       <div className="mt-8 text-left">
         {labels.map((label, i) => {
           const on = i < successStep;

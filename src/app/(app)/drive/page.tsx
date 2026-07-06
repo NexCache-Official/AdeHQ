@@ -24,6 +24,7 @@ import {
   type DriveDownloadResponse,
   type DriveItemType,
   type DriveListResponse,
+  type UploadProgress,
 } from "@/lib/drive/client";
 import type { SavedArtifact, WorkspaceStorageQuota } from "@/lib/types";
 import { ArtifactViewerModal } from "@/components/artifacts/ArtifactViewerModal";
@@ -73,6 +74,7 @@ export default function DrivePage() {
   const [folderName, setFolderName] = useState("");
   const [folderBusy, setFolderBusy] = useState(false);
   const [uploadBusy, setUploadBusy] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<UploadProgress | null>(null);
   const [viewerArtifact, setViewerArtifact] = useState<SavedArtifact | null>(null);
   const [exportBusy, setExportBusy] = useState(false);
   const [preview, setPreview] = useState<DriveDownloadResponse | null>(null);
@@ -98,17 +100,22 @@ export default function DrivePage() {
     setLoading(true);
     setError(null);
     try {
-      const [list, quotaResult] = await Promise.all([
-        fetchDriveList({
-          workspaceId,
-          section: activeSection,
-          folderId,
-          query: query.trim() || undefined,
-        }),
-        fetchDriveQuota(workspaceId),
-      ]);
+      const list = await fetchDriveList({
+        workspaceId,
+        section: activeSection,
+        folderId,
+        query: query.trim() || undefined,
+      });
       setData(list);
-      setQuota(quotaResult);
+      try {
+        const quotaResult = await fetchDriveQuota(workspaceId);
+        setQuota(quotaResult);
+      } catch (quotaErr) {
+        console.warn("[AdeHQ drive] quota load failed", quotaErr);
+        setError(
+          quotaErr instanceof Error ? quotaErr.message : "Unable to load storage quota.",
+        );
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not load AdeHQ Drive.");
     } finally {
@@ -163,21 +170,34 @@ export default function DrivePage() {
 
   const handleUpload = async (files: FileList | null) => {
     if (!files?.length || backend !== "supabase") return;
+    const fileList = Array.from(files);
     setUploadBusy(true);
+    setUploadProgress(null);
     setError(null);
     try {
-      for (const file of Array.from(files)) {
+      for (const [index, file] of fileList.entries()) {
+        const progressMeta = {
+          index: index + 1,
+          total: fileList.length,
+          onProgress: (progress: UploadProgress) => setUploadProgress(progress),
+        };
         if (section === "evidence" || activeSection === "evidence") {
-          await uploadEvidenceToDrive(file, { workspaceId, folderId });
+          await uploadEvidenceToDrive(file, { workspaceId, folderId }, progressMeta);
         } else {
-          await uploadToDrive(file, { workspaceId, folderId });
+          await uploadToDrive(file, { workspaceId, folderId }, progressMeta);
         }
+      }
+      try {
+        setQuota(await fetchDriveQuota(workspaceId));
+      } catch {
+        // list refresh below will still run
       }
       notifyDriveUpdated();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Upload failed.");
     } finally {
       setUploadBusy(false);
+      setUploadProgress(null);
       if (fileInputRef.current) fileInputRef.current.value = "";
       if (evidenceInputRef.current) evidenceInputRef.current.value = "";
     }
@@ -298,6 +318,26 @@ export default function DrivePage() {
           </div>
         }
       />
+
+      {uploadProgress && (
+        <div className="mb-5 rounded-2xl border border-border bg-surface p-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-sm font-medium text-ink">
+              Uploading {uploadProgress.fileName}
+              {uploadProgress.total > 1
+                ? ` (${uploadProgress.index} of ${uploadProgress.total})`
+                : ""}
+            </p>
+            <span className="text-xs text-ink-3">{uploadProgress.percent}%</span>
+          </div>
+          <div className="mt-3 h-2 overflow-hidden rounded-full bg-muted">
+            <div
+              className="h-full rounded-full bg-accent transition-all"
+              style={{ width: `${uploadProgress.percent}%` }}
+            />
+          </div>
+        </div>
+      )}
 
       {quota && (
         <div className="mb-5 rounded-2xl border border-border bg-surface p-4">
@@ -532,8 +572,10 @@ function QuotaPanel({ quota }: { quota: WorkspaceStorageQuota | null }) {
           <dd className="mt-1 text-lg font-semibold text-ink">{formatDriveBytes(quota.maxFileBytes)}</dd>
         </div>
         <div className="rounded-xl border border-border-2 bg-muted/40 p-4">
-          <dt className="text-xs uppercase tracking-wide text-ink-3">Free tier defaults</dt>
-          <dd className="mt-1 text-sm text-ink-2">100 MB workspace · 10 MB per file</dd>
+          <dt className="text-xs uppercase tracking-wide text-ink-3">Per-file limit</dt>
+          <dd className="mt-1 text-sm text-ink-2">
+            Up to {formatDriveBytes(quota.maxFileBytes)} per upload on your {quota.planTier} plan
+          </dd>
         </div>
       </dl>
     </div>

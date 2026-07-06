@@ -59,6 +59,7 @@ export type PlanConfig = {
   maxMembers: number | null;
   maxWorkspaces: number | null;
   maxStorageBytes: number | null;
+  maxFileUploadMb: number | null;
   allowedIntelligenceTiers: string[];
   browserResearchEnabled: boolean;
   gatewaySearchEnabled: boolean;

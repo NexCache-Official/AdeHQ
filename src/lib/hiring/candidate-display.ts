@@ -17,9 +17,9 @@ export function limitBullets<T>(items: T[], max: number): T[] {
 }
 
 export function tierBadgeLabel(tier: CandidateTier): string {
-  if (tier === "recommended") return "Best overall";
-  if (tier === "high_capacity") return "Fastest";
-  return "Highest quality";
+  if (tier === "recommended") return "Balanced Partner";
+  if (tier === "high_capacity") return "Fast Executor";
+  return "Senior Strategist";
 }
 
 /** One-line card summary — short but informative. */

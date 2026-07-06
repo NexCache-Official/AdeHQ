@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { SavedArtifact } from "@/lib/types";
 import { DRIVE_BUCKETS } from "@/lib/drive/constants";
-import { recordStorageUsage } from "@/lib/drive/quota";
+import { recordStorageUsage } from "@/lib/drive/quota-server";
 import { sanitizeFileName } from "@/lib/files/sanitize-file-name";
 
 export function artifactStoragePath(workspaceId: string, artifactId: string, title: string): string {
@@ -60,7 +60,7 @@ export async function syncArtifactToStorage(
 
   const delta = previousPath === storagePath ? sizeBytes - previousSize : sizeBytes;
   if (delta !== 0) {
-    await recordStorageUsage(client, {
+    await recordStorageUsage({
       workspaceId: artifact.workspaceId,
       userId,
       eventType: previousPath ? "artifact_save" : "artifact_save",
@@ -158,7 +158,7 @@ export async function exportArtifactToDrive(
   });
   if (insertError) throw insertError;
 
-  await recordStorageUsage(client, {
+  await recordStorageUsage({
     workspaceId: params.workspaceId,
     userId: params.userId,
     eventType: "export",

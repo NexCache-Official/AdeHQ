@@ -35,9 +35,14 @@ function sampleApplicant(overrides: Partial<AiEmployeeApplicant> = {}): AiEmploy
     recommended: true,
     personalityTags: ["collaborative"],
     grad: "linear-gradient(135deg,#6366f1,#3b82f6)",
-    badge: "Recommended",
+    badge: "Balanced Partner",
     badgeKind: "rec",
-    cap: 0.18,
+    cap: 0,
+    operatingStyle: "Balanced operator",
+    defaultIntelligence: "Balanced",
+    routingPreference: "auto",
+    routingBehavior: "Balances speed, cost, and quality automatically.",
+    commonModels: "DeepSeek, Qwen Coder",
     ...overrides,
   };
 }

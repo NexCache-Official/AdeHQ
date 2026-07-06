@@ -33,6 +33,7 @@ function toPlanConfig(row: PlanConfigRow): PlanConfig {
     maxMembers: row.max_members,
     maxWorkspaces: row.max_workspaces,
     maxStorageBytes: row.max_storage_bytes,
+    maxFileUploadMb: row.max_file_upload_mb,
     allowedIntelligenceTiers: Array.isArray(row.allowed_intelligence_tiers)
       ? row.allowed_intelligence_tiers
       : [],

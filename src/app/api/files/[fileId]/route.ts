@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { AuthError, requireAuthUser, requireWorkspaceMembership } from "@/lib/supabase/auth-server";
 import { assertCanAccessRoom } from "@/lib/server/room-access";
-import { recordStorageUsage } from "@/lib/drive/quota";
+import { recordStorageUsage } from "@/lib/drive/quota-server";
 import { fileChunkFromRow, workspaceFileFromRow } from "@/lib/files/records";
 
 export const runtime = "nodejs";
@@ -93,7 +93,7 @@ export async function DELETE(
         `and(from_object_type.eq.file,from_object_id.eq.${file.id}),and(to_object_type.eq.file,to_object_id.eq.${file.id})`,
       );
 
-    await recordStorageUsage(client, {
+    await recordStorageUsage({
       workspaceId: file.workspaceId,
       userId: user.id,
       eventType: "delete",

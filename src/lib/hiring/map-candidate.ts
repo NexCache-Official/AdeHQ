@@ -2,6 +2,7 @@ import { ROLE_TEMPLATES, TOOL_CATALOG, defaultPermissions } from "@/lib/demo";
 import type { AiEmployeeApplicant, AiEmployeeJobBrief } from "./types";
 import type { AIEmployee, EmployeeRoleKey } from "@/lib/types";
 import { buildIntelligencePolicyForHire } from "@/lib/ai/intelligence-policy";
+import type { RoutingPreference } from "@/lib/ai/intelligence-policy";
 import { briefToInstructions } from "./build-brief";
 import { getRoleByKey, legacyDepartmentIdForRole } from "./role-library";
 import { nowISO, uid } from "@/lib/utils";
@@ -69,7 +70,7 @@ export function candidateToEmployee(
           : "Mid",
     status: "idle",
     instructions: briefToInstructions(brief),
-    communicationStyle: brief.communicationStyle,
+    communicationStyle: candidate.communicationStyle ?? brief.communicationStyle,
     successCriteria: brief.successMetrics.join("; "),
     tools: template.suggestedTools.map((toolId) => {
       const meta = TOOL_CATALOG.find((t) => t.id === toolId)!;
@@ -97,12 +98,22 @@ export function candidateToEmployee(
     intelligencePolicy: buildIntelligencePolicyForHire({
       modelMode: candidate.modelMode,
       roleKey: employeeRoleKey,
+      routingPreference: candidate.routingPreference as RoutingPreference,
       workHourProfile:
-        candidate.quality === "premium"
+        candidate.tier === "premium"
           ? "heavy"
-          : candidate.quality === "high"
-            ? "moderate"
-            : "light",
+          : candidate.tier === "high_capacity"
+            ? "light"
+            : "moderate",
+      notes: [
+        `Operating style: ${candidate.operatingStyle}`,
+        candidate.personalityTags.length
+          ? `Personality: ${candidate.personalityTags.join(", ")}`
+          : null,
+        candidate.watchOuts.length ? `Watch-outs: ${candidate.watchOuts.join("; ")}` : null,
+      ]
+        .filter(Boolean)
+        .join(". "),
     }),
     lastActiveAt: timestamp,
     createdAt: timestamp,

@@ -33,6 +33,22 @@ export function displayEngineModel(modelId: string): string {
   return slug;
 }
 
-export function intelligenceLabel(mode: ModelMode): string {
-  return INTELLIGENCE_MODE_LABELS[mode] ?? "Balanced Intelligence";
+/** Friendly model families — no provider branding or raw IDs in customer UI. */
+export function commonModelFamiliesLabel(mode: ModelMode): string {
+  switch (mode) {
+    case "cheap":
+      return "DeepSeek, Qwen";
+    case "coding":
+      return "Qwen Coder, DeepSeek";
+    case "strong":
+      return "DeepSeek, Qwen";
+    case "long_context":
+      return "DeepSeek, Qwen";
+    default:
+      return "DeepSeek, Qwen Coder";
+  }
+}
+
+export function defaultIntelligenceShort(mode: ModelMode): string {
+  return RUNTIME_MODE_LABELS[mode] ?? "Balanced";
 }

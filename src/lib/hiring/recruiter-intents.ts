@@ -37,6 +37,12 @@ export function isHiringFlowMetaReply(text: string): boolean {
   ) {
     return true;
   }
+  if (/\b(move on|let'?s move on|keep going|next question|that'?s enough|nothing else)\b/i.test(lower)) {
+    return true;
+  }
+  if (/^(ok|okay|i'?m ok|im ok|i'?m okay|im okay)[,!.?\s]*(let'?s )?(move on|continue|go ahead)?[!.?]*$/i.test(lower)) {
+    return true;
+  }
   return false;
 }
 
@@ -74,9 +80,16 @@ export function detectRecruiterUserIntent(text: string): RecruiterUserIntent {
   }
 
   if (
-    /\b(i'?m |im )?(happy|good|great|looks good|sounds good|perfect|fine|all set|ready|approved)\b/i.test(
+    /\b(i'?m |im )?(happy|good|great|looks good|sounds good|perfect|fine|all set|ready|approved|okay|ok)\b/i.test(
       lower,
     ) &&
+    !NEGATIVE_ADJUST.test(lower)
+  ) {
+    return "approve_brief";
+  }
+
+  if (
+    /\b(move on|let'?s move on|keep going|nothing else to add|that covers it)\b/i.test(lower) &&
     !NEGATIVE_ADJUST.test(lower)
   ) {
     return "approve_brief";

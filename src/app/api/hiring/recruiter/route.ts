@@ -378,6 +378,7 @@ RULES:
 11. Always include 2–4 suggestionChips that directly answer your latest question. If your message asks a question, do not include a review_brief chip.
 12. Never ask about channels, rooms, or start location.
 13. ${MAYA_HIRE_LANGUAGE_RULE}
+14. NEVER paste the user's exact words into responsibilities or business focus. Interpret intent. Flow-control replies ("okay", "move on", "looks good") mean proceed — do not add them to the brief.
 
 Mode: ${body.mode ?? "chat"}
 ${body.refineInstruction ? `Refine (${body.refineMode ?? "improve"}) section ${body.refineSection}: ${body.refineInstruction}` : ""}
@@ -510,7 +511,8 @@ export async function POST(request: NextRequest) {
           { conversation, roleKey },
         ),
       );
-    } catch {
+    } catch (err) {
+      console.error("[hiring/recruiter] LLM failed, using rule-based fallback", err);
       return NextResponse.json(
         await finalizeRecruiterResponse(
           buildResponse({
