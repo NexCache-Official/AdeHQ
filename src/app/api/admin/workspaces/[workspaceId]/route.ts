@@ -30,6 +30,8 @@ export async function PATCH(
     }
     if (typeof body?.plan === "string" && body.plan.trim()) {
       updates.plan = body.plan.trim();
+      // Keep the unified plan_slug in sync so the entitlement resolver picks it up.
+      updates.plan_slug = body.plan.trim();
     }
     if (Object.keys(updates).length === 0) {
       return NextResponse.json(
@@ -40,7 +42,7 @@ export async function PATCH(
 
     const { data: before, error: readError } = await serviceClient
       .from("workspaces")
-      .select("id, name, status, plan")
+      .select("id, name, status, plan, plan_slug")
       .eq("id", params.workspaceId)
       .maybeSingle();
     if (readError) throw readError;
@@ -52,7 +54,7 @@ export async function PATCH(
       .from("workspaces")
       .update(updates)
       .eq("id", params.workspaceId)
-      .select("id, name, status, plan")
+      .select("id, name, status, plan, plan_slug")
       .single();
     if (updateError) throw updateError;
 

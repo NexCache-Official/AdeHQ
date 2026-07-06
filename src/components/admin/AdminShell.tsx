@@ -24,9 +24,12 @@ import {
   ListChecks,
   Rocket,
   ScrollText,
+  Cpu,
+  KeyRound,
   Shield,
   ShieldAlert,
   Siren,
+  Ticket,
   ToggleLeft,
   Users,
   Wrench,
@@ -50,6 +53,7 @@ type NavItem = {
   label: string;
   icon: React.ComponentType<{ className?: string }>;
   stage?: string;
+  superAdminOnly?: boolean;
 };
 
 const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
@@ -75,6 +79,7 @@ const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
       { href: "/admin/usage", label: "Usage & Cost", icon: BarChart3 },
       { href: "/admin/work-hours", label: "Work Hours", icon: Clock },
       { href: "/admin/models", label: "Models", icon: Activity },
+      { href: "/admin/runtime", label: "Runtime", icon: Cpu },
       { href: "/admin/browser-research", label: "Browser Research", icon: Globe },
       { href: "/admin/ai-employees", label: "AI Employees", icon: Bot },
       { href: "/admin/files-storage", label: "Files & Storage", icon: HardDrive },
@@ -84,6 +89,7 @@ const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
     title: "Commercial",
     items: [
       { href: "/admin/plans", label: "Plans", icon: ListChecks },
+      { href: "/admin/promo-codes", label: "Promo Codes", icon: Ticket },
       { href: "/admin/billing", label: "Billing", icon: CreditCard },
     ],
   },
@@ -96,6 +102,7 @@ const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
       { href: "/admin/experiments", label: "Experiments", icon: FlaskConical },
       { href: "/admin/jobs", label: "Jobs", icon: FileText },
       { href: "/admin/security", label: "Security", icon: ShieldAlert },
+      { href: "/admin/vercel-env", label: "Vercel Environment", icon: KeyRound, superAdminOnly: true },
       { href: "/admin/system-health", label: "System Health", icon: Activity },
     ],
   },
@@ -190,26 +197,28 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
                 <p className="px-2.5 pb-1 pt-2 text-[10.5px] font-semibold uppercase tracking-[0.08em] text-[var(--rail-ink-3)]">
                   {section.title}
                 </p>
-                {section.items.map((item) => (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    className={cn(
-                      "flex items-center gap-2.5 rounded-[10px] px-2.5 py-[7px] text-[13px] transition-colors",
-                      isActive(item.href)
-                        ? "bg-[var(--rail-active)] font-medium text-[var(--rail-ink)]"
-                        : "text-[var(--rail-ink-2)] hover:bg-[var(--rail-hover)] hover:text-[var(--rail-ink)]",
-                    )}
-                  >
-                    <item.icon className="h-[15px] w-[15px] shrink-0" />
-                    <span className="truncate">{item.label}</span>
-                    {item.stage && (
-                      <span className="ml-auto shrink-0 rounded-full border border-[var(--rail-border)] px-1.5 py-px text-[9px] uppercase tracking-wide text-[var(--rail-ink-3)]">
-                        {item.stage}
-                      </span>
-                    )}
-                  </Link>
-                ))}
+                {section.items
+                  .filter((item) => !item.superAdminOnly || identity.role === "super_admin")
+                  .map((item) => (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      className={cn(
+                        "flex items-center gap-2.5 rounded-[10px] px-2.5 py-[7px] text-[13px] transition-colors",
+                        isActive(item.href)
+                          ? "bg-[var(--rail-active)] font-medium text-[var(--rail-ink)]"
+                          : "text-[var(--rail-ink-2)] hover:bg-[var(--rail-hover)] hover:text-[var(--rail-ink)]",
+                      )}
+                    >
+                      <item.icon className="h-[15px] w-[15px] shrink-0" />
+                      <span className="truncate">{item.label}</span>
+                      {item.stage && (
+                        <span className="ml-auto shrink-0 rounded-full border border-[var(--rail-border)] px-1.5 py-px text-[9px] uppercase tracking-wide text-[var(--rail-ink-3)]">
+                          {item.stage}
+                        </span>
+                      )}
+                    </Link>
+                  ))}
               </div>
             ))}
           </nav>

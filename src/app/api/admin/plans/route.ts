@@ -28,6 +28,8 @@ const EDITABLE_FIELDS = [
   "team_features_enabled",
   "admin_controls_enabled",
   "priority_support",
+  "human_members_unlimited",
+  "ai_employees_unlimited",
   "entitlements",
 ] as const;
 

@@ -178,8 +178,9 @@ type MentionPickerItem =
 const HUMAN_ROLE_LABELS: Record<WorkspaceMemberRole, string> = {
   owner: "Owner",
   admin: "Admin",
+  manager: "Manager",
   member: "Member",
-  viewer: "Viewer",
+  guest: "Guest",
 };
 
 /** Single-line composer height; grows up to this before scrolling. */

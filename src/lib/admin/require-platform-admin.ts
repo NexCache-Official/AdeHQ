@@ -99,6 +99,13 @@ export function assertPlatformAdminCanWrite(admin: PlatformAdmin): void {
   }
 }
 
+/** Highest-privilege operations (Vercel secrets, destructive platform actions). */
+export function assertSuperAdmin(admin: PlatformAdmin): void {
+  if (admin.role !== "super_admin") {
+    throw new AuthError("Super admin access required.", 403);
+  }
+}
+
 export function requirePlatformPermission(
   ctx: PlatformAdminContext,
   permission: PlatformPermission,

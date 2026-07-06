@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { uid, nowISO } from "@/lib/utils";
 import { recordShadowWorkMinutesFromWorkUnit } from "@/lib/ai/work-hours/ledger";
+import { recordCostFromWorkUnit } from "@/lib/billing/costing/record-work-unit-cost";
 import { maybeRunSoftCapSimulationForWorkUnit } from "@/lib/ai/work-hours/soft-cap-simulation";
 import type { AiCapability, ProviderRoute, ReasoningProfile, RuntimeMode } from "@/lib/ai/runtime/types";
 import type { EmployeeIntelligencePolicy } from "@/lib/types";
@@ -311,6 +312,13 @@ export async function completeAiWorkUnit(
     metadata: result?.metadata,
   }).catch((error) => {
     console.warn("[AdeHQ work hours shadow]", error);
+  });
+  // Commercial cost ledger — primary billable capture hook.
+  void recordCostFromWorkUnit(client, completed, {
+    actualCostUsd: result?.actualCostUsd,
+    metadata: result?.metadata,
+  }).catch((error) => {
+    console.warn("[AdeHQ cost ledger]", error);
   });
   return completed;
 }

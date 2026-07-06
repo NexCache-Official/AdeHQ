@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { authHeaders } from "@/lib/api/auth-client";
-import { Button } from "@/components/ui";
+import { Button, Modal, ModalHeader } from "@/components/ui";
 import {
   AdminAsync,
   AdminDataTable,
@@ -24,6 +24,7 @@ export default function AdminWorkspacesPage() {
   const [query, setQuery] = useState("");
   const [busyId, setBusyId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [managing, setManaging] = useState<AdminWorkspaceRow | null>(null);
   const { data, loading, error, refresh } = useAdminData<{ workspaces: AdminWorkspaceRow[] }>(
     `/api/admin/workspaces${query ? `?search=${encodeURIComponent(query)}` : ""}`,
   );
@@ -88,11 +89,11 @@ export default function AdminWorkspacesPage() {
       canWrite ? (
         <select
           className="input-field text-xs"
-          value={w.plan}
+          value={["free", "pro", "team", "business", "enterprise"].includes(w.plan) ? w.plan : "free"}
           disabled={busyId === w.id}
           onChange={(e) => void setPlan(w, e.target.value)}
         >
-          {["founder", "starter", "growth", "business", "enterprise"].map((p) => (
+          {["free", "pro", "team", "business", "enterprise"].map((p) => (
             <option key={p} value={p}>{p}</option>
           ))}
         </select>
@@ -121,26 +122,32 @@ export default function AdminWorkspacesPage() {
             key: "actions",
             header: "",
             align: "right" as const,
-            render: (w: AdminWorkspaceRow) =>
-              w.status === "disabled" ? (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={busyId === w.id}
-                  onClick={() => void setStatus(w, "active")}
-                >
-                  Enable
+            render: (w: AdminWorkspaceRow) => (
+              <div className="flex justify-end gap-2">
+                <Button variant="ghost" size="sm" onClick={() => setManaging(w)}>
+                  Manage
                 </Button>
-              ) : (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={busyId === w.id}
-                  onClick={() => void setStatus(w, "disabled")}
-                >
-                  Disable
-                </Button>
-              ),
+                {w.status === "disabled" ? (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={busyId === w.id}
+                    onClick={() => void setStatus(w, "active")}
+                  >
+                    Enable
+                  </Button>
+                ) : (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={busyId === w.id}
+                    onClick={() => void setStatus(w, "disabled")}
+                  >
+                    Disable
+                  </Button>
+                )}
+              </div>
+            ),
           },
         ]
       : []),
@@ -183,6 +190,111 @@ export default function AdminWorkspacesPage() {
           emptyLabel="No workspaces found."
         />
       </AdminAsync>
+
+      {managing && (
+        <WorkspaceOverridesModal
+          workspace={managing}
+          onClose={() => setManaging(null)}
+          onDone={() => {
+            setManaging(null);
+            void refresh();
+          }}
+        />
+      )}
     </div>
+  );
+}
+
+function WorkspaceOverridesModal({
+  workspace,
+  onClose,
+  onDone,
+}: {
+  workspace: AdminWorkspaceRow;
+  onClose: () => void;
+  onDone: () => void;
+}) {
+  const [reason, setReason] = useState("");
+  const [workHours, setWorkHours] = useState(100);
+  const [overridePlan, setOverridePlan] = useState("business");
+  const [subStatus, setSubStatus] = useState("comped");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [ok, setOk] = useState<string | null>(null);
+
+  const run = async (action: string, payload: Record<string, unknown>) => {
+    if (!reason.trim()) {
+      setError("A reason is required (this action is audited).");
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    setOk(null);
+    try {
+      const headers = await authHeaders();
+      const res = await fetch(`/api/admin/workspaces/${workspace.id}/overrides`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ action, reason, ...payload }),
+      });
+      const body = await res.json();
+      if (!res.ok) throw new Error(body?.error ?? "Action failed.");
+      setOk("Done. This change is recorded in the audit log.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Action failed.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Modal open onClose={onClose} size="lg">
+      <ModalHeader title={`Manage ${workspace.name}`} subtitle="Overrides and credits — all audited." onClose={onClose} />
+      <div className="max-h-[70vh] space-y-5 overflow-y-auto px-6 py-5">
+        <label className="block">
+          <span className="mb-1.5 block text-xs font-medium text-ink-3">Reason (required)</span>
+          <input className="input-field" value={reason} onChange={(e) => setReason(e.target.value)} placeholder="e.g. Founder deal, support comp" />
+        </label>
+
+        <div className="rounded-xl border border-border-2 p-4">
+          <h3 className="mb-2 text-sm font-semibold text-ink">Grant AI Work Hours</h3>
+          <div className="flex items-end gap-2">
+            <input type="number" className="input-field w-40" value={workHours} onChange={(e) => setWorkHours(Number(e.target.value))} />
+            <Button size="sm" disabled={busy} onClick={() => run("grant_work_hours", { amount: workHours })}>Grant</Button>
+          </div>
+        </div>
+
+        <div className="rounded-xl border border-border-2 p-4">
+          <h3 className="mb-2 text-sm font-semibold text-ink">Set plan override</h3>
+          <div className="flex items-end gap-2">
+            <select className="input-field w-40" value={overridePlan} onChange={(e) => setOverridePlan(e.target.value)}>
+              {["free", "pro", "team", "business", "enterprise"].map((p) => (
+                <option key={p} value={p}>{p}</option>
+              ))}
+            </select>
+            <Button size="sm" disabled={busy} onClick={() => run("set_plan_override", { planSlug: overridePlan })}>Set</Button>
+            <Button size="sm" variant="outline" disabled={busy} onClick={() => run("clear_plan_override", {})}>Clear</Button>
+          </div>
+        </div>
+
+        <div className="rounded-xl border border-border-2 p-4">
+          <h3 className="mb-2 text-sm font-semibold text-ink">Subscription status</h3>
+          <div className="flex items-end gap-2">
+            <select className="input-field w-40" value={subStatus} onChange={(e) => setSubStatus(e.target.value)}>
+              {["trialing", "active", "past_due", "cancelled", "expired", "manual", "comped", "enterprise"].map((s) => (
+                <option key={s} value={s}>{s}</option>
+              ))}
+            </select>
+            <Button size="sm" disabled={busy} onClick={() => run("set_subscription_status", { status: subStatus })}>Apply</Button>
+          </div>
+        </div>
+
+        {error && <p className="text-sm text-danger">{error}</p>}
+        {ok && <p className="text-sm text-emerald-600">{ok}</p>}
+      </div>
+      <div className="flex justify-end gap-2 border-t border-border-2 px-6 py-4">
+        <Button variant="outline" onClick={onDone}>Close & refresh</Button>
+      </div>
+    </Modal>
   );
 }

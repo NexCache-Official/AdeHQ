@@ -13,6 +13,7 @@ import {
 } from "@/lib/supabase/ai-runtime";
 import { getOutputTokenCap, type ModelMode } from "@/lib/ai/model-catalog";
 import { recordAiRuntime } from "@/lib/ai/runtime-log";
+import { checkWorkspaceAiCapacity } from "@/lib/billing/usage/periods";
 
 export type BeginAiRunContext = {
   client: SupabaseClient;
@@ -54,6 +55,12 @@ export async function beginAiRun(ctx: BeginAiRunContext): Promise<BeginAiRunResu
 
   if (!settings.aiEnabled) {
     return { ok: false, reason: "AI is disabled for this workspace." };
+  }
+
+  // Weekly AI Work Hours enforcement — pause AI employees when the workspace is exhausted.
+  const capacity = await checkWorkspaceAiCapacity(ctx.client, ctx.workspaceId);
+  if (!capacity.allowed) {
+    return { ok: false, reason: capacity.reason ?? "Weekly AI Work Hours exhausted." };
   }
 
   const modeCap = getOutputTokenCap(ctx.modelMode);
