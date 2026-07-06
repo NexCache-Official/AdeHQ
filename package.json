@@ -52,6 +52,7 @@
     "test:integration-loop:e2e": "tsx scripts/test-integration-tool-loop-e2e.ts",
     "test:integration-permissions": "tsx scripts/test-integration-tool-permissions.ts",
     "test:integration-chat:e2e": "tsx scripts/test-integration-chat-e2e.ts",
+    "test:claimed-actions-guardrail": "tsx scripts/test-claimed-actions-guardrail.ts",
     "env:activate-live": "node scripts/activate-live-env.mjs",
     "env:activate-live:vercel": "node scripts/activate-live-env.mjs --push-vercel",
     "db:seed-demo": "node -e \"fetch('http://localhost:3000/api/dev/seed-demo',{method:'POST'}).then(r=>r.json()).then(console.log).catch(()=>console.log('Start npm run dev first, then run db:seed-demo'))\""

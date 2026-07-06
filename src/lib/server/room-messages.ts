@@ -44,6 +44,7 @@ import {
 } from "@/lib/artifacts/intelligence";
 import { recordAiMessageInTopicOrchestrationState } from "@/lib/orchestration/room-steward";
 import { executeEmployeeToolCalls } from "@/lib/integrations/manager";
+import { reconcileClaimedActions } from "@/lib/integrations/reconcile-claimed-actions";
 import { filterMemorySuggestions } from "@/lib/memory/curator";
 import type { ToolCallEffectItem } from "@/lib/types";
 import { extractMentions, nowISO, uid } from "@/lib/utils";
@@ -972,6 +973,9 @@ export async function persistEmployeeEffects(
   // Integration tool calls — the Tool Execution Core runs each call through
   // grant checks, the preview/approval gate, tool runs, and work logs, and
   // returns chat chips (approval cards, created records) for this message.
+  let toolSuccessCount = 0;
+  let toolPendingCount = 0;
+  let toolFailureCount = 0;
   if (effect.toolCalls?.length) {
     try {
       const toolOutcome = await executeEmployeeToolCalls(client, {
@@ -984,9 +988,15 @@ export async function persistEmployeeEffects(
         toolCalls: effect.toolCalls,
       });
       artifacts.push(...toolOutcome.messageArtifacts);
+      for (const result of toolOutcome.results) {
+        if (result.status === "success") toolSuccessCount += 1;
+        else if (result.status === "failed" || result.status === "blocked") toolFailureCount += 1;
+        else toolPendingCount += 1;
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : "Tool execution failed.";
       console.error("[AdeHQ room-messages] tool call execution failed", error);
+      toolFailureCount += 1;
       artifacts.push({
         type: "tool_result",
         id: `tool-err-${triggerMessageId ?? uid("tr")}`,
@@ -1077,6 +1087,36 @@ export async function persistEmployeeEffects(
       created_at: event.createdAt,
     });
     if (error) throw error;
+  }
+
+  // Honesty guardrail: if the reply claims it completed tool-backed actions
+  // (created a contact, logged a deal, generated a spreadsheet, …) but nothing
+  // actually persisted, rewrite the reply and surface a retry chip instead of
+  // showing a false "Done."
+  const reconciled = reconcileClaimedActions(
+    reply,
+    {
+      toolSuccessCount,
+      toolPendingCount,
+      toolFailureCount,
+      emailDraftCount: effect.emailDrafts?.length ?? 0,
+      taskCount: createdTaskIds.length,
+      artifactCount: createdArtifactIds.length,
+      approvalCount: createdApprovalIds.length,
+      memoryCount: createdMemoryIds.length,
+    },
+    { triggerMessageId },
+  );
+  if (reconciled.falseClaim) {
+    console.warn("[AdeHQ room-messages] false completion claim corrected", {
+      workspaceId,
+      roomId,
+      topicId,
+      employeeId: employee.id,
+      triggerMessageId,
+    });
+    reply = reconciled.reply;
+    if (reconciled.notice) artifacts.push(reconciled.notice);
   }
 
   const aiMessage: RoomMessage = {
