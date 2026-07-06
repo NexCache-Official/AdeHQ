@@ -36,6 +36,43 @@ export type CuratedMemoryDraft = {
   confidence: number;
 };
 
+const TRANSACTIONAL_PATTERNS: RegExp[] = [
+  /\bcrm setup (started|complete|in progress)\b/i,
+  /\b(created|added|generated|drafted|opened|prepared)\b.{0,40}\b(contact|deal|company|task|spreadsheet|email draft|pipeline|artifact)\b/i,
+  /\bcompany created\b/i,
+  /\bcontact (created|added)\b/i,
+  /\bdeal (created|added|opened)\b/i,
+  /\bfollow-?up task\b/i,
+  /\bspreadsheet (created|generated|summary)\b/i,
+  /\bemail draft (created|written|drafted)\b/i,
+  /\bwaiting for (your )?approval\b/i,
+  /\bpreview mode\b/i,
+  /\bwork log\b/i,
+  /\btool (run|execution)\b/i,
+  /\bintegration_tool\b/i,
+  /\ball (created|done|completed)\b/i,
+  /\bsetup started\b/i,
+];
+
+const DURABLE_HINTS: RegExp[] = [
+  /\bprefer(s|red)?\b/i,
+  /\btarget account\b/i,
+  /\bprimary contact\b/i,
+  /\bdecision\b/i,
+  /\bpolicy\b/i,
+  /\bcompliance\b/i,
+  /\bpositioning\b/i,
+  /\bideal customer\b/i,
+  /\bpricing (model|tier)\b/i,
+];
+
+export type MemorySuggestionLike = {
+  text?: string;
+  content?: string;
+  title?: string;
+  reason?: string;
+};
+
 function stripMentionPrefix(text: string): string {
   return text.replace(/^@[\w\s.'-]+[—–-]\s*/i, "").trim();
 }
@@ -46,6 +83,30 @@ function firstSentence(text: string, max = 220): string {
   const sentence = (match?.[1] ?? cleaned).trim();
   if (sentence.length <= max) return sentence;
   return `${sentence.slice(0, max - 1).trim()}…`;
+}
+
+function suggestionText(item: MemorySuggestionLike): string {
+  return [item.title, item.content, item.text].filter(Boolean).join(" ").trim();
+}
+
+/** True when a memory suggestion is worth showing (durable context, not activity logs). */
+export function isDurableMemorySuggestion(item: MemorySuggestionLike): boolean {
+  const text = suggestionText(item);
+  if (!text || text.length < 12) return false;
+
+  if (DURABLE_HINTS.some((re) => re.test(text))) return true;
+
+  if (TRANSACTIONAL_PATTERNS.some((re) => re.test(text))) return false;
+
+  if (text.length < 100 && /\b(created|added|generated|drafted|setup|completed)\b/i.test(text)) {
+    return false;
+  }
+
+  return true;
+}
+
+export function filterMemorySuggestions<T extends MemorySuggestionLike>(items: T[]): T[] {
+  return items.filter(isDurableMemorySuggestion);
 }
 
 function summarizeRawContent(title: string, raw: string): string {

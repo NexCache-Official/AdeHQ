@@ -1,4 +1,6 @@
 import type { CrmListPayload } from "./types";
+import { authHeaders } from "@/lib/api/auth-client";
+import { formatCrmClientError } from "./auth-errors";
 
 export async function fetchCrmData(params: {
   workspaceId: string;
@@ -7,10 +9,17 @@ export async function fetchCrmData(params: {
   const search = new URLSearchParams({ workspaceId: params.workspaceId });
   if (params.query?.trim()) search.set("q", params.query.trim());
 
-  const res = await fetch(`/api/crm?${search.toString()}`, { credentials: "include" });
+  let headers: HeadersInit;
+  try {
+    headers = await authHeaders();
+  } catch {
+    throw new Error(formatCrmClientError("Not signed in."));
+  }
+
+  const res = await fetch(`/api/crm?${search.toString()}`, { headers, credentials: "include" });
   if (!res.ok) {
     const body = (await res.json().catch(() => ({}))) as { error?: string };
-    throw new Error(body.error ?? "Unable to load CRM.");
+    throw new Error(formatCrmClientError(body.error ?? "Unable to load CRM."));
   }
   return res.json() as Promise<CrmListPayload>;
 }
@@ -29,15 +38,22 @@ export function crmEntityHref(type: "contact" | "deal" | "company", id: string):
 }
 
 async function patchJson<T>(url: string, body: Record<string, unknown>): Promise<T> {
+  let headers: HeadersInit;
+  try {
+    headers = await authHeaders();
+  } catch {
+    throw new Error(formatCrmClientError("Not signed in."));
+  }
+
   const res = await fetch(url, {
     method: "PATCH",
-    headers: { "Content-Type": "application/json" },
+    headers,
     credentials: "include",
     body: JSON.stringify(body),
   });
   if (!res.ok) {
     const payload = (await res.json().catch(() => ({}))) as { error?: string };
-    throw new Error(payload.error ?? "CRM update failed.");
+    throw new Error(formatCrmClientError(payload.error ?? "CRM update failed."));
   }
   return res.json() as Promise<T>;
 }

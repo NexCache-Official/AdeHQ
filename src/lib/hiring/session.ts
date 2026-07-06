@@ -101,6 +101,14 @@ export function hiringBackStep(step: HiringStep): HiringStep | null {
   return BACK_MAP[step] ?? null;
 }
 
+export function isPostHireHiringStep(step: HiringStep): boolean {
+  return step === "success" || step === "assign_optional";
+}
+
+export function isPostHireHiringState(state: HiringSessionState): boolean {
+  return Boolean(state.hiredEmployeeId) || isPostHireHiringStep(state.step);
+}
+
 export function hiringReducer(state: HiringSessionState, action: HiringAction): HiringSessionState {
   switch (action.type) {
     case "SET_STEP":
@@ -280,6 +288,14 @@ export function normalizeRestoredHiringSession(
   opts?: { dmFirst?: boolean },
 ): HiringSessionState {
   let next = state;
+
+  if (next.hiredEmployeeId) {
+    if (next.step === "success" || !isPostHireHiringStep(next.step)) {
+      next = { ...next, step: "assign_optional" };
+    }
+    return next;
+  }
+
   if (opts?.dmFirst && next.recruiterMessages.length > 0 && next.step === "role") {
     next = { ...next, step: "recruiter" };
   }

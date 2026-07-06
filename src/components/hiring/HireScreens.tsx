@@ -498,57 +498,205 @@ export function OfferScreen({
 }
 
 export function AssignScreen({
+  applicants,
+  roleTitle,
   rooms,
-  hireCount = 1,
   onAssignLater,
   onAssign,
 }: {
+  applicants: Pick<AiEmployeeApplicant, "id" | "name" | "title" | "grad">[];
+  roleTitle?: string;
   rooms: { id: string; name: string }[];
-  hireCount?: number;
   onAssignLater: () => void;
   onAssign: (roomId: string) => void;
 }) {
-  const plural = hireCount > 1;
+  const count = applicants.length;
+  const plural = count > 1;
+  const setupSteps =
+    count === 1
+      ? [
+          "Employee profile created",
+          "Job brief saved",
+          "DM created",
+          "Welcome message sent",
+          "Approval rules enabled",
+        ]
+      : [
+          `${count} employee profiles created`,
+          "Shared job brief saved",
+          "DMs created",
+          "Welcome messages sent",
+          "Approval rules enabled",
+        ];
+
+  const confettiPieces = Array.from({ length: 18 }, (_, i) => ({
+    id: i,
+    x: (i % 6) * 16 - 40 + (i % 3) * 8,
+    delay: i * 0.04,
+    color: ["#2F6FED", "#E8A838", "#3DAA7D", "#7C6FE8", "#E05A5A"][i % 5],
+    size: 6 + (i % 3) * 2,
+  }));
+
   return (
     <motion.div
-      initial={{ opacity: 0, y: 14 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="w-full max-w-[520px] text-center"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      className="relative w-full max-w-[640px]"
     >
-      <h1 className="text-2xl font-semibold tracking-tight">
-        {plural ? `${hireCount} employees hired` : "Employee hired"}
-      </h1>
-      <p className="mt-2 text-[15px] text-ink-2">
-        {plural
-          ? "DMs created and welcome messages sent. Assign the first hire to a room, or open their DMs directly."
-          : "DM created and welcome message sent. Would you like to assign them to a room?"}
-      </p>
-      <div className="mt-6 space-y-3">
+      <div className="pointer-events-none absolute inset-x-0 -top-8 flex h-32 justify-center overflow-hidden">
+        {confettiPieces.map((piece) => (
+          <motion.span
+            key={piece.id}
+            initial={{ opacity: 0, y: -20, x: piece.x, scale: 0, rotate: 0 }}
+            animate={{
+              opacity: [0, 1, 1, 0],
+              y: [-20, 40, 90],
+              x: piece.x + (piece.id % 2 === 0 ? 12 : -12),
+              scale: [0, 1, 0.6],
+              rotate: piece.id * 45,
+            }}
+            transition={{ duration: 1.4, delay: 0.15 + piece.delay, ease: "easeOut" }}
+            className="absolute rounded-sm"
+            style={{
+              width: piece.size,
+              height: piece.size,
+              backgroundColor: piece.color,
+            }}
+          />
+        ))}
+      </div>
+
+      <div className="text-center">
+        <motion.div
+          initial={{ scale: 0.6, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          transition={{ type: "spring", stiffness: 260, damping: 18, delay: 0.1 }}
+          className="relative inline-block"
+        >
+          {count === 1 ? (
+            <AdeOrb grad={applicants[0].grad} size={88} initials={initials(applicants[0].name)} />
+          ) : (
+            <div className="flex justify-center -space-x-3">
+              {applicants.map((a, i) => (
+                <motion.div
+                  key={a.id}
+                  initial={{ opacity: 0, x: 20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: 0.15 + i * 0.08 }}
+                  className="relative"
+                  style={{ zIndex: applicants.length - i }}
+                >
+                  <AdeOrb grad={a.grad} size={64} initials={initials(a.name)} />
+                </motion.div>
+              ))}
+            </div>
+          )}
+          <motion.div
+            initial={{ scale: 0 }}
+            animate={{ scale: 1 }}
+            transition={{ type: "spring", stiffness: 400, damping: 14, delay: 0.45 }}
+            className="absolute -bottom-1 -right-1 flex h-8 w-8 items-center justify-center rounded-full bg-green text-sm font-bold text-white shadow-md ring-4 ring-canvas"
+          >
+            ✓
+          </motion.div>
+        </motion.div>
+
+        <motion.h1
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.25 }}
+          className="mt-6 text-[34px] font-semibold tracking-tight"
+        >
+          {plural ? `${count} employees hired` : `${applicants[0]?.name ?? "Employee"} is on your team`}
+        </motion.h1>
+        <motion.p
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.32 }}
+          className="mt-2 text-[15px] text-ink-2"
+        >
+          {plural
+            ? "DMs created and welcome messages sent. Add them to a room or open their DMs directly."
+            : `${roleTitle ?? applicants[0]?.title ?? "Your new AI employee"} · DM ready with welcome message sent.`}
+        </motion.p>
+      </div>
+
+      <motion.div
+        initial={{ opacity: 0, y: 16 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.4 }}
+        className="mt-8 rounded-2xl border border-border bg-surface p-5 shadow-[0_20px_50px_-32px_rgba(34,31,26,0.35)]"
+      >
+        <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-ink-3">Setup complete</p>
+        <div className="space-y-0">
+          {setupSteps.map((label, i) => (
+            <motion.div
+              key={label}
+              initial={{ opacity: 0, x: -8 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: 0.5 + i * 0.07 }}
+              className="flex items-center gap-2.5 border-b border-border/50 py-2.5 last:border-none"
+            >
+              <div className="flex h-[22px] w-[22px] shrink-0 animate-[hirePop_0.3s_ease_both] items-center justify-center rounded-full bg-green text-xs font-bold text-white">
+                ✓
+              </div>
+              <span className="text-sm text-ink">{label}</span>
+            </motion.div>
+          ))}
+        </div>
+      </motion.div>
+
+      <motion.div
+        initial={{ opacity: 0, y: 16 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.75 }}
+        className="mt-6 space-y-4"
+      >
         <button
           type="button"
           onClick={onAssignLater}
-          className="w-full rounded-xl border border-border bg-surface py-3 text-sm font-medium"
+          className="group w-full rounded-xl bg-ink py-3.5 text-sm font-medium text-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
         >
-          Assign later → open DM
+          Open DM
+          <span className="ml-1 inline-block transition group-hover:translate-x-0.5">→</span>
         </button>
-        <div className="rounded-xl border border-border bg-surface p-4 text-left">
-          <p className="mb-3 text-xs font-medium uppercase tracking-wider text-ink-3">
-            Add to room
-          </p>
-          <div className="flex flex-wrap gap-2">
-            {rooms.map((r) => (
-              <button
-                key={r.id}
-                type="button"
-                onClick={() => onAssign(r.id)}
-                className="rounded-lg border border-border px-3 py-2 text-sm hover:border-ink"
-              >
-                {r.name}
-              </button>
-            ))}
+
+        {rooms.length > 0 && (
+          <div className="rounded-2xl border border-border bg-surface p-5">
+            <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-ink-3">
+              Add to a room
+            </p>
+            <p className="mb-4 text-sm text-ink-2">
+              {plural
+                ? "Assign the first hire to a project room. You can add others later from Workforce."
+                : "Optional — they can also join rooms anytime from Workforce."}
+            </p>
+            <div className="grid gap-2.5 sm:grid-cols-2">
+              {rooms.map((r, i) => (
+                <motion.button
+                  key={r.id}
+                  type="button"
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.85 + i * 0.06 }}
+                  whileHover={{ y: -2, scale: 1.01 }}
+                  whileTap={{ scale: 0.98 }}
+                  onClick={() => onAssign(r.id)}
+                  className="flex items-center gap-3 rounded-xl border border-border bg-muted/30 px-4 py-3.5 text-left transition hover:border-ink/30 hover:bg-muted/60 hover:shadow-sm"
+                >
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-ink text-sm font-semibold text-white">
+                    {r.name.charAt(0).toUpperCase()}
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block truncate text-sm font-medium text-ink">{r.name}</span>
+                    <span className="block text-xs text-ink-3">Add to this room</span>
+                  </span>
+                </motion.button>
+              ))}
+            </div>
           </div>
-        </div>
-      </div>
+        )}
+      </motion.div>
     </motion.div>
   );
 }

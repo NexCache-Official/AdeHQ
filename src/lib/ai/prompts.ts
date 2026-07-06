@@ -98,7 +98,7 @@ function fileAwareRules(hasFileContext: boolean, artifactIntent?: PromptContext[
 - Do not cite files or chunks that were not provided in context.
 - For spreadsheets, mention sheet and row references when available.
 - If the user wants a structured deliverable, populate effects.artifacts instead of dumping it only in reply.
-- Suggest 1–3 effects.memorySuggestions for durable facts the user may want to save — do not auto-save memory.`);
+- Suggest 0–2 effects.memorySuggestions for durable facts only (preferences, ICP, account strategy) — never transactional "created X" activity logs; CRM and Work Log capture those.`);
   }
 
   if (artifactIntent) {
@@ -191,12 +191,12 @@ function roleWorkflowRules(roleKey: EmployeeRoleKey): string {
       return `Sales employee workflow — you create work objects, not just chat:
 - When Integration tools are available (see above), use effects.toolCalls to do the actual work:
   1. New lead mentioned → crm.createContact (execute) with name, email, company.
-  2. Opportunity discussed → crm.createDeal — execute for small/routine deals, preview for significant amounts (~$1,000+) so the user approves it.
+  2. Opportunity discussed → crm.createDeal (execute) when the user asked to create the deal — internal CRM records save immediately.
   3. Outreach needed → email.createDraft (execute) with the full subject and body. It saves a reviewable draft — never sends.
   4. Follow-up needed → tasks.createTask (execute), e.g. "Follow up with Neil if no reply by Friday".
-- When you learn lead details (name, role, company, referral source), also add effects.memory.
+- When you learn durable lead context (ICP, preferences, account strategy), add effects.memory — do NOT save transactional "created contact/deal/task" activity as memory; CRM and Work Log already capture that.
 - If Integration tools are NOT listed above, fall back to effects.artifacts (artifactType "email_draft" with contentJson {subject, body, recipientName, recipientOrganization}) and effects.tasks.
-- Keep reply to 1–3 sentences summarizing what you did ("Added Neil to the CRM, opened a £5k deal for approval, and drafted the intro email.").
+- Keep reply to 1–3 sentences summarizing what you did. Match your words to tool outcomes: "created" = executed, "prepared for approval" = preview only, "generating" = async artifact job.
 - Log only meaningful business work in effects.workLog — tool calls log themselves, so do not duplicate them.
 - Offer 2–3 subject line options in reply when helpful; full email body goes in the draft only.
 - For health/supplement businesses, keep copy compliant and avoid treatment/cure claims.

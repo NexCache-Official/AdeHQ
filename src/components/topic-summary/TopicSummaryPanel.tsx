@@ -25,6 +25,7 @@ import {
   memorySuggestionTitle,
   sanitizeDisplayText,
   sanitizeSummaryText,
+  sourceLabelForSummaryItem,
   sourceLabelFromMessage,
 } from "@/lib/topic-summary/source-labels";
 import { jumpToMessage } from "@/lib/navigation/jump-to-source";
@@ -74,7 +75,7 @@ type TopicSummaryPanelProps = {
   isDm?: boolean;
   summary: TopicSummary | null;
   employees: AIEmployee[];
-  messages?: Pick<RoomMessage, "id" | "senderName" | "senderType">[];
+  messages?: Pick<RoomMessage, "id" | "senderName" | "senderType" | "artifacts">[];
   loading?: boolean;
   refreshing?: boolean;
   error?: string | null;
@@ -342,7 +343,7 @@ export function TopicSummaryPanel({
           <ul className="space-y-2">
             {keyFacts.map((fact, index) => {
               const text = sanitizeDisplayText(fact.text);
-              const source = sourceLabelFromMessage(fact.sourceMessageId, messages, "short");
+              const source = sourceLabelForSummaryItem(fact.sourceMessageId, messages, "short");
               return (
                 <li
                   key={`${text}-${index}`}
@@ -387,7 +388,7 @@ export function TopicSummaryPanel({
         <OverviewSection title="Open questions">
           <ul className="space-y-2">
             {summary!.openQuestions.map((question, index) => {
-              const source = sourceLabelFromMessage(question.sourceMessageId, messages, "short");
+              const source = sourceLabelForSummaryItem(question.sourceMessageId, messages, "short");
               const text = sanitizeDisplayText(question.text);
               return (
                 <li
@@ -425,7 +426,7 @@ export function TopicSummaryPanel({
           <ul className="space-y-2">
             {summary!.nextActions.map((action, index) => {
               if (dismissedActions.has(index)) return null;
-              const source = sourceLabelFromMessage(action.sourceMessageId, messages, "short");
+              const source = sourceLabelForSummaryItem(action.sourceMessageId, messages, "short");
               return (
                 <li
                   key={`${action.title}-${index}`}
@@ -503,7 +504,7 @@ export function TopicSummaryPanel({
                 item.scope,
                 topic?.title ?? (isDm ? "Direct Chat" : undefined),
               );
-              const source = sourceLabelFromMessage(item.sourceMessageId, messages, "short");
+              const source = sourceLabelForSummaryItem(item.sourceMessageId, messages, "short");
               return (
                 <li
                   key={`${item.text}-${index}`}

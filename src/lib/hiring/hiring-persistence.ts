@@ -16,6 +16,7 @@ import { migrateLegacyDepartmentId } from "./role-library";
 import {
   clearHiringSession,
   initialHiringSession,
+  isPostHireHiringState,
   loadHiringSession,
   normalizeRestoredHiringSession,
   persistHiringSession,
@@ -647,6 +648,10 @@ export async function persistDurableHiringSession(params: {
 }): Promise<string | null> {
   persistHiringSession(params.state, params.scope);
 
+  if (isPostHireHiringState(params.state)) {
+    return params.sessionId;
+  }
+
   if (
     params.backend !== "supabase" ||
     !params.workspaceId ||
@@ -681,10 +686,19 @@ export async function finalizeDurableHiringSession(params: {
   candidateId: string;
   scope?: HiringSessionScope;
 }): Promise<void> {
+  const postHireState: HiringSessionState = {
+    ...params.state,
+    hiredEmployeeId: params.hiredEmployeeId,
+    hiredEmployeeIds: params.state.hiredEmployeeIds ?? [params.hiredEmployeeId],
+    dmRoomId: params.dmRoomId,
+    step: "assign_optional",
+    sessionStatus: "hired",
+  };
+
   if (params.scope) {
-    clearHiringSession(params.scope);
+    persistHiringSession(postHireState, params.scope);
   } else {
-    clearHiringSession();
+    persistHiringSession(postHireState);
   }
 
   if (params.backend !== "supabase" || !params.sessionId || !params.workspaceId) {

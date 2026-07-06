@@ -43,6 +43,32 @@ export function sourceLabelFromMessage(
   return style === "short" ? `${firstName}'s reply` : `From ${firstName}'s reply`;
 }
 
+/** Prefer structured record sources (CRM, task, artifact) over generic reply labels. */
+export function sourceLabelForSummaryItem(
+  messageId: string | undefined,
+  messages: Pick<RoomMessage, "id" | "senderName" | "senderType" | "artifacts">[],
+  style: "chip" | "short" = "short",
+): string | null {
+  if (!messageId) return null;
+  const message = messages.find((m) => m.id === messageId);
+  const artifacts = message?.artifacts ?? [];
+  if (artifacts.length > 0) {
+    const types = new Set(artifacts.map((a) => a.type));
+    if (types.has("crm_contact")) return style === "short" ? "CRM contact" : "From CRM contact record";
+    if (types.has("crm_deal")) return style === "short" ? "CRM deal" : "From CRM deal record";
+    if (types.has("crm_company")) return style === "short" ? "CRM company" : "From CRM company record";
+    if (types.has("task") || artifacts.some((a) => a.meta?.toolName === "tasks.createTask")) {
+      return style === "short" ? "Task" : "From task record";
+    }
+    if (types.has("artifact")) return style === "short" ? "Artifact" : "From artifact";
+    if (types.has("approval")) return style === "short" ? "Approval" : "From approval request";
+    if (artifacts.some((a) => a.type === "tool_result" && a.meta?.toolStatus === "success")) {
+      return style === "short" ? "Tool result" : "From tool execution";
+    }
+  }
+  return sourceLabelFromMessage(messageId, messages, style);
+}
+
 export function memorySuggestionTitle(text: string): string {
   const line = stripInternalRefs(text.split("\n").find((l) => l.trim())?.trim() ?? text.trim());
   if (line.length <= 72) return line;

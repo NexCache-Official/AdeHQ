@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import type { MessageArtifact } from "@/lib/types";
-import { Briefcase, Building2, User } from "lucide-react";
+import { CheckCircle2, Briefcase, Building2, User } from "lucide-react";
 
 export function CrmInlineCard({ artifact }: { artifact: MessageArtifact }) {
   const Icon =
@@ -22,10 +22,11 @@ export function CrmInlineCard({ artifact }: { artifact: MessageArtifact }) {
   return (
     <Link
       href={href}
-      className="flex items-center gap-3 rounded-xl border border-border bg-surface px-3.5 py-3 text-left shadow-sm transition hover:border-accent/30 hover:bg-accent-soft/20"
+      className="mt-2 flex items-center gap-3 rounded-xl border border-border bg-surface px-3.5 py-3 text-left shadow-sm transition hover:border-accent/30 hover:bg-accent-soft/20"
     >
-      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-muted text-ink-2">
+      <span className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-muted text-ink-2">
         <Icon className="h-4 w-4" />
+        <CheckCircle2 className="absolute -bottom-1 -right-1 h-3.5 w-3.5 rounded-full bg-surface text-emerald-600" />
       </span>
       <div className="min-w-0 flex-1">
         <div className="text-[10px] font-semibold uppercase tracking-wide text-ink-3">

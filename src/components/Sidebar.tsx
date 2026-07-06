@@ -200,7 +200,7 @@ export function Sidebar() {
                     <EmployeeAvatar
                       employee={employee}
                       size="xs"
-                      showStatus
+                      showStatus={false}
                       className="!h-4 !w-4 !rounded-[5px] !text-[8px]"
                     />
                   }

@@ -175,7 +175,7 @@ export function AdeOrb({
 }) {
   return (
     <div
-      className="relative flex shrink-0 items-center justify-center font-semibold text-white shadow-[0_6px_18px_-6px_rgba(34,31,26,0.4),inset_0_1px_1px_rgba(255,255,255,0.3)]"
+      className="relative inline-flex shrink-0 items-center justify-center font-semibold text-white shadow-[0_6px_18px_-6px_rgba(34,31,26,0.4),inset_0_1px_1px_rgba(255,255,255,0.3)]"
       style={{
         width: size,
         height: size,

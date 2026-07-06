@@ -44,6 +44,7 @@ import {
 } from "@/lib/artifacts/intelligence";
 import { recordAiMessageInTopicOrchestrationState } from "@/lib/orchestration/room-steward";
 import { executeEmployeeToolCalls } from "@/lib/integrations/manager";
+import { filterMemorySuggestions } from "@/lib/memory/curator";
 import type { ToolCallEffectItem } from "@/lib/types";
 import { extractMentions, nowISO, uid } from "@/lib/utils";
 
@@ -767,7 +768,7 @@ export async function persistEmployeeEffects(
     if (artifactLogError) throw artifactLogError;
   }
 
-  for (const [index, suggestion] of (effect.memorySuggestions ?? []).entries()) {
+  for (const [index, suggestion] of filterMemorySuggestions(effect.memorySuggestions ?? []).entries()) {
     const suggestionKey = uid("mem-sug");
     artifacts.push({
       type: "memory_suggestion",

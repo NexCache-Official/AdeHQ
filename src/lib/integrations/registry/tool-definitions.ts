@@ -188,8 +188,8 @@ const createDeal: ToolDefinition<CreateDealArgs> = {
   provider: "internal",
   description: "Create a deal in the AdeHQ CRM pipeline.",
   readOnly: false,
-  risk: "medium",
-  approval: "suggested",
+  risk: "low",
+  approval: "none",
   argsSchema: CreateDealArgsSchema,
   promptUsage:
     'crm.createDeal — args: { "name": "Acme Ltd — annual plan", "amount"?: 5000, "currency"?: "USD", "stage"?: "Qualified", "contactName"?, "companyName"?, "expectedCloseDate"?: "2026-08-01", "notes"? }',

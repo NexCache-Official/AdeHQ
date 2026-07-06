@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { filterMemorySuggestions } from "@/lib/memory/curator";
 import { logOrchestrationWorkLog } from "@/lib/orchestration/persistence";
 import { nowISO } from "@/lib/utils";
 import {
@@ -146,7 +147,7 @@ export async function refreshTopicSummary(
     openQuestions: generated.openQuestions,
     keyFacts: generated.keyFacts,
     nextActions: generated.nextActions,
-    suggestedMemory: generated.suggestedMemory,
+    suggestedMemory: filterMemorySuggestions(generated.suggestedMemory),
     sourceMessageIds: ctx.sourceMessageIds,
     sourceWorkLogIds: ctx.sourceWorkLogIds,
     lastRefreshedAt: nowISO(),

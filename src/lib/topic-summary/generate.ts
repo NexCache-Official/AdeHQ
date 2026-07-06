@@ -78,6 +78,8 @@ Rules:
 - NEVER include raw message IDs, UUIDs, or [msg_...] references inside text fields — use sourceMessageId only.
 - Preserve sourceMessageId from message IDs in brackets when an item came from a specific message.
 - suggestedMemory is a suggestion only — never imply it was saved.
+- Do NOT suggest memory for transactional tool activity already captured elsewhere: "created contact/deal/company/task", "CRM setup started", "email draft created", "spreadsheet generated", or summaries of recent tool execution. Those belong in CRM, Tasks, Drive, or Work Log.
+- Suggest memory only for durable business context: target accounts, primary contacts, preferences, positioning, compliance notes, ICP — not activity logs.
 - For suggestedMemory: provide a short clean title (max ~8 words), 1–2 sentence content, category from: Company Context, Product / Service, Market Research, Sales, Customer / Client, Marketing, Operations, Decision, Preference, People / Workforce, Process / Playbook, File Finding, Topic Summary, Employee-Specific Context, Other.
 - Include 2–6 lowercase tags for retrieval. Prefer topic or room scope unless truly workspace-wide.
 - suggestedByEmployeeId: employee id when an AI message inspired the suggestion.

@@ -7,7 +7,7 @@ import {
   visibleCandidatesForSession,
 } from "@/lib/hiring/hiring-session-service";
 import { clearHiringSessionCandidates } from "@/lib/hiring/hiring-persistence";
-import type { HiringAction } from "@/lib/hiring/session";
+import { isPostHireHiringState, type HiringAction } from "@/lib/hiring/session";
 import type { HiringSessionState } from "@/lib/hiring/types";
 import type { HiringBackendMode } from "@/lib/hiring/hiring-persistence";
 
@@ -40,6 +40,8 @@ export function useHiringCandidateIntegrity({
   );
 
   useEffect(() => {
+    if (isPostHireHiringState(session)) return;
+
     if (session.candidates.length === 0) {
       staleHandledRef.current = null;
       return;
@@ -71,6 +73,8 @@ export function useHiringCandidateIntegrity({
   }, [
     session.candidates,
     session.briefReady,
+    session.hiredEmployeeId,
+    session.step,
     visibleCandidates,
     candidateContext,
     dispatch,

@@ -190,7 +190,6 @@ export function useHiringSessionSync({
         candidateId: params.candidateId,
         scope,
       });
-      sessionIdRef.current = null;
       hireInFlightRef.current = false;
     },
     [backend, workspaceId, scope],

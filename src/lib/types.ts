@@ -241,7 +241,7 @@ export type MessageArtifact = {
     suggestionKey?: string;
     mayaArtifactKind?: string;
     toolName?: string;
-    toolStatus?: "queued" | "failed" | "blocked" | "success";
+    toolStatus?: "queued" | "failed" | "blocked" | "success" | "approval_pending";
     error?: string;
   };
 };

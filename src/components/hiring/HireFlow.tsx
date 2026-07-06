@@ -21,6 +21,7 @@ import { normalizeRecruiterAnswer } from "@/lib/hiring/normalize-recruiter-answe
 import { inferRoleFromText, inferenceOpeningMessage } from "@/lib/hiring/role-inference";
 import {
   hiringBackStep,
+  clearHiringSession,
 } from "@/lib/hiring/session";
 import { useHiringSessionSync } from "@/lib/hiring/use-hiring-session-sync";
 import { useHiringCandidateIntegrity } from "@/lib/hiring/use-hiring-candidate-integrity";
@@ -108,6 +109,7 @@ export function HireFlow({ onboarding = false, entrySource = "hire_route" }: Hir
     dispatch,
     sessionId,
     sessionScopeKey,
+    scope,
     tryClaimHireLock,
     releaseHireLock,
     completeDurableHire,
@@ -134,7 +136,6 @@ export function HireFlow({ onboarding = false, entrySource = "hire_route" }: Hir
       mayaRoomId,
     },
   });
-  const sucTimer = useRef<ReturnType<typeof setInterval>>();
   const generateGuardRef = useRef(new ActionOnceGuard());
   const chatEndRef = useRef<HTMLDivElement>(null);
   const prevBriefRef = useRef<Partial<AiEmployeeJobBrief>>();
@@ -211,6 +212,43 @@ export function HireFlow({ onboarding = false, entrySource = "hire_route" }: Hir
             : [];
     return visibleCandidates.filter((c) => ids.includes(c.id));
   }, [session.selectedCandidateId, session.selectedCandidateIds, visibleCandidates, hired]);
+
+  const assignApplicants = useMemo(() => {
+    const ids =
+      session.selectedCandidateIds?.length
+        ? session.selectedCandidateIds
+        : session.selectedCandidateId
+          ? [session.selectedCandidateId]
+          : [];
+    const fromSession = session.candidates.filter((c) => ids.includes(c.id));
+    if (fromSession.length > 0) {
+      return fromSession.map((c) => ({ id: c.id, name: c.name, title: c.title, grad: c.grad }));
+    }
+    if (selectedCandidates.length > 0) {
+      return selectedCandidates.map((c) => ({ id: c.id, name: c.name, title: c.title, grad: c.grad }));
+    }
+    const hiredIds =
+      session.hiredEmployeeIds?.length
+        ? session.hiredEmployeeIds
+        : session.hiredEmployeeId
+          ? [session.hiredEmployeeId]
+          : [];
+    return hiredIds
+      .map((id) => {
+        const emp = appState.employees.find((e) => e.id === id);
+        if (!emp) return null;
+        return { id: emp.id, name: emp.name, title: emp.role, grad: emp.accent };
+      })
+      .filter(Boolean) as { id: string; name: string; title: string; grad: string }[];
+  }, [
+    session.candidates,
+    session.selectedCandidateId,
+    session.selectedCandidateIds,
+    session.hiredEmployeeId,
+    session.hiredEmployeeIds,
+    selectedCandidates,
+    appState.employees,
+  ]);
   const ivApplicant = session.interviewWith
     ? visibleCandidates.find((c) => c.id === session.interviewWith)
     : null;
@@ -226,7 +264,6 @@ export function HireFlow({ onboarding = false, entrySource = "hire_route" }: Hir
 
   useEffect(() => {
     return () => {
-      if (sucTimer.current) clearInterval(sucTimer.current);
       if (composeTimerRef.current) clearTimeout(composeTimerRef.current);
     };
   }, []);
@@ -815,8 +852,7 @@ export function HireFlow({ onboarding = false, entrySource = "hire_route" }: Hir
         employeeIds: result.employeeIds ?? [result.employeeId],
         dmRoomId: result.dmRoomId,
       });
-      runSuccessAnimation();
-      setTimeout(() => dispatch({ type: "SET_STEP", step: "assign_optional" }), 2400);
+      dispatch({ type: "SET_STEP", step: "assign_optional" });
     } catch (e) {
       releaseHireLock();
       dispatch({
@@ -826,17 +862,6 @@ export function HireFlow({ onboarding = false, entrySource = "hire_route" }: Hir
     } finally {
       dispatch({ type: "SET_BUSY", busy: false });
     }
-  };
-
-  const runSuccessAnimation = () => {
-    dispatch({ type: "SET_SUCCESS_STEP", successStep: 0 });
-    if (sucTimer.current) clearInterval(sucTimer.current);
-    let step = 0;
-    sucTimer.current = setInterval(() => {
-      step += 1;
-      dispatch({ type: "SET_SUCCESS_STEP", successStep: step });
-      if (step >= 6 && sucTimer.current) clearInterval(sucTimer.current);
-    }, 380);
   };
 
   const finishAssign = (roomId?: string) => {
@@ -850,6 +875,7 @@ export function HireFlow({ onboarding = false, entrySource = "hire_route" }: Hir
       actions.updateEmployee(hiredIds[0], { defaultRoomId: roomId });
       actions.addEmployeeToRoom(roomId, hiredIds[0]);
     }
+    clearHiringSession(scope);
     router.replace(session.dmRoomId ? `/rooms/${session.dmRoomId}` : "/workforce");
   };
 
@@ -1114,10 +1140,11 @@ export function HireFlow({ onboarding = false, entrySource = "hire_route" }: Hir
           <SuccessScreen applicants={selectedCandidates} successStep={session.successStep} />
         )}
 
-        {session.step === "assign_optional" && (
+        {session.step === "assign_optional" && assignApplicants.length > 0 && (
           <AssignScreen
+            applicants={assignApplicants}
+            roleTitle={session.brief?.roleTitle}
             rooms={rooms}
-            hireCount={session.hiredEmployeeIds?.length ?? (session.hiredEmployeeId ? 1 : 0)}
             onAssignLater={() => finishAssign()}
             onAssign={(roomId) => finishAssign(roomId)}
           />

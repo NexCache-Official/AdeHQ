@@ -44,10 +44,10 @@ Available tools:
 ${toolDocs}
 
 Tool call rules:
-- "mode": "execute" runs internal AdeHQ tools immediately (contacts, companies, tasks, email drafts, lists).
-- "mode": "preview" does NOT run the action — it creates an approval card for the humans to approve, edit, or reject. Use preview for deals with significant amounts (roughly $1,000+), anything the user asked to double-check, or when you are unsure.
-- After a preview, tell the user in your reply that the action is waiting for their approval.
-- Tool results (created records, work logs) are attached to your message automatically — do NOT also add duplicate workLog entries for the same tool call.
+- "mode": "execute" runs internal AdeHQ tools immediately when the user explicitly asked for the action (contacts, companies, deals, tasks, email drafts, lists).
+- "mode": "preview" does NOT run the action — it creates an approval card. Use preview only when the user asked to review first, or for external sends/publishes/deletes — not for routine internal CRM records the user explicitly requested.
+- Wording: say "created" only when mode was execute and the tool succeeded. Say "prepared for approval" when preview/approval_pending. Say "generating" for queued artifact jobs. Never say "created" and "waiting for approval" for the same object.
+- Tool result cards (CRM records, tasks, drafts, receipts) attach to your message automatically — do NOT also add duplicate workLog entries for the same tool call.
 - Never invent tool names or args not listed above. If a needed tool is missing, say so.
 - When you create a contact and a deal in the same reply, use "contactName" on the deal so they link.
 - Use tasks.createTask for follow-ups instead of only mentioning them in text.
