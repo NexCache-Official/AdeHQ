@@ -55,7 +55,8 @@ Public (browser):
 ```bash
 NEXT_PUBLIC_SUPABASE_URL=...
 NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=...
-NEXT_PUBLIC_SITE_URL=https://ade-hq-eight.vercel.app
+NEXT_PUBLIC_SITE_URL=https://app.adehq.com
+NEXT_PUBLIC_APP_URL=https://app.adehq.com
 NEXT_PUBLIC_ENABLE_DEMO_MODE=false   # default
 ```
 
@@ -76,8 +77,8 @@ Apply `supabase/migrations/20250629120000_ai_runtime_and_work_graph.sql` (or the
 
 Add redirect URLs in Supabase → Authentication → URL configuration:
 
-- **Site URL:** your deployment URL
-- **Redirect URLs:** `https://your-app/**`
+- **Site URL:** `https://app.adehq.com`
+- **Redirect URLs:** `https://app.adehq.com/**`
 
 ## SiliconFlow setup (recommended)
 

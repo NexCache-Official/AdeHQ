@@ -8,6 +8,7 @@ import { Button } from "@/components/ui";
 import { useStore } from "@/lib/demo-store";
 import { ResendConfirmation } from "@/components/auth/ResendConfirmation";
 import { ENABLE_DEMO_MODE } from "@/lib/config/features";
+import { getSiteUrl } from "@/lib/site-url";
 import { ArrowRight, Sparkles } from "lucide-react";
 
 export default function SignupPage() {
@@ -126,7 +127,7 @@ export default function SignupPage() {
           </p>
           <p className="mt-2 text-xs text-emerald-700">
             The link returns you to{" "}
-            <span className="font-medium">ade-hq-eight.vercel.app</span> at{" "}
+            <span className="font-medium">{getSiteUrl().replace(/^https?:\/\//, "")}</span> at{" "}
             <span className="font-mono">/auth/callback</span>.
           </p>
           <Link

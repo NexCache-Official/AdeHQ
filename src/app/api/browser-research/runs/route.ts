@@ -124,11 +124,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 403 });
     }
     const message = error instanceof Error ? error.message : "Failed to create research run.";
-    if (message.includes("SERVICE_ROLE") || message.includes("secret key")) {
+    if (message.includes("SECRET_KEY") || message.includes("secret key") || message.includes("SERVICE_ROLE")) {
       return NextResponse.json(
         {
           error:
-            "Server configuration incomplete. Set SUPABASE_SECRET_KEY (or SUPABASE_SERVICE_ROLE_KEY) in Vercel environment variables.",
+            "Server configuration incomplete. Set SUPABASE_SECRET_KEY (sb_secret_…) in Vercel environment variables.",
         },
         { status: 503 },
       );

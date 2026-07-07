@@ -50,7 +50,7 @@ export async function POST(
       serviceClient = createServiceRoleClient();
     } catch (err) {
       const hint =
-        "SUPABASE_SERVICE_ROLE_KEY is not set on the server. Add it in Vercel env vars.";
+        "SUPABASE_SECRET_KEY (sb_secret_…) is not set on the server. Add it in Vercel env vars.";
       return NextResponse.json(
         {
           ok: false,
@@ -144,8 +144,8 @@ export async function POST(
               ...debugErrorPayload(error),
               hint: message.includes("SILICONFLOW") || message.includes("API key")
                 ? "Set SILICONFLOW_API_KEY in Vercel environment variables."
-                : message.includes("SERVICE_ROLE") || message.includes("service role")
-                  ? "Set SUPABASE_SERVICE_ROLE_KEY in Vercel environment variables."
+                : message.includes("SECRET_KEY") || message.includes("secret key") || message.includes("service role")
+                  ? "Set SUPABASE_SECRET_KEY (sb_secret_…) in Vercel environment variables."
                   : message.includes("null value") && message.includes("id")
                     ? "Database insert missing required id — redeploy latest code."
                     : undefined,

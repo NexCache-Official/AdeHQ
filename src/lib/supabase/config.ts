@@ -9,6 +9,16 @@ function trim(value: string | undefined): string | undefined {
   return v || undefined;
 }
 
+/** A legacy Supabase API key (anon / service_role) is a JWT starting with `eyJ`. */
+export function isLegacyJwtKey(key: string | undefined): boolean {
+  return Boolean(key && key.startsWith("eyJ"));
+}
+
+/** The new publishable API key format (safe for the browser). */
+export function isNewPublishableKey(key: string | undefined): boolean {
+  return Boolean(key && key.startsWith("sb_publishable_"));
+}
+
 /** Never use secret/service keys in the browser. */
 export function isPlausiblePublishableKey(key: string | undefined): key is string {
   if (!key || key.length < 24) return false;
@@ -17,7 +27,9 @@ export function isPlausiblePublishableKey(key: string | undefined): key is strin
     return false;
   }
   if (key.startsWith("sb_secret_")) return false;
-  return key.startsWith("sb_publishable_") || key.startsWith("eyJ");
+  // Prefer the new `sb_publishable_` format; still accept a legacy anon JWT as a
+  // fallback so the app keeps working until legacy keys are disabled.
+  return isNewPublishableKey(key) || isLegacyJwtKey(key);
 }
 
 function pickEnvPublishableKey(): string | undefined {
@@ -26,8 +38,9 @@ function pickEnvPublishableKey(): string | undefined {
     trim(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY),
     trim(process.env.SUPABASE_PUBLISHABLE_KEY),
     trim(process.env.SUPABASE_ANON_KEY),
-  ];
-  return candidates.find(isPlausiblePublishableKey);
+  ].filter((key): key is string => isPlausiblePublishableKey(key));
+  // Prefer a new-format publishable key over any legacy anon JWT that is also set.
+  return candidates.find(isNewPublishableKey) ?? candidates[0];
 }
 
 export function resolveSupabaseUrl(): string {

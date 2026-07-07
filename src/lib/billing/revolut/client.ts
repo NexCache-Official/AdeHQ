@@ -3,6 +3,8 @@
  * Secret API keys are server-only and never exposed to the browser.
  */
 
+import { getPublicAppUrl } from "@/lib/site-url";
+
 export type RevolutConfig = {
   apiKey: string;
   baseUrl: string;
@@ -18,10 +20,7 @@ export function getRevolutConfig(): RevolutConfig | null {
   const baseUrl =
     process.env.REVOLUT_API_BASE_URL?.trim() || "https://merchant.revolut.com/api";
   const apiVersion = process.env.REVOLUT_API_VERSION?.trim() || "2024-09-01";
-  const appBaseUrl =
-    process.env.NEXT_PUBLIC_APP_URL?.trim() ||
-    process.env.APP_BASE_URL?.trim() ||
-    "http://localhost:3000";
+  const appBaseUrl = getPublicAppUrl();
   return {
     apiKey,
     baseUrl: baseUrl.replace(/\/$/, ""),
