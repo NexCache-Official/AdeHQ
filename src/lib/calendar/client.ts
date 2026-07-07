@@ -29,3 +29,34 @@ export async function fetchCalendarData(params: {
 export function calendarEntityHref(type: "campaign" | "post", id: string): string {
   return `/calendar?${type}=${encodeURIComponent(id)}`;
 }
+
+async function patchJson<T>(url: string, body: Record<string, unknown>): Promise<T> {
+  const headers = await authHeaders();
+  const res = await fetch(url, {
+    method: "PATCH",
+    headers,
+    credentials: "include",
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const payload = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new Error(payload.error ?? "Calendar update failed.");
+  }
+  return res.json() as Promise<T>;
+}
+
+export async function patchCalendarPost(
+  workspaceId: string,
+  postId: string,
+  patch: {
+    scheduledAt?: string | null;
+    status?: import("./types").ContentPostStatus;
+    title?: string;
+    platform?: import("./types").ContentPlatform;
+  },
+) {
+  return patchJson<{ post: import("./types").ContentPost }>(
+    `/api/calendar/posts/${postId}`,
+    { workspaceId, ...patch },
+  );
+}
