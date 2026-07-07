@@ -77,6 +77,16 @@ ADEHQ_DEFAULT_PROVIDER=siliconflow
 ADEHQ_SECRET_ENCRYPTION_KEY=...
 ADEHQ_SECRET_ENCRYPTION_KEY_VERSION=1
 ALLOW_PROVIDER_ENV_FALLBACK=true
+
+# Revolut Pay (payment processor for AdeHQ subscriptions)
+# The platform runs against Revolut's sandbox by default and degrades gracefully
+# until a merchant key is set: checkout still records an intent, no payment is taken.
+# Set REVOLUT_ENVIRONMENT=production to go live.
+REVOLUT_ENVIRONMENT=sandbox            # sandbox (default) | production
+REVOLUT_MERCHANT_API_KEY=...           # Merchant API secret key (server-only)
+REVOLUT_WEBHOOK_SECRET=...             # Verifies ORDER_COMPLETED webhook signatures
+# REVOLUT_API_BASE_URL=...             # Optional override; defaults per environment
+# REVOLUT_API_VERSION=2024-09-01       # Optional Revolut-Api-Version override
 ```
 
 Apply `supabase/migrations/20250629120000_ai_runtime_and_work_graph.sql` (or the synced

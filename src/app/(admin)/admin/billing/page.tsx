@@ -13,8 +13,13 @@ import {
 } from "@/components/admin/common";
 import { CreditCard } from "lucide-react";
 
+type PaymentsMode = "sandbox" | "production" | "not_configured";
+
 type BillingResponse = {
-  stripeConnected: boolean;
+  paymentProvider: string;
+  paymentsConnected: boolean;
+  paymentsMode: PaymentsMode;
+  webhookVerified: boolean;
   mrrCents: number | null;
   activePaidWorkspaces: number;
   billingCustomers: number;
@@ -29,7 +34,7 @@ type BillingResponse = {
     id: string;
     workspace_id: string;
     status: string;
-    amount_due_cents: number;
+    amount_cents: number;
     created_at: string;
   }[];
   recentGrants: {
@@ -62,11 +67,20 @@ export default function AdminBillingPage() {
     { key: "created", header: "Created", render: (r) => new Date(r.created_at).toLocaleDateString() },
   ];
 
+  const revolutLabel =
+    data?.paymentsMode === "production"
+      ? "Live"
+      : data?.paymentsMode === "sandbox"
+        ? "Sandbox"
+        : "Not connected";
+  const revolutTone: "healthy" | "degraded" | "unknown" =
+    data?.paymentsMode === "production" ? "healthy" : data?.paymentsMode === "sandbox" ? "degraded" : "unknown";
+
   return (
     <div>
       <AdminPageHeader
         title="Billing"
-        subtitle="Revenue, subscriptions, credits, and Stripe events."
+        subtitle="Revenue, subscriptions, credits, and Revolut Pay events."
         icon={<CreditCard className="h-5 w-5" />}
       />
 
@@ -75,13 +89,8 @@ export default function AdminBillingPage() {
           <div className="space-y-6">
             <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
               <AdminMetricCard
-                label="Stripe"
-                value={
-                  <AdminHealthBadge
-                    tone={data.stripeConnected ? "healthy" : "unknown"}
-                    label={data.stripeConnected ? "Connected" : "Not connected"}
-                  />
-                }
+                label="Revolut Pay"
+                value={<AdminHealthBadge tone={revolutTone} label={revolutLabel} />}
               />
               <AdminMetricCard label="MRR" value={data.mrrCents != null ? formatUsd(data.mrrCents / 100) : "—"} />
               <AdminMetricCard label="Active subs" value={data.activePaidWorkspaces} />

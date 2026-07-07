@@ -86,7 +86,7 @@ export default function AdminOverviewPage() {
         {data && response && (
           <div className="space-y-6">
             <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-6">
-              <AdminMetricCard label="MRR" value="—" hint="Stripe not connected yet" />
+              <AdminMetricCard label="MRR" value="—" hint="Revolut Pay revenue coming soon" />
               <AdminMetricCard
                 label={`AI cost (${range})`}
                 value={formatUsd(data.usage.totalCostUsd)}

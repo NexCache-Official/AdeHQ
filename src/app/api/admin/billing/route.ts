@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { adminRoute } from "@/lib/admin/api-route";
 import { requirePlatformPermission } from "@/lib/admin/require-platform-admin";
+import { getRevolutStatus } from "@/lib/billing/revolut/client";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -9,14 +10,14 @@ export const GET = adminRoute(async (_request, ctx) => {
   requirePlatformPermission(ctx, "billing.read");
 
   const [customersRes, subsRes, invoicesRes, eventsRes, grantsRes] = await Promise.all([
-    ctx.serviceClient.from("billing_customers").select("id, workspace_id, stripe_customer_id, created_at").limit(50),
+    ctx.serviceClient.from("billing_customers").select("id, workspace_id, created_at").limit(50),
     ctx.serviceClient
       .from("billing_subscriptions")
       .select("id, workspace_id, status, plan_slug, current_period_end")
       .limit(50),
     ctx.serviceClient
       .from("billing_invoices")
-      .select("id, workspace_id, status, amount_due_cents, created_at")
+      .select("id, workspace_id, status, amount_cents, created_at")
       .order("created_at", { ascending: false })
       .limit(20),
     ctx.serviceClient
@@ -36,9 +37,13 @@ export const GET = adminRoute(async (_request, ctx) => {
   }
 
   const activeSubs = (subsRes.data ?? []).filter((s) => s.status === "active");
+  const revolut = getRevolutStatus();
 
   return NextResponse.json({
-    stripeConnected: Boolean(process.env.STRIPE_SECRET_KEY?.trim()),
+    paymentProvider: "revolut",
+    paymentsConnected: revolut.configured,
+    paymentsMode: revolut.configured ? revolut.environment : "not_configured",
+    webhookVerified: revolut.webhookVerified,
     mrrCents: null,
     arrCents: null,
     activePaidWorkspaces: activeSubs.length,
