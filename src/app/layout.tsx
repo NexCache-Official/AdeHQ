@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Schibsted_Grotesk, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
+import { Analytics } from "@vercel/analytics/next";
 import { StoreProvider } from "@/lib/demo-store";
 import { AuthConfirmHandler } from "@/components/auth/AuthConfirmHandler";
 import { ThemeProvider, themeInitScript } from "@/components/ThemeProvider";
@@ -42,6 +43,7 @@ export default function RootLayout({
             {children}
           </StoreProvider>
         </ThemeProvider>
+        <Analytics />
       </body>
     </html>
   );
