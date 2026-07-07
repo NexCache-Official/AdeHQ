@@ -29,6 +29,15 @@ const TOOL_COST_TABLE: Record<string, ToolRunCostEstimate> = {
   // Phase 2 async artifacts — placeholder estimates until worker reports actuals.
   "artifact.createSpreadsheet": { costUsd: 0.002, workMinutes: 1 },
   "artifact.createPdfReport": { costUsd: 0.005, workMinutes: 2 },
+  "social.createCampaign": { costUsd: 0, workMinutes: 0 },
+  "social.draftPost": { costUsd: 0, workMinutes: 0 },
+  "calendar.createContentPost": { costUsd: 0, workMinutes: 0 },
+  "calendar.scheduleDraft": { costUsd: 0, workMinutes: 0 },
+  "investor.createFirm": { costUsd: 0, workMinutes: 0 },
+  "investor.createInvestorContact": { costUsd: 0, workMinutes: 0 },
+  "investor.updatePipeline": { costUsd: 0, workMinutes: 0 },
+  "investor.scoreFit": { costUsd: 0, workMinutes: 0 },
+  "investor.createFollowUp": { costUsd: 0, workMinutes: 0 },
 };
 
 export function estimateToolRunCost(toolName: string, mode: ToolCallMode): ToolRunCostEstimate {

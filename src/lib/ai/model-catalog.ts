@@ -30,6 +30,7 @@ export const ROLE_DEFAULT_MODE: Record<EmployeeRoleKey, ModelMode> = {
   operations: "balanced",
   sales: "balanced",
   marketing: "balanced",
+  fundraising: "balanced",
   design: "balanced",
   engineering: "coding",
   gamedev: "coding",

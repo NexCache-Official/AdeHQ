@@ -23,6 +23,8 @@ import {
   SidebarNestedLink,
 } from "./SidebarCollapsibleSection";
 import {
+  CalendarDays,
+  TrendingUp,
   Bot,
   Briefcase,
   CheckSquare,
@@ -50,6 +52,8 @@ import { useTheme } from "./ThemeProvider";
 const WORKFORCE_NAV = [
   { href: "/workforce", label: "AI Workforce", icon: Bot },
   { href: "/crm", label: "CRM", icon: Briefcase },
+  { href: "/calendar", label: "Calendar", icon: CalendarDays },
+  { href: "/investors", label: "Investors", icon: TrendingUp },
   { href: "/tasks", label: "Tasks", icon: CheckSquare, badgeKey: "tasks" as const },
   { href: "/memory", label: "Memory", icon: Brain },
   { href: "/approvals", label: "Approvals", icon: ClipboardCheck, badgeKey: "approvals" as const },

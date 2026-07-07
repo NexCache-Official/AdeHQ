@@ -161,6 +161,7 @@ export type EmployeeRoleKey =
   | "engineering"
   | "design"
   | "marketing"
+  | "fundraising"
   | "gamedev"
   | "operations"
   | "sales"
@@ -243,6 +244,9 @@ export type MessageArtifact = {
     toolName?: string;
     toolStatus?: "queued" | "failed" | "blocked" | "success" | "approval_pending";
     error?: string;
+    toolRunId?: string;
+    idempotencyKey?: string;
+    retryArgs?: Record<string, unknown>;
   };
 };
 

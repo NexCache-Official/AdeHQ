@@ -11,7 +11,8 @@ import { catalogToolIdForDomain } from "./capabilities";
 /** Suggested capability domains per employee role. */
 export const PREFAB_TOOLSETS: Record<EmployeeRoleKey, CapabilityDomain[]> = {
   sales: ["crm", "email", "tasks", "drive", "artifact"],
-  marketing: ["email", "tasks", "drive", "artifact"],
+  marketing: ["social", "calendar", "email", "tasks", "drive", "artifact"],
+  fundraising: ["investor", "email", "tasks", "drive", "artifact"],
   pm: ["tasks", "drive", "artifact"],
   research: ["tasks", "drive", "artifact"],
   operations: ["crm", "tasks", "drive", "artifact"],

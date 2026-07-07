@@ -28,6 +28,8 @@ export const TOOL_CATALOG: Tool[] = [
   { id: "adehq-email", name: "AdeHQ Email Drafts", category: "Communication", description: "Draft outreach and follow-up emails as reviewable artifacts.", status: "connected" },
   { id: "adehq-tasks", name: "AdeHQ Tasks", category: "Productivity", description: "Create and manage follow-up tasks inside AdeHQ.", status: "connected" },
   { id: "adehq-drive", name: "AdeHQ Drive", category: "Storage", description: "Save generated files and artifacts to workspace Drive.", status: "connected" },
+  { id: "adehq-calendar", name: "AdeHQ Calendar", category: "Business", description: "Campaigns and social content drafts inside AdeHQ.", status: "connected" },
+  { id: "adehq-investors", name: "AdeHQ Investors", category: "Business", description: "Investor firms, contacts, and pipeline inside AdeHQ.", status: "connected" },
   { id: "web-search", name: "Web Search", category: "Research", description: "Search the live web for fresh information and sources.", status: "mock" },
   { id: "browser", name: "Browser", category: "Research", description: "Open and read web pages like a human researcher.", status: "mock" },
   { id: "perplexity", name: "Perplexity", category: "Research", description: "Answer engine for deep, cited research.", status: "mock" },
@@ -199,6 +201,23 @@ export const ROLE_TEMPLATES: RoleTemplate[] = [
     successCriteria: "Messaging is sharp and the launch plan is actionable.",
     instructions:
       "Lead with the wedge audience. Draft copy and a distribution plan. Request approval before sending any external message or email.",
+  },
+  {
+    key: "fundraising",
+    role: "Fundraising Associate",
+    name: "Fundraising Employee",
+    blurb: "Investor research, pipeline tracking, outreach drafts, and briefs.",
+    description:
+      "Builds investor target lists, scores fit, tracks pipeline stages, and drafts outreach. Uses AdeHQ Investors and Drive artifacts — no external sends without approval.",
+    suggestedTools: ["web-search", "browser", "files"],
+    suggestedProvider: "SiliconFlow",
+    suggestedModel: "GPT",
+    difficulty: "Standard",
+    accent: "#a78bfa",
+    communicationStyle: "Direct, investor-aware, concise.",
+    successCriteria: "Pipeline is organized and outreach is tailored.",
+    instructions:
+      "Research firms, add them to the investor pipeline, score fit, and draft personalized outreach. Use email drafts only — never claim messages were sent.",
   },
   {
     key: "gamedev",

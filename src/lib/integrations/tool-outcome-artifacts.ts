@@ -1,6 +1,8 @@
 import type { MessageArtifact } from "@/lib/types";
-import type { ToolCallResult } from "./types";
+import type { ToolCallEffect, ToolCallResult } from "./types";
 import { crmEntityHref } from "@/lib/crm/client";
+import { calendarEntityHref } from "@/lib/calendar/client";
+import { investorEntityHref } from "@/lib/investors/client";
 
 const TOOL_LABELS: Record<string, string> = {
   "crm.createContact": "CRM contact",
@@ -11,6 +13,15 @@ const TOOL_LABELS: Record<string, string> = {
   "tasks.createTask": "follow-up task",
   "artifact.createSpreadsheet": "spreadsheet",
   "artifact.createPdfReport": "PDF report",
+  "social.createCampaign": "campaign",
+  "social.draftPost": "social post",
+  "calendar.createContentPost": "content post",
+  "calendar.scheduleDraft": "schedule post",
+  "investor.createFirm": "investor firm",
+  "investor.createInvestorContact": "investor contact",
+  "investor.updatePipeline": "pipeline update",
+  "investor.scoreFit": "fit score",
+  "investor.createFollowUp": "investor follow-up",
 };
 
 function humanToolLabel(tool: string): string {
@@ -121,6 +132,96 @@ export function toolReceiptArtifact(result: ToolCallResult): MessageArtifact | n
       };
     }
 
+    if (result.tool === "social.createCampaign" && objectId) {
+      return {
+        type: "tool_result",
+        id: objectId,
+        label: output?.summary ?? "Campaign created",
+        meta: {
+          toolName: result.tool,
+          toolStatus: "success",
+          href: calendarEntityHref("campaign", objectId),
+          subtitle: "Open in Calendar",
+        },
+      };
+    }
+
+    if (
+      (result.tool === "social.draftPost" || result.tool === "calendar.createContentPost") &&
+      objectId
+    ) {
+      return {
+        type: "tool_result",
+        id: objectId,
+        label: output?.summary ?? "Post drafted",
+        meta: {
+          toolName: result.tool,
+          toolStatus: "success",
+          href: calendarEntityHref("post", objectId),
+          subtitle: "Open in Calendar",
+        },
+      };
+    }
+
+    if (result.tool === "calendar.scheduleDraft" && objectId) {
+      return {
+        type: "tool_result",
+        id: objectId,
+        label: output?.summary ?? "Post scheduled",
+        meta: {
+          toolName: result.tool,
+          toolStatus: "success",
+          href: calendarEntityHref("post", objectId),
+          subtitle: "Open in Calendar",
+        },
+      };
+    }
+
+    if (result.tool === "investor.createFirm" && objectId) {
+      return {
+        type: "tool_result",
+        id: objectId,
+        label: output?.summary ?? "Firm created",
+        meta: {
+          toolName: result.tool,
+          toolStatus: "success",
+          href: investorEntityHref("firm", objectId),
+          subtitle: "Open in Investors",
+        },
+      };
+    }
+
+    if (result.tool === "investor.createInvestorContact" && objectId) {
+      return {
+        type: "tool_result",
+        id: objectId,
+        label: output?.summary ?? "Contact created",
+        meta: {
+          toolName: result.tool,
+          toolStatus: "success",
+          href: investorEntityHref("contact", objectId),
+          subtitle: "Open in Investors",
+        },
+      };
+    }
+
+    if (
+      (result.tool === "investor.updatePipeline" || result.tool === "investor.scoreFit") &&
+      objectId
+    ) {
+      return {
+        type: "tool_result",
+        id: objectId,
+        label: output?.summary ?? "Pipeline updated",
+        meta: {
+          toolName: result.tool,
+          toolStatus: "success",
+          href: investorEntityHref("pipeline", objectId),
+          subtitle: "Open in Investors",
+        },
+      };
+    }
+
     if (
       (result.tool === "artifact.createSpreadsheet" || result.tool === "artifact.createPdfReport") &&
       objectId
@@ -143,7 +244,10 @@ export function toolReceiptArtifact(result: ToolCallResult): MessageArtifact | n
 }
 
 /** Inline chat chips for non-success tool outcomes the user must see. */
-export function toolOutcomeArtifact(result: ToolCallResult): MessageArtifact | null {
+export function toolOutcomeArtifact(
+  result: ToolCallResult,
+  retry?: { args?: Record<string, unknown>; idempotencyKey?: string },
+): MessageArtifact | null {
   if (result.status === "success" || result.status === "preview" || result.status === "approval_pending") {
     return null;
   }
@@ -188,6 +292,10 @@ export function toolOutcomeArtifact(result: ToolCallResult): MessageArtifact | n
         toolStatus: "failed",
         error: result.error ?? "Something went wrong running this action.",
         subtitle: result.error,
+        toolRunId: result.toolRunId,
+        href: result.toolRunId ? `/admin/tool-runs?id=${encodeURIComponent(result.toolRunId)}` : undefined,
+        retryArgs: retry?.args,
+        idempotencyKey: retry?.idempotencyKey,
       },
     };
   }
@@ -198,19 +306,25 @@ export function toolOutcomeArtifact(result: ToolCallResult): MessageArtifact | n
 export function mergeToolOutcomeArtifacts(
   results: ToolCallResult[],
   existing: MessageArtifact[],
+  sourceCalls?: ToolCallEffect[],
 ): MessageArtifact[] {
   const merged = [...existing];
   const seen = new Set(existing.map((a) => `${a.type}:${a.id}`));
 
-  for (const result of results) {
-    for (const artifact of [toolReceiptArtifact(result), toolOutcomeArtifact(result)]) {
+  results.forEach((result, index) => {
+    const call = sourceCalls?.[index];
+    const retry =
+      call && result.status === "failed"
+        ? { args: call.args, idempotencyKey: result.idempotencyKey }
+        : undefined;
+    for (const artifact of [toolReceiptArtifact(result), toolOutcomeArtifact(result, retry)]) {
       if (!artifact) continue;
       const key = `${artifact.type}:${artifact.id}`;
       if (seen.has(key)) continue;
       merged.push(artifact);
       seen.add(key);
     }
-  }
+  });
 
   return merged;
 }

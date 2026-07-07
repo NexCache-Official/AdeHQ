@@ -12,8 +12,6 @@ import { buildEnhancedSpreadsheetBuffer } from "@/lib/artifacts/engine/spreadshe
 import {
   buildReportMarkdown,
   buildSimplePdfBuffer,
-  type PdfReportSpec,
-  type ReportSection,
 } from "@/lib/artifacts/engine/pdf-report";
 import { DRIVE_BUCKETS } from "@/lib/drive/constants";
 import { exportStoragePath } from "@/lib/drive/storage-sync";
@@ -23,6 +21,8 @@ import type {
   CreatePdfReportArgs,
   CreateSpreadsheetArgs,
 } from "@/lib/integrations/registry/tool-definitions";
+import { applySpreadsheetTemplate } from "@/lib/artifacts/templates/spreadsheets/index";
+import { applyPdfTemplate } from "@/lib/artifacts/templates/pdf/index";
 
 type JobPayload = {
   tool?: string;
@@ -192,21 +192,24 @@ async function handleSpreadsheetJob(
   if (!employeeId) throw new Error("Missing employee for spreadsheet job.");
 
   const title = args.title.trim();
+  const templated = applySpreadsheetTemplate(args);
 
   const buffer = buildEnhancedSpreadsheetBuffer({
-    sheetName: args.sheetName,
-    columns: args.columns,
-    rows: args.rows,
+    sheetName: templated.sheetName,
+    columns: templated.columns,
+    rows: templated.rows,
     meta: {
       title,
       generatedBy: employeeId,
-      source: "artifact.createSpreadsheet",
+      source: templated.template
+        ? `artifact.createSpreadsheet (${templated.template})`
+        : "artifact.createSpreadsheet",
     },
   });
   const previewMd = spreadsheetMarkdownPreview({
-    columns: args.columns,
-    rows: args.rows,
-    sheetName: args.sheetName,
+    columns: templated.columns,
+    rows: templated.rows,
+    sheetName: templated.sheetName,
   });
 
   const artifactId = await createArtifactRow(client, {
@@ -220,9 +223,10 @@ async function handleSpreadsheetJob(
     contentMarkdown: `# ${title}\n\n${previewMd}`,
     contentJson: {
       kind: "spreadsheet",
-      columns: args.columns,
-      rowCount: args.rows.length,
-      sheetName: args.sheetName ?? "Sheet1",
+      template: args.template ?? null,
+      columns: templated.columns,
+      rowCount: templated.rows.length,
+      sheetName: templated.sheetName ?? "Sheet1",
     },
   });
 
@@ -239,7 +243,7 @@ async function handleSpreadsheetJob(
     exportType: "artifact_bundle",
   });
 
-  const summary = `Generated spreadsheet "${title}" (${args.rows.length} rows) — saved to Drive.`;
+  const summary = `Generated spreadsheet "${title}" (${templated.rows.length} rows) — saved to Drive.`;
   await writeArtifactWorkLog(client, job, {
     action: "artifact_spreadsheet_created",
     summary,
@@ -248,7 +252,7 @@ async function handleSpreadsheetJob(
   });
 
   return {
-    result: { artifactId, exportId, title, rowCount: args.rows.length },
+    result: { artifactId, exportId, title, rowCount: templated.rows.length, template: args.template },
     costUsd: 0.002,
     summary,
   };
@@ -264,15 +268,17 @@ async function handlePdfReportJob(
   const employeeId = job.employeeId ?? ctx.employeeId;
   if (!employeeId) throw new Error("Missing employee for PDF report job.");
 
-  const spec: PdfReportSpec = {
-    title: args.title,
-    summary: args.summary,
-    sections: args.sections as ReportSection[],
+  const spec = applyPdfTemplate(args);
+  const contentMarkdown = buildReportMarkdown({
+    ...spec,
     generatedBy: employeeId,
     generatedAt: new Date().toISOString(),
-  };
-  const contentMarkdown = buildReportMarkdown(spec);
-  const pdfBuffer = buildSimplePdfBuffer(spec);
+  });
+  const pdfBuffer = buildSimplePdfBuffer({
+    ...spec,
+    generatedBy: employeeId,
+    generatedAt: new Date().toISOString(),
+  });
   const title = args.title.trim();
 
   const artifactId = await createArtifactRow(client, {
@@ -286,8 +292,9 @@ async function handlePdfReportJob(
     contentMarkdown,
     contentJson: {
       kind: "pdf_report",
-      sectionCount: args.sections.length,
-      summary: args.summary ?? null,
+      template: args.template ?? null,
+      sectionCount: spec.sections.length,
+      summary: spec.summary ?? null,
     },
   });
 

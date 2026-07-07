@@ -267,6 +267,7 @@ const GENERATORS: Record<EmployeeRoleKey, Generator> = {
   engineering,
   design,
   marketing,
+  fundraising: generic,
   gamedev,
   operations: generic,
   sales: generic,

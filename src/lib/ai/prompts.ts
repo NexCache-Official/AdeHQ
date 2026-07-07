@@ -201,6 +201,24 @@ function roleWorkflowRules(roleKey: EmployeeRoleKey): string {
 - Offer 2–3 subject line options in reply when helpful; full email body goes in the draft only.
 - For health/supplement businesses, keep copy compliant and avoid treatment/cure claims.
 - Do not claim you sent the email or that it was delivered. Draft only unless an email integration is connected with approval.`;
+    case "marketing":
+      return `Marketing workflow — create real calendar objects via effects.toolCalls:
+- Campaign brief → social.createCampaign (execute) with name, dates, description.
+- Post drafts → social.draftPost or calendar.createContentPost (one call per post) with title, body, platform.
+- Scheduling for human sign-off → calendar.scheduleDraft with mode preview (approval card); execute only sets internal scheduled_later status.
+- Content calendar export → artifact.createSpreadsheet with template "content_calendar".
+- Campaign brief PDF → artifact.createPdfReport with template "campaign_brief".
+- Never claim posts were published externally — v1 is internal drafts and scheduling only.`;
+    case "fundraising":
+      return `Fundraising workflow — build investor pipeline via effects.toolCalls:
+- New VC/firm → investor.createFirm (execute) with name, focus, stageFocus.
+- Partner/contact → investor.createInvestorContact with fullName, firmName, email.
+- Pipeline stage / amount → investor.updatePipeline with firmName and stage.
+- Fit scoring → investor.scoreFit with score 0–100.
+- Follow-ups → investor.createFollowUp or tasks.createTask with due dates.
+- Target list workbook → artifact.createSpreadsheet with template "investor_target".
+- Fundraising brief → artifact.createPdfReport with template "investor_brief".
+- Outreach drafts → email.createDraft (never sends).`;
     case "research":
       return `Research workflow: save findings to effects.memory, create tasks for deeper dives, log meaningful research work only.
 - A planning step decides whether to search; when Browse/Agent mode is on, search always runs for that message.

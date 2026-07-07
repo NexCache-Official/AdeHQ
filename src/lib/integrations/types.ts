@@ -10,7 +10,15 @@ import type { AIEmployee, MessageArtifact, WorkspaceMemberRole } from "@/lib/typ
 export type IntegrationEmployee = Pick<AIEmployee, "id" | "name" | "roleKey" | "tools">;
 
 /** Capability domains routed by the Tool Execution Core. */
-export type CapabilityDomain = "crm" | "email" | "tasks" | "artifact" | "social" | "drive";
+export type CapabilityDomain =
+  | "crm"
+  | "email"
+  | "tasks"
+  | "artifact"
+  | "social"
+  | "calendar"
+  | "investor"
+  | "drive";
 
 export type ToolCallMode = "preview" | "execute";
 
@@ -63,7 +71,20 @@ export type ToolExecutionOutput = {
   /** Work log action key (snake_case business action). */
   workLogAction?: string;
   /** Related entity for the work log entry. */
-  relatedEntityType?: "task" | "memory" | "approval" | "message" | "artifact" | "contact" | "deal" | "company";
+  relatedEntityType?:
+    | "task"
+    | "memory"
+    | "approval"
+    | "message"
+    | "artifact"
+    | "contact"
+    | "deal"
+    | "company"
+    | "campaign"
+    | "content_post"
+    | "investor_firm"
+    | "investor_contact"
+    | "investor_pipeline";
   relatedEntityId?: string;
   /** Optional rich chat chip (e.g. email draft artifact card). */
   messageArtifact?: MessageArtifact;
@@ -125,6 +146,9 @@ export type ToolCallResult = {
   error?: string;
   /** Chat chips describing the result (approval cards, work-log chips). */
   messageArtifacts: MessageArtifact[];
+  /** Original args — used for retry UI on failed runs. */
+  inputArgs?: Record<string, unknown>;
+  idempotencyKey?: string;
 };
 
 /** Model-emitted tool call (effects.toolCalls[]). */

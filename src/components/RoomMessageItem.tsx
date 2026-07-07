@@ -768,7 +768,16 @@ export function RoomMessageItem({
         ))}
 
         {toolResultArtifacts.map((artifact) => (
-          <ToolResultInlineCard key={`tool-${artifact.id}`} artifact={artifact} />
+          <ToolResultInlineCard
+            key={`tool-${artifact.id}`}
+            artifact={artifact}
+            context={{
+              workspaceId: state.workspace.id,
+              employeeId: message.senderType === "ai" ? message.senderId : undefined,
+              roomId: messageRoomId,
+              topicId: message.topicId,
+            }}
+          />
         ))}
 
         {memorySuggestions.map((artifact) => (

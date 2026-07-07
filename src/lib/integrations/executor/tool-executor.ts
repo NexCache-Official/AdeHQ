@@ -502,7 +502,7 @@ export async function runToolCall(
       toolUsed: tool.name,
       status: "failed",
     });
-    return { ...failedResult(request, mode, message), toolRunId: runId };
+    return { ...failedResult(request, mode, message), toolRunId: runId, idempotencyKey, inputArgs: args };
   }
 }
 

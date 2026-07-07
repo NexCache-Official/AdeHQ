@@ -90,7 +90,11 @@ export async function executeEmployeeToolCalls(
 
   return {
     results,
-    messageArtifacts: mergeToolOutcomeArtifacts(results, results.flatMap((r) => r.messageArtifacts)),
+    messageArtifacts: mergeToolOutcomeArtifacts(
+      results,
+      results.flatMap((r) => r.messageArtifacts),
+      calls,
+    ),
     summaries: results.map((r) =>
       r.status === "success"
         ? (r.output?.summary ?? `${r.tool} succeeded`)

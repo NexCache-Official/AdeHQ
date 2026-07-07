@@ -48,8 +48,20 @@ export const CAPABILITY_DOMAINS: Record<CapabilityDomain, CapabilityDomainInfo> 
   social: {
     domain: "social",
     label: "Social",
-    description: "Draft and publish social posts (Phase 4 — approval gated).",
-    catalogToolId: "adehq-email",
+    description: "Draft campaigns and social posts inside AdeHQ.",
+    catalogToolId: "adehq-calendar",
+  },
+  calendar: {
+    domain: "calendar",
+    label: "Content Calendar",
+    description: "Schedule and manage content posts and campaigns.",
+    catalogToolId: "adehq-calendar",
+  },
+  investor: {
+    domain: "investor",
+    label: "Investors",
+    description: "Investor firms, contacts, and fundraising pipeline.",
+    catalogToolId: "adehq-investors",
   },
 };
 
