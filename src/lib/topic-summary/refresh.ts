@@ -67,6 +67,7 @@ export async function refreshTopicSummary(
     topicDescription?: string | null;
     trigger?: TopicSummaryRefreshTrigger;
     manual?: boolean;
+    force?: boolean;
     employeeId?: string;
     /** When false, skip writing topic-summary work log events (e.g. employee DMs). */
     logWorkEvents?: boolean;
@@ -74,6 +75,7 @@ export async function refreshTopicSummary(
 ): Promise<RefreshTopicSummaryResult> {
   const trigger = params.trigger ?? (params.manual ? "manual" : "meaningful_ai_reply");
   const manual = Boolean(params.manual || trigger === "manual");
+  const force = Boolean(params.force);
   const logWorkEvents = params.logWorkEvents !== false;
 
   if (!shouldAutoRefreshTopicSummary(trigger)) {
@@ -103,7 +105,7 @@ export async function refreshTopicSummary(
     return { summary: null, refreshed: false, skippedReason: "chat_cleared" };
   }
 
-  const useArchivedSummary = !chatClearedAt;
+  const useArchivedSummary = !chatClearedAt && !force;
   const existingForContext = useArchivedSummary ? existing : null;
 
   if (!manual && ctx.messages.length < 3) {
@@ -134,7 +136,7 @@ export async function refreshTopicSummary(
     return { summary: existingForContext, refreshed: false, skippedReason: "casual_conversation" };
   }
 
-  if (generated.isCasualConversation && manual && !generated.summary.trim()) {
+  if (generated.isCasualConversation && manual && !force && !generated.summary.trim()) {
     return { summary: existingForContext, refreshed: false, skippedReason: "casual_conversation" };
   }
 
@@ -165,6 +167,10 @@ export async function refreshTopicSummary(
 
   const changed = summariesMeaningfullyChanged(existing, reconciledSummary);
   if (!manual && !changed) {
+    return { summary: existingForContext, refreshed: false, skippedReason: "no_meaningful_change" };
+  }
+
+  if (manual && !force && !changed && existingForContext) {
     return { summary: existingForContext, refreshed: false, skippedReason: "no_meaningful_change" };
   }
 

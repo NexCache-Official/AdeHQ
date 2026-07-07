@@ -225,6 +225,7 @@ export function TopicPanel({
     loading: summaryLoading,
     refreshing: summaryRefreshing,
     error: summaryError,
+    info: summaryInfo,
     refresh: refreshTopicSummary,
   } = useTopicSummary(topic.id);
 
@@ -294,13 +295,17 @@ export function TopicPanel({
   }, [loadArtifacts, loadFiles, topic.id]);
 
   const handleSummarize = () => {
-    void refreshTopicSummary(true).then((result) => {
+    onSummarize();
+  };
+
+  const handleRefreshSummary = () => {
+    void refreshTopicSummary({ manual: true, force: false }).then((result) => {
       if (result?.refreshed) onWorkLogRefresh?.();
     });
   };
 
-  const handleRefreshSummary = () => {
-    void refreshTopicSummary(true).then((result) => {
+  const handleRegenerateSummary = () => {
+    void refreshTopicSummary({ manual: true, force: true }).then((result) => {
       if (result?.refreshed) onWorkLogRefresh?.();
     });
   };
@@ -538,6 +543,16 @@ export function TopicPanel({
                 <Sparkles className="h-3.5 w-3.5" />
               )}
               Summarize
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleRegenerateSummary}
+              disabled={summarizing || summaryRefreshing || summaryLoading || isArchived}
+              title="Regenerate summary from the latest messages"
+            >
+              <WandSparkles className="h-3.5 w-3.5" />
+              Regenerate
             </Button>
             <Button
               variant="ghost"
@@ -840,7 +855,9 @@ export function TopicPanel({
                 loading={summaryLoading}
                 refreshing={summaryRefreshing}
                 error={summaryError}
+                info={summaryInfo}
                 onRefresh={handleRefreshSummary}
+                onRegenerate={handleRegenerateSummary}
                 onCreateTask={onCreateTaskFromSummary}
                 onMemorySaved={handleMemorySaved}
                 compactActions

@@ -15,7 +15,7 @@ export const DRIVE_SECTIONS: Array<{ id: DriveSection | "all"; label: string }> 
   { id: "files", label: "Files" },
   { id: "artifacts", label: "Artifacts" },
   { id: "evidence", label: "Screenshots / Evidence" },
-  { id: "exports", label: "Exports" },
+  { id: "exports", label: "Spreadsheets & downloads" },
 ];
 
 export const FREE_TIER_MAX_WORKSPACE_BYTES = 100 * 1024 * 1024;

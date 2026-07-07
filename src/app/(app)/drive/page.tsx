@@ -1,11 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { useStore } from "@/lib/demo-store";
 import { ENABLE_DEMO_MODE } from "@/lib/config/features";
 import type { DriveSection } from "@/lib/drive/constants";
 import { DRIVE_SECTIONS } from "@/lib/drive/constants";
-import { driveUsagePercent, fileExtensionLabel, formatDriveBytes } from "@/lib/drive/format";
+import { driveUsagePercent, formatDriveBytes } from "@/lib/drive/format";
 import {
   createDriveFolder,
   deleteDriveFile,
@@ -28,16 +29,23 @@ import {
 } from "@/lib/drive/client";
 import type { SavedArtifact, WorkspaceStorageQuota } from "@/lib/types";
 import { ArtifactViewerModal } from "@/components/artifacts/ArtifactViewerModal";
+import {
+  DriveArtifactTile,
+  DriveEvidenceTile,
+  DriveExportTile,
+  DriveFileTile,
+  DriveFolderTile,
+} from "@/components/drive/DriveItemTile";
 import { DrivePreviewModal } from "@/components/drive/DrivePreviewModal";
 import { PageContainer, PageHeader } from "@/components/Page";
 import { EmptyState } from "@/components/States";
 import { Button, Modal, ModalHeader } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import {
-  Eye,
   Camera,
   ChevronRight,
   Download,
+  FileSpreadsheet,
   FileText,
   Folder,
   FolderPlus,
@@ -46,7 +54,6 @@ import {
   LayoutList,
   Loader2,
   Search,
-  Trash2,
   Upload,
 } from "lucide-react";
 
@@ -62,6 +69,7 @@ function sectionIcon(section: DriveSection | "all") {
 export default function DrivePage() {
   const { state, backend } = useStore();
   const workspaceId = state.workspace.id;
+  const searchParams = useSearchParams();
   const [section, setSection] = useState<DriveSection | "all" | "quotas">("all");
   const [folderId, setFolderId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
@@ -84,6 +92,29 @@ export default function DrivePage() {
   const evidenceInputRef = useRef<HTMLInputElement>(null);
 
   const activeSection = section === "quotas" ? "all" : section;
+
+  useEffect(() => {
+    const sectionParam = searchParams.get("section");
+    const artifactParam = searchParams.get("artifact");
+    if (artifactParam) {
+      setSection("all");
+    } else if (
+      sectionParam === "files" ||
+      sectionParam === "artifacts" ||
+      sectionParam === "evidence" ||
+      sectionParam === "exports" ||
+      sectionParam === "all"
+    ) {
+      setSection(sectionParam);
+    }
+  }, [searchParams]);
+
+  useEffect(() => {
+    const artifactId = searchParams.get("artifact");
+    if (!artifactId || !data?.artifacts.length) return;
+    const artifact = data.artifacts.find((item) => item.id === artifactId);
+    if (artifact) setViewerArtifact(artifact);
+  }, [data?.artifacts, searchParams]);
 
   const load = useCallback(async () => {
     if (backend !== "supabase" && !ENABLE_DEMO_MODE) {
@@ -142,6 +173,16 @@ export default function DrivePage() {
       data.evidence.length +
       data.exports.length
     );
+  }, [data]);
+
+  const sectionCounts = useMemo(() => {
+    if (!data) return null;
+    return {
+      files: data.files.length,
+      artifacts: data.artifacts.length,
+      evidence: data.evidence.length,
+      exports: data.exports.length,
+    };
   }, [data]);
 
   const handleCreateFolder = async () => {
@@ -214,6 +255,21 @@ export default function DrivePage() {
     }
   };
 
+  const handleDownload = async (type: DriveItemType, id: string) => {
+    if (backend !== "supabase") return;
+    setError(null);
+    try {
+      const result = await fetchDriveDownload(workspaceId, type, id);
+      if (result.signedUrl) {
+        window.open(result.signedUrl, "_blank", "noopener,noreferrer");
+      } else {
+        setError("No download URL available for this item.");
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not download item.");
+    }
+  };
+
   const handleMoveItem = async (itemType: DriveItemType, itemId: string, targetFolderId: string | null) => {
     if (backend !== "supabase") return;
     setError(null);
@@ -272,7 +328,7 @@ export default function DrivePage() {
     <PageContainer wide className="pb-10">
       <PageHeader
         title="AdeHQ Drive"
-        subtitle="Your workspace files, artifacts, evidence, and exports — with app-level storage quotas."
+        subtitle="Files, spreadsheets, artifacts, and evidence — organized with clear file types and one-click downloads."
         icon={<HardDrive className="h-5 w-5" />}
         actions={
           <div className="flex flex-wrap items-center gap-2">
@@ -377,21 +433,30 @@ export default function DrivePage() {
                   if (item.id !== section) setFolderId(null);
                 }}
                 className={cn(
-                  "flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm transition-colors",
+                  "flex w-full items-center justify-between gap-2 rounded-xl px-3 py-2 text-left text-sm transition-colors",
                   section === item.id
                     ? "bg-accent-soft text-accent-d font-medium"
                     : "text-ink-2 hover:bg-muted hover:text-ink",
                 )}
               >
-                {item.id === "quotas" ? (
-                  <HardDrive className="h-4 w-4" />
-                ) : (
-                  (() => {
-                    const Icon = sectionIcon(item.id);
-                    return <Icon className="h-4 w-4" />;
-                  })()
+                <span className="flex min-w-0 items-center gap-2">
+                  {item.id === "quotas" ? (
+                    <HardDrive className="h-4 w-4 shrink-0" />
+                  ) : item.id === "exports" ? (
+                    <FileSpreadsheet className="h-4 w-4 shrink-0" />
+                  ) : (
+                    (() => {
+                      const Icon = sectionIcon(item.id);
+                      return <Icon className="h-4 w-4 shrink-0" />;
+                    })()
+                  )}
+                  <span className="truncate">{item.label}</span>
+                </span>
+                {sectionCounts && item.id in sectionCounts && (
+                  <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-ink-3">
+                    {sectionCounts[item.id as keyof typeof sectionCounts]}
+                  </span>
                 )}
-                {item.label}
               </button>
             ))}
           </nav>
@@ -501,6 +566,7 @@ export default function DrivePage() {
                   onDeleteFile={handleDeleteFile}
                   onOpenArtifact={setViewerArtifact}
                   onPreview={handlePreview}
+                  onDownload={handleDownload}
                 />
               )}
             </>
@@ -596,6 +662,7 @@ function DriveItemsGrid({
   onDeleteFile,
   onOpenArtifact,
   onPreview,
+  onDownload,
 }: {
   data: DriveListResponse;
   viewMode: ViewMode;
@@ -610,22 +677,20 @@ function DriveItemsGrid({
   onDeleteFile: (id: string) => void;
   onOpenArtifact: (artifact: SavedArtifact) => void;
   onPreview: (type: DriveItemType, id: string) => void;
+  onDownload: (type: DriveItemType, id: string) => void;
 }) {
   const gridClass =
     viewMode === "grid"
-      ? "grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4"
+      ? "grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3"
       : "flex flex-col gap-2";
 
   return (
     <div className={gridClass}>
       {data.folders.map((folder) => (
-        <DriveTile
+        <DriveFolderTile
           key={folder.id}
           viewMode={viewMode}
-          icon={Folder}
-          iconClass="text-amber-600 bg-amber-50"
-          title={folder.name}
-          meta="Folder · drop items here"
+          name={folder.name}
           dropHighlight={dropTargetFolderId === folder.id}
           onDragOver={(e) => {
             if (!dragItem) return;
@@ -642,28 +707,23 @@ function DriveItemsGrid({
         />
       ))}
       {data.files.map((file) => (
-        <DriveTile
+        <DriveFileTile
           key={file.id}
           viewMode={viewMode}
-          icon={FileText}
-          iconClass="text-sky-700 bg-sky-50"
-          title={file.displayName}
-          meta={`${fileExtensionLabel(file.displayName)} · ${formatDriveBytes(file.sizeBytes)}`}
+          file={file}
           draggable
           onDragStart={() => onDragStart("file", file.id)}
           onDragEnd={onDragEnd}
           onPreview={() => onPreview("file", file.id)}
+          onDownload={() => onDownload("file", file.id)}
           onDelete={() => void onDeleteFile(file.id)}
         />
       ))}
       {data.artifacts.map((artifact) => (
-        <DriveTile
+        <DriveArtifactTile
           key={artifact.id}
           viewMode={viewMode}
-          icon={FileText}
-          iconClass="text-violet-700 bg-violet-50"
-          title={artifact.title}
-          meta={`${artifact.artifactType.replace(/_/g, " ")} · artifact`}
+          artifact={artifact}
           draggable
           onDragStart={() => onDragStart("artifact", artifact.id)}
           onDragEnd={onDragEnd}
@@ -672,133 +732,29 @@ function DriveItemsGrid({
         />
       ))}
       {data.evidence.map((item) => (
-        <DriveTile
+        <DriveEvidenceTile
           key={item.id}
           viewMode={viewMode}
-          icon={Camera}
-          iconClass="text-emerald-700 bg-emerald-50"
-          title={item.title}
-          meta={`Evidence · ${formatDriveBytes(item.sizeBytes)}`}
+          item={item}
           draggable
           onDragStart={() => onDragStart("evidence", item.id)}
           onDragEnd={onDragEnd}
           onPreview={() => onPreview("evidence", item.id)}
+          onDownload={() => onDownload("evidence", item.id)}
         />
       ))}
       {data.exports.map((item) => (
-        <DriveTile
+        <DriveExportTile
           key={item.id}
           viewMode={viewMode}
-          icon={Download}
-          iconClass="text-indigo-700 bg-indigo-50"
-          title={item.title}
-          meta={`Export · ${formatDriveBytes(item.sizeBytes)}`}
+          item={item}
           draggable
           onDragStart={() => onDragStart("export", item.id)}
           onDragEnd={onDragEnd}
           onPreview={() => onPreview("export", item.id)}
+          onDownload={() => onDownload("export", item.id)}
         />
       ))}
-    </div>
-  );
-}
-
-function DriveTile({
-  viewMode,
-  icon: Icon,
-  iconClass,
-  title,
-  meta,
-  dropHighlight,
-  draggable,
-  onDragStart,
-  onDragEnd,
-  onDragOver,
-  onDragLeave,
-  onDrop,
-  onOpen,
-  onPreview,
-  onDelete,
-}: {
-  viewMode: ViewMode;
-  icon: typeof Folder;
-  iconClass: string;
-  title: string;
-  meta: string;
-  dropHighlight?: boolean;
-  draggable?: boolean;
-  onDragStart?: () => void;
-  onDragEnd?: () => void;
-  onDragOver?: (e: React.DragEvent) => void;
-  onDragLeave?: () => void;
-  onDrop?: (e: React.DragEvent) => void;
-  onOpen?: () => void;
-  onPreview?: () => void;
-  onDelete?: () => void;
-}) {
-  return (
-    <div
-      className={cn(
-        "group relative rounded-2xl border bg-surface transition-shadow hover:shadow-md",
-        viewMode === "grid" ? "p-4" : "flex items-center gap-3 p-3",
-        onOpen && "cursor-pointer",
-        dropHighlight ? "border-accent bg-accent-soft/20 ring-2 ring-accent/30" : "border-border",
-      )}
-      draggable={draggable}
-      onDragStart={(e) => {
-        if (!draggable) return;
-        onDragStart?.();
-        e.dataTransfer.effectAllowed = "move";
-      }}
-      onDragEnd={onDragEnd}
-      onDragOver={onDragOver}
-      onDragLeave={onDragLeave}
-      onDrop={onDrop}
-      onClick={onOpen}
-      onKeyDown={(e) => {
-        if (onOpen && (e.key === "Enter" || e.key === " ")) {
-          e.preventDefault();
-          onOpen();
-        }
-      }}
-      role={onOpen ? "button" : undefined}
-      tabIndex={onOpen ? 0 : undefined}
-    >
-      <div className={cn("flex h-10 w-10 shrink-0 items-center justify-center rounded-xl", iconClass)}>
-        <Icon className="h-5 w-5" />
-      </div>
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-medium text-ink">{title}</p>
-        <p className="truncate text-xs text-ink-3">{meta}</p>
-      </div>
-      <div className="absolute right-2 top-2 flex gap-1 opacity-0 transition-opacity group-hover:opacity-100">
-        {onPreview && (
-          <button
-            type="button"
-            className="rounded-lg p-1.5 text-ink-3 hover:bg-muted hover:text-ink"
-            onClick={(e) => {
-              e.stopPropagation();
-              onPreview();
-            }}
-            aria-label="Preview"
-          >
-            <Eye className="h-3.5 w-3.5" />
-          </button>
-        )}
-        {onDelete && (
-          <button
-            type="button"
-            className="rounded-lg p-1.5 text-ink-3 hover:bg-muted hover:text-rose-600"
-            onClick={(e) => {
-              e.stopPropagation();
-              onDelete();
-            }}
-            aria-label="Delete"
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-          </button>
-        )}
-      </div>
     </div>
   );
 }

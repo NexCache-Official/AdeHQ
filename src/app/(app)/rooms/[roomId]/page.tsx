@@ -20,7 +20,7 @@ import {
 } from "@/components/people/RoomMembersPopover";
 import { OrchestrationUiProvider } from "@/components/orchestration/OrchestrationUiContext";
 import { roomAssignableEmployees, isMayaEmployee } from "@/lib/maya-employee";
-import { notifyTopicSummaryUpdated } from "@/lib/topic-summary/client";
+import { notifyTopicSummaryUpdated, refreshTopicSummaryClient } from "@/lib/topic-summary/client";
 import { clearLocalTopicSummaryUiState } from "@/lib/memory/suggestion-lifecycle";
 import {
   clearRoomChatHistoryClient,
@@ -246,7 +246,7 @@ export default function RoomDetailPage() {
     }
   };
 
-  const summarizeTopic = async () => {
+  const summarizeTopic = async (options?: { force?: boolean }) => {
     if (!room) return;
 
     setSummarizing(true);
@@ -274,16 +274,13 @@ export default function RoomDetailPage() {
 
         if (!topicId) return;
 
-        const headers = await authHeaders();
-        const response = await fetch(`/api/topics/${topicId}/summary/refresh`, {
-          method: "POST",
-          headers,
-          body: JSON.stringify({ manual: true }),
+        const result = await refreshTopicSummaryClient(topicId, {
+          manual: true,
+          force: Boolean(options?.force),
         });
-        if (!response.ok) throw new Error("Summarize failed");
-        const payload = await response.json();
-        if (payload.topic) actions.upsertTopic(payload.topic);
-        notifyTopicSummaryUpdated(topicId);
+        if (!result.refreshed && result.skippedReason) {
+          console.info("[AdeHQ summarize]", result.skippedReason);
+        }
         void actions.refreshWorkLogForTopic(topicId);
         return;
       }

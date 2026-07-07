@@ -79,7 +79,9 @@ type TopicSummaryPanelProps = {
   loading?: boolean;
   refreshing?: boolean;
   error?: string | null;
+  info?: string | null;
   onRefresh: () => void;
+  onRegenerate?: () => void;
   onCreateTask?: (title: string, ownerEmployeeId?: string) => void;
   onMemorySaved?: (memory?: MemoryEntry, duplicate?: boolean) => void;
   compactActions?: boolean;
@@ -97,7 +99,9 @@ export function TopicSummaryPanel({
   loading,
   refreshing,
   error,
+  info,
   onRefresh,
+  onRegenerate,
   onCreateTask,
   onMemorySaved,
   compactActions = false,
@@ -270,6 +274,12 @@ export function TopicSummaryPanel({
             )}
             Refresh summary
           </Button>
+          {onRegenerate && (
+            <Button variant="ghost" size="sm" onClick={onRegenerate} disabled={refreshing || loading}>
+              <Sparkles className="h-3.5 w-3.5" />
+              Regenerate
+            </Button>
+          )}
           {briefSummary && (
             <Button
               variant="ghost"
@@ -287,6 +297,11 @@ export function TopicSummaryPanel({
       {error && (
         <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-800">
           {error}
+        </p>
+      )}
+      {info && !error && (
+        <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+          {info}
         </p>
       )}
       {memorySaveError && (

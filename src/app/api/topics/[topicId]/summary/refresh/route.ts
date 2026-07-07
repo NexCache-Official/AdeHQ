@@ -13,7 +13,7 @@ export async function POST(
 ) {
   try {
     const { user, client } = await requireAuthUser(request);
-    const body = (await request.json().catch(() => ({}))) as { manual?: boolean };
+    const body = (await request.json().catch(() => ({}))) as { manual?: boolean; force?: boolean };
 
     const { data: topicRow, error: topicError } = await client
       .from("topics")
@@ -36,6 +36,7 @@ export async function POST(
       topicTitle: topic.title,
       topicDescription: topic.description,
       manual: body.manual !== false,
+      force: Boolean(body.force),
       trigger: "manual",
       employeeId: user.id,
     });

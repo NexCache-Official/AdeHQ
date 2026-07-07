@@ -13,12 +13,12 @@ export type MemorySaveResult = {
 
 export function notifyTopicSummaryUpdated(
   topicId: string,
-  options?: { cleared?: boolean },
+  options?: { cleared?: boolean; summary?: TopicSummary | null },
 ) {
   if (typeof window === "undefined") return;
   window.dispatchEvent(
     new CustomEvent(TOPIC_SUMMARY_UPDATED_EVENT, {
-      detail: { topicId, cleared: options?.cleared },
+      detail: { topicId, cleared: options?.cleared, summary: options?.summary },
     }),
   );
 }
@@ -40,29 +40,43 @@ export async function fetchTopicSummaryClient(topicId: string): Promise<TopicSum
     headers,
     cache: "no-store",
   });
-  if (!res.ok) return null;
+  if (!res.ok) {
+    const payload = await res.json().catch(() => ({}));
+    throw new Error(payload.error ?? `Unable to load topic summary (${res.status}).`);
+  }
   const payload = await res.json();
   return (payload.summary as TopicSummary | null) ?? null;
 }
 
+export type RefreshTopicSummaryOptions = {
+  manual?: boolean;
+  force?: boolean;
+};
+
 export async function refreshTopicSummaryClient(
   topicId: string,
-  manual = true,
+  options: RefreshTopicSummaryOptions | boolean = true,
 ): Promise<{ summary: TopicSummary | null; refreshed: boolean; skippedReason?: string }> {
+  const normalized =
+    typeof options === "boolean" ? { manual: options, force: false } : options;
   const headers = await authHeaders();
   const res = await fetch(`/api/topics/${topicId}/summary/refresh`, {
     method: "POST",
     headers,
-    body: JSON.stringify({ manual }),
+    body: JSON.stringify({
+      manual: normalized.manual !== false,
+      force: Boolean(normalized.force),
+    }),
   });
   if (!res.ok) {
     const payload = await res.json().catch(() => ({}));
     throw new Error(payload.error ?? "Unable to refresh topic summary.");
   }
   const payload = await res.json();
-  notifyTopicSummaryUpdated(topicId);
+  const summary = (payload.summary as TopicSummary | null) ?? null;
+  notifyTopicSummaryUpdated(topicId, { summary });
   return {
-    summary: (payload.summary as TopicSummary | null) ?? null,
+    summary,
     refreshed: Boolean(payload.refreshed),
     skippedReason: payload.skippedReason as string | undefined,
   };
