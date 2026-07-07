@@ -17,6 +17,8 @@ const KEY_NAME = "ADEHQ_SECRET_ENCRYPTION_KEY";
 const VERSION_NAME = "ADEHQ_SECRET_ENCRYPTION_KEY_VERSION";
 const FALLBACK_NAME = "ALLOW_PROVIDER_ENV_FALLBACK";
 const ALL_TARGETS = ["production", "preview", "development"] as const;
+// Vercel forbids "sensitive" env vars from targeting the development environment.
+const SENSITIVE_TARGETS = ["production", "preview"] as const;
 
 export const GET = adminRoute(async (_request, { admin }) => {
   assertSuperAdmin(admin);
@@ -53,8 +55,17 @@ export const POST = adminRoute(async (request, { admin, serviceClient }) => {
     return NextResponse.json({ error: "A reason is required for audit." }, { status: 400 });
   }
 
-  const listed = await listVercelEnvVars();
-  const existingKeys = new Set(listed.envs.map((env) => env.key));
+  let existingKeys: Set<string>;
+  try {
+    const listed = await listVercelEnvVars();
+    existingKeys = new Set(listed.envs.map((env) => env.key));
+  } catch (error) {
+    return NextResponse.json(
+      { error: `Could not read Vercel environment variables: ${error instanceof Error ? error.message : "unknown error"}` },
+      { status: 502 },
+    );
+  }
+
   if (existingKeys.has(KEY_NAME)) {
     return NextResponse.json(
       {
@@ -67,13 +78,20 @@ export const POST = adminRoute(async (request, { admin, serviceClient }) => {
   // 32 random bytes, base64-encoded — decodes to exactly 32 bytes for AES-256-GCM.
   const key = randomBytes(32).toString("base64");
 
-  await createVercelEnvVar({
-    key: KEY_NAME,
-    value: key,
-    type: "sensitive",
-    target: [...ALL_TARGETS],
-    comment: "AdeHQ provider secret encryption master key (generated from AdeHQ Control).",
-  });
+  try {
+    await createVercelEnvVar({
+      key: KEY_NAME,
+      value: key,
+      type: "sensitive",
+      target: [...SENSITIVE_TARGETS],
+      comment: "AdeHQ provider secret encryption master key (generated from AdeHQ Control).",
+    });
+  } catch (error) {
+    return NextResponse.json(
+      { error: `Failed to write ${KEY_NAME} to Vercel: ${error instanceof Error ? error.message : "unknown error"}` },
+      { status: 502 },
+    );
+  }
 
   if (!existingKeys.has(VERSION_NAME)) {
     await createVercelEnvVar({
