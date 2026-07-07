@@ -32,13 +32,17 @@ function toPlanConfig(row: PlanConfigRow): PlanConfig {
     maxAiEmployees: row.max_ai_employees,
     maxMembers: row.max_members,
     maxWorkspaces: row.max_workspaces,
+    maxRooms: row.max_rooms,
+    maxTopics: row.max_topics,
     maxStorageBytes: row.max_storage_bytes,
+    maxBrowserRunsPerWeek: row.max_browser_runs_per_week,
     maxFileUploadMb: row.max_file_upload_mb,
     allowedIntelligenceTiers: Array.isArray(row.allowed_intelligence_tiers)
       ? row.allowed_intelligence_tiers
       : [],
     browserResearchEnabled: row.browser_research_enabled,
     gatewaySearchEnabled: row.gateway_search_enabled,
+    customAiEmployeesEnabled: row.custom_ai_employees_enabled,
     teamFeaturesEnabled: row.team_features_enabled,
     adminControlsEnabled: row.admin_controls_enabled,
     prioritySupport: row.priority_support,

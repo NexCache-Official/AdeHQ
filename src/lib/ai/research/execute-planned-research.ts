@@ -8,6 +8,7 @@ import type { BrowserResearchRun } from "@/lib/ai/browser-research/types";
 import { sanitizeReplyForChat } from "@/lib/ai/normalize-model-response";
 import { executeSearchAnswer } from "@/lib/ai/search/search-answer";
 import { isGatewayResearchProvider } from "@/lib/ai/research/research-provider";
+import { PlanEntitlementError } from "@/lib/billing/plans/entitlements";
 import type { GatewaySearchRunMeta } from "@/lib/ai/search/types";
 import type { MessageArtifact, RoomMessage } from "@/lib/types";
 import { nowISO, uid } from "@/lib/utils";
@@ -161,6 +162,15 @@ export async function executePlannedResearch(
     agentRunId: params.agentRunId,
   };
 
-  const { run, chatReply, async: isAsync } = await createAndRunBrowserResearch(client, runParams);
-  return { run, chatReply, plan: params.plan, async: isAsync };
+  try {
+    const { run, chatReply, async: isAsync } = await createAndRunBrowserResearch(client, runParams);
+    return { run, chatReply, plan: params.plan, async: isAsync };
+  } catch (error) {
+    // Plan doesn't include browser research: skip silently so the autonomous reply flow
+    // continues with a normal answer instead of failing the whole run.
+    if (error instanceof PlanEntitlementError) {
+      return { chatReply: null, plan: params.plan, async: false };
+    }
+    throw error;
+  }
 }

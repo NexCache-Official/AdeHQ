@@ -7,6 +7,7 @@ import {
   assertBrowserResearchAllowed,
   BrowserResearchPermissionError,
 } from "./permissions";
+import { assertBrowserResearchPlanAccess } from "@/lib/billing/plans/entitlements";
 import { runMockBrowserResearchProvider } from "./mock-provider";
 import { persistBrowserResearchChatReply } from "./chat-reply";
 import { createResearchReportArtifactFromRun } from "./report-artifact";
@@ -739,6 +740,8 @@ export async function createAndRunBrowserResearch(
   client: SupabaseClient,
   params: CreateBrowserResearchRunParams,
 ): Promise<{ run: BrowserResearchRun; chatReply: RoomMessage | null; async: boolean }> {
+  // Single enforcement chokepoint: browser research is gated by the workspace's plan.
+  await assertBrowserResearchPlanAccess(client, params.workspaceId);
   const created = await createBrowserResearchRun(client, params);
   if (shouldRunBrowserResearchAsync(created.provider)) {
     scheduleBrowserResearchRunExecution({

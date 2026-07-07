@@ -58,11 +58,15 @@ export type PlanConfig = {
   maxAiEmployees: number | null;
   maxMembers: number | null;
   maxWorkspaces: number | null;
+  maxRooms: number | null;
+  maxTopics: number | null;
   maxStorageBytes: number | null;
+  maxBrowserRunsPerWeek: number | null;
   maxFileUploadMb: number | null;
   allowedIntelligenceTiers: string[];
   browserResearchEnabled: boolean;
   gatewaySearchEnabled: boolean;
+  customAiEmployeesEnabled: boolean;
   teamFeaturesEnabled: boolean;
   adminControlsEnabled: boolean;
   prioritySupport: boolean;
