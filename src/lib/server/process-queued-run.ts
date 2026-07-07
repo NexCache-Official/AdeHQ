@@ -711,16 +711,20 @@ export async function processQueuedAgentRun(
 
             if (!isGreetingRun) {
               if (isDmRoom) {
-                await refreshTopicSummary(client, {
-                  workspaceId,
-                  roomId,
-                  topicId,
-                  topicTitle: ctx.topic.title,
-                  topicDescription: ctx.topic.description,
-                  trigger: "meaningful_ai_reply",
-                  employeeId,
-                  logWorkEvents: false,
-                });
+                try {
+                  await refreshTopicSummary(client, {
+                    workspaceId,
+                    roomId,
+                    topicId,
+                    topicTitle: ctx.topic.title,
+                    topicDescription: ctx.topic.description,
+                    trigger: "meaningful_ai_reply",
+                    employeeId,
+                    logWorkEvents: false,
+                  });
+                } catch (error) {
+                  console.warn("[AdeHQ dm summary refresh]", error);
+                }
               } else {
                 scheduleTopicSummaryRefresh(client, {
                   workspaceId,
@@ -1151,21 +1155,26 @@ export async function processQueuedAgentRun(
 
       if (refreshTrigger) {
         if (isDm) {
-          const refreshResult = await refreshTopicSummary(client, {
-            workspaceId,
-            roomId,
-            topicId,
-            topicTitle: ctx.topic.title,
-            topicDescription: ctx.topic.description,
-            trigger: refreshTrigger,
-            employeeId,
-            logWorkEvents: false,
-          });
-          if (refreshResult.summary?.suggestedMemory.length) {
-            artifacts = [
-              ...artifacts,
-              ...buildMemorySuggestionArtifacts(refreshResult.summary.suggestedMemory, topicId),
-            ];
+          // Summary refresh is advisory — never let it fail an already-posted reply.
+          try {
+            const refreshResult = await refreshTopicSummary(client, {
+              workspaceId,
+              roomId,
+              topicId,
+              topicTitle: ctx.topic.title,
+              topicDescription: ctx.topic.description,
+              trigger: refreshTrigger,
+              employeeId,
+              logWorkEvents: false,
+            });
+            if (refreshResult.summary?.suggestedMemory.length) {
+              artifacts = [
+                ...artifacts,
+                ...buildMemorySuggestionArtifacts(refreshResult.summary.suggestedMemory, topicId),
+              ];
+            }
+          } catch (error) {
+            console.warn("[AdeHQ dm summary refresh]", error);
           }
         } else {
           scheduleTopicSummaryRefresh(client, {

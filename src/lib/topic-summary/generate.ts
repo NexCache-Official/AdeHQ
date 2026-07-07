@@ -171,7 +171,27 @@ export function buildTopicSummaryContextBlock(params: BuildContextParams): strin
   return lines.filter((line) => line !== undefined).join("\n");
 }
 
-/** Direct SiliconFlow path — unchanged from pre-Runtime V2 behavior. */
+/** Hard cap so a slow/unparseable summary never blocks the run that spawned it. */
+const TOPIC_SUMMARY_TIMEOUT_MS = 20_000;
+
+/**
+ * Safe degraded payload used when summary generation fails. Marked as a casual
+ * conversation so callers skip updating the stored summary instead of erroring.
+ */
+export function emptyCasualSummaryPayload(): GeneratedTopicSummaryPayload {
+  return {
+    summary: "",
+    whatHappened: "",
+    currentDecision: null,
+    openQuestions: [],
+    keyFacts: [],
+    nextActions: [],
+    suggestedMemory: [],
+    isCasualConversation: true,
+  };
+}
+
+/** Direct SiliconFlow path — resilient: never hangs and never throws. */
 export async function generateTopicSummaryPayloadOld(
   contextBlock: string,
 ): Promise<GeneratedTopicSummaryPayload> {
@@ -181,15 +201,22 @@ export async function generateTopicSummaryPayloadOld(
 
   const model = siliconFlowChatModel(resolveModel("siliconflow", "balanced"));
 
-  const { object } = await generateObject({
-    model,
-    schema: summarySchema,
-    system: TOPIC_SUMMARY_SYSTEM,
-    prompt: contextBlock,
-    maxOutputTokens: TOPIC_SUMMARY_MAX_TOKENS,
-  });
+  try {
+    const { object } = await generateObject({
+      model,
+      schema: summarySchema,
+      system: TOPIC_SUMMARY_SYSTEM,
+      prompt: contextBlock,
+      maxOutputTokens: TOPIC_SUMMARY_MAX_TOKENS,
+      abortSignal: AbortSignal.timeout(TOPIC_SUMMARY_TIMEOUT_MS),
+    });
 
-  return object;
+    return object;
+  } catch (error) {
+    // Summaries are advisory — degrade gracefully rather than failing the caller's run.
+    console.warn("[AdeHQ topic summary old path]", error);
+    return emptyCasualSummaryPayload();
+  }
 }
 
 async function recordShadowPlanning(
