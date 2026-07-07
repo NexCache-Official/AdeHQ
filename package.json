@@ -49,6 +49,8 @@
     "test:research-query": "tsx scripts/test-research-query-resolver.ts",
     "test:platform-admin": "tsx scripts/test-platform-admin-guard.ts",
     "test:integration-tools": "tsx scripts/test-integration-tool-core.ts",
+    "test:autonomy": "tsx scripts/test-autonomy-engine.ts",
+    "test:coordination": "tsx scripts/test-team-coordination.ts",
     "test:integration-loop:e2e": "tsx scripts/test-integration-tool-loop-e2e.ts",
     "test:integration-permissions": "tsx scripts/test-integration-tool-permissions.ts",
     "test:integration-chat:e2e": "tsx scripts/test-integration-chat-e2e.ts",

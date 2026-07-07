@@ -18,6 +18,7 @@ export type CapabilityDomain =
   | "social"
   | "calendar"
   | "investor"
+  | "team"
   | "drive";
 
 export type ToolCallMode = "preview" | "execute";

@@ -197,7 +197,9 @@ export type MessageArtifact = {
     | "crm_contact"
     | "crm_deal"
     | "crm_company"
-    | "tool_result";
+    | "tool_result"
+    | "autonomous_session"
+    | "autopilot_offer";
   id: string;
   label: string;
   meta?: {
@@ -249,6 +251,9 @@ export type MessageArtifact = {
     triggerMessageId?: string;
     idempotencyKey?: string;
     retryArgs?: Record<string, unknown>;
+    /** Autopilot offer chip. */
+    objective?: string;
+    autopilotEmployeeId?: string;
   };
 };
 
@@ -749,7 +754,7 @@ export type ProviderId =
 export type WorkspaceAiSettings = {
   workspaceId: string;
   aiEnabled: boolean;
-  defaultProvider: "siliconflow" | "mock";
+  defaultProvider: "siliconflow" | "openai" | "mock";
   dailyTokenLimit: number;
   dailyCostLimitUsd: number;
   employeeDailyTokenLimit: number;
@@ -757,6 +762,8 @@ export type WorkspaceAiSettings = {
   maxOutputTokens: number;
   maxToolRunsPerTask: number;
   maxHandoffDepth: number;
+  autonomyStepBudget: number;
+  autonomyCostBudgetUsd: number;
   createdAt?: string;
   updatedAt?: string;
 };
@@ -927,6 +934,14 @@ export type ToolCallEffectItem = {
   args: Record<string, unknown>;
 };
 
+/** Conversational autopilot — offer to run, or start running, a multi-step objective. */
+export type AutopilotEffect = {
+  mode: "offer" | "start";
+  objective: string;
+  /** Who should run it — defaults to the responding employee. */
+  employeeName?: string;
+};
+
 export type EmployeeResponseEffect = {
   workLog: Array<Partial<WorkLogEvent>>;
   tasks: Array<Partial<Task>>;
@@ -942,6 +957,7 @@ export type EmployeeResponseEffect = {
   artifacts?: ArtifactEffect[];
   memorySuggestions?: MemorySuggestionEffect[];
   toolCalls?: ToolCallEffectItem[];
+  autopilot?: AutopilotEffect;
   statusChange?: EmployeeStatus;
   handoffTo?: string[];
   currentTask?: string;

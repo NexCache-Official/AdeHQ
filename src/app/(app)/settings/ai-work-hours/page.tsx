@@ -1,12 +1,21 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useStore } from "@/lib/demo-store";
+import { authHeaders } from "@/lib/api/auth-client";
 import { useWorkspaceUsage } from "@/hooks/useWorkspaceUsage";
-import { canViewBilling } from "@/lib/workspace/permissions";
+import { canManageWorkspaceSettings, canViewBilling } from "@/lib/workspace/permissions";
 import { PageHeader } from "@/components/Page";
 import { Card, Button, Progress } from "@/components/ui";
-import { Timer } from "lucide-react";
+import { Bot, Timer } from "lucide-react";
+
+const AUTONOMY_STEP_BUDGETS = [4, 6, 8, 12, 16, 20];
+
+type AutonomyDefaults = {
+  autonomyStepBudget: number;
+  autonomyCostBudgetUsd: number;
+};
 
 function formatResetDate(iso: string): string {
   const date = new Date(iso);
@@ -15,9 +24,70 @@ function formatResetDate(iso: string): string {
 }
 
 export default function SettingsWorkHoursPage() {
-  const { state } = useStore();
+  const { state, backend } = useStore();
   const myRole = state.workspaceMembers.find((m) => m.userId === state.user?.id)?.role ?? "member";
   const { data, loading, error } = useWorkspaceUsage(state.workspace.id);
+  const canManageAiDefaults =
+    backend === "supabase" && canManageWorkspaceSettings(myRole) && Boolean(state.workspace.id);
+  const [autonomyDefaults, setAutonomyDefaults] = useState<AutonomyDefaults>({
+    autonomyStepBudget: 8,
+    autonomyCostBudgetUsd: 0.5,
+  });
+  const [defaultsLoading, setDefaultsLoading] = useState(false);
+  const [defaultsSaving, setDefaultsSaving] = useState(false);
+  const [defaultsMessage, setDefaultsMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!canManageAiDefaults) return;
+    let active = true;
+    setDefaultsLoading(true);
+    setDefaultsMessage(null);
+    void (async () => {
+      try {
+        const headers = await authHeaders();
+        const res = await fetch(`/api/workspaces/${state.workspace.id}/ai-settings`, { headers });
+        const body = (await res.json()) as Partial<AutonomyDefaults> & { error?: string };
+        if (!res.ok) throw new Error(body.error ?? "Unable to load autopilot defaults.");
+        if (!active) return;
+        setAutonomyDefaults({
+          autonomyStepBudget: Number(body.autonomyStepBudget ?? 8),
+          autonomyCostBudgetUsd: Number(body.autonomyCostBudgetUsd ?? 0.5),
+        });
+      } catch (err) {
+        if (active) setDefaultsMessage(err instanceof Error ? err.message : "Unable to load autopilot defaults.");
+      } finally {
+        if (active) setDefaultsLoading(false);
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [canManageAiDefaults, state.workspace.id]);
+
+  const saveAutonomyDefaults = async () => {
+    if (!canManageAiDefaults) return;
+    setDefaultsSaving(true);
+    setDefaultsMessage(null);
+    try {
+      const headers = await authHeaders();
+      const res = await fetch(`/api/workspaces/${state.workspace.id}/ai-settings`, {
+        method: "PATCH",
+        headers,
+        body: JSON.stringify(autonomyDefaults),
+      });
+      const body = (await res.json()) as Partial<AutonomyDefaults> & { error?: string };
+      if (!res.ok) throw new Error(body.error ?? "Unable to save autopilot defaults.");
+      setAutonomyDefaults({
+        autonomyStepBudget: Number(body.autonomyStepBudget ?? autonomyDefaults.autonomyStepBudget),
+        autonomyCostBudgetUsd: Number(body.autonomyCostBudgetUsd ?? autonomyDefaults.autonomyCostBudgetUsd),
+      });
+      setDefaultsMessage("Saved autopilot defaults.");
+    } catch (err) {
+      setDefaultsMessage(err instanceof Error ? err.message : "Unable to save autopilot defaults.");
+    } finally {
+      setDefaultsSaving(false);
+    }
+  };
 
   const cap = data?.capacity;
   const allowance = cap?.allowance ?? 0;
@@ -98,6 +168,67 @@ export default function SettingsWorkHoursPage() {
           long-context analysis, coding, or large reports uses more.
         </p>
       </Card>
+
+      {canManageAiDefaults && (
+        <Card className="mt-4 p-6">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <div className="flex items-center gap-2">
+                <Bot className="h-4 w-4 text-accent" />
+                <h2 className="text-sm font-semibold text-ink">Autopilot defaults</h2>
+              </div>
+              <p className="mt-1 text-sm text-ink-3">
+                Used when an employee starts autonomous work from chat or a launcher uses the workspace default.
+              </p>
+            </div>
+            <Button size="sm" onClick={() => void saveAutonomyDefaults()} disabled={defaultsLoading || defaultsSaving}>
+              {defaultsSaving ? "Saving..." : "Save defaults"}
+            </Button>
+          </div>
+
+          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            <label className="block space-y-1.5">
+              <span className="text-xs font-medium text-ink-3">Default step budget</span>
+              <select
+                className="input-field"
+                value={autonomyDefaults.autonomyStepBudget}
+                disabled={defaultsLoading}
+                onChange={(e) =>
+                  setAutonomyDefaults((current) => ({
+                    ...current,
+                    autonomyStepBudget: Number(e.target.value),
+                  }))
+                }
+              >
+                {AUTONOMY_STEP_BUDGETS.map((budget) => (
+                  <option key={budget} value={budget}>
+                    {budget} steps
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="block space-y-1.5">
+              <span className="text-xs font-medium text-ink-3">Default cost budget</span>
+              <input
+                className="input-field"
+                type="number"
+                min={0.01}
+                max={25}
+                step={0.05}
+                value={autonomyDefaults.autonomyCostBudgetUsd}
+                disabled={defaultsLoading}
+                onChange={(e) =>
+                  setAutonomyDefaults((current) => ({
+                    ...current,
+                    autonomyCostBudgetUsd: Number(e.target.value),
+                  }))
+                }
+              />
+            </label>
+          </div>
+          {defaultsMessage && <p className="mt-3 text-xs font-medium text-ink-3">{defaultsMessage}</p>}
+        </Card>
+      )}
     </>
   );
 }

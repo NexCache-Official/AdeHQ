@@ -114,6 +114,18 @@ export const MemorySuggestionEffectSchema = z.object({
   sourceArtifactId: z.string().optional(),
 });
 
+/**
+ * Conversational autopilot — the employee decides a request is multi-step and
+ * either offers to run it autonomously ("offer") or, when the user clearly
+ * asked them to just handle it end-to-end, starts it ("start").
+ */
+export const AutopilotEffectSchema = z.object({
+  mode: z.enum(["offer", "start"]),
+  objective: z.string().min(1),
+  /** Who should run it — defaults to the responding employee. */
+  employeeName: z.string().optional(),
+});
+
 export const EmployeeEffectsSchema = z.object({
   workLog: z.array(WorkLogEffectSchema).default([]),
   tasks: z.array(TaskEffectSchema).default([]),
@@ -124,6 +136,7 @@ export const EmployeeEffectsSchema = z.object({
   artifacts: z.array(ArtifactEffectSchema).default([]),
   memorySuggestions: z.array(MemorySuggestionEffectSchema).default([]),
   toolCalls: z.array(ToolCallEffectSchema).default([]),
+  autopilot: AutopilotEffectSchema.optional(),
   statusChange: z.enum(["idle", "working", "waiting_approval", "on_call", "blocked"]).optional(),
   handoffTo: z.array(z.string()).optional(),
   currentTask: z.string().optional(),

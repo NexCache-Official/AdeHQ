@@ -85,6 +85,7 @@ const SLASH_COMMANDS: SlashCommand[] = [
   { cmd: "/ask", label: "Draft an AI question", example: "/ask", implemented: true },
   { cmd: "/archive", label: "Archive current topic", example: "/archive", implemented: true },
   { cmd: "/assign", label: "Add employee to topic", example: "/assign @", implemented: true },
+  { cmd: "/autopilot", label: "Run an objective autonomously", example: "/autopilot ", implemented: true },
 ];
 
 const PLUS_ACTIONS = [
@@ -105,6 +106,7 @@ export type SlashCommandResult =
   | { type: "ask" }
   | { type: "archive" }
   | { type: "assign"; employeeId: string; employeeName: string }
+  | { type: "autopilot"; objective: string; employeeId?: string; employeeName?: string }
   | { type: "send"; text: string };
 
 const ARTIFACT_SLASH = /^\/(prd|report|brief|proposal|checklist)\b/i;
@@ -138,6 +140,22 @@ function parseSlashCommand(text: string, employees: AIEmployee[]): SlashCommandR
   }
 
   if (lower === "/summary" || lower === "/summarize") return { type: "summary" };
+
+  if (lower === "/autopilot" || lower === "/auto") {
+    if (!args) return null;
+    // Optional leading @Employee picks who runs it.
+    const mentionMatch = args.match(/^@([^\s].*?)(?:\s+([\s\S]+))?$/);
+    if (mentionMatch) {
+      const name = mentionMatch[1].trim();
+      const emp = employees.find(
+        (e) => e.name.toLowerCase() === name.toLowerCase() || e.name.toLowerCase().startsWith(name.toLowerCase()),
+      );
+      if (emp && mentionMatch[2]?.trim()) {
+        return { type: "autopilot", objective: mentionMatch[2].trim(), employeeId: emp.id, employeeName: emp.name };
+      }
+    }
+    return { type: "autopilot", objective: args };
+  }
 
   if (lower === "/ask") return { type: "ask" };
 

@@ -291,6 +291,8 @@ create table if not exists public.workspace_ai_settings (
   max_output_tokens integer not null default 4096,
   max_tool_runs_per_task smallint not null default 10,
   max_handoff_depth smallint not null default 1,
+  autonomy_step_budget smallint not null default 8,
+  autonomy_cost_budget_usd numeric(12,6) not null default 0.50,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );

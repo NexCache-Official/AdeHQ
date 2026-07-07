@@ -99,6 +99,19 @@ function normalizeToolCalls(raw: unknown): NonNullable<ParsedEffects["toolCalls"
     .map((item) => coerceToolCall(String(item.tool), item));
 }
 
+function normalizeAutopilot(raw: unknown): ParsedEffects["autopilot"] {
+  if (!raw || typeof raw !== "object") return undefined;
+  const item = raw as Record<string, unknown>;
+  const objective = typeof item.objective === "string" ? item.objective.trim() : "";
+  if (!objective) return undefined;
+  const mode = item.mode === "start" ? "start" : "offer";
+  return {
+    mode,
+    objective,
+    employeeName: typeof item.employeeName === "string" ? item.employeeName : undefined,
+  };
+}
+
 function normalizeEmailDrafts(raw: unknown): NonNullable<ParsedEffects["emailDrafts"]> {
   if (!Array.isArray(raw)) return [];
   return raw
@@ -112,6 +125,10 @@ function normalizeEmailDrafts(raw: unknown): NonNullable<ParsedEffects["emailDra
     .filter((d) => d.body.trim().length > 0);
 }
 
+function normalizePassthroughArray<T>(raw: unknown): T[] {
+  return Array.isArray(raw) ? (raw as T[]) : [];
+}
+
 function normalizeEffects(raw: unknown): ParsedEffects {
   const effects =
     raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
@@ -120,9 +137,19 @@ function normalizeEffects(raw: unknown): ParsedEffects {
     workLog: normalizeWorkLog(effects.workLog),
     tasks: normalizeTasks(effects.tasks),
     memory: normalizeMemory(effects.memory),
+    memorySuggestions: normalizePassthroughArray<NonNullable<ParsedEffects["memorySuggestions"]>[number]>(
+      effects.memorySuggestions,
+    ),
+    citations: normalizePassthroughArray<NonNullable<ParsedEffects["citations"]>[number]>(
+      effects.citations,
+    ),
+    artifacts: normalizePassthroughArray<NonNullable<ParsedEffects["artifacts"]>[number]>(
+      effects.artifacts,
+    ),
     approvals: normalizeApprovals(effects.approvals),
     emailDrafts: normalizeEmailDrafts(effects.emailDrafts),
     toolCalls: normalizeToolCalls(effects.toolCalls),
+    autopilot: normalizeAutopilot(effects.autopilot),
     statusChange: effects.statusChange as ParsedEffects["statusChange"],
     handoffTo: Array.isArray(handoff)
       ? handoff.filter((v): v is string => typeof v === "string")
@@ -154,9 +181,13 @@ export function parseModelResponseText(
           workLog: validated.data.effects.workLog,
           tasks: validated.data.effects.tasks,
           memory: validated.data.effects.memory,
+          memorySuggestions: validated.data.effects.memorySuggestions,
+          citations: validated.data.effects.citations,
+          artifacts: validated.data.effects.artifacts,
           approvals: validated.data.effects.approvals,
           emailDrafts: validated.data.effects.emailDrafts,
           toolCalls: validated.data.effects.toolCalls,
+          autopilot: validated.data.effects.autopilot,
           statusChange: validated.data.effects.statusChange,
           handoffTo: validated.data.effects.handoffTo,
           currentTask: validated.data.effects.currentTask,

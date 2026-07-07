@@ -196,13 +196,22 @@ export async function queueFollowUpRuns(
       reason === "handoff" && !isActionOriented(params.aiReply)
         ? `collab_${params.rootTriggerMessageId}`
         : undefined;
+    const inheritedCoordination =
+      params.runMetadata?.coordinationDepth !== undefined
+        ? {
+            coordinationDepth: params.runMetadata.coordinationDepth,
+            coordinationSourceEmployeeId: params.runMetadata.coordinationSourceEmployeeId,
+            coordinationSourceEmployeeName: params.runMetadata.coordinationSourceEmployeeName,
+          }
+        : undefined;
+    const runMetadata = collaborationRunId
+      ? { ...inheritedCoordination, collaborationRunId, collaborationOnly: true }
+      : inheritedCoordination;
 
     responders.push({
       employee,
       reason,
-      runMetadata: collaborationRunId
-        ? { collaborationRunId, collaborationOnly: true }
-        : undefined,
+      runMetadata,
     });
   }
 

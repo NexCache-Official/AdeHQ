@@ -52,6 +52,8 @@ export async function PATCH(
       maxOutputTokens: body.maxOutputTokens,
       maxToolRunsPerTask: body.maxToolRunsPerTask,
       maxHandoffDepth: body.maxHandoffDepth,
+      autonomyStepBudget: body.autonomyStepBudget,
+      autonomyCostBudgetUsd: body.autonomyCostBudgetUsd,
     });
 
     return NextResponse.json(settings);

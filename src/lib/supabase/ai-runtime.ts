@@ -18,6 +18,8 @@ export type WorkspaceAiSettings = {
   maxOutputTokens: number;
   maxToolRunsPerTask: number;
   maxHandoffDepth: number;
+  autonomyStepBudget: number;
+  autonomyCostBudgetUsd: number;
 };
 
 export type AgentRunStatus =
@@ -44,7 +46,15 @@ const DEFAULT_SETTINGS: Omit<WorkspaceAiSettings, "workspaceId"> = {
   maxOutputTokens: 4096,
   maxToolRunsPerTask: 10,
   maxHandoffDepth: 1,
+  autonomyStepBudget: 8,
+  autonomyCostBudgetUsd: 0.5,
 };
+
+function clampNumber(value: unknown, fallback: number, min: number, max: number): number {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return fallback;
+  return Math.min(max, Math.max(min, numeric));
+}
 
 function settingsFromRow(workspaceId: string, row: DbRow): WorkspaceAiSettings {
   return {
@@ -60,6 +70,10 @@ function settingsFromRow(workspaceId: string, row: DbRow): WorkspaceAiSettings {
     maxOutputTokens: Number(row.max_output_tokens ?? DEFAULT_SETTINGS.maxOutputTokens),
     maxToolRunsPerTask: Number(row.max_tool_runs_per_task ?? DEFAULT_SETTINGS.maxToolRunsPerTask),
     maxHandoffDepth: Number(row.max_handoff_depth ?? DEFAULT_SETTINGS.maxHandoffDepth),
+    autonomyStepBudget: Number(row.autonomy_step_budget ?? DEFAULT_SETTINGS.autonomyStepBudget),
+    autonomyCostBudgetUsd: Number(
+      row.autonomy_cost_budget_usd ?? DEFAULT_SETTINGS.autonomyCostBudgetUsd,
+    ),
   };
 }
 
@@ -99,6 +113,22 @@ export async function updateWorkspaceAiSettings(
   if (patch.maxOutputTokens !== undefined) payload.max_output_tokens = patch.maxOutputTokens;
   if (patch.maxToolRunsPerTask !== undefined) payload.max_tool_runs_per_task = patch.maxToolRunsPerTask;
   if (patch.maxHandoffDepth !== undefined) payload.max_handoff_depth = patch.maxHandoffDepth;
+  if (patch.autonomyStepBudget !== undefined) {
+    payload.autonomy_step_budget = clampNumber(
+      patch.autonomyStepBudget,
+      DEFAULT_SETTINGS.autonomyStepBudget,
+      1,
+      20,
+    );
+  }
+  if (patch.autonomyCostBudgetUsd !== undefined) {
+    payload.autonomy_cost_budget_usd = clampNumber(
+      patch.autonomyCostBudgetUsd,
+      DEFAULT_SETTINGS.autonomyCostBudgetUsd,
+      0.01,
+      25,
+    );
+  }
 
   const { error } = await client
     .from("workspace_ai_settings")
@@ -114,6 +144,8 @@ export async function updateWorkspaceAiSettings(
         max_output_tokens: DEFAULT_SETTINGS.maxOutputTokens,
         max_tool_runs_per_task: DEFAULT_SETTINGS.maxToolRunsPerTask,
         max_handoff_depth: DEFAULT_SETTINGS.maxHandoffDepth,
+        autonomy_step_budget: DEFAULT_SETTINGS.autonomyStepBudget,
+        autonomy_cost_budget_usd: DEFAULT_SETTINGS.autonomyCostBudgetUsd,
         ...payload,
       },
       { onConflict: "workspace_id" },

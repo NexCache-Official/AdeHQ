@@ -8,6 +8,7 @@ import { TopicList } from "@/components/TopicList";
 import { TopicPanel } from "@/components/TopicPanel";
 import { NewTopicModal } from "@/components/NewTopicModal";
 import { AddEmployeeToRoomModal } from "@/components/AddEmployeeToRoomModal";
+import { AutonomousLauncher } from "@/components/autonomy/AutonomousLauncher";
 import { EmployeeAvatar } from "@/components/EmployeeAvatar";
 import { Button } from "@/components/ui";
 import { EmptyState } from "@/components/States";
@@ -71,6 +72,7 @@ export default function RoomDetailPage() {
     label: string;
   } | null>(null);
   const [slashNotice, setSlashNotice] = useState<string | null>(null);
+  const [autopilot, setAutopilot] = useState<{ objective: string; employeeId: string } | null>(null);
   const [addEmployeeOpen, setAddEmployeeOpen] = useState(false);
   const [addingEmployeeId, setAddingEmployeeId] = useState<string | null>(null);
   const [membersOpen, setMembersOpen] = useState(false);
@@ -643,6 +645,16 @@ export default function RoomDetailPage() {
         }
         setSlashNotice(`${result.employeeName} added to topic.`);
         break;
+      case "autopilot": {
+        const roomEmployees = state.employees.filter((e) => room.aiEmployees.includes(e.id));
+        const pick = result.employeeId ?? roomEmployees[0]?.id;
+        if (!pick) {
+          setSlashNotice("Add an AI employee to this room first.");
+          break;
+        }
+        setAutopilot({ objective: result.objective, employeeId: pick });
+        break;
+      }
       default:
         break;
     }
@@ -1172,6 +1184,16 @@ export default function RoomDetailPage() {
         employees={state.employees}
         workspaceMembers={state.workspaceMembers}
         currentUserId={state.user?.id}
+      />
+      <AutonomousLauncher
+        open={autopilot !== null}
+        onClose={() => setAutopilot(null)}
+        workspaceId={state.workspace.id}
+        employees={state.employees.filter((e) => room.aiEmployees.includes(e.id))}
+        defaultObjective={autopilot?.objective ?? ""}
+        defaultEmployeeId={autopilot?.employeeId}
+        roomId={roomId}
+        topicId={selectedTopic?.id}
       />
     </div>
   );

@@ -30,6 +30,7 @@ export const TOOL_CATALOG: Tool[] = [
   { id: "adehq-drive", name: "AdeHQ Drive", category: "Storage", description: "Save generated files and artifacts to workspace Drive.", status: "connected" },
   { id: "adehq-calendar", name: "AdeHQ Calendar", category: "Business", description: "Campaigns and social content drafts inside AdeHQ.", status: "connected" },
   { id: "adehq-investors", name: "AdeHQ Investors", category: "Business", description: "Investor firms, contacts, and pipeline inside AdeHQ.", status: "connected" },
+  { id: "adehq-team", name: "AdeHQ Teamwork", category: "Productivity", description: "Delegate to and coordinate with other AI employees across shared rooms.", status: "connected" },
   { id: "web-search", name: "Web Search", category: "Research", description: "Search the live web for fresh information and sources.", status: "mock" },
   { id: "browser", name: "Browser", category: "Research", description: "Open and read web pages like a human researcher.", status: "mock" },
   { id: "perplexity", name: "Perplexity", category: "Research", description: "Answer engine for deep, cited research.", status: "mock" },

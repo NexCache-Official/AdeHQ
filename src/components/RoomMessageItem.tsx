@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { RoomMessage } from "@/lib/types";
+import type { AIEmployee, MessageArtifact, RoomMessage } from "@/lib/types";
 import { useStore } from "@/lib/demo-store";
 import { EmployeeAvatar, HumanAvatar } from "./EmployeeAvatar";
 import { cn, formatTime } from "@/lib/utils";
@@ -28,10 +28,13 @@ import { ArtifactCard, FileArtifactCard } from "./ArtifactCard";
 import { EmailArtifactInlineCard } from "@/components/artifacts/ArtifactViewerModal";
 import { CrmInlineCard } from "@/components/crm/CrmInlineCard";
 import { ToolResultInlineCard } from "@/components/integrations/ToolResultInlineCard";
+import { AutonomousLauncher } from "@/components/autonomy/AutonomousLauncher";
+import { AutonomousSessionChip } from "@/components/autonomy/AutonomousSessionChip";
 import { SearchSourceCards } from "@/components/search/SearchSourceCards";
 import { MessageMarkdown } from "./MessageMarkdown";
 import {
   BrainCircuit,
+  Bot,
   Check,
   Copy,
   FilePlus2,
@@ -102,6 +105,36 @@ function EmailDraftCard({
       <div className="px-3 py-2.5">
         <p className="whitespace-pre-wrap text-[13px] leading-relaxed text-ink-2">{meta.body}</p>
       </div>
+    </div>
+  );
+}
+
+function AutopilotOfferCard({
+  artifact,
+  employee,
+  onStart,
+}: {
+  artifact: MessageArtifact;
+  employee?: AIEmployee;
+  onStart: () => void;
+}) {
+  const objective = artifact.meta?.objective ?? artifact.label;
+  return (
+    <div className="mt-2 flex max-w-xl flex-wrap items-center justify-between gap-3 rounded-xl border border-accent/20 bg-accent-soft/40 px-3 py-2.5">
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-1.5 text-xs font-semibold text-accent-d">
+          <Bot className="h-3.5 w-3.5 shrink-0" />
+          <span>Autopilot offer</span>
+        </div>
+        <p className="mt-1 line-clamp-2 text-[13px] leading-snug text-ink-2">
+          {employee ? `${employee.name}: ` : ""}
+          {objective}
+        </p>
+      </div>
+      <Button size="sm" variant="secondary" className="h-8 shrink-0" onClick={onStart}>
+        <Sparkles className="h-3.5 w-3.5" />
+        Run
+      </Button>
     </div>
   );
 }
@@ -603,8 +636,16 @@ export function RoomMessageItem({
 }) {
   const { state } = useStore();
   const { enabled: debugEnabled } = useDebugTrace();
+  const [autopilotOffer, setAutopilotOffer] = useState<{
+    objective: string;
+    employeeId?: string;
+  } | null>(null);
   const topic = state.topics.find((t) => t.id === message.topicId);
   const messageRoomId = topic?.roomId;
+  const room = messageRoomId ? state.rooms.find((r) => r.id === messageRoomId) : undefined;
+  const roomEmployees = room
+    ? state.employees.filter((e) => room.aiEmployees.includes(e.id))
+    : state.employees;
   const employee = state.employees.find((e) => e.id === message.senderId);
 
   const mentionParticipants = useMemo(
@@ -653,6 +694,9 @@ export function RoomMessageItem({
       (a) => a.type === "crm_contact" || a.type === "crm_deal" || a.type === "crm_company",
     ) ?? [];
   const toolResultArtifacts = message.artifacts?.filter((a) => a.type === "tool_result") ?? [];
+  const sessionArtifacts = message.artifacts?.filter((a) => a.type === "autonomous_session") ?? [];
+  const autopilotOfferArtifacts =
+    message.artifacts?.filter((a) => a.type === "autopilot_offer") ?? [];
   const otherArtifacts = (message.artifacts ?? []).filter(
     (
       a,
@@ -669,6 +713,8 @@ export function RoomMessageItem({
       a.type !== "crm_deal" &&
       a.type !== "crm_company" &&
       a.type !== "tool_result" &&
+      a.type !== "autonomous_session" &&
+      a.type !== "autopilot_offer" &&
       (a.type === "task" || a.type === "memory" || a.type === "approval"),
   );
   const debugWorkLogArtifacts = debugEnabled ? workLogArtifacts : [];
@@ -780,6 +826,28 @@ export function RoomMessageItem({
           />
         ))}
 
+        {sessionArtifacts.map((artifact) => (
+          <AutonomousSessionChip key={`session-${artifact.id}`} sessionId={artifact.id} label={artifact.label} />
+        ))}
+
+        {autopilotOfferArtifacts.map((artifact) => {
+          const offerEmployeeId = artifact.meta?.autopilotEmployeeId ?? message.senderId;
+          const offerEmployee = state.employees.find((e) => e.id === offerEmployeeId);
+          return (
+            <AutopilotOfferCard
+              key={`autopilot-offer-${artifact.id}`}
+              artifact={artifact}
+              employee={offerEmployee}
+              onStart={() =>
+                setAutopilotOffer({
+                  objective: artifact.meta?.objective ?? artifact.label,
+                  employeeId: offerEmployeeId,
+                })
+              }
+            />
+          );
+        })}
+
         {memorySuggestions.map((artifact) => (
           <MemorySuggestionArtifact
             key={artifact.id}
@@ -890,6 +958,16 @@ export function RoomMessageItem({
           </div>
         )}
       </div>
+      <AutonomousLauncher
+        open={autopilotOffer !== null}
+        onClose={() => setAutopilotOffer(null)}
+        workspaceId={state.workspace.id}
+        employees={roomEmployees.length ? roomEmployees : state.employees}
+        defaultObjective={autopilotOffer?.objective ?? ""}
+        defaultEmployeeId={autopilotOffer?.employeeId}
+        roomId={messageRoomId}
+        topicId={message.topicId}
+      />
     </div>
   );
 }

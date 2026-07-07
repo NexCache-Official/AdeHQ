@@ -10,16 +10,17 @@ import { catalogToolIdForDomain } from "./capabilities";
 
 /** Suggested capability domains per employee role. */
 export const PREFAB_TOOLSETS: Record<EmployeeRoleKey, CapabilityDomain[]> = {
-  sales: ["crm", "email", "tasks", "drive", "artifact"],
-  marketing: ["social", "calendar", "email", "tasks", "drive", "artifact"],
-  fundraising: ["investor", "email", "tasks", "drive", "artifact"],
-  pm: ["tasks", "drive", "artifact"],
-  research: ["tasks", "drive", "artifact"],
-  operations: ["crm", "tasks", "drive", "artifact"],
-  support: ["crm", "email", "tasks"],
-  engineering: ["tasks", "drive"],
-  design: ["tasks", "drive"],
-  gamedev: ["tasks", "drive"],
+  // Every working employee can coordinate/delegate across shared rooms ("team").
+  sales: ["crm", "email", "tasks", "drive", "artifact", "team"],
+  marketing: ["social", "calendar", "email", "tasks", "drive", "artifact", "team"],
+  fundraising: ["investor", "email", "tasks", "drive", "artifact", "team"],
+  pm: ["tasks", "drive", "artifact", "team"],
+  research: ["tasks", "drive", "artifact", "team"],
+  operations: ["crm", "tasks", "drive", "artifact", "team"],
+  support: ["crm", "email", "tasks", "team"],
+  engineering: ["tasks", "drive", "team"],
+  design: ["tasks", "drive", "team"],
+  gamedev: ["tasks", "drive", "team"],
   // Maya manages hiring — no business tools by default.
   recruiting_manager: [],
 };

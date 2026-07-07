@@ -121,6 +121,7 @@ export function mapModelSchemaToEmployeeResponse(
       artifacts: object.effects.artifacts ?? [],
       memorySuggestions: object.effects.memorySuggestions ?? [],
       toolCalls: object.effects.toolCalls ?? [],
+      autopilot: object.effects.autopilot,
       statusChange: object.effects.statusChange,
       handoffTo: object.effects.handoffTo,
       currentTask: object.effects.currentTask,
@@ -152,6 +153,7 @@ export function toEmployeeResponseFromReplyAndEffect(
       artifacts: effects.artifacts ?? [],
       memorySuggestions: effects.memorySuggestions ?? [],
       toolCalls: effects.toolCalls ?? [],
+      autopilot: effects.autopilot,
     },
   };
 }

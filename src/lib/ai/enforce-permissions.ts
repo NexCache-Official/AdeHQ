@@ -16,6 +16,7 @@ export function enforceEmployeePermissions(
     // Tool calls pass through — the Tool Execution Core enforces the
     // capability grant + approval gates per call at execution time.
     toolCalls: effect.toolCalls ? [...effect.toolCalls] : undefined,
+    autopilot: effect.autopilot,
     statusChange: effect.statusChange,
     handoffTo: effect.handoffTo,
     currentTask: effect.currentTask,

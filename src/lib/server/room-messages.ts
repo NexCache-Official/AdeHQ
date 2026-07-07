@@ -45,6 +45,7 @@ import {
 import { recordAiMessageInTopicOrchestrationState } from "@/lib/orchestration/room-steward";
 import { executeEmployeeToolCalls } from "@/lib/integrations/manager";
 import { reconcileClaimedActions } from "@/lib/integrations/reconcile-claimed-actions";
+import { handleAutopilotEffect, resolveAutopilotEmployee } from "@/lib/server/autopilot-effect";
 import { filterMemorySuggestions } from "@/lib/memory/curator";
 import type { ToolCallEffectItem } from "@/lib/types";
 import { extractMentions, nowISO, uid } from "@/lib/utils";
@@ -609,6 +610,7 @@ export async function persistEmployeeEffects(
     artifacts?: ArtifactEffect[];
     memorySuggestions?: MemorySuggestionEffect[];
     toolCalls?: ToolCallEffectItem[];
+    autopilot?: import("@/lib/types").AutopilotEffect;
     statusChange?: AIEmployee["status"];
     currentTask?: string;
   },
@@ -1007,6 +1009,30 @@ export async function persistEmployeeEffects(
           subtitle: message,
         },
       });
+    }
+  }
+
+  // Conversational autopilot — the employee decided this is multi-step work and
+  // either offered to run it or started it (when the user said "just handle it").
+  if (effect.autopilot?.objective && roomId && topicId) {
+    try {
+      const runner =
+        effect.autopilot.employeeName
+          ? await resolveAutopilotEmployee(client, workspaceId, roomId, effect.autopilot.employeeName, employee.id)
+          : { id: employee.id, name: employee.name };
+      const chip = await handleAutopilotEffect(client, {
+        workspaceId,
+        roomId,
+        topicId,
+        objective: effect.autopilot.objective,
+        mode: effect.autopilot.mode,
+        runnerId: runner.id,
+        runnerName: runner.name,
+        createdByUserId: undefined,
+      });
+      if (chip) artifacts.push(chip);
+    } catch (error) {
+      console.warn("[AdeHQ room-messages] autopilot effect failed", error);
     }
   }
 

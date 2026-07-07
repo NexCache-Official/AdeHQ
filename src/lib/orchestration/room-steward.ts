@@ -940,6 +940,7 @@ Mode rules:
 - smart_assist: continue pending questions, answer direct questions, and select normally one employee, max two.
 - active_team: can involve multiple relevant employees, max three.
 - talent_observation: prefer offerOnlyEmployeeIds instead of doing full work.
+- Multi-step objectives do not require the human to type /autopilot. Select the best employee owner when the request sounds like real work; the employee will decide whether to answer normally, ask one clarifying question, offer autopilot, or start autonomous work.
 
 Open pending questions:
 ${pending || "- none"}

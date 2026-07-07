@@ -833,6 +833,64 @@ const createInvestorFollowUp: ToolDefinition<CreateInvestorFollowUpArgs> = {
 };
 
 // ---------------------------------------------------------------------------
+// Teamwork — delegate to / coordinate with other AI employees.
+// ---------------------------------------------------------------------------
+
+export const SuggestColleaguesArgsSchema = z.object({
+  role: z.string().optional(),
+  skill: z.string().optional(),
+});
+export type SuggestColleaguesArgs = z.infer<typeof SuggestColleaguesArgsSchema>;
+
+export const CoordinateArgsSchema = z.object({
+  employeeName: z.string().optional(),
+  employeeId: z.string().optional(),
+  message: z.string().min(1),
+  topicHint: z.string().optional(),
+});
+export type CoordinateArgs = z.infer<typeof CoordinateArgsSchema>;
+
+const suggestColleagues: ToolDefinition<SuggestColleaguesArgs> = {
+  name: "team.suggestColleagues",
+  domain: "team",
+  provider: "internal",
+  description: "List AI teammates (name, role, and whether you share a room) so you can pick who to delegate to.",
+  readOnly: true,
+  risk: "low",
+  approval: "none",
+  argsSchema: SuggestColleaguesArgsSchema,
+  promptUsage: 'team.suggestColleagues — args: { "role"?: "designer", "skill"?: "pricing" } → returns teammates you can coordinate with',
+  buildPreview: (args) => ({
+    title: "Find a teammate",
+    summary: args.role || args.skill ? `Look for a teammate (${[args.role, args.skill].filter(Boolean).join(", ")}).` : "List teammates.",
+    fields: fields([["Role", args.role], ["Skill", args.skill]]),
+    risk: "low",
+  }),
+};
+
+const coordinate: ToolDefinition<CoordinateArgs> = {
+  name: "team.coordinate",
+  domain: "team",
+  provider: "internal",
+  description: "Bring another AI employee into a shared room and get them working with you (never in DMs).",
+  readOnly: false,
+  risk: "low",
+  approval: "none",
+  argsSchema: CoordinateArgsSchema,
+  promptUsage:
+    'team.coordinate — args: { "employeeName": "Priya", "message": "can you own the pricing research for the new launch?", "topicHint"?: "pricing" }. Finds a room you both share, brings it up there, and gets them started.',
+  buildPreview: (args) => ({
+    title: `Coordinate with ${args.employeeName ?? "a teammate"}`,
+    summary: args.message.slice(0, 120),
+    fields: fields([
+      ["Teammate", args.employeeName],
+      ["Topic", args.topicHint],
+    ]),
+    risk: "low",
+  }),
+};
+
+// ---------------------------------------------------------------------------
 // Registry access
 // ---------------------------------------------------------------------------
 
@@ -862,6 +920,8 @@ const TOOL_DEFINITIONS = [
   updatePipeline,
   scoreFit,
   createInvestorFollowUp,
+  suggestColleagues,
+  coordinate,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
 ] as ToolDefinition<any>[];
 

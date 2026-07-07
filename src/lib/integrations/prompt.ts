@@ -24,6 +24,19 @@ function effectiveCapabilityToolIds(employee: IntegrationEmployee): Set<string> 
   return new Set(suggestedCapabilityToolIds(employee.roleKey));
 }
 
+/**
+ * Compact list of the tool usage docs an employee may call (one per line).
+ * Used by the autonomy engine's tool catalog. "" when nothing is granted.
+ */
+export function listGrantedToolUsage(employee: IntegrationEmployee): string {
+  const grantedToolIds = effectiveCapabilityToolIds(employee);
+  if (!grantedToolIds.size) return "";
+  return listToolDefinitions()
+    .filter((tool) => grantedToolIds.has(catalogToolIdForDomain(tool.domain)))
+    .map((tool) => `- ${tool.promptUsage}`)
+    .join("\n");
+}
+
 /** Build the "Integration tools" prompt block, or "" when nothing is granted. */
 export function buildIntegrationToolsPrompt(employee: IntegrationEmployee): string {
   const grantedToolIds = effectiveCapabilityToolIds(employee);
@@ -71,6 +84,18 @@ Complete Sales bundle example for "Create a company called GreenEdge Robotics, a
     ? `\n- ${artifactAsyncTools.join(", ")} run in the background — tell the user the file is generating and will appear in Drive when ready.`
     : "";
 
+  const teamworkRule = availableNames.has("team.coordinate")
+    ? `
+
+Working with teammates (this is a shared workspace — it's yours too):
+- You can pull in another AI employee when the work is theirs to own. First identify the right person by role; use team.suggestColleagues if unsure.
+- To hand off or co-work, call team.coordinate with { "employeeName", "message", "topicHint"? }. It finds a room you both belong to, brings it up there, and gets them started — like walking over and saying "hey, can you take this?".
+- You and other AI employees only talk in shared GROUP rooms, never in DMs. A DM is between you and a human. If you don't share a room with someone, say so and suggest the human add you both to one.
+- Keep coordination on-topic: it defaults to the room's general chat; pass "topicHint" to land in a relevant existing topic instead. Suggest spinning up a dedicated topic when a thread gets deep.
+- When the user says "coordinate with X", "loop in X", "get X to…", or the task clearly needs another discipline (design, research, pricing, engineering), delegate with team.coordinate rather than trying to do their job yourself.
+- After delegating, tell the user where you took it (which room) and what you asked for.`
+    : "";
+
   return `Integration tools (effects.toolCalls) — you can DO real work, not just describe it:
 You have access to these AdeHQ tools. To use one, add an entry to effects.toolCalls:
   { "tool": "crm.createContact", "mode": "execute", "args": { ... } }
@@ -93,5 +118,5 @@ Tool call rules:
 - Never invent tool names or args not listed above. If a needed tool is missing, say so.
 - When you create a contact and a deal in the same reply, use "contactName" on the deal so they link.
 - Use tasks.createTask for follow-ups instead of only mentioning them in text.
-${asyncArtifactRule}`;
+${asyncArtifactRule}${teamworkRule}`;
 }

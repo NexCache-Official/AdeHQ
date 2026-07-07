@@ -63,6 +63,12 @@ export const CAPABILITY_DOMAINS: Record<CapabilityDomain, CapabilityDomainInfo> 
     description: "Investor firms, contacts, and fundraising pipeline.",
     catalogToolId: "adehq-investors",
   },
+  team: {
+    domain: "team",
+    label: "Teamwork",
+    description: "Delegate to and coordinate with other AI employees across shared rooms.",
+    catalogToolId: "adehq-team",
+  },
 };
 
 export function capabilityDomainForTool(toolName: string): CapabilityDomain | null {

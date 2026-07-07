@@ -25,11 +25,13 @@ import {
   type Tone,
 } from "@/components/workspace/WorkspaceKit";
 import { IntegrationsStrip } from "@/components/workspace/IntegrationsStrip";
+import { AutonomousLauncher } from "@/components/autonomy/AutonomousLauncher";
 import { Task, TaskPriority, TaskStatus } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useResponder } from "@/lib/ai/use-responder";
 import {
   AlarmClock,
+  Bot,
   CalendarClock,
   CheckCircle2,
   CheckSquare,
@@ -91,8 +93,24 @@ export default function TasksPage() {
   const [assigneeFilter, setAssigneeFilter] = useState("all");
   const [priorityFilter, setPriorityFilter] = useState<"all" | TaskPriority>("all");
   const [search, setSearch] = useState("");
+  const [autopilotOpen, setAutopilotOpen] = useState(false);
+  const [autopilotDefaults, setAutopilotDefaults] = useState<{
+    objective?: string;
+    employeeId?: string;
+    roomId?: string;
+    topicId?: string;
+    taskId?: string;
+  }>({});
 
   const groupRooms = getGroupRooms(state.rooms);
+
+  const openAutopilot = (defaults: typeof autopilotDefaults = {}) => {
+    setAutopilotDefaults({
+      roomId: roomFilter !== "all" ? roomFilter : groupRooms[0]?.id,
+      ...defaults,
+    });
+    setAutopilotOpen(true);
+  };
 
   const tasks = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -195,9 +213,14 @@ export default function TasksPage() {
         subtitle="A powerful board for humans and AI employees — drag to move, group any way, and let your workforce clear the queue."
         icon={<CheckSquare className="h-5 w-5" />}
         actions={
-          <Button onClick={() => openCreate()}>
-            <Plus className="h-4 w-4" /> New task
-          </Button>
+          <>
+            <Button variant="secondary" onClick={() => openAutopilot()}>
+              <Bot className="h-4 w-4" /> Autopilot
+            </Button>
+            <Button onClick={() => openCreate()}>
+              <Plus className="h-4 w-4" /> New task
+            </Button>
+          </>
         }
       />
 
@@ -286,11 +309,37 @@ export default function TasksPage() {
         />
       </WorkspaceCanvas>
 
-      {detail && <TaskDetailModal task={detail} onClose={() => setDetail(null)} />}
+      {detail && (
+        <TaskDetailModal
+          task={detail}
+          onClose={() => setDetail(null)}
+          onAutopilot={(t) => {
+            setDetail(null);
+            openAutopilot({
+              objective: [t.title, t.description].filter(Boolean).join(" — "),
+              employeeId: t.assigneeType === "ai" ? t.assigneeId : undefined,
+              roomId: t.roomId,
+              topicId: t.topicId,
+              taskId: t.id,
+            });
+          }}
+        />
+      )}
       <CreateTaskGlobalModal
         open={createOpen}
         defaults={createDefaults}
         onClose={() => { setCreateOpen(false); setCreateDefaults(undefined); }}
+      />
+      <AutonomousLauncher
+        open={autopilotOpen}
+        onClose={() => setAutopilotOpen(false)}
+        workspaceId={state.workspace.id}
+        employees={state.employees}
+        defaultObjective={autopilotDefaults.objective ?? ""}
+        defaultEmployeeId={autopilotDefaults.employeeId}
+        roomId={autopilotDefaults.roomId}
+        topicId={autopilotDefaults.topicId}
+        taskId={autopilotDefaults.taskId}
       />
     </PageContainer>
   );
@@ -595,7 +644,15 @@ function FilterSelect({
 // Detail modal (kept, refined)
 // ---------------------------------------------------------------------------
 
-function TaskDetailModal({ task, onClose }: { task: Task; onClose: () => void }) {
+function TaskDetailModal({
+  task,
+  onClose,
+  onAutopilot,
+}: {
+  task: Task;
+  onClose: () => void;
+  onAutopilot: (task: Task) => void;
+}) {
   const { state, actions, backend } = useStore();
   const router = useRouter();
   const respond = useResponder();
@@ -705,6 +762,11 @@ function TaskDetailModal({ task, onClose }: { task: Task; onClose: () => void })
           )}
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          {current.status !== "done" && (
+            <Button size="sm" variant="secondary" onClick={() => onAutopilot(current)}>
+              <Bot className="h-4 w-4" /> Run autonomously
+            </Button>
+          )}
           {assignee && current.assigneeType === "ai" && (
             <Button size="sm" onClick={askToWork}>
               <Sparkles className="h-4 w-4" /> Ask {assignee.name.split(" ")[0]} to work on it

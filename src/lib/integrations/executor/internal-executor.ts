@@ -27,6 +27,7 @@ import {
   updatePipeline,
 } from "@/lib/integrations/adapters/adehq-investors";
 import { createTask } from "@/lib/integrations/adapters/adehq-tasks";
+import { coordinate, suggestColleagues } from "@/lib/integrations/adapters/adehq-team";
 
 const INTERNAL_HANDLERS: AdapterHandlerMap = {
   "crm.createContact": createContact as AdapterHandler,
@@ -47,6 +48,8 @@ const INTERNAL_HANDLERS: AdapterHandlerMap = {
   "investor.updatePipeline": updatePipeline as AdapterHandler,
   "investor.scoreFit": scoreFit as AdapterHandler,
   "investor.createFollowUp": createFollowUp as AdapterHandler,
+  "team.suggestColleagues": suggestColleagues as AdapterHandler,
+  "team.coordinate": coordinate as AdapterHandler,
 };
 
 export function getInternalHandler(toolName: string): AdapterHandler | null {

@@ -29,9 +29,13 @@ function toEffect(parsed: {
     workLog?: EmployeeResponse["effect"]["workLog"];
     tasks?: EmployeeResponse["effect"]["tasks"];
     memory?: EmployeeResponse["effect"]["memory"];
+    memorySuggestions?: EmployeeResponse["effect"]["memorySuggestions"];
+    citations?: EmployeeResponse["effect"]["citations"];
+    artifacts?: EmployeeResponse["effect"]["artifacts"];
     approvals?: EmployeeResponse["effect"]["approvals"];
     emailDrafts?: EmployeeResponse["effect"]["emailDrafts"];
     toolCalls?: EmployeeResponse["effect"]["toolCalls"];
+    autopilot?: EmployeeResponse["effect"]["autopilot"];
     statusChange?: EmployeeResponse["effect"]["statusChange"];
     handoffTo?: EmployeeResponse["effect"]["handoffTo"];
     currentTask?: EmployeeResponse["effect"]["currentTask"];
@@ -43,9 +47,13 @@ function toEffect(parsed: {
       workLog: parsed.effects.workLog ?? [],
       tasks: parsed.effects.tasks ?? [],
       memory: parsed.effects.memory ?? [],
+      memorySuggestions: parsed.effects.memorySuggestions ?? [],
+      citations: parsed.effects.citations ?? [],
+      artifacts: parsed.effects.artifacts ?? [],
       approvals: parsed.effects.approvals ?? [],
       emailDrafts: parsed.effects.emailDrafts ?? [],
       toolCalls: parsed.effects.toolCalls ?? [],
+      autopilot: parsed.effects.autopilot,
       statusChange: parsed.effects.statusChange,
       handoffTo: parsed.effects.handoffTo,
       currentTask: parsed.effects.currentTask,
@@ -62,7 +70,7 @@ function tier3Fallback(text: string): Pick<EmployeeResponse, "reply" | "effect">
     };
   }
 
-    return {
+  return {
     reply: sanitizeReplyForChat(text) || "Got it — working on that.",
     effect: {
       workLog: [],
@@ -144,7 +152,7 @@ export async function callStructuredLlm(
 
         const textResult = await generateText({
           model,
-          system: `${system}\n\nReturn ONLY valid JSON matching this shape:\n{"reply":"string","effects":{"workLog":[],"tasks":[],"memory":[],"approvals":[]}}`,
+          system: `${system}\n\nReturn ONLY valid JSON matching this shape:\n{"reply":"string","effects":{"workLog":[],"tasks":[],"memory":[],"memorySuggestions":[],"citations":[],"artifacts":[],"approvals":[],"emailDrafts":[],"toolCalls":[],"autopilot":{"mode":"offer","objective":"..."},"handoffTo":[]}}`,
           prompt,
           temperature,
           maxOutputTokens: maxTokens,
