@@ -103,6 +103,7 @@ const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
       { href: "/admin/experiments", label: "Experiments", icon: FlaskConical },
       { href: "/admin/jobs", label: "Jobs", icon: FileText },
       { href: "/admin/security", label: "Security", icon: ShieldAlert },
+      { href: "/admin/provider-credentials", label: "Provider Credentials", icon: KeyRound, superAdminOnly: true },
       { href: "/admin/vercel-env", label: "Vercel Environment", icon: KeyRound, superAdminOnly: true },
       { href: "/admin/system-health", label: "System Health", icon: Activity },
     ],

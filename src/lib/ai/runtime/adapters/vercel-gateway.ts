@@ -26,6 +26,7 @@ import {
   isVercelGatewayConfigured,
   resolveVercelGatewayModelId,
 } from "./vercel-models";
+import type { ResolvedCredential } from "@/lib/providers/credentials/types";
 
 const CTX: AiAdapterContext = {
   providerRoute: "vercel_gateway",
@@ -79,6 +80,7 @@ function usageFromTokens(
   outputTokens: number,
   cachedTokens: number,
   latencyMs: number,
+  credential?: ResolvedCredential,
 ): RuntimeResult["usage"] {
   const modelCostUsd = estimateCost(modelId, inputTokens, outputTokens);
   return {
@@ -93,12 +95,29 @@ function usageFromTokens(
     providerRoute: CTX.providerRoute,
     providerName: CTX.providerName,
     modelId,
+    providerCredentialId: credential?.credentialId,
+    providerAllocationId: credential?.allocationId,
+    providerProjectId: credential?.providerProjectId,
+    credentialSource: credential?.source,
   };
 }
 
 export function createVercelGatewayAdapter(
   options: VercelGatewayAdapterOptions = {},
+  credential?: ResolvedCredential,
 ): AiAdapter {
+  const apiKey = credential?.apiKey ?? process.env.AI_GATEWAY_API_KEY?.trim();
+  const withGatewayApiKey = async <T>(fn: () => Promise<T>): Promise<T> => {
+    if (!credential?.apiKey) return fn();
+    const previous = process.env.AI_GATEWAY_API_KEY;
+    process.env.AI_GATEWAY_API_KEY = credential.apiKey;
+    try {
+      return await fn();
+    } finally {
+      if (previous === undefined) delete process.env.AI_GATEWAY_API_KEY;
+      else process.env.AI_GATEWAY_API_KEY = previous;
+    }
+  };
   return {
     route: CTX.providerRoute,
     providerName: CTX.providerName,
@@ -130,17 +149,18 @@ export function createVercelGatewayAdapter(
             Math.max(1, Math.ceil(text.length / 4)),
             0,
             Date.now() - started,
+            credential,
           ),
         });
       }
 
-      if (!isVercelGatewayConfigured()) {
+      if (!apiKey) {
         throw new Error("AI_GATEWAY_API_KEY is not configured.");
       }
 
       try {
         const providerOptions = buildGatewayProviderOptions(params.gatewayProviderSlug);
-        const result = await generateText({
+        const result = await withGatewayApiKey(() => generateText({
           model: gateway(modelId),
           system,
           prompt,
@@ -148,7 +168,7 @@ export function createVercelGatewayAdapter(
           maxOutputTokens: maxTokens,
           abortSignal: AbortSignal.timeout(timeoutMs),
           ...(providerOptions ? { providerOptions } : {}),
-        });
+        }));
 
         const inputTokens = result.usage?.inputTokens ?? 0;
         const outputTokens = result.usage?.outputTokens ?? 0;
@@ -160,7 +180,7 @@ export function createVercelGatewayAdapter(
           modelId,
           text: result.text,
           latencyMs: Date.now() - started,
-          usage: usageFromTokens(modelId, inputTokens, outputTokens, cached, Date.now() - started),
+          usage: usageFromTokens(modelId, inputTokens, outputTokens, cached, Date.now() - started, credential),
           finishReason: result.finishReason,
         });
       } catch (error) {
@@ -192,17 +212,18 @@ export function createVercelGatewayAdapter(
             Math.max(1, Math.ceil(serialized.length / 4)),
             0,
             Date.now() - started,
+            credential,
           ),
         });
       }
 
-      if (!isVercelGatewayConfigured()) {
+      if (!apiKey) {
         throw new Error("AI_GATEWAY_API_KEY is not configured.");
       }
 
       try {
         const providerOptions = buildGatewayProviderOptions(params.gatewayProviderSlug);
-        const result = await generateObject({
+        const result = await withGatewayApiKey(() => generateObject({
           model: gateway(modelId),
           schema: params.schema,
           system,
@@ -211,7 +232,7 @@ export function createVercelGatewayAdapter(
           maxOutputTokens: maxTokens,
           abortSignal: AbortSignal.timeout(timeoutMs),
           ...(providerOptions ? { providerOptions } : {}),
-        });
+        }));
 
         const inputTokens = result.usage?.inputTokens ?? 0;
         const outputTokens = result.usage?.outputTokens ?? 0;
@@ -223,7 +244,7 @@ export function createVercelGatewayAdapter(
           modelId,
           object: result.object,
           latencyMs: Date.now() - started,
-          usage: usageFromTokens(modelId, inputTokens, outputTokens, cached, Date.now() - started),
+          usage: usageFromTokens(modelId, inputTokens, outputTokens, cached, Date.now() - started, credential),
           finishReason: result.finishReason,
         });
       } catch (error) {
@@ -239,7 +260,7 @@ export function createVercelGatewayAdapter(
       if (!inputs.length) {
         return {
           embeddings: [],
-          usage: usageFromTokens(modelId, 0, 0, 0, 0),
+          usage: usageFromTokens(modelId, 0, 0, 0, 0, credential),
         };
       }
 
@@ -254,26 +275,27 @@ export function createVercelGatewayAdapter(
             Math.max(1, Math.ceil(serialized.length / 4)),
             0,
             Date.now() - started,
+            credential,
           ),
           finishReason: "stop",
         };
       }
 
-      if (!isVercelGatewayConfigured()) {
+      if (!apiKey) {
         throw new Error("AI_GATEWAY_API_KEY is not configured.");
       }
 
       try {
-        const result = await embedMany({
+        const result = await withGatewayApiKey(() => embedMany({
           model: gateway.embeddingModel(modelId),
           values: inputs,
           abortSignal: AbortSignal.timeout(30_000),
-        });
+        }));
 
         const inputTokens = result.usage?.tokens ?? Math.max(1, Math.ceil(inputs.join(" ").length / 4));
         return {
           embeddings: result.embeddings,
-          usage: usageFromTokens(modelId, inputTokens, 0, 0, Date.now() - started),
+          usage: usageFromTokens(modelId, inputTokens, 0, 0, Date.now() - started, credential),
           finishReason: "stop",
         };
       } catch (error) {

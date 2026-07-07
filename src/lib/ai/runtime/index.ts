@@ -16,6 +16,10 @@ import {
   isVercelGatewayAdapterAvailable,
 } from "./adapters/vercel-gateway";
 import type { AiAdapter } from "./adapters/base";
+import { resolveProviderCredential } from "@/lib/providers/credentials/resolve-provider-credential";
+import { recordCredentialEvent } from "@/lib/providers/credentials/record-credential-event";
+import { createServiceRoleClient } from "@/lib/supabase/server";
+import type { ManagedProviderId, ResolvedCredential } from "@/lib/providers/credentials/types";
 import type {
   CapabilityRouteDecision,
   ProviderRoute,
@@ -47,19 +51,20 @@ async function resolveCatalogOffers(): Promise<import("./pricing/types").ModelEn
 function selectAdapter(
   route: ProviderRoute,
   pref: RuntimeProviderPref,
+  credential?: ResolvedCredential,
 ): AiAdapter {
   if (route === "mock" || pref === "mock") {
     return createMockAdapter();
   }
   if (route === "siliconflow_direct") {
-    if (isSiliconFlowAdapterAvailable()) {
-      return createSiliconFlowAdapter();
+    if (credential || isSiliconFlowAdapterAvailable()) {
+      return createSiliconFlowAdapter(credential);
     }
     return createMockAdapter();
   }
   if (route === "vercel_gateway") {
-    if (isVercelGatewayAdapterAvailable()) {
-      return createVercelGatewayAdapter();
+    if (credential || isVercelGatewayAdapterAvailable()) {
+      return createVercelGatewayAdapter({}, credential);
     }
     if (isSiliconFlowAdapterAvailable()) {
       return createSiliconFlowAdapter();
@@ -67,6 +72,51 @@ function selectAdapter(
     return createMockAdapter();
   }
   return createMockAdapter();
+}
+
+function providerForRoute(route: ProviderRoute): ManagedProviderId | null {
+  switch (route) {
+    case "siliconflow_direct":
+      return "siliconflow";
+    case "vercel_gateway":
+      return "vercel_gateway";
+    default:
+      return null;
+  }
+}
+
+async function resolveCredentialForRoute(
+  workspaceId: string | undefined,
+  route: ProviderRoute,
+): Promise<ResolvedCredential | undefined> {
+  const provider = providerForRoute(route);
+  if (!provider) return undefined;
+  return resolveProviderCredential({ workspaceId, provider }).catch((error) => {
+    console.warn("[AdeHQ runtime credentials]", error);
+    return undefined;
+  });
+}
+
+function recordRuntimeCredentialUse(
+  credential: ResolvedCredential | undefined,
+  workspaceId: string | undefined,
+  failed?: boolean,
+  error?: unknown,
+): void {
+  if (!credential?.credentialId) return;
+  try {
+    const client = createServiceRoleClient();
+    void recordCredentialEvent(client, {
+      credentialId: credential.credentialId,
+      workspaceId,
+      provider: credential.provider,
+      eventType: failed ? "failed" : "used",
+      reason: failed ? (error instanceof Error ? error.message : String(error ?? "Runtime provider failed.")) : undefined,
+      metadata: { source: credential.source },
+    });
+  } catch {
+    // Non-fatal: usage/cost ledger remains the source of truth.
+  }
 }
 
 function shadowResult<T>(
@@ -134,7 +184,8 @@ async function invokeWithRouting<T>(
     throw new DisabledError(`Unsupported AI_RUNTIME_V2_MODE: ${flags.mode}`);
   }
 
-  const adapter = selectAdapter(routing.providerRoute, flags.providerPref);
+  const credential = await resolveCredentialForRoute(params.workspaceId, routing.providerRoute);
+  const adapter = selectAdapter(routing.providerRoute, flags.providerPref, credential);
   const merged = {
     ...params,
     modelId: params.modelId ?? routing.modelId,
@@ -143,10 +194,17 @@ async function invokeWithRouting<T>(
     endpointKey: params.endpointKey ?? routing.endpointKey,
   };
 
-  const result =
-    kind === "text"
-      ? await adapter.generateText(merged as RuntimeGenerateTextParams)
-      : await adapter.generateObject(merged as RuntimeGenerateObjectParams<T>);
+  let result: RuntimeResult<T>;
+  try {
+    result =
+      kind === "text"
+        ? ((await adapter.generateText(merged as RuntimeGenerateTextParams)) as RuntimeResult<T>)
+        : await adapter.generateObject(merged as RuntimeGenerateObjectParams<T>);
+    recordRuntimeCredentialUse(credential, params.workspaceId);
+  } catch (error) {
+    recordRuntimeCredentialUse(credential, params.workspaceId, true, error);
+    throw error;
+  }
 
   return {
     ...(result as RuntimeResult<T>),
@@ -226,7 +284,8 @@ export async function embed(
     throw new DisabledError(`Unsupported AI_RUNTIME_V2_MODE: ${flags.mode}`);
   }
 
-  const adapter = selectAdapter(routing.providerRoute, flags.providerPref);
+  const credential = await resolveCredentialForRoute(params.workspaceId, routing.providerRoute);
+  const adapter = selectAdapter(routing.providerRoute, flags.providerPref, credential);
   const merged = {
     ...params,
     modelId: params.modelId ?? routing.modelId,
@@ -235,7 +294,14 @@ export async function embed(
     endpointKey: params.endpointKey ?? routing.endpointKey,
   };
 
-  const result = await adapter.embed(merged);
+  let result: RuntimeEmbedResult;
+  try {
+    result = await adapter.embed(merged);
+    recordRuntimeCredentialUse(credential, params.workspaceId);
+  } catch (error) {
+    recordRuntimeCredentialUse(credential, params.workspaceId, true, error);
+    throw error;
+  }
   return {
     ...result,
     routing,

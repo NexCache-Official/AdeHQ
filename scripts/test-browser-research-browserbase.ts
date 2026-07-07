@@ -163,11 +163,11 @@ async function main() {
   });
 
   await run("Stagehand LLM config matches SiliconFlow adapter source of truth", async () => {
-    await withEnv({ AI_RUNTIME_V2_PROVIDER_PREF: "auto" }, () => {
+    await withEnv({ AI_RUNTIME_V2_PROVIDER_PREF: "auto" }, async () => {
       const adapterModel = resolveSiliconFlowRuntimeModel({ runtimeMode: "balanced" });
       const stagehandPrimary = resolveSiliconFlowStagehandPrimaryModel();
       assert(adapterModel === stagehandPrimary, "expected same primary model id");
-      const [first] = listStagehandLlmCandidates();
+      const [first] = await listStagehandLlmCandidates();
       assert(Boolean(first), "expected at least one candidate");
       assert(first!.modelId === adapterModel, "expected first candidate to use adapter model");
       assert(first!.baseURL === SILICONFLOW_API_BASE_URL, "expected /v1 SiliconFlow baseURL");

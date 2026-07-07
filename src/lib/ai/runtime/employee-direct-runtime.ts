@@ -192,6 +192,10 @@ export async function generateEmployeeDirectResponseRuntime(
         metadata: {
           providerRoute: result.usage.providerRoute,
           providerName: result.usage.providerName,
+          providerCredentialId: result.usage.providerCredentialId,
+          providerAllocationId: result.usage.providerAllocationId,
+          providerProjectId: result.usage.providerProjectId,
+          credentialSource: result.usage.credentialSource,
           capability,
           workUnitId,
           workMinutesEstimated: result.workMinutesEstimated,

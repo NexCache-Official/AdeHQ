@@ -33,6 +33,17 @@ export const AUDIT_ACTION_META: Record<string, AuditActionMeta> = {
   user_enabled: { severity: "medium" },
   viewed_support_metadata: { severity: "critical", requiresReason: true },
   viewed_restricted_content: { severity: "critical", requiresReason: true },
+  provider_credential_created: { severity: "critical", requiresReason: true },
+  provider_credential_tested: { severity: "high" },
+  provider_credential_updated: { severity: "critical", requiresReason: true },
+  provider_credential_activated: { severity: "critical", requiresReason: true },
+  provider_credential_disabled: { severity: "critical", requiresReason: true },
+  provider_credential_rotation_started: { severity: "critical", requiresReason: true },
+  provider_credential_rotation_completed: { severity: "critical", requiresReason: true },
+  provider_credential_revoked: { severity: "critical", requiresReason: true },
+  provider_credential_assigned: { severity: "high", requiresReason: true },
+  provider_allocation_paused: { severity: "high", requiresReason: true },
+  provider_allocation_resumed: { severity: "medium", requiresReason: true },
 };
 
 export type AuditLogInput = {

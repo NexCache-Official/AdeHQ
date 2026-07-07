@@ -1,4 +1,7 @@
 import { estimateWorkMinutesFromCost } from "@/lib/ai/work-hours/estimate";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { resolveProviderCredential } from "@/lib/providers/credentials/resolve-provider-credential";
+import { recordCredentialEvent } from "@/lib/providers/credentials/record-credential-event";
 import { getTavilyMaxResults, getTavilySearchCostUsd } from "./provider-config";
 import type { BrowserResearchProviderResult } from "./provider-result";
 import type { BrowserResearchMockSource } from "./types";
@@ -63,10 +66,21 @@ export type TavilySearchOptions = {
   maxResults?: number;
   searchDepth?: "basic" | "advanced";
   fetchImpl?: typeof fetch;
+  workspaceId?: string;
+  client?: SupabaseClient;
 };
 
 export async function tavilySearch(options: TavilySearchOptions): Promise<TavilySearchResponse> {
-  const apiKey = options.apiKey ?? process.env.TAVILY_API_KEY?.trim();
+  const resolved = options.apiKey
+    ? null
+    : options.workspaceId
+      ? await resolveProviderCredential({
+          workspaceId: options.workspaceId,
+          provider: "tavily",
+          client: options.client,
+        }).catch(() => null)
+      : null;
+  const apiKey = options.apiKey ?? resolved?.apiKey ?? process.env.TAVILY_API_KEY?.trim();
   if (!apiKey) {
     throw new Error("TAVILY_API_KEY is not configured.");
   }
@@ -85,17 +99,35 @@ export async function tavilySearch(options: TavilySearchOptions): Promise<Tavily
   });
 
   if (!response.ok) {
+    if (resolved?.credentialId && options.client) {
+      void recordCredentialEvent(options.client, {
+        credentialId: resolved.credentialId,
+        workspaceId: options.workspaceId,
+        provider: "tavily",
+        eventType: "failed",
+        reason: `Tavily search failed (${response.status}).`,
+      });
+    }
     const detail = await response.text().catch(() => "");
     throw new Error(`Tavily search failed (${response.status}): ${detail.slice(0, 200)}`);
   }
 
+  if (resolved?.credentialId && options.client) {
+    void recordCredentialEvent(options.client, {
+      credentialId: resolved.credentialId,
+      workspaceId: options.workspaceId,
+      provider: "tavily",
+      eventType: "used",
+      metadata: { source: resolved.source },
+    });
+  }
   return (await response.json()) as TavilySearchResponse;
 }
 
 /** Tavily search provider — real web search snippets, no live page browsing. */
 export async function runTavilyBrowserResearchProvider(
   query: string,
-  options?: { fetchImpl?: typeof fetch; apiKey?: string },
+  options?: { fetchImpl?: typeof fetch; apiKey?: string; workspaceId?: string; client?: SupabaseClient },
 ): Promise<BrowserResearchProviderResult> {
   const trimmed = query.trim();
   const maxResults = getTavilyMaxResults();
@@ -119,6 +151,8 @@ export async function runTavilyBrowserResearchProvider(
   const response = await tavilySearch({
     query: trimmed,
     apiKey: options?.apiKey,
+    workspaceId: options?.workspaceId,
+    client: options?.client,
     maxResults,
     fetchImpl: options?.fetchImpl,
   });

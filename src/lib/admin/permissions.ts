@@ -11,6 +11,8 @@ export type PlatformPermission =
   | "work_hours.read"
   | "models.read"
   | "models.write"
+  | "provider_credentials.read"
+  | "provider_credentials.write"
   | "browser_research.read"
   | "flags.read"
   | "flags.write"
@@ -35,6 +37,8 @@ const PLATFORM_ADMIN_PERMISSIONS: Record<PlatformAdminRole, PlatformPermission[]
     "work_hours.read",
     "models.read",
     "models.write",
+    "provider_credentials.read",
+    "provider_credentials.write",
     "browser_research.read",
     "flags.read",
     "flags.write",
@@ -64,6 +68,7 @@ const PLATFORM_ADMIN_PERMISSIONS: Record<PlatformAdminRole, PlatformPermission[]
     "usage.read",
     "work_hours.read",
     "models.read",
+    "provider_credentials.read",
     "browser_research.read",
     "flags.read",
     "audit.read",

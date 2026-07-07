@@ -65,6 +65,9 @@ export async function recordCostEvent(
     provider_name: input.providerName ?? null,
     model_id: input.modelId ?? null,
     endpoint_key: input.endpointKey ?? null,
+    provider_credential_id: input.providerCredentialId ?? null,
+    provider_allocation_id: input.providerAllocationId ?? null,
+    provider_project_id: input.providerProjectId ?? null,
     runtime_mode: input.runtimeMode ?? null,
     capability: input.capability ?? null,
     work_type: input.workType ?? input.sourceType,
@@ -94,7 +97,7 @@ export async function recordCostEvent(
   const { data, error } = await client
     .from("ai_cost_ledger_entries")
     .insert(payload)
-    .select("id, workspace_id, employee_id, source_type, actual_cost_usd, work_hours_charged, billable_to_workspace, platform_overhead, created_at")
+    .select("id, workspace_id, employee_id, source_type, actual_cost_usd, work_hours_charged, billable_to_workspace, platform_overhead, provider_credential_id, provider_allocation_id, provider_project_id, created_at")
     .single();
 
   if (error) {
@@ -113,6 +116,9 @@ export async function recordCostEvent(
     employeeId: data.employee_id ? String(data.employee_id) : null,
     sourceType: data.source_type,
     actualCostUsd: Number(data.actual_cost_usd ?? 0),
+    providerCredentialId: data.provider_credential_id ? String(data.provider_credential_id) : null,
+    providerAllocationId: data.provider_allocation_id ? String(data.provider_allocation_id) : null,
+    providerProjectId: data.provider_project_id ? String(data.provider_project_id) : null,
     workHoursCharged: Number(data.work_hours_charged ?? 0),
     billableToWorkspace: Boolean(data.billable_to_workspace),
     platformOverhead: Boolean(data.platform_overhead),

@@ -37,6 +37,9 @@ export type CostEventInput = {
   providerName?: string | null;
   modelId?: string | null;
   endpointKey?: string | null;
+  providerCredentialId?: string | null;
+  providerAllocationId?: string | null;
+  providerProjectId?: string | null;
 
   runtimeMode?: string | null;
   capability?: string | null;
@@ -74,6 +77,9 @@ export type CostLedgerEntry = {
   employeeId: string | null;
   sourceType: CostSourceType;
   actualCostUsd: number;
+  providerCredentialId?: string | null;
+  providerAllocationId?: string | null;
+  providerProjectId?: string | null;
   workHoursCharged: number;
   billableToWorkspace: boolean;
   platformOverhead: boolean;

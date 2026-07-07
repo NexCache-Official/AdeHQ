@@ -131,6 +131,8 @@ export async function executeSearchAnswer(
         recency: decision.recency,
         domains: decision.domains,
         employeeName: params.employeeName,
+        workspaceId: params.workspaceId,
+        client: params.client,
       });
       text = result.text;
       rawSources = result.sources;

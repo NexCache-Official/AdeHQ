@@ -321,7 +321,10 @@ async function executeBrowserResearchProvider(
 
   if (provider === "browserbase" || provider === "tavily") {
     try {
-      return await runTavilyBrowserResearchProvider(query);
+      return await runTavilyBrowserResearchProvider(query, {
+        workspaceId: context?.workspaceId,
+        client: context?.client,
+      });
     } catch (error) {
       console.warn("[AdeHQ browser research] tavily failed — falling back to mock", error);
       recordAiRuntime({

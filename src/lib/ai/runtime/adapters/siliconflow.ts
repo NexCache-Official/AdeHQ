@@ -18,6 +18,7 @@ import {
 import { siliconFlowModelsForMode } from "@/lib/ai/siliconflow-call";
 import { formatProviderError } from "@/lib/ai/provider-errors";
 import { isSiliconFlowConfigured } from "@/lib/config/features";
+import type { ResolvedCredential } from "@/lib/providers/credentials/types";
 import type { RuntimeMode } from "../types";
 import type {
   RuntimeEmbedParams,
@@ -106,6 +107,7 @@ function usageFromTokens(
   outputTokens: number,
   cachedTokens: number,
   latencyMs: number,
+  credential?: ResolvedCredential,
 ): RuntimeResult["usage"] {
   const modelCostUsd = estimateCost(modelId, inputTokens, outputTokens);
   return {
@@ -120,20 +122,26 @@ function usageFromTokens(
     providerRoute: CTX.providerRoute,
     providerName: CTX.providerName,
     modelId,
+    providerCredentialId: credential?.credentialId,
+    providerAllocationId: credential?.allocationId,
+    providerProjectId: credential?.providerProjectId,
+    credentialSource: credential?.source,
   };
 }
 
-export function createSiliconFlowAdapter(): AiAdapter {
+export function createSiliconFlowAdapter(credential?: ResolvedCredential): AiAdapter {
+  const apiKey = credential?.apiKey ?? process.env.SILICONFLOW_API_KEY?.trim();
+  const baseURL = credential?.baseURL ?? SILICONFLOW_API_BASE_URL;
   return {
     route: CTX.providerRoute,
     providerName: CTX.providerName,
 
     chatModel(modelId: string) {
-      return siliconFlowChatModel(modelId);
+      return siliconFlowChatModel(modelId, { apiKey, baseURL });
     },
 
     async generateText(params: RuntimeGenerateTextParams): Promise<RuntimeResult> {
-      if (!isSiliconFlowConfigured()) {
+      if (!apiKey) {
         throw new Error("SILICONFLOW_API_KEY is not configured.");
       }
 
@@ -151,7 +159,7 @@ export function createSiliconFlowAdapter(): AiAdapter {
       for (const modelId of modelsToTry(preferred, modelMode)) {
         try {
           const result = await generateText({
-            model: siliconFlowChatModel(modelId),
+            model: siliconFlowChatModel(modelId, { apiKey, baseURL }),
             system,
             prompt,
             temperature,
@@ -170,7 +178,7 @@ export function createSiliconFlowAdapter(): AiAdapter {
             modelId,
             text: result.text,
             latencyMs: Date.now() - started,
-            usage: usageFromTokens(modelId, inputTokens, outputTokens, cached, Date.now() - started),
+            usage: usageFromTokens(modelId, inputTokens, outputTokens, cached, Date.now() - started, credential),
             finishReason: result.finishReason,
           });
         } catch (error) {
@@ -182,7 +190,7 @@ export function createSiliconFlowAdapter(): AiAdapter {
     },
 
     async generateObject<T>(params: RuntimeGenerateObjectParams<T>): Promise<RuntimeResult<T>> {
-      if (!isSiliconFlowConfigured()) {
+      if (!apiKey) {
         throw new Error("SILICONFLOW_API_KEY is not configured.");
       }
 
@@ -200,7 +208,7 @@ export function createSiliconFlowAdapter(): AiAdapter {
       for (const modelId of modelsToTry(preferred, modelMode)) {
         try {
           const result = await generateObject({
-            model: siliconFlowChatModel(modelId),
+            model: siliconFlowChatModel(modelId, { apiKey, baseURL }),
             schema: params.schema,
             system,
             prompt,
@@ -220,7 +228,7 @@ export function createSiliconFlowAdapter(): AiAdapter {
             modelId,
             object: result.object,
             latencyMs: Date.now() - started,
-            usage: usageFromTokens(modelId, inputTokens, outputTokens, cached, Date.now() - started),
+            usage: usageFromTokens(modelId, inputTokens, outputTokens, cached, Date.now() - started, credential),
             finishReason: result.finishReason,
           });
         } catch (error) {
@@ -232,22 +240,21 @@ export function createSiliconFlowAdapter(): AiAdapter {
     },
 
     async embed(params: RuntimeEmbedParams): Promise<RuntimeEmbedResult> {
-      if (!isSiliconFlowConfigured()) {
+      if (!apiKey) {
         throw new Error("SILICONFLOW_API_KEY is not configured.");
       }
 
-      const apiKey = process.env.SILICONFLOW_API_KEY?.trim();
       const modelId = params.modelId?.trim() || DEFAULT_EMBEDDING_MODEL;
       const inputs = params.texts.map((text) => text.trim()).filter(Boolean);
       if (!inputs.length) {
         return {
           embeddings: [],
-          usage: usageFromTokens(modelId, 0, 0, 0, 0),
+          usage: usageFromTokens(modelId, 0, 0, 0, 0, credential),
         };
       }
 
       const started = Date.now();
-      const response = await fetch(`${SILICONFLOW_API_BASE_URL}/embeddings`, {
+      const response = await fetch(`${baseURL}/embeddings`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${apiKey}`,
@@ -278,7 +285,7 @@ export function createSiliconFlowAdapter(): AiAdapter {
       const inputTokens = Math.max(1, Math.ceil(inputs.join(" ").length / 4));
       return {
         embeddings,
-        usage: usageFromTokens(modelId, inputTokens, 0, 0, Date.now() - started),
+        usage: usageFromTokens(modelId, inputTokens, 0, 0, Date.now() - started, credential),
         finishReason: "stop",
       };
     },

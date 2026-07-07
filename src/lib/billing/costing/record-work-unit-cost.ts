@@ -32,6 +32,11 @@ function numFromMeta(meta: Record<string, unknown>, key: string): number {
   return Number.isFinite(n) && n > 0 ? Math.round(n) : 0;
 }
 
+function stringFromMeta(meta: Record<string, unknown>, key: string): string | null {
+  const value = meta[key];
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
 /**
  * Derive a billable cost event from a completed work unit and write it to the cost ledger.
  * This is the primary capture hook — every path that completes a work unit records cost here.
@@ -77,6 +82,9 @@ export async function recordCostFromWorkUnit(
     providerRoute: workUnit.providerRoute ?? null,
     providerName: workUnit.providerName ?? null,
     modelId: workUnit.modelId ?? null,
+    providerCredentialId: stringFromMeta(meta, "providerCredentialId"),
+    providerAllocationId: stringFromMeta(meta, "providerAllocationId"),
+    providerProjectId: stringFromMeta(meta, "providerProjectId"),
     runtimeMode: workUnit.runtimeMode ?? null,
     capability: workUnit.capability ?? null,
     workType: workUnit.workType,

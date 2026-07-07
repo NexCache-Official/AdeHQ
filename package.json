@@ -32,6 +32,7 @@
     "test:model-pricing": "tsx scripts/test-model-pricing-sync.ts",
     "test:route-optimizer": "tsx scripts/test-route-optimizer.ts",
     "test:provider-endpoint-pricing": "tsx scripts/test-provider-endpoint-pricing.ts",
+    "test:provider-credentials": "tsx scripts/test-provider-credentials.ts",
     "test:vercel-gateway-provider-pin": "tsx scripts/test-vercel-gateway-provider-pin.ts",
     "test:pinned-provider-policy": "tsx scripts/test-pinned-provider-policy.ts",
     "verify:model-capabilities": "tsx scripts/verify-model-capabilities.ts",

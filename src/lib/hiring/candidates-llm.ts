@@ -222,6 +222,10 @@ Keep copy scannable: candidatePitch max 18 words; bestFor one short sentence; st
         metadata: {
           providerRoute: result.usage.providerRoute,
           modelId: result.usage.modelId,
+          providerCredentialId: result.usage.providerCredentialId,
+          providerAllocationId: result.usage.providerAllocationId,
+          providerProjectId: result.usage.providerProjectId,
+          credentialSource: result.usage.credentialSource,
           inputTokens: result.usage.inputTokens,
           outputTokens: result.usage.outputTokens,
         },

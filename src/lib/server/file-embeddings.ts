@@ -241,6 +241,10 @@ export async function embedTextsRuntime(
         metadata: {
           providerRoute: result.usage.providerRoute,
           modelId: result.usage.modelId,
+          providerCredentialId: result.usage.providerCredentialId,
+          providerAllocationId: result.usage.providerAllocationId,
+          providerProjectId: result.usage.providerProjectId,
+          credentialSource: result.usage.credentialSource,
           inputTokens: result.usage.inputTokens,
           textCount: inputs.length,
         },

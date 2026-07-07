@@ -22,6 +22,8 @@ import {
 import { listStagehandLlmCandidates, type StagehandLlmCandidate } from "./stagehand-llm-config";
 import { tavilySearch } from "./tavily-provider";
 import type { BrowserResearchMockSource } from "./types";
+import { resolveProviderCredential } from "@/lib/providers/credentials/resolve-provider-credential";
+import type { ResolvedCredential } from "@/lib/providers/credentials/types";
 
 const pageExtractionSchema = z.object({
   pageTitle: z.string().describe("The page title"),
@@ -152,6 +154,7 @@ async function runLiveBrowserResearchSession(
   query: string,
   options: RunBrowserbaseBrowserResearchOptions,
   candidate: StagehandLlmCandidate,
+  browserbaseCredential?: ResolvedCredential,
 ): Promise<
   BrowserResearchProviderResult & {
     liveSessionUrl?: string;
@@ -207,7 +210,7 @@ async function runLiveBrowserResearchSession(
 
     stagehand = stagehandFactory({
       env: "BROWSERBASE",
-      apiKey: process.env.BROWSERBASE_API_KEY?.trim(),
+      apiKey: browserbaseCredential?.apiKey ?? process.env.BROWSERBASE_API_KEY?.trim(),
       model: candidate.model,
       cacheDir: getStagehandCacheDir(),
       verbose: 0,
@@ -413,16 +416,22 @@ export async function runBrowserbaseBrowserResearchProvider(
     stagehandLlmProvider?: string;
   }
 > {
-  if (!isBrowserbaseConfigured()) {
+  const browserbaseCredential = await resolveProviderCredential({
+    workspaceId: options.workspaceId,
+    provider: "browserbase",
+    client: options.client,
+  }).catch(() => null);
+
+  if (!browserbaseCredential && !isBrowserbaseConfigured()) {
     throw new Error("BROWSERBASE_API_KEY is not configured.");
   }
 
-  const candidates = listStagehandLlmCandidates();
+  const candidates = await listStagehandLlmCandidates(options.workspaceId);
   let lastError: Error | null = null;
 
   for (const candidate of candidates) {
     try {
-      const result = await runLiveBrowserResearchSession(query, options, candidate);
+      const result = await runLiveBrowserResearchSession(query, options, candidate, browserbaseCredential ?? undefined);
       console.log("[AdeHQ browser research] Stagehand LLM succeeded", {
         providerRoute: candidate.providerRoute,
         modelId: candidate.modelId,

@@ -5,6 +5,7 @@ import { isEmailConfirmed } from "@/lib/auth/session";
 import { ensureToolCatalog } from "@/lib/server/tool-catalog";
 import { AccountLifecycleError } from "@/lib/server/account-lifecycle";
 import { ensureMayaForWorkspace } from "@/lib/server/ensure-maya";
+import { ensureWorkspaceProviderAllocations } from "@/lib/providers/credentials/ensure-workspace-allocations";
 
 type DbRow = Record<string, unknown>;
 
@@ -95,6 +96,9 @@ export async function bootstrapWorkspaceForUser(
   const existingId = await findExistingWorkspaceId(client, user.id);
   if (existingId) {
     await ensureMemberRow(client, existingId, user.id);
+    await ensureWorkspaceProviderAllocations(client, existingId, user.id).catch((error) => {
+      console.warn("[AdeHQ provider allocations bootstrap]", error);
+    });
     const { data, error } = await client
       .from("workspaces")
       .select("name")
@@ -139,6 +143,9 @@ export async function bootstrapWorkspaceForUser(
   await ensureMemberRow(client, workspaceId, user.id);
   await seedWorkspaceTools(client, workspaceId);
   await ensureMayaForWorkspace(client, workspaceId);
+  await ensureWorkspaceProviderAllocations(client, workspaceId, user.id).catch((error) => {
+    console.warn("[AdeHQ provider allocations bootstrap]", error);
+  });
 
   return { workspaceId, workspaceName: name, created: true };
 }

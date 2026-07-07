@@ -70,6 +70,13 @@ ADEHQ_SILICONFLOW_CHEAP_MODEL=deepseek-ai/DeepSeek-V3
 ADEHQ_SILICONFLOW_CODER_MODEL=Qwen/Qwen3-Coder-30B-A3B-Instruct
 ADEHQ_SILICONFLOW_LONG_CONTEXT_MODEL=MiniMaxAI/MiniMax-M2.5
 ADEHQ_DEFAULT_PROVIDER=siliconflow
+
+# Provider Credential Management V1 (server-only)
+# Use a 32-byte base64, hex, or raw UTF-8 key. Rotate by bumping the version
+# and keeping ADEHQ_SECRET_ENCRYPTION_KEY_V<n> for old envelopes.
+ADEHQ_SECRET_ENCRYPTION_KEY=...
+ADEHQ_SECRET_ENCRYPTION_KEY_VERSION=1
+ALLOW_PROVIDER_ENV_FALLBACK=true
 ```
 
 Apply `supabase/migrations/20250629120000_ai_runtime_and_work_graph.sql` (or the synced

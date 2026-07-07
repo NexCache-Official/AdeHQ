@@ -121,6 +121,10 @@ export type RuntimeUsage = {
   providerRoute: ProviderRoute;
   providerName: string;
   modelId: string;
+  providerCredentialId?: string;
+  providerAllocationId?: string;
+  providerProjectId?: string;
+  credentialSource?: "workspace_allocation" | "global_pool" | "env_fallback";
 };
 
 export type RuntimeResult<T = unknown> = {

@@ -1,5 +1,7 @@
 import { generateText, stepCountIs } from "ai";
 import { gateway } from "@ai-sdk/gateway";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { resolveProviderCredential } from "@/lib/providers/credentials/resolve-provider-credential";
 import { resolveVercelGatewayModelId } from "@/lib/ai/runtime/adapters/vercel-models";
 import type { SearchMode, SearchRoute, SearchSource } from "./types";
 import {
@@ -17,6 +19,8 @@ export type GatewaySearchOptions = {
   recency?: "day" | "week" | "month" | "year";
   domains?: string[];
   employeeName?: string;
+  workspaceId?: string;
+  client?: SupabaseClient;
 };
 
 export type GatewaySearchAnswerResult = {
@@ -168,10 +172,21 @@ async function runSonarSearchAnswer(
 export async function runGatewaySearchAnswer(
   options: GatewaySearchOptions,
 ): Promise<GatewaySearchAnswerResult> {
-  if (!isGatewaySearchConfigured()) {
+  const credential = options.workspaceId
+    ? await resolveProviderCredential({
+        workspaceId: options.workspaceId,
+        provider: "vercel_gateway",
+        client: options.client,
+      }).catch(() => null)
+    : null;
+  const apiKey = credential?.apiKey ?? process.env.AI_GATEWAY_API_KEY?.trim();
+  if (!apiKey) {
     throw new Error("AI_GATEWAY_API_KEY is not configured.");
   }
+  const previousGatewayKey = process.env.AI_GATEWAY_API_KEY;
+  if (credential?.apiKey) process.env.AI_GATEWAY_API_KEY = credential.apiKey;
 
+  try {
   const route = options.route ?? "gateway_perplexity";
   const searchMode = options.searchMode ?? "standard";
   const preset = getFastFactSearchPreset();
@@ -245,6 +260,12 @@ export async function runGatewaySearchAnswer(
     searchLatencyMs: Date.now() - totalStarted - sonar.synthesisLatencyMs,
     synthesisLatencyMs: sonar.synthesisLatencyMs,
   };
+  } finally {
+    if (credential?.apiKey) {
+      if (previousGatewayKey === undefined) delete process.env.AI_GATEWAY_API_KEY;
+      else process.env.AI_GATEWAY_API_KEY = previousGatewayKey;
+    }
+  }
 }
 
 export function estimateGatewaySearchCostUsd(): number {
