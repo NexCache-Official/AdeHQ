@@ -44,6 +44,7 @@ export const AUDIT_ACTION_META: Record<string, AuditActionMeta> = {
   provider_credential_assigned: { severity: "high", requiresReason: true },
   provider_allocation_paused: { severity: "high", requiresReason: true },
   provider_allocation_resumed: { severity: "medium", requiresReason: true },
+  provider_encryption_key_generated: { severity: "critical", requiresReason: true },
 };
 
 export type AuditLogInput = {

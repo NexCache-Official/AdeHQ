@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { authHeaders } from "@/lib/api/auth-client";
 import { Button, Card } from "@/components/ui";
 import {
@@ -28,14 +28,23 @@ function statusTone(status: string): "healthy" | "degraded" | "disabled" | "unkn
   return "unknown";
 }
 
+type EncryptionKeyStatus = {
+  runtimeConfigured: boolean;
+  vercelConfigured: boolean;
+  manageable: boolean;
+};
+
 export default function AdminProviderCredentialsPage() {
   const admin = usePlatformAdmin();
   const canWrite = admin.role === "super_admin" || admin.role === "ops_admin";
+  const isSuperAdmin = admin.role === "super_admin";
   const { data, loading, error, refresh } =
     useAdminData<ProviderCredentialsSummary>("/api/admin/provider-credentials");
   const [form, setForm] = useState({ provider: "siliconflow", label: "", apiKey: "", reason: "" });
   const [busy, setBusy] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [keyStatus, setKeyStatus] = useState<EncryptionKeyStatus | null>(null);
+  const [generatedKey, setGeneratedKey] = useState<string | null>(null);
 
   const credentials = data?.credentials ?? [];
   const allocations = data?.allocations ?? [];
@@ -51,6 +60,48 @@ export default function AdminProviderCredentialsPage() {
     const body = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(body?.error ?? `Request failed (${res.status}).`);
     return body;
+  };
+
+  const loadKeyStatus = useCallback(async () => {
+    if (!isSuperAdmin) return;
+    try {
+      const headers = await authHeaders();
+      const res = await fetch("/api/admin/provider-credentials/encryption-key", { headers });
+      if (res.ok) setKeyStatus(await res.json());
+    } catch {
+      // Non-fatal: status card simply stays hidden.
+    }
+  }, [isSuperAdmin]);
+
+  useEffect(() => {
+    void loadKeyStatus();
+  }, [loadKeyStatus]);
+
+  const generateEncryptionKey = async () => {
+    const reason = window.prompt("Reason for generating the provider encryption key?") ?? "";
+    if (!reason.trim()) {
+      setMessage("A reason is required to generate the encryption key.");
+      return;
+    }
+    setBusy("genkey");
+    setMessage(null);
+    try {
+      const result = await request("/api/admin/provider-credentials/encryption-key", {
+        method: "POST",
+        body: JSON.stringify({ reason }),
+      });
+      setGeneratedKey(result.key);
+      setMessage(
+        result.redeploy?.triggered
+          ? `Encryption key saved to Vercel. ${result.redeploy.detail} It goes live once the redeploy completes.`
+          : `Encryption key saved to Vercel, but auto-redeploy did not run (${result.redeploy?.detail ?? "unknown"}). Redeploy manually to activate it.`,
+      );
+      await loadKeyStatus();
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "Encryption key generation failed.");
+    } finally {
+      setBusy(null);
+    }
   };
 
   const createCredential = async () => {
@@ -180,6 +231,61 @@ export default function AdminProviderCredentialsPage() {
         subtitle="Encrypted provider key registry, workspace allocations, budget gates, and rotation controls."
         icon={<KeyRound className="h-5 w-5" />}
       />
+
+      {isSuperAdmin && keyStatus && (
+        <Card className="mb-4 p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-semibold text-ink">Secret encryption key</h2>
+              <p className="text-xs text-ink-3">
+                {keyStatus.runtimeConfigured
+                  ? "Active on this deployment — provider secrets are encrypted at rest."
+                  : keyStatus.vercelConfigured
+                    ? "Configured in Vercel — becomes active once the next production deploy completes."
+                    : "Not configured. Generate one to enable encrypted provider credentials. Nothing else to set up."}
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <AdminHealthBadge
+                tone={keyStatus.runtimeConfigured ? "healthy" : keyStatus.vercelConfigured ? "degraded" : "disabled"}
+                label={keyStatus.runtimeConfigured ? "Active" : keyStatus.vercelConfigured ? "Pending redeploy" : "Not set"}
+              />
+              {!keyStatus.runtimeConfigured && !keyStatus.vercelConfigured && (
+                <Button
+                  size="sm"
+                  disabled={busy === "genkey" || !keyStatus.manageable}
+                  onClick={() => void generateEncryptionKey()}
+                >
+                  {busy === "genkey" ? "Generating…" : "Generate & set key"}
+                </Button>
+              )}
+            </div>
+          </div>
+
+          {!keyStatus.manageable && !keyStatus.runtimeConfigured && (
+            <p className="mt-2 text-xs text-amber-700">
+              Vercel API token is not configured on this deployment — set VERCEL_API_TOKEN to enable one-click generation.
+            </p>
+          )}
+
+          {generatedKey && (
+            <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50/60 p-3">
+              <p className="text-xs font-semibold text-amber-800">
+                Copy this key now — it will not be shown again. Save it in your password manager as a recovery backup.
+              </p>
+              <div className="mt-2 flex items-center gap-2">
+                <code className="flex-1 break-all rounded bg-white px-2 py-1 font-mono text-[11px] text-ink">{generatedKey}</code>
+                <Button size="sm" variant="outline" onClick={() => void navigator.clipboard?.writeText(generatedKey)}>
+                  Copy
+                </Button>
+                <Button size="sm" variant="outline" onClick={() => setGeneratedKey(null)}>
+                  Done
+                </Button>
+              </div>
+            </div>
+          )}
+        </Card>
+      )}
 
       {envWarnings.length > 0 && (
         <Card className="mb-4 border-amber-200 bg-amber-50/60 p-4 text-sm text-amber-800">
