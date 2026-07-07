@@ -10,16 +10,23 @@ import { registerJobHandler, type JobHandlerResult } from "./registry";
 import { spreadsheetMarkdownPreview } from "@/lib/artifacts/engine/spreadsheet";
 import { buildEnhancedSpreadsheetBuffer } from "@/lib/artifacts/engine/spreadsheet-enhanced";
 import {
+  buildHtmlPdfBuffer,
   buildReportMarkdown,
-  buildSimplePdfBuffer,
 } from "@/lib/artifacts/engine/pdf-report";
+import { buildDocxBuffer } from "@/lib/artifacts/engine/docx";
+import { buildPresentationBuffer } from "@/lib/artifacts/engine/presentation";
 import { DRIVE_BUCKETS } from "@/lib/drive/constants";
 import { exportStoragePath } from "@/lib/drive/storage-sync";
 import { recordStorageUsage } from "@/lib/drive/quota-server";
 import { uid, nowISO } from "@/lib/utils";
 import type {
+  ConvertFileArgs,
+  CreateDocxArgs,
   CreatePdfReportArgs,
+  CreatePresentationArgs,
   CreateSpreadsheetArgs,
+  SaveToDriveArgs,
+  UpdateSpreadsheetArgs,
 } from "@/lib/integrations/registry/tool-definitions";
 import { applySpreadsheetTemplate } from "@/lib/artifacts/templates/spreadsheets/index";
 import { applyPdfTemplate } from "@/lib/artifacts/templates/pdf/index";
@@ -181,6 +188,102 @@ async function createArtifactRow(
   return artifactId;
 }
 
+async function recordArtifactRun(
+  client: SupabaseClient,
+  job: IntegrationJobRecord,
+  params: {
+    toolName: string;
+    artifactId?: string;
+    exportId?: string;
+    templateId?: string | null;
+    inputPayload: Record<string, unknown>;
+    outputPayload: Record<string, unknown>;
+  },
+): Promise<void> {
+  const { error } = await client.from("artifact_runs").insert({
+    workspace_id: job.workspaceId,
+    integration_tool_run_id: job.toolRunId ?? null,
+    integration_job_id: job.id,
+    artifact_id: params.artifactId ?? null,
+    drive_export_id: params.exportId ?? null,
+    tool_name: params.toolName,
+    template_id: params.templateId ?? null,
+    status: "success",
+    input_payload: params.inputPayload,
+    output_payload: params.outputPayload,
+    completed_at: nowISO(),
+  });
+  if (error) {
+    console.warn("[AdeHQ artifacts] artifact_runs insert skipped", error);
+  }
+}
+
+async function loadArtifact(
+  client: SupabaseClient,
+  workspaceId: string,
+  artifactId: string,
+): Promise<{
+  id: string;
+  title: string;
+  contentMarkdown: string;
+  contentJson: Record<string, unknown>;
+} | null> {
+  const { data, error } = await client
+    .from("artifacts")
+    .select("id, title, content_markdown, content_json")
+    .eq("workspace_id", workspaceId)
+    .eq("id", artifactId)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) return null;
+  return {
+    id: String(data.id),
+    title: String(data.title ?? "Artifact"),
+    contentMarkdown: String(data.content_markdown ?? ""),
+    contentJson: (data.content_json as Record<string, unknown> | null) ?? {},
+  };
+}
+
+function markdownToSections(markdown: string): Array<{ heading: string; body: string }> {
+  const trimmed = markdown.trim();
+  if (!trimmed) return [{ heading: "Notes", body: "No source content was available." }];
+  const sections: Array<{ heading: string; body: string }> = [];
+  const parts = trimmed.split(/\n(?=##\s+)/g);
+  for (const part of parts) {
+    const headingMatch = part.match(/^##\s+(.+)$/m);
+    if (headingMatch?.[1]) {
+      sections.push({
+        heading: headingMatch[1].trim(),
+        body: part.replace(/^##\s+.+$/m, "").trim() || "—",
+      });
+    }
+  }
+  return sections.length ? sections : [{ heading: "Content", body: trimmed.replace(/^#\s+.+$/m, "").trim() || trimmed }];
+}
+
+function markdownTitle(markdown: string, fallback: string): string {
+  return markdown.match(/^#\s+(.+)$/m)?.[1]?.trim() || fallback;
+}
+
+function rowsFromContentJson(contentJson: Record<string, unknown>): {
+  columns: string[];
+  rows: Array<Array<string | number | boolean | null>>;
+  sheetName?: string;
+} | null {
+  const columns = Array.isArray(contentJson.columns)
+    ? contentJson.columns.map((column) => String(column)).filter(Boolean)
+    : [];
+  const rows = Array.isArray(contentJson.rows)
+    ? contentJson.rows.map((row) => (Array.isArray(row) ? row : [row])) as Array<Array<string | number | boolean | null>>
+    : [];
+  if (!columns.length && !rows.length) return null;
+  return {
+    columns: columns.length ? columns : ["Value"],
+    rows,
+    sheetName: contentJson.sheetName ? String(contentJson.sheetName) : undefined,
+  };
+}
+
 async function handleSpreadsheetJob(
   client: SupabaseClient,
   job: IntegrationJobRecord,
@@ -194,7 +297,7 @@ async function handleSpreadsheetJob(
   const title = args.title.trim();
   const templated = applySpreadsheetTemplate(args);
 
-  const buffer = buildEnhancedSpreadsheetBuffer({
+  const buffer = await buildEnhancedSpreadsheetBuffer({
     sheetName: templated.sheetName,
     columns: templated.columns,
     rows: templated.rows,
@@ -225,6 +328,7 @@ async function handleSpreadsheetJob(
       kind: "spreadsheet",
       template: args.template ?? null,
       columns: templated.columns,
+      rows: templated.rows,
       rowCount: templated.rows.length,
       sheetName: templated.sheetName ?? "Sheet1",
     },
@@ -251,8 +355,18 @@ async function handleSpreadsheetJob(
     toolName: "artifact.createSpreadsheet",
   });
 
+  const result = { artifactId, exportId, title, rowCount: templated.rows.length, template: args.template };
+  await recordArtifactRun(client, job, {
+    toolName: "artifact.createSpreadsheet",
+    artifactId,
+    exportId,
+    templateId: args.template ?? null,
+    inputPayload: args,
+    outputPayload: result,
+  });
+
   return {
-    result: { artifactId, exportId, title, rowCount: templated.rows.length, template: args.template },
+    result,
     costUsd: 0.002,
     summary,
   };
@@ -274,7 +388,7 @@ async function handlePdfReportJob(
     generatedBy: employeeId,
     generatedAt: new Date().toISOString(),
   });
-  const pdfBuffer = buildSimplePdfBuffer({
+  const pdfBuffer = await buildHtmlPdfBuffer({
     ...spec,
     generatedBy: employeeId,
     generatedAt: new Date().toISOString(),
@@ -319,12 +433,477 @@ async function handlePdfReportJob(
     toolName: "artifact.createPdfReport",
   });
 
+  const result = { artifactId, exportId, title, sectionCount: args.sections.length };
+  await recordArtifactRun(client, job, {
+    toolName: "artifact.createPdfReport",
+    artifactId,
+    exportId,
+    templateId: args.template ?? null,
+    inputPayload: args,
+    outputPayload: result,
+  });
+
   return {
-    result: { artifactId, exportId, title, sectionCount: args.sections.length },
+    result,
     costUsd: 0.005,
     summary,
   };
 }
 
+async function handleDocxJob(
+  client: SupabaseClient,
+  job: IntegrationJobRecord,
+): Promise<JobHandlerResult> {
+  const payload = job.payload as JobPayload;
+  const args = payload.args as CreateDocxArgs;
+  const ctx = payload.ctx ?? {};
+  const employeeId = job.employeeId ?? ctx.employeeId;
+  if (!employeeId) throw new Error("Missing employee for DOCX job.");
+
+  const title = args.title.trim();
+  const generatedAt = new Date().toISOString();
+  const buffer = await buildDocxBuffer({
+    title,
+    summary: args.summary,
+    sections: args.sections,
+    generatedBy: employeeId,
+    generatedAt,
+  });
+  const contentMarkdown = buildReportMarkdown({
+    title,
+    summary: args.summary,
+    sections: args.sections,
+    generatedBy: employeeId,
+    generatedAt,
+  });
+
+  const artifactId = await createArtifactRow(client, {
+    workspaceId: job.workspaceId,
+    employeeId,
+    roomId: ctx.roomId,
+    topicId: ctx.topicId,
+    triggerMessageId: ctx.triggerMessageId,
+    title,
+    artifactType: "report",
+    contentMarkdown,
+    contentJson: {
+      kind: "docx",
+      template: args.template ?? null,
+      sectionCount: args.sections.length,
+      summary: args.summary ?? null,
+    },
+  });
+
+  const { exportId } = await persistBinaryExport(client, {
+    workspaceId: job.workspaceId,
+    employeeId,
+    roomId: ctx.roomId,
+    topicId: ctx.topicId,
+    title,
+    ext: "docx",
+    mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    buffer,
+    artifactId,
+    exportType: "document",
+  });
+
+  const summary = `Generated document "${title}" — saved as a DOCX export in Drive.`;
+  await writeArtifactWorkLog(client, job, {
+    action: "artifact_docx_created",
+    summary,
+    artifactId,
+    toolName: "artifact.createDocx",
+  });
+
+  const result = { artifactId, exportId, title, sectionCount: args.sections.length };
+  await recordArtifactRun(client, job, {
+    toolName: "artifact.createDocx",
+    artifactId,
+    exportId,
+    templateId: args.template ?? null,
+    inputPayload: args,
+    outputPayload: result,
+  });
+
+  return { result, costUsd: 0.004, summary };
+}
+
+async function handlePresentationJob(
+  client: SupabaseClient,
+  job: IntegrationJobRecord,
+): Promise<JobHandlerResult> {
+  const payload = job.payload as JobPayload;
+  const args = payload.args as CreatePresentationArgs;
+  const ctx = payload.ctx ?? {};
+  const employeeId = job.employeeId ?? ctx.employeeId;
+  if (!employeeId) throw new Error("Missing employee for presentation job.");
+
+  const title = args.title.trim();
+  const generatedAt = new Date().toISOString();
+  const buffer = await buildPresentationBuffer({
+    title,
+    subtitle: args.subtitle,
+    slides: args.slides,
+    generatedBy: employeeId,
+    generatedAt,
+  });
+  const contentMarkdown = [
+    `# ${title}`,
+    args.subtitle ? `\n${args.subtitle}` : "",
+    ...args.slides.flatMap((slide) => [
+      "",
+      `## ${slide.title}`,
+      ...(slide.bullets ?? []).map((bullet) => `- ${bullet}`),
+      slide.notes ? `\nNotes: ${slide.notes}` : "",
+    ]),
+  ].join("\n");
+
+  const artifactId = await createArtifactRow(client, {
+    workspaceId: job.workspaceId,
+    employeeId,
+    roomId: ctx.roomId,
+    topicId: ctx.topicId,
+    triggerMessageId: ctx.triggerMessageId,
+    title,
+    artifactType: "report",
+    contentMarkdown,
+    contentJson: {
+      kind: "presentation",
+      template: args.template ?? null,
+      slideCount: args.slides.length,
+      slides: args.slides,
+    },
+  });
+
+  const { exportId } = await persistBinaryExport(client, {
+    workspaceId: job.workspaceId,
+    employeeId,
+    roomId: ctx.roomId,
+    topicId: ctx.topicId,
+    title,
+    ext: "pptx",
+    mimeType: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    buffer,
+    artifactId,
+    exportType: "presentation",
+  });
+
+  const summary = `Generated presentation "${title}" (${args.slides.length} slides) — saved to Drive.`;
+  await writeArtifactWorkLog(client, job, {
+    action: "artifact_presentation_created",
+    summary,
+    artifactId,
+    toolName: "artifact.createPresentation",
+  });
+
+  const result = { artifactId, exportId, title, slideCount: args.slides.length };
+  await recordArtifactRun(client, job, {
+    toolName: "artifact.createPresentation",
+    artifactId,
+    exportId,
+    templateId: args.template ?? null,
+    inputPayload: args,
+    outputPayload: result,
+  });
+
+  return { result, costUsd: 0.006, summary };
+}
+
+async function handleUpdateSpreadsheetJob(
+  client: SupabaseClient,
+  job: IntegrationJobRecord,
+): Promise<JobHandlerResult> {
+  const payload = job.payload as JobPayload;
+  const args = payload.args as UpdateSpreadsheetArgs;
+  const ctx = payload.ctx ?? {};
+  const employeeId = job.employeeId ?? ctx.employeeId;
+  if (!employeeId) throw new Error("Missing employee for spreadsheet update job.");
+
+  let sourceRows: Array<Array<string | number | boolean | null>> = [];
+  let sourceColumns: string[] = [];
+  let sourceSheetName: string | undefined;
+  if (args.sourceArtifactId) {
+    const source = await loadArtifact(client, job.workspaceId, args.sourceArtifactId);
+    const sourceSheet = source ? rowsFromContentJson(source.contentJson) : null;
+    sourceRows = sourceSheet?.rows ?? [];
+    sourceColumns = sourceSheet?.columns ?? [];
+    sourceSheetName = sourceSheet?.sheetName;
+  }
+
+  const columns = args.columns ?? sourceColumns;
+  const providedRows = args.rows ?? [];
+  const appendRows = args.appendRows ?? [];
+  const rows = providedRows.length ? providedRows : [...sourceRows, ...appendRows];
+  const title = args.title.trim();
+  const templated = applySpreadsheetTemplate({
+    title,
+    sheetName: args.sheetName ?? sourceSheetName,
+    columns: columns.length ? columns : ["Item", "Status", "Notes"],
+    rows,
+    template: args.template,
+  });
+
+  const buffer = await buildEnhancedSpreadsheetBuffer({
+    sheetName: templated.sheetName,
+    columns: templated.columns,
+    rows: templated.rows,
+    meta: {
+      title,
+      generatedBy: employeeId,
+      source: args.sourceArtifactId
+        ? `artifact.updateSpreadsheet (${args.sourceArtifactId})`
+        : "artifact.updateSpreadsheet",
+    },
+  });
+  const previewMd = spreadsheetMarkdownPreview({
+    columns: templated.columns,
+    rows: templated.rows,
+    sheetName: templated.sheetName,
+  });
+
+  const artifactId = await createArtifactRow(client, {
+    workspaceId: job.workspaceId,
+    employeeId,
+    roomId: ctx.roomId,
+    topicId: ctx.topicId,
+    triggerMessageId: ctx.triggerMessageId,
+    title,
+    artifactType: "report",
+    contentMarkdown: `# ${title}\n\n${previewMd}`,
+    contentJson: {
+      kind: "spreadsheet",
+      sourceArtifactId: args.sourceArtifactId ?? null,
+      template: args.template ?? null,
+      columns: templated.columns,
+      rows: templated.rows,
+      rowCount: templated.rows.length,
+      sheetName: templated.sheetName ?? "Sheet1",
+    },
+  });
+
+  const { exportId } = await persistBinaryExport(client, {
+    workspaceId: job.workspaceId,
+    employeeId,
+    roomId: ctx.roomId,
+    topicId: ctx.topicId,
+    title,
+    ext: "xlsx",
+    mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    buffer,
+    artifactId,
+    exportType: "artifact_bundle",
+  });
+
+  const summary = `Updated spreadsheet "${title}" (${templated.rows.length} rows) — saved to Drive.`;
+  await writeArtifactWorkLog(client, job, {
+    action: "artifact_spreadsheet_updated",
+    summary,
+    artifactId,
+    toolName: "artifact.updateSpreadsheet",
+  });
+
+  const result = { artifactId, exportId, title, rowCount: templated.rows.length };
+  await recordArtifactRun(client, job, {
+    toolName: "artifact.updateSpreadsheet",
+    artifactId,
+    exportId,
+    templateId: args.template ?? null,
+    inputPayload: args,
+    outputPayload: result,
+  });
+
+  return { result, costUsd: 0.003, summary };
+}
+
+async function handleConvertFileJob(
+  client: SupabaseClient,
+  job: IntegrationJobRecord,
+): Promise<JobHandlerResult> {
+  const payload = job.payload as JobPayload;
+  const args = payload.args as ConvertFileArgs;
+  const ctx = payload.ctx ?? {};
+  const employeeId = job.employeeId ?? ctx.employeeId;
+  if (!employeeId) throw new Error("Missing employee for conversion job.");
+  if (!args.sourceArtifactId && !args.sections?.length) {
+    throw new Error("artifact.convertFile needs sourceArtifactId or sections in this MVP.");
+  }
+
+  const source = args.sourceArtifactId
+    ? await loadArtifact(client, job.workspaceId, args.sourceArtifactId)
+    : null;
+  if (args.sourceArtifactId && !source) throw new Error("Source artifact not found.");
+
+  const sourceMarkdown = source?.contentMarkdown ?? "";
+  const title = (args.title ?? source?.title ?? "Converted artifact").trim();
+  const sections = args.sections?.length
+    ? args.sections
+    : markdownToSections(sourceMarkdown);
+  const generatedAt = new Date().toISOString();
+  let buffer: Buffer;
+  let ext: string = args.targetFormat;
+  let mimeType = "application/octet-stream";
+  let exportType = "artifact_conversion";
+
+  if (args.targetFormat === "pdf") {
+    buffer = await buildHtmlPdfBuffer({ title, sections, generatedBy: employeeId, generatedAt });
+    mimeType = "application/pdf";
+    exportType = "report";
+  } else if (args.targetFormat === "docx") {
+    buffer = await buildDocxBuffer({ title, sections, generatedBy: employeeId, generatedAt });
+    mimeType = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+    exportType = "document";
+  } else if (args.targetFormat === "pptx") {
+    buffer = await buildPresentationBuffer({
+      title,
+      slides: sections.map((section) => ({
+        title: section.heading,
+        bullets: section.body.split(/\n+/).map((line) => line.replace(/^[-*]\s*/, "").trim()).filter(Boolean).slice(0, 6),
+      })),
+      generatedBy: employeeId,
+      generatedAt,
+    });
+    mimeType = "application/vnd.openxmlformats-officedocument.presentationml.presentation";
+    exportType = "presentation";
+  } else if (args.targetFormat === "xlsx") {
+    const sourceSheet = source ? rowsFromContentJson(source.contentJson) : null;
+    const columns = sourceSheet?.columns ?? ["Section", "Content"];
+    const rows = sourceSheet?.rows?.length
+      ? sourceSheet.rows
+      : sections.map((section) => [section.heading, section.body]);
+    buffer = await buildEnhancedSpreadsheetBuffer({
+      sheetName: "Converted",
+      columns,
+      rows,
+      meta: { title, generatedBy: employeeId, source: "artifact.convertFile" },
+    });
+    mimeType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+    exportType = "artifact_bundle";
+  } else {
+    ext = "md";
+    buffer = Buffer.from(sourceMarkdown || buildReportMarkdown({ title, sections, generatedBy: employeeId, generatedAt }), "utf8");
+    mimeType = "text/markdown";
+  }
+
+  const artifactId = await createArtifactRow(client, {
+    workspaceId: job.workspaceId,
+    employeeId,
+    roomId: ctx.roomId,
+    topicId: ctx.topicId,
+    triggerMessageId: ctx.triggerMessageId,
+    title,
+    artifactType: "report",
+    contentMarkdown: sourceMarkdown || buildReportMarkdown({ title, sections, generatedBy: employeeId, generatedAt }),
+    contentJson: {
+      kind: "conversion",
+      targetFormat: args.targetFormat,
+      sourceArtifactId: args.sourceArtifactId ?? null,
+    },
+  });
+
+  const { exportId } = await persistBinaryExport(client, {
+    workspaceId: job.workspaceId,
+    employeeId,
+    roomId: ctx.roomId,
+    topicId: ctx.topicId,
+    title,
+    ext,
+    mimeType,
+    buffer,
+    artifactId,
+    exportType,
+  });
+
+  const summary = `Converted "${title}" to ${args.targetFormat.toUpperCase()} and saved it to Drive.`;
+  await writeArtifactWorkLog(client, job, {
+    action: "artifact_file_converted",
+    summary,
+    artifactId,
+    toolName: "artifact.convertFile",
+  });
+
+  const result = { artifactId, exportId, title, targetFormat: args.targetFormat };
+  await recordArtifactRun(client, job, {
+    toolName: "artifact.convertFile",
+    artifactId,
+    exportId,
+    templateId: null,
+    inputPayload: args,
+    outputPayload: result,
+  });
+
+  return { result, costUsd: 0.005, summary };
+}
+
+async function handleSaveToDriveJob(
+  client: SupabaseClient,
+  job: IntegrationJobRecord,
+): Promise<JobHandlerResult> {
+  const payload = job.payload as JobPayload;
+  const args = payload.args as SaveToDriveArgs;
+  const ctx = payload.ctx ?? {};
+  const employeeId = job.employeeId ?? ctx.employeeId;
+  if (!employeeId) throw new Error("Missing employee for Drive export job.");
+
+  const source = await loadArtifact(client, job.workspaceId, args.artifactId);
+  if (!source) throw new Error("Artifact not found.");
+  const title = (args.title ?? source.title).trim();
+  const sections = markdownToSections(source.contentMarkdown);
+  const exportFormat = args.exportFormat ?? "markdown";
+  const generatedAt = new Date().toISOString();
+
+  let buffer: Buffer;
+  let ext = "md";
+  let mimeType = "text/markdown";
+  if (exportFormat === "pdf") {
+    ext = "pdf";
+    mimeType = "application/pdf";
+    buffer = await buildHtmlPdfBuffer({ title, sections, generatedBy: employeeId, generatedAt });
+  } else if (exportFormat === "docx") {
+    ext = "docx";
+    mimeType = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+    buffer = await buildDocxBuffer({ title, sections, generatedBy: employeeId, generatedAt });
+  } else {
+    buffer = Buffer.from(source.contentMarkdown, "utf8");
+  }
+
+  const { exportId } = await persistBinaryExport(client, {
+    workspaceId: job.workspaceId,
+    employeeId,
+    roomId: ctx.roomId,
+    topicId: ctx.topicId,
+    title,
+    ext,
+    mimeType,
+    buffer,
+    artifactId: source.id,
+    exportType: "artifact_export",
+  });
+
+  const summary = `Saved "${title}" to Drive as ${exportFormat}.`;
+  await writeArtifactWorkLog(client, job, {
+    action: "artifact_saved_to_drive",
+    summary,
+    artifactId: source.id,
+    toolName: "artifact.saveToDrive",
+  });
+
+  const result = { artifactId: source.id, exportId, title, exportFormat };
+  await recordArtifactRun(client, job, {
+    toolName: "artifact.saveToDrive",
+    artifactId: source.id,
+    exportId,
+    templateId: null,
+    inputPayload: args,
+    outputPayload: result,
+  });
+
+  return { result, costUsd: 0.002, summary };
+}
+
 registerJobHandler("artifact_xlsx", handleSpreadsheetJob);
 registerJobHandler("artifact_pdf", handlePdfReportJob);
+registerJobHandler("artifact_docx", handleDocxJob);
+registerJobHandler("artifact_pptx", handlePresentationJob);
+registerJobHandler("artifact_xlsx_update", handleUpdateSpreadsheetJob);
+registerJobHandler("artifact_convert", handleConvertFileJob);
+registerJobHandler("artifact_save_to_drive", handleSaveToDriveJob);

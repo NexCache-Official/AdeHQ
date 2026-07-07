@@ -203,6 +203,58 @@ export const CreatePdfReportArgsSchema = z.object({
 });
 export type CreatePdfReportArgs = z.infer<typeof CreatePdfReportArgsSchema>;
 
+export const CreateDocxArgsSchema = z.object({
+  title: z.string().min(1),
+  summary: z.string().optional(),
+  sections: z.array(ReportSectionSchema).min(1).max(40),
+  template: z.enum(["business_brief", "sales_outreach_brief", "investor_brief", "research_report"]).optional(),
+});
+export type CreateDocxArgs = z.infer<typeof CreateDocxArgsSchema>;
+
+export const PresentationSlideSchema = z.object({
+  title: z.string().min(1),
+  bullets: z.array(z.string().min(1)).default([]),
+  notes: z.string().optional(),
+});
+
+export const CreatePresentationArgsSchema = z.object({
+  title: z.string().min(1),
+  subtitle: z.string().optional(),
+  slides: z.array(PresentationSlideSchema).min(1).max(30),
+  template: z.enum(["sales_deck", "investor_update", "campaign_review", "research_brief"]).optional(),
+});
+export type CreatePresentationArgs = z.infer<typeof CreatePresentationArgsSchema>;
+
+export const UpdateSpreadsheetArgsSchema = z.object({
+  title: z.string().min(1),
+  sourceArtifactId: z.string().optional(),
+  sheetName: z.string().optional(),
+  columns: z.array(z.string().min(1)).min(1).max(40).optional(),
+  rows: z.array(SpreadsheetRowSchema).max(500).optional(),
+  appendRows: z.array(SpreadsheetRowSchema).max(500).optional(),
+  template: z
+    .enum(["sales_pipeline", "investor_target", "content_calendar", "market_research"])
+    .optional(),
+});
+export type UpdateSpreadsheetArgs = z.infer<typeof UpdateSpreadsheetArgsSchema>;
+
+export const ConvertFileArgsSchema = z.object({
+  title: z.string().optional(),
+  sourceArtifactId: z.string().optional(),
+  sourceExportId: z.string().optional(),
+  sourceFileId: z.string().optional(),
+  targetFormat: z.enum(["pdf", "docx", "pptx", "xlsx", "markdown"]),
+  sections: z.array(ReportSectionSchema).optional(),
+});
+export type ConvertFileArgs = z.infer<typeof ConvertFileArgsSchema>;
+
+export const SaveToDriveArgsSchema = z.object({
+  artifactId: z.string().min(1),
+  title: z.string().optional(),
+  exportFormat: z.enum(["markdown", "pdf", "docx"]).optional(),
+});
+export type SaveToDriveArgs = z.infer<typeof SaveToDriveArgsSchema>;
+
 // ---------------------------------------------------------------------------
 // Preview helpers
 // ---------------------------------------------------------------------------
@@ -460,6 +512,126 @@ const createPdfReport: ToolDefinition<CreatePdfReportArgs> = {
   }),
 };
 
+const createDocx: ToolDefinition<CreateDocxArgs> = {
+  name: "artifact.createDocx",
+  domain: "artifact",
+  provider: "internal",
+  description: "Generate a formatted Word-compatible DOCX document and save it to Drive.",
+  readOnly: false,
+  risk: "low",
+  approval: "none",
+  asyncJobType: "artifact_docx",
+  argsSchema: CreateDocxArgsSchema,
+  promptUsage:
+    'artifact.createDocx — args: { "title": "Sales brief", "template"?: "business_brief"|"sales_outreach_brief"|"investor_brief"|"research_report", "summary"?: "...", "sections": [{ "heading": "Overview", "body": "..." }] }',
+  buildPreview: (args) => ({
+    title: `Document — ${args.title}`,
+    summary: args.summary ?? `${args.title} with ${args.sections.length} sections${args.template ? ` (${args.template})` : ""}.`,
+    fields: fields([
+      ["Title", args.title],
+      ["Template", args.template],
+      ["Sections", String(args.sections.length)],
+    ]),
+    risk: "low",
+  }),
+};
+
+const createPresentation: ToolDefinition<CreatePresentationArgs> = {
+  name: "artifact.createPresentation",
+  domain: "artifact",
+  provider: "internal",
+  description: "Generate a PowerPoint presentation and save it to Drive.",
+  readOnly: false,
+  risk: "low",
+  approval: "none",
+  asyncJobType: "artifact_pptx",
+  argsSchema: CreatePresentationArgsSchema,
+  promptUsage:
+    'artifact.createPresentation — args: { "title": "Investor update", "template"?: "sales_deck"|"investor_update"|"campaign_review"|"research_brief", "slides": [{ "title": "Overview", "bullets": ["Point"] }] }',
+  buildPreview: (args) => ({
+    title: `Presentation — ${args.title}`,
+    summary: `${args.title}: ${args.slides.length} slides${args.template ? ` (${args.template})` : ""}.`,
+    fields: fields([
+      ["Title", args.title],
+      ["Template", args.template],
+      ["Slides", String(args.slides.length)],
+    ]),
+    risk: "low",
+  }),
+};
+
+const updateSpreadsheet: ToolDefinition<UpdateSpreadsheetArgs> = {
+  name: "artifact.updateSpreadsheet",
+  domain: "artifact",
+  provider: "internal",
+  description: "Create an updated Excel workbook from existing or appended spreadsheet rows and save it to Drive.",
+  readOnly: false,
+  risk: "low",
+  approval: "none",
+  asyncJobType: "artifact_xlsx_update",
+  argsSchema: UpdateSpreadsheetArgsSchema,
+  promptUsage:
+    'artifact.updateSpreadsheet — args: { "title": "Updated pipeline", "sourceArtifactId"?, "columns"?: ["Company"], "rows"?: [["Acme"]], "appendRows"?: [["New row"]], "sheetName"?: "Pipeline" }',
+  buildPreview: (args) => ({
+    title: `Update spreadsheet — ${args.title}`,
+    summary: `${args.title}: ${(args.rows ?? args.appendRows ?? []).length} provided rows${args.sourceArtifactId ? " plus source artifact" : ""}.`,
+    fields: fields([
+      ["Title", args.title],
+      ["Source artifact", args.sourceArtifactId],
+      ["Template", args.template],
+    ]),
+    risk: "low",
+  }),
+};
+
+const convertFile: ToolDefinition<ConvertFileArgs> = {
+  name: "artifact.convertFile",
+  domain: "artifact",
+  provider: "internal",
+  description: "Convert an AdeHQ artifact/export into PDF, DOCX, PPTX, XLSX, or Markdown and save it to Drive.",
+  readOnly: false,
+  risk: "low",
+  approval: "none",
+  asyncJobType: "artifact_convert",
+  argsSchema: ConvertFileArgsSchema,
+  promptUsage:
+    'artifact.convertFile — args: { "sourceArtifactId" or "sourceExportId" or "sourceFileId", "targetFormat": "pdf"|"docx"|"pptx"|"xlsx"|"markdown", "title"? }',
+  buildPreview: (args) => ({
+    title: `Convert file — ${args.targetFormat.toUpperCase()}`,
+    summary: `Convert ${args.sourceArtifactId ?? args.sourceExportId ?? args.sourceFileId ?? "provided content"} to ${args.targetFormat.toUpperCase()}.`,
+    fields: fields([
+      ["Target format", args.targetFormat],
+      ["Source artifact", args.sourceArtifactId],
+      ["Source export", args.sourceExportId],
+      ["Source file", args.sourceFileId],
+    ]),
+    risk: "low",
+  }),
+};
+
+const saveToDrive: ToolDefinition<SaveToDriveArgs> = {
+  name: "artifact.saveToDrive",
+  domain: "artifact",
+  provider: "internal",
+  description: "Export an existing AdeHQ artifact to Drive as Markdown, PDF, or DOCX.",
+  readOnly: false,
+  risk: "low",
+  approval: "none",
+  asyncJobType: "artifact_save_to_drive",
+  argsSchema: SaveToDriveArgsSchema,
+  promptUsage:
+    'artifact.saveToDrive — args: { "artifactId": "art_...", "title"?, "exportFormat"?: "markdown"|"pdf"|"docx" }',
+  buildPreview: (args) => ({
+    title: `Save artifact — ${args.title ?? args.artifactId}`,
+    summary: `Save artifact ${args.artifactId} to Drive as ${args.exportFormat ?? "markdown"}.`,
+    fields: fields([
+      ["Artifact", args.artifactId],
+      ["Format", args.exportFormat ?? "markdown"],
+    ]),
+    risk: "low",
+  }),
+};
+
 const createCampaign: ToolDefinition<CreateCampaignArgs> = {
   name: "social.createCampaign",
   domain: "social",
@@ -513,6 +685,15 @@ const createContentPost: ToolDefinition<DraftPostArgs> = {
   description: "Create a content calendar post (alias for social.draftPost).",
   promptUsage:
     'calendar.createContentPost — args: { "title": "Launch teaser", "body": "...", "campaignName"?, "platform"?: "linkedin", "scheduledAt"? }',
+};
+
+const createCalendarCampaign: ToolDefinition<CreateCampaignArgs> = {
+  ...createCampaign,
+  name: "calendar.createCampaign",
+  domain: "calendar",
+  description: "Create a content calendar campaign.",
+  promptUsage:
+    'calendar.createCampaign — args: { "name": "Q3 launch", "description"?, "startDate"?: "2026-07-01", "endDate"?: "2026-09-30" }',
 };
 
 const scheduleDraft: ToolDefinition<ScheduleDraftArgs> = {
@@ -666,7 +847,13 @@ const TOOL_DEFINITIONS = [
   createTask,
   createSpreadsheet,
   createPdfReport,
+  createDocx,
+  createPresentation,
+  updateSpreadsheet,
+  convertFile,
+  saveToDrive,
   createCampaign,
+  createCalendarCampaign,
   draftPost,
   createContentPost,
   scheduleDraft,

@@ -79,6 +79,16 @@ export function reconcileClaimedActions(
     counts.memoryCount > 0;
 
   if (producedRealEffect) {
+    if (
+      counts.toolFailureCount > 0 &&
+      replyClaimsCompletedAction(reply) &&
+      !/\b(failed|couldn'?t|could not|wasn'?t able|some actions failed)\b/i.test(reply)
+    ) {
+      return {
+        reply: `${reply}\n\nSome actions failed — see the cards below for details.`,
+        falseClaim: true,
+      };
+    }
     return { reply, falseClaim: false };
   }
 

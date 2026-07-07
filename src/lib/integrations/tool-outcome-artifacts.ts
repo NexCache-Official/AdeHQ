@@ -13,7 +13,13 @@ const TOOL_LABELS: Record<string, string> = {
   "tasks.createTask": "follow-up task",
   "artifact.createSpreadsheet": "spreadsheet",
   "artifact.createPdfReport": "PDF report",
+  "artifact.createDocx": "Word document",
+  "artifact.createPresentation": "PowerPoint deck",
+  "artifact.updateSpreadsheet": "spreadsheet update",
+  "artifact.convertFile": "file conversion",
+  "artifact.saveToDrive": "Drive export",
   "social.createCampaign": "campaign",
+  "calendar.createCampaign": "campaign",
   "social.draftPost": "social post",
   "calendar.createContentPost": "content post",
   "calendar.scheduleDraft": "schedule post",
@@ -246,7 +252,7 @@ export function toolReceiptArtifact(result: ToolCallResult): MessageArtifact | n
 /** Inline chat chips for non-success tool outcomes the user must see. */
 export function toolOutcomeArtifact(
   result: ToolCallResult,
-  retry?: { args?: Record<string, unknown>; idempotencyKey?: string },
+  retry?: { args?: Record<string, unknown>; idempotencyKey?: string; triggerMessageId?: string },
 ): MessageArtifact | null {
   if (result.status === "success" || result.status === "preview" || result.status === "approval_pending") {
     return null;
@@ -294,8 +300,9 @@ export function toolOutcomeArtifact(
         subtitle: result.error,
         toolRunId: result.toolRunId,
         href: result.toolRunId ? `/admin/tool-runs?id=${encodeURIComponent(result.toolRunId)}` : undefined,
-        retryArgs: retry?.args,
+        retryArgs: result.inputArgs ?? retry?.args,
         idempotencyKey: retry?.idempotencyKey,
+        triggerMessageId: result.triggerMessageId ?? retry?.triggerMessageId,
       },
     };
   }
@@ -307,6 +314,7 @@ export function mergeToolOutcomeArtifacts(
   results: ToolCallResult[],
   existing: MessageArtifact[],
   sourceCalls?: ToolCallEffect[],
+  options?: { triggerMessageId?: string },
 ): MessageArtifact[] {
   const merged = [...existing];
   const seen = new Set(existing.map((a) => `${a.type}:${a.id}`));
@@ -315,7 +323,11 @@ export function mergeToolOutcomeArtifacts(
     const call = sourceCalls?.[index];
     const retry =
       call && result.status === "failed"
-        ? { args: call.args, idempotencyKey: result.idempotencyKey }
+        ? {
+            args: result.inputArgs ?? call.args,
+            idempotencyKey: result.idempotencyKey,
+            triggerMessageId: result.triggerMessageId ?? options?.triggerMessageId,
+          }
         : undefined;
     for (const artifact of [toolReceiptArtifact(result), toolOutcomeArtifact(result, retry)]) {
       if (!artifact) continue;

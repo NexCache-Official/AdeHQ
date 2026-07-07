@@ -66,6 +66,17 @@ function main() {
     expectTrue(result.notice === undefined, "no notice");
   });
 
+  test("partial tool failure appends an honest caveat", () => {
+    const result = reconcileClaimedActions(REAL_CRM_CLAIM, {
+      ...NOTHING,
+      toolSuccessCount: 2,
+      toolFailureCount: 1,
+    });
+    expectTrue(result.falseClaim, "partial completion claim should be adjusted");
+    expectTrue(/Some actions failed/i.test(result.reply), "reply should mention partial failure");
+    expectTrue(result.notice === undefined, "cards already show individual failures");
+  });
+
   test("claim backed by a created task passes through", () => {
     const result = reconcileClaimedActions("Added a follow-up task for Friday.", {
       ...NOTHING,

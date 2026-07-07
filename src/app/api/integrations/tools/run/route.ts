@@ -26,9 +26,29 @@ type RunToolBody = {
   args?: Record<string, unknown>;
   roomId?: string;
   topicId?: string;
+  triggerMessageId?: string;
   approvalId?: string;
   idempotencyKey?: string;
 };
+
+async function loadTriggerMessageText(
+  client: Awaited<ReturnType<typeof requireAuthUser>>["client"],
+  workspaceId: string,
+  triggerMessageId?: string,
+): Promise<string | undefined> {
+  if (!triggerMessageId) return undefined;
+  const { data, error } = await client
+    .from("messages")
+    .select("content")
+    .eq("workspace_id", workspaceId)
+    .eq("id", triggerMessageId)
+    .maybeSingle();
+  if (error) {
+    console.warn("[AdeHQ integrations tools/run] trigger message fetch failed", error);
+    return undefined;
+  }
+  return data?.content ? String(data.content) : undefined;
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -69,6 +89,11 @@ export async function POST(request: NextRequest) {
       body.workspaceId,
       employee,
     );
+    const triggerMessageText = await loadTriggerMessageText(
+      client,
+      body.workspaceId,
+      body.triggerMessageId,
+    );
 
     const result = await runToolCall(
       client,
@@ -81,6 +106,8 @@ export async function POST(request: NextRequest) {
         requestedByRole: role as WorkspaceMemberRole,
         roomId: body.roomId,
         topicId: body.topicId,
+        triggerMessageId: body.triggerMessageId,
+        triggerMessageText,
       },
       {
         tool: body.tool,

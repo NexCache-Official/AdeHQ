@@ -38,6 +38,7 @@ const INTERNAL_HANDLERS: AdapterHandlerMap = {
   "email.createDraft": createEmailDraft as AdapterHandler,
   "tasks.createTask": createTask as AdapterHandler,
   "social.createCampaign": createCampaign as AdapterHandler,
+  "calendar.createCampaign": createCampaign as AdapterHandler,
   "social.draftPost": draftPost as AdapterHandler,
   "calendar.createContentPost": createContentPost as AdapterHandler,
   "calendar.scheduleDraft": scheduleDraft as AdapterHandler,

@@ -1,5 +1,6 @@
 import { ModelResponseSchema } from "./schemas";
 import type { EmployeeResponse } from "./types";
+import { coerceToolCall } from "@/lib/integrations/coerce-tool-args";
 
 type ParsedEffects = EmployeeResponse["effect"];
 
@@ -95,14 +96,7 @@ function normalizeToolCalls(raw: unknown): NonNullable<ParsedEffects["toolCalls"
   return raw
     .filter((item): item is Record<string, unknown> => !!item && typeof item === "object")
     .filter((item) => typeof item.tool === "string" && (item.tool as string).includes("."))
-    .map((item) => ({
-      tool: String(item.tool),
-      mode: item.mode === "preview" ? ("preview" as const) : ("execute" as const),
-      args:
-        item.args && typeof item.args === "object" && !Array.isArray(item.args)
-          ? (item.args as Record<string, unknown>)
-          : {},
-    }));
+    .map((item) => coerceToolCall(String(item.tool), item));
 }
 
 function normalizeEmailDrafts(raw: unknown): NonNullable<ParsedEffects["emailDrafts"]> {

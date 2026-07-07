@@ -30,6 +30,8 @@ import {
 } from "@/lib/integrations/tool-runs";
 import { getInternalHandler } from "./internal-executor";
 import { enqueueIntegrationJob } from "@/lib/integrations/jobs/queue";
+import { coerceToolCall } from "@/lib/integrations/coerce-tool-args";
+import { hydrateToolCallArgs, type ToolHydrationState } from "@/lib/integrations/hydrate-tool-args";
 import { nowISO, uid } from "@/lib/utils";
 
 export type RunToolCallOptions = {
@@ -196,17 +198,49 @@ export async function runToolCall(
   options: RunToolCallOptions,
 ): Promise<ToolCallResult> {
   const mode: ToolCallMode = request.mode === "preview" ? "preview" : "execute";
-  const tool = getToolDefinition(request.tool);
+  const normalizedRequest = coerceToolCall(request.tool, request);
+  const tool = getToolDefinition(normalizedRequest.tool);
   if (!tool) {
     return failedResult(request, mode, `Unknown tool "${request.tool}".`);
   }
 
-  const parsed = tool.argsSchema.safeParse(request.args ?? {});
+  const argsForParse = hydrateToolCallArgs(tool.name, normalizedRequest.args, {
+    userMessage: ctx.triggerMessageText,
+    state: ctx.toolHydrationState as ToolHydrationState | undefined,
+  });
+  const parsed = tool.argsSchema.safeParse(argsForParse);
   if (!parsed.success) {
     const issues = parsed.error.issues
       .map((i) => `${i.path.join(".") || "args"}: ${i.message}`)
       .join("; ");
-    return failedResult(request, mode, `Invalid arguments for ${tool.name} — ${issues}`);
+    let runId: string | undefined;
+    try {
+      const run = await createToolRun(client, {
+        ctx,
+        capabilityDomain: tool.domain,
+        toolName: tool.name,
+        mode,
+        status: "failed",
+        inputPayload: argsForParse,
+      });
+      runId = run.id;
+    } catch (error) {
+      console.warn("[AdeHQ integrations] invalid-args tool run write failed", error);
+    }
+    const message = `Invalid arguments for ${tool.name} — ${issues}`;
+    await writeWorkLog(client, ctx, {
+      action: "integration_tool_failed",
+      summary: `${tool.name} failed: ${message}`,
+      toolUsed: tool.name,
+      status: "failed",
+    });
+    return {
+      ...failedResult(request, mode, message),
+      tool: tool.name,
+      toolRunId: runId,
+      inputArgs: argsForParse,
+      triggerMessageId: ctx.triggerMessageId,
+    };
   }
   const args = parsed.data as Record<string, unknown>;
 

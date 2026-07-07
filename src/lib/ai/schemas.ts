@@ -76,6 +76,34 @@ export const ToolCallEffectSchema = z.object({
   tool: z.string(),
   mode: z.enum(["preview", "execute"]).optional(),
   args: z.record(z.string(), z.unknown()).default({}),
+}).superRefine((value, ctx) => {
+  const knownWritePrefixes = [
+    "crm.create",
+    "crm.update",
+    "email.create",
+    "tasks.create",
+    "artifact.create",
+    "artifact.update",
+    "artifact.convert",
+    "artifact.save",
+    "social.create",
+    "social.draft",
+    "calendar.create",
+    "calendar.schedule",
+    "investor.create",
+    "investor.update",
+    "investor.score",
+  ];
+  if (
+    knownWritePrefixes.some((prefix) => value.tool.startsWith(prefix)) &&
+    Object.keys(value.args ?? {}).length === 0
+  ) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["args"],
+      message: "Known write tools must include a non-empty args object.",
+    });
+  }
 });
 
 export const MemorySuggestionEffectSchema = z.object({

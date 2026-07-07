@@ -258,6 +258,31 @@ async function main() {
 
   check("integration_tool_runs rows written", (toolRunCount ?? 0) >= toolCalls.length - 1);
 
+  console.log("\n=== GreenEdge empty-args repair path ===");
+  const emptyArgsMessage =
+    "Create a company called GreenEdge Robotics Hydration, add Praveen as the contact, log a £5,000 qualified deal, draft an outreach email, create a follow-up task, and make a spreadsheet summary.";
+  const emptyArgsOutcome = await executeEmployeeToolCalls(client, {
+    workspaceId,
+    employee,
+    roomId,
+    topicId,
+    triggerMessageId: uid("msg"),
+    triggerMessageText: emptyArgsMessage,
+    toolCalls: [
+      { tool: "crm.createCompany", mode: "execute" as const, args: {} },
+      { tool: "crm.createContact", mode: "execute" as const, args: {} },
+      { tool: "crm.createDeal", mode: "execute" as const, args: {} },
+      { tool: "email.createDraft", mode: "execute" as const, args: {} },
+      { tool: "tasks.createTask", mode: "execute" as const, args: {} },
+      { tool: "artifact.createSpreadsheet", mode: "execute" as const, args: {} },
+    ],
+  });
+  check(
+    "empty args hydrated without failed tool calls",
+    emptyArgsOutcome.results.every((r) => r.status === "success" || r.status === "queued"),
+    emptyArgsOutcome.results.map((r) => `${r.tool}:${r.status}:${r.error ?? ""}`).join("; "),
+  );
+
   console.log("\n=== Receipt artifact labels ===");
   for (const a of artifacts) {
     console.log(`  · [${a.type}] ${a.label}`);

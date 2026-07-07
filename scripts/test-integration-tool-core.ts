@@ -78,8 +78,8 @@ run("preview builds human-readable cards with currency formatting", () => {
   assert(!!amountField && amountField.value.includes("5,000"), "amount formatted with separators");
 });
 
-run("approval policy: deals suggested, reads none, drafts none", () => {
-  assert(getToolDefinition("crm.createDeal")!.approval === "suggested", "deal needs suggested approval");
+run("approval policy: internal writes execute, reads none, drafts none", () => {
+  assert(getToolDefinition("crm.createDeal")!.approval === "none", "internal deal creation runs immediately");
   assert(getToolDefinition("crm.listContacts")!.approval === "none", "reads need no approval");
   assert(getToolDefinition("crm.listContacts")!.readOnly, "listContacts is read-only");
   assert(getToolDefinition("email.createDraft")!.approval === "none", "drafts run immediately");

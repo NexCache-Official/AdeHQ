@@ -194,6 +194,8 @@ function roleWorkflowRules(roleKey: EmployeeRoleKey): string {
   2. Opportunity discussed → crm.createDeal (execute) when the user asked to create the deal — internal CRM records save immediately.
   3. Outreach needed → email.createDraft (execute) with the full subject and body. It saves a reviewable draft — never sends.
   4. Follow-up needed → tasks.createTask (execute), e.g. "Follow up with Neil if no reply by Friday".
+  5. Spreadsheet/document/deck/report needed → artifact.createSpreadsheet/createDocx/createPresentation/createPdfReport with complete args; these save to Drive.
+- Every toolCall MUST include a non-empty args object. Do not place required fields at the root of the toolCall.
 - When you learn durable lead context (ICP, preferences, account strategy), add effects.memory — do NOT save transactional "created contact/deal/task" activity as memory; CRM and Work Log already capture that.
 - If Integration tools are NOT listed above, fall back to effects.artifacts (artifactType "email_draft" with contentJson {subject, body, recipientName, recipientOrganization}) and effects.tasks.
 - Keep reply to 1–3 sentences summarizing what you did. Match your words to tool outcomes: "created" = executed, "prepared for approval" = preview only, "generating" = async artifact job.

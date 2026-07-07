@@ -73,6 +73,7 @@ export function ToolResultInlineCard({
           args: artifact.meta.retryArgs ?? {},
           roomId: context!.roomId,
           topicId: context!.topicId,
+          triggerMessageId: artifact.meta.triggerMessageId,
           idempotencyKey: artifact.meta.idempotencyKey,
         }),
       });

@@ -57,6 +57,10 @@ export type ToolExecutionContext = {
   topicId?: string;
   agentRunId?: string;
   triggerMessageId?: string;
+  /** Original human text that caused the run, used only to repair weak model args. */
+  triggerMessageText?: string;
+  /** Mutable per-batch hydration state shared across sequential tool calls. */
+  toolHydrationState?: Record<string, unknown>;
 };
 
 export type ToolExecutionOutput = {
@@ -149,6 +153,7 @@ export type ToolCallResult = {
   /** Original args — used for retry UI on failed runs. */
   inputArgs?: Record<string, unknown>;
   idempotencyKey?: string;
+  triggerMessageId?: string;
 };
 
 /** Model-emitted tool call (effects.toolCalls[]). */
@@ -184,6 +189,7 @@ export type IntegrationToolRunRecord = {
   roomId?: string;
   topicId?: string;
   agentRunId?: string;
+  triggerMessageId?: string;
   capabilityDomain: string;
   toolName: string;
   provider: string;
