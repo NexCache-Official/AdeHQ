@@ -4,7 +4,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { AIEmployee, MentionRef, SavedArtifactType, WorkspaceMemberRole } from "@/lib/types";
 import { STATUS_META } from "@/lib/icons";
 import { cn } from "@/lib/utils";
-import { BROWSER_RESEARCH_UI_COPY } from "@/lib/ai/browser-research";
+import { BROWSER_RESEARCH_UI_COPY } from "@/lib/ai/browser-research/types";
 import { resolveMessageMentions, type MentionParticipant } from "@/lib/mentions";
 import { EmployeeAvatar, HumanAvatar } from "./EmployeeAvatar";
 import { FileArtifactCard } from "./ArtifactCard";

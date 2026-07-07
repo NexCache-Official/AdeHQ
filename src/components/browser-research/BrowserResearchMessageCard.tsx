@@ -1,12 +1,12 @@
 "use client";
 
-import type { BrowserResearchRun } from "@/lib/ai/browser-research";
 import {
   BROWSER_RESEARCH_UI_COPY,
   browserResearchFindingsSectionLabel,
   browserResearchRunLabel,
   browserResearchSourceSectionLabel,
-} from "@/lib/ai/browser-research";
+  type BrowserResearchRun,
+} from "@/lib/ai/browser-research/types";
 import { authHeaders } from "@/lib/api/auth-client";
 import { parseJsonResponse } from "@/lib/api/parse-json-response";
 import { Button } from "@/components/ui";

@@ -7,11 +7,13 @@ import {
   browserResearchFindingsSectionLabel,
   browserResearchRunLabel,
   browserResearchSourceSectionLabel,
-  canEmployeeUseBrowserResearch,
-  getBrowserResearchAccessLabel,
   type BrowserResearchProvider,
   type BrowserResearchRun,
-} from "@/lib/ai/browser-research";
+} from "@/lib/ai/browser-research/types";
+import {
+  canEmployeeUseBrowserResearch,
+  getBrowserResearchAccessLabel,
+} from "@/lib/ai/browser-research/permissions";
 import { authHeaders } from "@/lib/api/auth-client";
 import { useStore } from "@/lib/demo-store";
 import { Button, Card } from "@/components/ui";

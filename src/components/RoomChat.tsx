@@ -51,10 +51,8 @@ import {
 } from "lucide-react";
 import { EmployeeStatusDot } from "./EmployeeStatusBadge";
 import { formatEmployeeIntelligenceSummary } from "@/lib/ai/intelligence-policy";
-import {
-  canEmployeeUseBrowserResearch,
-  type BrowserResearchRun,
-} from "@/lib/ai/browser-research";
+import { canEmployeeUseBrowserResearch } from "@/lib/ai/browser-research/permissions";
+import type { BrowserResearchRun } from "@/lib/ai/browser-research/types";
 import {
   fetchBrowserResearchRun,
   fetchBrowserResearchRuns,
