@@ -229,7 +229,13 @@ export function toolReceiptArtifact(result: ToolCallResult): MessageArtifact | n
     }
 
     if (
-      (result.tool === "artifact.createSpreadsheet" || result.tool === "artifact.createPdfReport") &&
+      (result.tool === "artifact.createSpreadsheet" ||
+        result.tool === "artifact.createPdfReport" ||
+        result.tool === "artifact.createDocx" ||
+        result.tool === "artifact.createPresentation" ||
+        result.tool === "artifact.convertFile" ||
+        result.tool === "artifact.saveToDrive" ||
+        result.tool === "artifact.updateSpreadsheet") &&
       objectId
     ) {
       return {
@@ -268,7 +274,8 @@ export function toolOutcomeArtifact(
       meta: {
         toolName: result.tool,
         toolStatus: "queued",
-        subtitle: "Saved to Drive when ready. Check Work Log for progress.",
+        jobId: result.jobId,
+        subtitle: "Saved to Drive when ready. This usually takes a few seconds.",
         href: result.jobId ? `/work-log` : undefined,
       },
     };

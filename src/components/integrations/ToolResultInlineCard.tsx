@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import type { MessageArtifact } from "@/lib/types";
 import { authHeaders } from "@/lib/api/auth-client";
@@ -15,6 +15,46 @@ type ToolResultContext = {
   topicId?: string;
 };
 
+type IntegrationJobResponse = {
+  job?: {
+    status?: string;
+    errorMessage?: string;
+    result?: { artifactId?: string; title?: string; rowCount?: number };
+  };
+};
+
+function successArtifactFromJob(
+  prior: MessageArtifact,
+  job: NonNullable<IntegrationJobResponse["job"]>,
+): MessageArtifact {
+  const artifactId = job.result?.artifactId;
+  const title = job.result?.title ?? "file";
+  const tool = prior.meta?.toolName ?? "";
+  const kind = tool.includes("Spreadsheet") || tool.includes("spreadsheet")
+    ? "Spreadsheet"
+    : tool.includes("Pdf") || tool.includes("pdf")
+      ? "Report"
+      : tool.includes("Docx") || tool.includes("docx")
+        ? "Document"
+        : tool.includes("Presentation") || tool.includes("presentation")
+          ? "Presentation"
+          : "File";
+
+  return {
+    type: "tool_result",
+    id: artifactId ?? prior.id,
+    label: `${kind} ready — ${title}`,
+    meta: {
+      toolName: prior.meta?.toolName,
+      toolStatus: "success",
+      href: artifactId
+        ? `/drive?artifact=${encodeURIComponent(artifactId)}`
+        : "/drive?section=exports",
+      subtitle: "Open in Drive (check Exports for the .xlsx download)",
+    },
+  };
+}
+
 export function ToolResultInlineCard({
   artifact,
   context,
@@ -22,17 +62,77 @@ export function ToolResultInlineCard({
   artifact: MessageArtifact;
   context?: ToolResultContext;
 }) {
+  const [display, setDisplay] = useState(artifact);
   const [retrying, setRetrying] = useState(false);
   const [retryMessage, setRetryMessage] = useState<string | null>(null);
 
-  const status = artifact.meta?.toolStatus ?? "failed";
-  const href = artifact.meta?.href;
+  const status = display.meta?.toolStatus ?? "failed";
+  const href = display.meta?.href;
   const canRetry =
     status === "failed" &&
-    artifact.meta?.toolName &&
+    display.meta?.toolName &&
     context?.workspaceId &&
     context?.employeeId &&
-    artifact.meta?.retryArgs;
+    display.meta?.retryArgs;
+
+  useEffect(() => {
+    setDisplay(artifact);
+  }, [artifact]);
+
+  useEffect(() => {
+    const jobId =
+      artifact.meta?.jobId ??
+      (artifact.meta?.toolStatus === "queued" && artifact.meta?.toolName?.startsWith("artifact.")
+        ? artifact.id
+        : undefined);
+    if (artifact.meta?.toolStatus !== "queued" || !jobId) return;
+
+    let cancelled = false;
+    let attempts = 0;
+
+    const poll = async () => {
+      if (cancelled || attempts > 30) return;
+      attempts += 1;
+      try {
+        const headers = await authHeaders();
+        const res = await fetch(`/api/integrations/jobs/${encodeURIComponent(jobId)}`, {
+          headers,
+          credentials: "include",
+        });
+        if (!res.ok) return;
+        const body = (await res.json()) as IntegrationJobResponse;
+        if (cancelled || !body.job) return;
+
+        if (body.job.status === "success") {
+          setDisplay(successArtifactFromJob(artifact, body.job));
+          return;
+        }
+        if (body.job.status === "failed") {
+          setDisplay({
+            ...artifact,
+            label: `Failed: ${artifact.meta?.toolName?.split(".").pop() ?? "action"}`,
+            meta: {
+              ...artifact.meta,
+              toolStatus: "failed",
+              error: body.job.errorMessage ?? "Background job failed.",
+              subtitle: body.job.errorMessage ?? "Background job failed.",
+            },
+          });
+          return;
+        }
+      } catch {
+        // keep polling
+      }
+      if (!cancelled) {
+        window.setTimeout(() => void poll(), 2000);
+      }
+    };
+
+    void poll();
+    return () => {
+      cancelled = true;
+    };
+  }, [artifact]);
 
   const Icon =
     status === "success"
@@ -56,7 +156,7 @@ export function ToolResultInlineCard({
             : "border-rose-200 bg-rose-50 text-rose-900";
 
   const retry = async () => {
-    if (!canRetry || !artifact.meta?.toolName) return;
+    if (!canRetry || !display.meta?.toolName) return;
     setRetrying(true);
     setRetryMessage(null);
     try {
@@ -68,21 +168,33 @@ export function ToolResultInlineCard({
         body: JSON.stringify({
           workspaceId: context!.workspaceId,
           employeeId: context!.employeeId,
-          tool: artifact.meta.toolName,
+          tool: display.meta.toolName,
           mode: "execute",
-          args: artifact.meta.retryArgs ?? {},
+          args: display.meta.retryArgs ?? {},
           roomId: context!.roomId,
           topicId: context!.topicId,
-          triggerMessageId: artifact.meta.triggerMessageId,
-          idempotencyKey: artifact.meta.idempotencyKey,
+          triggerMessageId: display.meta.triggerMessageId,
+          idempotencyKey: display.meta.idempotencyKey,
         }),
       });
       const body = (await res.json().catch(() => ({}))) as {
         error?: string;
-        result?: { status?: string; error?: string; output?: { summary?: string } };
+        result?: { status?: string; error?: string; output?: { summary?: string; objectId?: string } };
       };
       if (!res.ok) throw new Error(body.error ?? "Retry failed.");
       if (body.result?.status === "success") {
+        const objectId = body.result.output?.objectId;
+        setDisplay({
+          ...display,
+          label: body.result.output?.summary ?? "Action succeeded.",
+          meta: {
+            ...display.meta,
+            toolStatus: "success",
+            href: objectId ? `/drive?artifact=${objectId}` : "/drive",
+            subtitle: "Open in Drive",
+            error: undefined,
+          },
+        });
         setRetryMessage(body.result.output?.summary ?? "Action succeeded.");
       } else {
         throw new Error(body.result?.error ?? `Retry ${body.result?.status ?? "failed"}.`);
@@ -100,17 +212,19 @@ export function ToolResultInlineCard({
         className={cn("mt-0.5 h-4 w-4 shrink-0", status === "queued" && "animate-spin")}
       />
       <div className="min-w-0 flex-1">
-        <div className="font-medium">{artifact.label}</div>
-        {artifact.meta?.subtitle && (
-          <p className="mt-1 text-xs opacity-90">{artifact.meta.subtitle}</p>
+        <div className="font-medium">{display.label}</div>
+        {display.meta?.subtitle && (
+          <p className="mt-1 text-xs opacity-90">{display.meta.subtitle}</p>
         )}
-        {status === "queued" && !artifact.meta?.subtitle && (
+        {status === "queued" && !display.meta?.subtitle && (
           <p className="mt-1 flex items-center gap-1 text-xs opacity-80">
             <Clock className="h-3 w-3" />
-            Background job — check Work Log when complete.
+            Generating file — will update when ready.
           </p>
         )}
-        {retryMessage && <p className="mt-1 text-xs opacity-90">{retryMessage}</p>}
+        {retryMessage && status !== "success" && (
+          <p className="mt-1 text-xs opacity-90">{retryMessage}</p>
+        )}
         {canRetry && (
           <Button
             type="button"

@@ -245,6 +245,7 @@ export type MessageArtifact = {
     toolStatus?: "queued" | "failed" | "blocked" | "success" | "approval_pending";
     error?: string;
     toolRunId?: string;
+    jobId?: string;
     triggerMessageId?: string;
     idempotencyKey?: string;
     retryArgs?: Record<string, unknown>;

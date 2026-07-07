@@ -16,6 +16,7 @@ import { ensureDefaultEmployeeToolGrants } from "./permissions";
 import { getToolDefinition } from "./registry/tool-definitions";
 import { mergeToolOutcomeArtifacts } from "./tool-outcome-artifacts";
 import { coerceToolCall } from "./coerce-tool-args";
+import { drainQueuedToolResult } from "./jobs/drain-queued-result";
 import {
   createToolHydrationState,
   hydrateToolCallArgs,
@@ -126,7 +127,8 @@ export async function executeEmployeeToolCalls(
       { employee },
     );
     observeToolCallResult(coerced.tool, args, result, hydrationState);
-    results.push(result);
+    const drained = await drainQueuedToolResult(client, params.workspaceId, result);
+    results.push(drained);
   }
 
   return {
@@ -140,6 +142,8 @@ export async function executeEmployeeToolCalls(
     summaries: results.map((r) =>
       r.status === "success"
         ? (r.output?.summary ?? `${r.tool} succeeded`)
+        : r.status === "queued"
+          ? `${r.tool} still generating`
         : r.status === "approval_pending"
           ? `${r.tool} awaiting approval`
           : `${r.tool} ${r.status}${r.error ? `: ${r.error}` : ""}`,
