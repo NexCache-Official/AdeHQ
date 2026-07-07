@@ -53,6 +53,12 @@ function LoginForm() {
       router.replace(onboardingComplete ? "/" : "/onboarding");
     } catch (err) {
       const parsed = parseAuthError(err);
+      if (parsed.needsEmailConfirmation) {
+        // Unverified accounts belong on the dedicated verification page, not
+        // stuck on the login form.
+        router.replace(`/confirm-email?email=${encodeURIComponent(email.trim())}`);
+        return;
+      }
       setError(parsed.message);
       setNeedsConfirmation(parsed.needsEmailConfirmation);
       setShowResend(parsed.needsEmailConfirmation);

@@ -283,7 +283,10 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const loadRemote = useCallback(
-    async (user: User, preferredWorkspaceId?: string) => {
+    async (
+      user: User,
+      preferredWorkspaceId?: string,
+    ): Promise<{ onboardingComplete: boolean; hasWorkspace: boolean }> => {
       if (!isEmailConfirmed(user)) {
         await supabase.auth.signOut();
         authUserRef.current = null;
@@ -303,6 +306,13 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       setBackend("supabase");
       setHydrated(true);
       setError(null);
+
+      // Return the freshly loaded flags directly — stateRef is only updated
+      // inside the setState updater (next render), so reading it here is stale.
+      return {
+        onboardingComplete: loaded.onboardingComplete,
+        hasWorkspace: Boolean(loaded.workspace.id),
+      };
     },
     [setRemoteState],
   );
@@ -637,8 +647,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
             await supabase.auth.signOut();
             throw new Error("Email not confirmed");
           }
-          await loadRemote(data.user);
-          return { onboardingComplete: stateRef.current.onboardingComplete };
+          const loaded = await loadRemote(data.user);
+          return { onboardingComplete: loaded.onboardingComplete };
         } finally {
           authBusyRef.current = false;
         }

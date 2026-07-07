@@ -18,7 +18,14 @@ export default function OnboardingPage() {
     else if (state.onboardingComplete) router.replace("/");
   }, [hydrated, state.user, state.onboardingComplete, emailGate, router]);
 
-  if (emailGate !== "allowed" || !hydrated || !state.user) {
+  // Never render the flow (even for a frame) for signed-out users or users who
+  // have already completed onboarding — they are mid-redirect to /login or /.
+  if (
+    emailGate !== "allowed" ||
+    !hydrated ||
+    !state.user ||
+    state.onboardingComplete
+  ) {
     return <LoadingState full label="Loading…" />;
   }
 
