@@ -69,6 +69,8 @@ Rules:
 - CRITICAL: Distinguish PLANNED work from COMPLETED work. Never describe proposals, intentions, or future plans as finished outcomes.
 - Do not write "Alex will identify leads" as if it already happened. Use honest phrasing: "Alex proposed…", "Planned:", or "Still requires…".
 - nextActions are proposals — default status "Planned". Use "Completed" only when work logs or messages show the work was done.
+- Never include nextActions that duplicate an item already listed under Open tasks — reference existing tasks in whatHappened, currentDecision, or keyFacts instead.
+- Do not repeat the same nextAction twice. One card per distinct follow-up only.
 - Use status on nextActions: Planned | In progress | Completed | Waiting for clarification.
 - Do not claim live external research, web searches, lead lists, market sizing, or competitor data unless work logs reference browser/search/file tools or uploaded sources were used.
 - If employees discussed research or outreach but no tools ran, say what was proposed and note that live execution still requires browser/search access or uploaded data.
@@ -128,7 +130,7 @@ type BuildContextParams = {
   topicDescription?: string | null;
   existing?: TopicSummary | null;
   messages: Array<{ id: string; senderName: string; content: string; createdAt: string }>;
-  tasks: Array<{ title: string; status: string; priority: string }>;
+  tasks: Array<{ id?: string; title: string; status: string; priority: string }>;
   memory: Array<{ title: string; content: string; status: string }>;
   approvals: Array<{ title: string; status: string; risk: string }>;
   workLogs: Array<{ id: string; action: string; summary: string }>;
@@ -440,7 +442,7 @@ export async function loadTopicSummaryGenerationContext(
 
   let tasksQuery = client
     .from("tasks")
-    .select("title, status, priority, created_at")
+    .select("id, title, status, priority, created_at")
     .eq("workspace_id", workspaceId)
     .eq("topic_id", topicId)
     .limit(20);

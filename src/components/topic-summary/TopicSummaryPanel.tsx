@@ -1,8 +1,12 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import type { AIEmployee, MemoryEntry, MemoryScope, ProjectRoom, RoomMessage, RoomTopic } from "@/lib/types";
+import type { AIEmployee, MemoryEntry, MemoryScope, ProjectRoom, RoomMessage, RoomTopic, Task } from "@/lib/types";
 import type { TopicSummary } from "@/lib/topic-summary/types";
+import {
+  findMatchingOpenTask,
+  reconcileTopicSummaryNextActions,
+} from "@/lib/topic-summary/reconcile-next-actions";
 import {
   dismissMemorySuggestionClient,
   saveFileMemorySuggestionClient,
@@ -84,6 +88,7 @@ type TopicSummaryPanelProps = {
   onRegenerate?: () => void;
   onCreateTask?: (title: string, ownerEmployeeId?: string) => void;
   onMemorySaved?: (memory?: MemoryEntry, duplicate?: boolean) => void;
+  existingTasks?: Pick<Task, "id" | "title" | "status">[];
   compactActions?: boolean;
 };
 
@@ -104,6 +109,7 @@ export function TopicSummaryPanel({
   onRegenerate,
   onCreateTask,
   onMemorySaved,
+  existingTasks = [],
   compactActions = false,
 }: TopicSummaryPanelProps) {
   const [savingSummary, setSavingSummary] = useState(false);
@@ -165,7 +171,12 @@ export function TopicSummaryPanel({
     return !shouldHideSuggestion(suggestionState(index));
   });
 
-  const visibleNextActions = (summary?.nextActions ?? []).filter(
+  const reconciledNextActions = useMemo(() => {
+    const actions = summary?.nextActions ?? [];
+    return reconcileTopicSummaryNextActions(actions, existingTasks);
+  }, [summary?.nextActions, existingTasks]);
+
+  const visibleNextActions = reconciledNextActions.filter(
     (_, index) => !dismissedActions.has(index),
   );
 
@@ -439,8 +450,10 @@ export function TopicSummaryPanel({
       {visibleNextActions.length > 0 && (
         <OverviewSection title="Next actions">
           <ul className="space-y-2">
-            {summary!.nextActions.map((action, index) => {
+            {reconciledNextActions.map((action, index) => {
               if (dismissedActions.has(index)) return null;
+              const matchingTask = findMatchingOpenTask(action.title, existingTasks);
+              if (matchingTask) return null;
               const source = sourceLabelForSummaryItem(action.sourceMessageId, messages, "short");
               return (
                 <li

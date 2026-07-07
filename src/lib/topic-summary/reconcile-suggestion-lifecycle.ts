@@ -10,6 +10,7 @@ import {
 import { normalizeMemoryScope } from "@/lib/memory/scope-rules";
 import type { TopicSummary } from "./types";
 import { fetchTopicSummary, updateMemorySuggestionLifecycle } from "./persistence";
+import { reconcileTopicSummaryNextActions } from "./reconcile-next-actions";
 
 /** Mark suggestions as already_saved when matching active memory exists. Persists lifecycle updates. */
 export async function reconcileTopicSummarySuggestionLifecycle(
@@ -100,11 +101,25 @@ export async function fetchReconciledTopicSummary(
 ): Promise<TopicSummary | null> {
   const summary = await fetchTopicSummary(client, workspaceId, topicId);
   if (!summary) return null;
-  return reconcileTopicSummarySuggestionLifecycle(client, {
+  const reconciled = await reconcileTopicSummarySuggestionLifecycle(client, {
     workspaceId,
     roomId,
     topicId,
     userId,
     summary,
   });
+
+  const { data: taskRows } = await client
+    .from("tasks")
+    .select("id, title, status")
+    .eq("workspace_id", workspaceId)
+    .eq("topic_id", topicId);
+
+  return {
+    ...reconciled,
+    nextActions: reconcileTopicSummaryNextActions(
+      reconciled.nextActions,
+      (taskRows ?? []) as Array<{ id: string; title: string; status: string }>,
+    ),
+  };
 }

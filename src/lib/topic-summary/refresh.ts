@@ -10,6 +10,7 @@ import {
 import { fetchTopicSummary, suppressSummaryIfChatCleared, upsertTopicSummary } from "./persistence";
 import { fetchTopicChatClearedAtColumn } from "@/lib/conversation-context/epochs";
 import { reconcileTopicSummarySuggestionLifecycle } from "./reconcile-suggestion-lifecycle";
+import { reconcileTopicSummaryNextActions } from "./reconcile-next-actions";
 import {
   TOPIC_SUMMARY_AUTO_COOLDOWN_MS,
   type TopicSummary,
@@ -149,7 +150,7 @@ export async function refreshTopicSummary(
     currentDecision: generated.currentDecision?.trim() || null,
     openQuestions: generated.openQuestions,
     keyFacts: generated.keyFacts,
-    nextActions: generated.nextActions,
+    nextActions: reconcileTopicSummaryNextActions(generated.nextActions, ctx.tasks),
     suggestedMemory: filterMemorySuggestions(generated.suggestedMemory),
     sourceMessageIds: ctx.sourceMessageIds,
     sourceWorkLogIds: ctx.sourceWorkLogIds,

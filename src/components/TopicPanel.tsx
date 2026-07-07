@@ -859,6 +859,7 @@ export function TopicPanel({
                 onRefresh={handleRefreshSummary}
                 onRegenerate={handleRegenerateSummary}
                 onCreateTask={onCreateTaskFromSummary}
+                existingTasks={topicTasks}
                 onMemorySaved={handleMemorySaved}
                 compactActions
               />

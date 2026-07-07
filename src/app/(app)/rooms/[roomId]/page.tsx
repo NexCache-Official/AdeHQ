@@ -21,6 +21,7 @@ import {
 import { OrchestrationUiProvider } from "@/components/orchestration/OrchestrationUiContext";
 import { roomAssignableEmployees, isMayaEmployee } from "@/lib/maya-employee";
 import { notifyTopicSummaryUpdated, refreshTopicSummaryClient } from "@/lib/topic-summary/client";
+import { findMatchingOpenTask } from "@/lib/topic-summary/reconcile-next-actions";
 import { clearLocalTopicSummaryUiState } from "@/lib/memory/suggestion-lifecycle";
 import {
   clearRoomChatHistoryClient,
@@ -725,6 +726,12 @@ export default function RoomDetailPage() {
 
   const createTaskFromSummary = (title: string, ownerEmployeeId?: string) => {
     if (!room || !selectedTopic) return;
+    const topicTasks = state.tasks.filter((task) => task.topicId === selectedTopic.id);
+    if (findMatchingOpenTask(title, topicTasks)) {
+      setSlashNotice("That task already exists in this topic.");
+      setTimeout(() => setSlashNotice(null), 3500);
+      return;
+    }
     actions.createTask({
       roomId,
       topicId: selectedTopic.id,
