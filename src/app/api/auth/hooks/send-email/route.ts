@@ -59,11 +59,16 @@ function hookError(message: string, httpCode = 500) {
 }
 
 export async function POST(request: NextRequest) {
-  const secret = process.env.SEND_EMAIL_HOOK_SECRET?.trim();
-  if (!secret) {
+  const rawSecret = process.env.SEND_EMAIL_HOOK_SECRET?.trim();
+  if (!rawSecret) {
     console.error("[AdeHQ auth hook] SEND_EMAIL_HOOK_SECRET is not configured");
     return hookError("Email hook is not configured", 500);
   }
+
+  // Supabase provides secrets in the form `v1,whsec_...`.
+  // `standardwebhooks` expects the base64 part behind `whsec_...` and will
+  // only auto-strip a `whsec_` prefix, not the leading `v1,`.
+  const secret = rawSecret.startsWith("v1,") ? rawSecret.slice("v1,".length) : rawSecret;
 
   const payload = await request.text();
   const headers = Object.fromEntries(request.headers.entries());
