@@ -50,7 +50,9 @@ function buildVerifyUrl(tokenHash: string, actionType: string, redirectTo: strin
     type,
     redirect_to: redirectTo || `${getSiteUrl()}/auth/callback`,
   });
-  return `${SUPABASE_PROJECT_URL}/auth/v1/verify?${params.toString()}`;
+  // Keep email links on our branded domain; we proxy to Supabase verify in
+  // `src/app/auth/verify/route.ts`.
+  return `${getSiteUrl()}/auth/verify?${params.toString()}`;
 }
 
 /** Supabase expects this shape so it surfaces a clean auth error to the user. */

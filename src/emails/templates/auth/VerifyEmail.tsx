@@ -6,7 +6,7 @@ export type VerifyEmailProps = {
   expiresInMinutes?: number;
 };
 
-export function VerifyEmail({ actionUrl, expiresInMinutes = 60 }: VerifyEmailProps) {
+export function VerifyEmail({ actionUrl, expiresInMinutes = 20 }: VerifyEmailProps) {
   return (
     <MinimalAuthEmail
       preview="Confirm your email to activate your AdeHQ account"
@@ -22,7 +22,7 @@ export function VerifyEmail({ actionUrl, expiresInMinutes = 60 }: VerifyEmailPro
 
 VerifyEmail.PreviewProps = {
   actionUrl: "https://app.adehq.com/auth/callback?token=preview",
-  expiresInMinutes: 60,
+  expiresInMinutes: 20,
 } as VerifyEmailProps;
 
 export default VerifyEmail;

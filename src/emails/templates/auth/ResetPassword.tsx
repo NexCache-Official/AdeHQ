@@ -6,7 +6,7 @@ export type ResetPasswordProps = {
   expiresInMinutes?: number;
 };
 
-export function ResetPassword({ actionUrl, expiresInMinutes = 60 }: ResetPasswordProps) {
+export function ResetPassword({ actionUrl, expiresInMinutes = 20 }: ResetPasswordProps) {
   return (
     <MinimalAuthEmail
       preview="Reset your AdeHQ password"
@@ -22,7 +22,7 @@ export function ResetPassword({ actionUrl, expiresInMinutes = 60 }: ResetPasswor
 
 ResetPassword.PreviewProps = {
   actionUrl: "https://app.adehq.com/auth/callback?token=preview",
-  expiresInMinutes: 60,
+  expiresInMinutes: 20,
 } as ResetPasswordProps;
 
 export default ResetPassword;

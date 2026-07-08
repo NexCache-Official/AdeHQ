@@ -7,7 +7,7 @@ export type ChangeEmailProps = {
   expiresInMinutes?: number;
 };
 
-export function ChangeEmail({ actionUrl, newEmail, expiresInMinutes = 60 }: ChangeEmailProps) {
+export function ChangeEmail({ actionUrl, newEmail, expiresInMinutes = 20 }: ChangeEmailProps) {
   return (
     <MinimalAuthEmail
       preview="Confirm your new email address for AdeHQ"
@@ -28,7 +28,7 @@ export function ChangeEmail({ actionUrl, newEmail, expiresInMinutes = 60 }: Chan
 ChangeEmail.PreviewProps = {
   actionUrl: "https://app.adehq.com/auth/callback?token=preview",
   newEmail: "new@example.com",
-  expiresInMinutes: 60,
+  expiresInMinutes: 20,
 } as ChangeEmailProps;
 
 export default ChangeEmail;

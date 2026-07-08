@@ -22,7 +22,9 @@ export function AuthShell({ children }: { children: React.ReactNode }) {
         />
         <div className="absolute -right-10 bottom-10 -z-10 h-64 w-64 rounded-full bg-accent-50 blur-[90px]" />
 
-        <BrandLockup size={30} />
+        <div className="flex justify-center">
+          <BrandLockup size={42} />
+        </div>
 
         <div className="max-w-md">
           <motion.h2

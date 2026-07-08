@@ -73,8 +73,8 @@ function LoginForm() {
 
   return (
     <AuthShell>
-      <div className="mb-8 lg:hidden">
-        <BrandLockup size={28} />
+      <div className="mb-8 lg:hidden flex justify-center">
+        <BrandLockup size={40} />
       </div>
 
       <h1 className="text-2xl font-semibold tracking-tight text-slate-900">

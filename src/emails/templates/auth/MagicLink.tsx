@@ -6,7 +6,7 @@ export type MagicLinkProps = {
   expiresInMinutes?: number;
 };
 
-export function MagicLink({ actionUrl, expiresInMinutes = 60 }: MagicLinkProps) {
+export function MagicLink({ actionUrl, expiresInMinutes = 20 }: MagicLinkProps) {
   return (
     <MinimalAuthEmail
       preview="Your AdeHQ sign-in link"
@@ -22,7 +22,7 @@ export function MagicLink({ actionUrl, expiresInMinutes = 60 }: MagicLinkProps) 
 
 MagicLink.PreviewProps = {
   actionUrl: "https://app.adehq.com/auth/callback?token=preview",
-  expiresInMinutes: 60,
+  expiresInMinutes: 20,
 } as MagicLinkProps;
 
 export default MagicLink;

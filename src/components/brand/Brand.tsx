@@ -90,7 +90,8 @@ export function BrandLockup({
   return (
     <span className={cn("inline-flex items-center gap-2", className)}>
       <BrandMark size={size} className={cn("text-accent", markClassName)} />
-      <BrandWordmark height={Math.round(size * 0.72)} />
+      {/* Slightly larger wordmark relative to icon for the desired brand feel. */}
+      <BrandWordmark height={Math.round(size * 0.93)} />
     </span>
   );
 }
