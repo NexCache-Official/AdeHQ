@@ -42,7 +42,7 @@ begin
   perform cron.schedule(
     'delete_unverified_users_20m',
     '*/5 * * * *',
-    $$select public.delete_unverified_users_older_than(1200);$$
+    $cron$select public.delete_unverified_users_older_than(1200)$cron$
   );
 end $$;
 
