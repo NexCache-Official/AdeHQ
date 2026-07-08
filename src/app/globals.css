@@ -41,7 +41,7 @@
   --c-rail-2: 247 248 250;
 
   /* Hex-form aliases consumed directly via var(--x). These reference the channel
-     tokens, so overriding channels under .dark automatically re-themes them. */
+     tokens. The platform is light-theme only. */
   --canvas: rgb(var(--c-canvas));
   --surface: rgb(var(--c-surface));
   --muted: rgb(var(--c-muted));
@@ -83,66 +83,6 @@
   --row-hover: rgba(0, 0, 0, 0.035);
 }
 
-.dark {
-  color-scheme: dark;
-
-  /* AdeHQ — Onyx Blue, Dark mode. Deep blue-black surfaces, brighter accent. */
-  --c-canvas: 13 16 23;
-  --c-surface: 20 24 31;
-  --c-muted: 27 32 41;
-  --c-border: 38 44 55;
-  --c-border-2: 30 36 45;
-  --c-ink: 232 234 240;
-  --c-ink-2: 162 169 181;
-  --c-ink-3: 122 130 143;
-  --c-accent: 77 132 245;
-  --c-accent-d: 156 188 251;
-  --c-accent-soft: 24 37 60;
-  --c-accent-2: 122 165 250;
-  --c-accent-50: 22 35 59;
-  --c-accent-100: 27 44 73;
-  --c-accent-200: 39 64 105;
-  --c-accent-300: 55 87 140;
-  --c-accent-400: 95 143 224;
-  --c-accent-500: 77 132 245;
-  --c-accent-600: 111 157 247;
-  --c-accent-700: 156 188 251;
-  --c-accent-800: 194 214 253;
-  --c-accent-900: 221 232 254;
-  --c-green: 52 199 142;
-  --c-green-soft: 18 50 39;
-  --c-amber: 224 169 58;
-  --c-amber-soft: 51 40 15;
-  --c-danger: 240 104 91;
-  --c-danger-soft: 58 30 27;
-  --c-info: 77 132 245;
-  --c-info-soft: 24 37 60;
-  --c-rail: 11 13 18;
-  --c-rail-2: 18 21 27;
-
-  /* Rail chrome — dark rail, so ink is white. */
-  --rail-edge: #1c212b;
-  --rail-ink: #ffffff;
-  --rail-ink-2: rgba(255, 255, 255, 0.62);
-  --rail-ink-3: rgba(255, 255, 255, 0.4);
-  --rail-border: rgba(255, 255, 255, 0.09);
-  --rail-fill: rgba(255, 255, 255, 0.04);
-  --rail-hover: rgba(255, 255, 255, 0.07);
-  --rail-active-bg: rgba(255, 255, 255, 0.1);
-  --rail-active-ink: #ffffff;
-  --rail-badge-bg: rgba(255, 255, 255, 0.1);
-  --rail-badge-ink: rgba(255, 255, 255, 0.7);
-
-  /* Effects / gradients. */
-  --accent-glow: rgba(77, 132, 245, 0.45);
-  --sel: rgba(77, 132, 245, 0.24);
-  --hero-grad: linear-gradient(135deg, #0a0d14, #0f1622 60%, #10203f);
-  --hero-glow: rgba(77, 132, 245, 0.4);
-  --hero-glow2: rgba(34, 211, 238, 0.16);
-  --logo-grad: linear-gradient(140deg, #1b2740, #4d84f5);
-  --row-hover: rgba(255, 255, 255, 0.045);
-}
-
 html,
 body {
   height: 100%;
@@ -179,16 +119,6 @@ body {
 }
 *::-webkit-scrollbar-thumb:hover {
   background-color: rgba(120, 114, 102, 0.45);
-}
-
-.dark {
-  scrollbar-color: rgba(255, 255, 255, 0.16) transparent;
-}
-.dark *::-webkit-scrollbar-thumb {
-  background-color: rgba(255, 255, 255, 0.16);
-}
-.dark *::-webkit-scrollbar-thumb:hover {
-  background-color: rgba(255, 255, 255, 0.28);
 }
 
 @layer components {

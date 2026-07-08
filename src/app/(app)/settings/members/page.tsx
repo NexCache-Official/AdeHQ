@@ -104,7 +104,19 @@ export default function SettingsMembersPage() {
     }
     setInviteBusy(true);
     try {
-      await actions.inviteWorkspaceMember(inviteEmail, inviteRole);
+      if (backend === "supabase") {
+        // Server route creates the invite and sends the branded invite email.
+        const headers = await authHeaders();
+        const res = await fetch(`/api/workspaces/${workspaceId}/invitations`, {
+          method: "POST",
+          headers: { ...headers, "Content-Type": "application/json" },
+          body: JSON.stringify({ email: inviteEmail, role: inviteRole }),
+        });
+        const body = await res.json();
+        if (!res.ok) throw new Error(body?.error ?? "Unable to create invite.");
+      } else {
+        await actions.inviteWorkspaceMember(inviteEmail, inviteRole);
+      }
       setInviteEmail("");
       await load();
     } catch (err) {

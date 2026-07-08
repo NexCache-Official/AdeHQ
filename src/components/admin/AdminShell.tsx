@@ -34,6 +34,7 @@ import {
   Users,
   Wrench,
 } from "lucide-react";
+import { BrandMark } from "@/components/brand/Brand";
 
 type AdminIdentity = {
   role: PlatformAdminRole;
@@ -181,7 +182,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
         <aside className="hidden w-[232px] shrink-0 flex-col border-r border-[var(--rail-edge)] bg-rail lg:flex">
           <div className="flex items-center gap-2.5 px-4 pb-2 pt-4">
             <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-accent text-white shadow-glow">
-              <Shield className="h-4 w-4" />
+              <BrandMark size={16} />
             </div>
             <div className="min-w-0">
               <p className="truncate text-[13px] font-semibold text-[var(--rail-ink)]">

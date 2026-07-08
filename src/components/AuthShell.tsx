@@ -1,7 +1,8 @@
 "use client";
 
-import { Sparkles, Bot, CheckCircle2, Brain, Phone } from "lucide-react";
+import { Bot, CheckCircle2, Brain, Phone } from "lucide-react";
 import { motion } from "framer-motion";
+import { BrandLockup } from "@/components/brand/Brand";
 
 const FEATURES = [
   { icon: Bot, text: "Hire AI employees with real roles & tools" },
@@ -21,12 +22,7 @@ export function AuthShell({ children }: { children: React.ReactNode }) {
         />
         <div className="absolute -right-10 bottom-10 -z-10 h-64 w-64 rounded-full bg-accent-50 blur-[90px]" />
 
-        <div className="flex items-center gap-2.5">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-accent-500 to-glow-amber shadow-glow-sm">
-            <Sparkles className="h-5 w-5 text-white" />
-          </div>
-          <span className="text-lg font-semibold tracking-tight text-slate-900">AdeHQ</span>
-        </div>
+        <BrandLockup size={30} />
 
         <div className="max-w-md">
           <motion.h2

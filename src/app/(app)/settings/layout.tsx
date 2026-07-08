@@ -6,11 +6,12 @@ import { cn } from "@/lib/utils";
 import { useStore } from "@/lib/demo-store";
 import { canViewBilling, canViewUsage } from "@/lib/workspace/permissions";
 import { PageContainer } from "@/components/Page";
-import { CreditCard, Gauge, Settings as SettingsIcon, Timer, Users, UserCircle } from "lucide-react";
+import { Bell, CreditCard, Gauge, Settings as SettingsIcon, Timer, Users, UserCircle } from "lucide-react";
 
 const NAV = [
   { href: "/settings", label: "Profile", icon: UserCircle, show: () => true },
   { href: "/settings/members", label: "Members", icon: Users, show: () => true },
+  { href: "/settings/notifications", label: "Notifications", icon: Bell, show: () => true },
   { href: "/settings/usage", label: "Usage", icon: Gauge, show: canViewUsage },
   { href: "/settings/ai-work-hours", label: "AI Work Hours", icon: Timer, show: () => true },
   { href: "/settings/billing", label: "Billing", icon: CreditCard, show: canViewBilling },

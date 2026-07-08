@@ -10,6 +10,7 @@ import { ResendConfirmation } from "@/components/auth/ResendConfirmation";
 import { ENABLE_DEMO_MODE } from "@/lib/config/features";
 import { getSiteUrl } from "@/lib/site-url";
 import { ArrowRight, Sparkles } from "lucide-react";
+import { BrandLockup } from "@/components/brand/Brand";
 
 export default function SignupPage() {
   const { actions, error: storeError } = useStore();
@@ -82,12 +83,7 @@ export default function SignupPage() {
   return (
     <AuthShell>
       <div className="mb-8 lg:hidden">
-        <div className="flex items-center gap-2.5">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-accent-500 to-glow-amber">
-            <Sparkles className="h-5 w-5 text-white" />
-          </div>
-          <span className="text-lg font-semibold text-slate-900">AdeHQ</span>
-        </div>
+        <BrandLockup size={28} />
       </div>
 
       <h1 className="text-2xl font-semibold tracking-tight text-slate-900">

@@ -43,11 +43,8 @@ import {
   LogOut,
   RotateCcw,
   ChevronUp,
-  Sun,
-  Moon,
 } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
-import { useTheme } from "./ThemeProvider";
 
 const WORKFORCE_NAV = [
   { href: "/workforce", label: "AI Workforce", icon: Bot },
@@ -68,7 +65,6 @@ export function Sidebar() {
   const router = useRouter();
   const { state, actions, backend } = useStore();
   const ui = useShellUI();
-  const { theme, toggleTheme } = useTheme();
   const [profileOpen, setProfileOpen] = useState(false);
 
   const pendingApprovals = state.approvals.filter((a) => a.status === "pending").length;
@@ -315,42 +311,6 @@ export function Sidebar() {
                   <div className="truncate text-xs text-ink-3">{state.user?.email}</div>
                 </div>
                 <div className="p-1.5">
-                  <div className="flex items-center justify-between gap-2 rounded-lg px-2.5 py-2 text-sm text-ink-2">
-                    <span className="flex items-center gap-2.5">
-                      {theme === "dark" ? (
-                        <Moon className="h-4 w-4" strokeWidth={1.8} />
-                      ) : (
-                        <Sun className="h-4 w-4" strokeWidth={1.8} />
-                      )}
-                      Appearance
-                    </span>
-                    <button
-                      type="button"
-                      onClick={toggleTheme}
-                      role="switch"
-                      aria-checked={theme === "dark"}
-                      aria-label="Toggle dark mode"
-                      className={cn(
-                        "relative inline-flex h-5 w-9 shrink-0 items-center rounded-full border transition-colors",
-                        theme === "dark"
-                          ? "border-accent bg-accent"
-                          : "border-border bg-muted",
-                      )}
-                    >
-                      <span
-                        className={cn(
-                          "inline-flex h-4 w-4 items-center justify-center rounded-full bg-white shadow-sm transition-transform",
-                          theme === "dark" ? "translate-x-4" : "translate-x-0.5",
-                        )}
-                      >
-                        {theme === "dark" ? (
-                          <Moon className="h-2.5 w-2.5 text-accent" strokeWidth={2.4} />
-                        ) : (
-                          <Sun className="h-2.5 w-2.5 text-amber" strokeWidth={2.4} />
-                        )}
-                      </span>
-                    </button>
-                  </div>
                   <button
                     type="button"
                     onClick={() => {

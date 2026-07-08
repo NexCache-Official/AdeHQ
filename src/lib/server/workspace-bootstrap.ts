@@ -6,8 +6,28 @@ import { ensureToolCatalog } from "@/lib/server/tool-catalog";
 import { AccountLifecycleError } from "@/lib/server/account-lifecycle";
 import { ensureMayaForWorkspace } from "@/lib/server/ensure-maya";
 import { ensureWorkspaceProviderAllocations } from "@/lib/providers/credentials/ensure-workspace-allocations";
+import { sendEmail } from "@/lib/email/send";
+import { getSiteUrl } from "@/lib/site-url";
 
 type DbRow = Record<string, unknown>;
+
+async function sendWelcomeEmail(user: User, workspaceId: string): Promise<void> {
+  if (!user.email) return;
+  const meta = user.user_metadata ?? {};
+  const fullName = (meta.full_name as string | undefined) ?? (meta.name as string | undefined);
+  const firstName = fullName?.trim().split(/\s+/)[0];
+  try {
+    await sendEmail({
+      template: "welcome",
+      to: user.email,
+      userId: user.id,
+      workspaceId,
+      props: { firstName, ctaUrl: `${getSiteUrl()}/` },
+    });
+  } catch (error) {
+    console.warn("[AdeHQ welcome email]", error);
+  }
+}
 
 export type BootstrapWorkspaceResult = {
   workspaceId: string;
@@ -146,6 +166,11 @@ export async function bootstrapWorkspaceForUser(
   await ensureWorkspaceProviderAllocations(client, workspaceId, user.id).catch((error) => {
     console.warn("[AdeHQ provider allocations bootstrap]", error);
   });
+
+  // First workspace created (post email-confirmation) — send the branded
+  // Welcome email. Preference-gated (product_updates) and best-effort: never
+  // block onboarding on email delivery.
+  void sendWelcomeEmail(user, workspaceId);
 
   return { workspaceId, workspaceName: name, created: true };
 }

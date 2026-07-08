@@ -10,9 +10,9 @@ import {
   Loader2,
   RefreshCw,
   Rocket,
-  Sparkles,
   User,
 } from "lucide-react";
+import { BrandMark } from "@/components/brand/Brand";
 import { useStore } from "@/lib/demo-store";
 import {
   ONBOARDING_CONTEXT_KEY,
@@ -282,7 +282,7 @@ export function OnboardingFlow() {
 
         <header className="relative z-[3] flex items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-[var(--accent)] to-[var(--accent-2)] shadow-[0_8px_24px_-8px_rgba(47,111,237,.55)]">
-            <Sparkles className="h-5 w-5 text-white" strokeWidth={2} />
+            <BrandMark size={20} />
           </div>
           <div className="flex flex-col gap-0.5">
             <span className="font-mono text-[10px] uppercase tracking-[0.09em] text-white/45">
