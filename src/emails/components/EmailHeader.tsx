@@ -4,8 +4,9 @@ import { brandAssets } from "../assets";
 import { colors } from "../theme";
 
 const wrap: React.CSSProperties = {
-  padding: "24px 32px 0",
+  padding: "28px 32px 0",
   backgroundColor: colors.card,
+  textAlign: "center",
 };
 
 export function EmailHeader({ compact }: { compact?: boolean }) {
@@ -14,17 +15,17 @@ export function EmailHeader({ compact }: { compact?: boolean }) {
       {compact ? (
         <Img
           src={brandAssets.icon()}
-          width="34"
-          height="34"
+          width="48"
+          height="48"
           alt="AdeHQ"
-          style={{ display: "block" }}
+          style={{ display: "inline-block" }}
         />
       ) : (
         <Img
           src={brandAssets.lockup()}
-          height="30"
+          height="54"
           alt="AdeHQ"
-          style={{ display: "block" }}
+          style={{ display: "inline-block" }}
         />
       )}
     </Section>

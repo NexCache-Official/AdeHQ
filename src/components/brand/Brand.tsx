@@ -16,7 +16,8 @@ const WORDMARK_URL = "/brand/adehq-wordmark.svg";
 const ICON_RATIO = 640 / 622;
 
 export function BrandMark({
-  size = 24,
+  // Slightly larger default so the mark feels more present in nav and auth shells.
+  size = 34,
   className,
   title = "AdeHQ",
 }: {
@@ -48,7 +49,8 @@ export function BrandMark({
 }
 
 export function BrandWordmark({
-  height = 20,
+  // Default wordmark height tuned to feel balanced with the larger icon.
+  height = 32,
   className,
 }: {
   height?: number;
@@ -71,7 +73,8 @@ export function BrandWordmark({
 
 export function BrandLockup({
   variant = "lockup",
-  size = 28,
+  // Icon height in px; bumped up so the lockup reads more like a primary brand mark.
+  size = 40,
   className,
   markClassName,
 }: {

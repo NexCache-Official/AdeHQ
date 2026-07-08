@@ -93,7 +93,6 @@ export function EmailFooter({ unsubscribeUrl }: { unsubscribeUrl?: string }) {
 
       <Text style={legalLine}>
         © {year} NexCache Limited · Trading as AdeHQ · All rights reserved
-        <span style={legalTagline}> — Hire employees, not models.</span>
       </Text>
     </Section>
   );
