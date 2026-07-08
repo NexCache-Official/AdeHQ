@@ -5,6 +5,7 @@ import {
 } from "@/lib/hiring/maya";
 import { cn } from "@/lib/utils";
 import type { HiringStep } from "@/lib/hiring/types";
+import { BrandMark } from "@/components/brand/Brand";
 import { ArrowLeft } from "lucide-react";
 
 export function HireExitConfirmDialog({
@@ -85,8 +86,8 @@ export function HireHeader({
             {backLabel ?? "Back"}
           </button>
         )}
-        <div className="flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-lg bg-ink text-sm font-bold text-white">
-          A
+        <div className="flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-lg bg-ink text-accent">
+          <BrandMark size={16} />
         </div>
         <div className="flex min-w-0 items-baseline gap-2">
           <span className="text-[15px] font-semibold tracking-tight text-ink">AdeHQ</span>

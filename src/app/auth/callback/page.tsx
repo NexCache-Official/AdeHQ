@@ -9,7 +9,7 @@ import { parseAuthError } from "@/lib/auth/confirmation";
 import { ResendConfirmation } from "@/components/auth/ResendConfirmation";
 import { loadWorkspaceState } from "@/lib/supabase/persistence";
 import { getSiteUrl } from "@/lib/site-url";
-import { Sparkles } from "lucide-react";
+import { BrandMark } from "@/components/brand/Brand";
 
 function AuthCallbackInner() {
   const router = useRouter();
@@ -87,8 +87,8 @@ function AuthCallbackInner() {
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-slate-50 p-6">
-      <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-accent-500 to-glow-amber shadow-glow-sm">
-        <Sparkles className="h-6 w-6 text-white" />
+      <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-accent-500 to-glow-amber shadow-glow-sm text-white">
+        <BrandMark size={28} />
       </div>
       <p className={`mt-6 max-w-md text-center text-sm ${failed ? "text-rose-700" : "text-slate-600"}`}>
         {message}

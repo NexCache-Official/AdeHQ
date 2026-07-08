@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useStore } from "@/lib/demo-store";
 import { ENABLE_DEMO_MODE } from "@/lib/config/features";
 import { cn } from "@/lib/utils";
+import { BrandMark } from "@/components/brand/Brand";
 import { Check, ChevronDown, Plus } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
 
@@ -32,8 +33,8 @@ export function WorkspaceSwitcher({
   if (singleWorkspace && isRail) {
     return (
       <div className="mb-2.5 flex items-center gap-2.5 rounded-[13px] border border-[var(--rail-border)] bg-[var(--rail-fill)] px-2.5 py-2">
-        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[9px] bg-gradient-to-br from-accent to-[var(--accent-2)] text-[15px] font-extrabold text-white shadow-[0_2px_8px_-2px_var(--accent-glow)]">
-          {state.workspace.name.slice(0, 1).toUpperCase()}
+        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[9px] bg-[var(--rail-fill)] text-accent">
+          <BrandMark size={22} />
         </div>
         <div className="min-w-0 flex-1">
           <div className="truncate text-[13.5px] font-semibold text-[var(--rail-ink)]">{state.workspace.name}</div>
@@ -62,8 +63,8 @@ export function WorkspaceSwitcher({
         )}
       >
         {isRail ? (
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[9px] bg-gradient-to-br from-accent to-[var(--accent-2)] text-[15px] font-extrabold text-white">
-            {state.workspace.name.slice(0, 1).toUpperCase()}
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[9px] text-accent">
+            <BrandMark size={22} />
           </div>
         ) : (
           <span className="h-2 w-2 rounded-full bg-green" />

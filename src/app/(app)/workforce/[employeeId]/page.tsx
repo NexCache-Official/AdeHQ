@@ -12,6 +12,7 @@ import { MemoryCard } from "@/components/MemoryCard";
 import { WorkLogTimeline } from "@/components/WorkLogTimeline";
 import { EmptyState } from "@/components/States";
 import { toolIcon, TOOL_STATUS_META } from "@/lib/icons";
+import { displayToolStatus } from "@/lib/tools/catalog";
 import { cn, timeAgo } from "@/lib/utils";
 import { ENABLE_DEMO_MODE, normalizeLiveProvider } from "@/lib/config/features";
 import { EmployeeStatus } from "@/lib/types";
@@ -220,7 +221,7 @@ export default function EmployeeProfilePage() {
               <div className="grid gap-2 sm:grid-cols-2">
                 {employee.tools.map((t) => {
                   const TI = toolIcon(t.toolId);
-                  const meta = TOOL_STATUS_META[t.status];
+                  const meta = TOOL_STATUS_META[displayToolStatus(t.toolId, t.status)];
                   return (
                     <div key={t.toolId} className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
                       <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-slate-50 text-slate-700">

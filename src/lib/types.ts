@@ -10,7 +10,7 @@ export type EmployeeStatus =
   | "on_call"
   | "blocked";
 
-export type ToolStatus = "connected" | "mock" | "not_connected";
+export type ToolStatus = "connected" | "mock" | "not_connected" | "coming_soon";
 export type ToolPermission = "none" | "read" | "write" | "admin";
 
 export type HumanUser = {
@@ -734,6 +734,7 @@ export type ToolCategory =
   | "Productivity"
   | "Game development"
   | "Business"
+  | "Fundraising"
   | "Model providers";
 
 export type Tool = {

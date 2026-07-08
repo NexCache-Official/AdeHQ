@@ -124,7 +124,7 @@ export function HireEmployeeModal({
           toolId: id,
           name: meta.name,
           category: meta.category,
-          status: meta.status === "not_connected" ? "mock" : meta.status,
+          status: meta.status,
           permission,
         };
       }),

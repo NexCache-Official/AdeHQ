@@ -311,7 +311,6 @@ export default function CalendarPage() {
         <IntegrationsStrip
           title="Publishing integrations"
           ids={["gcal", "outlook", "linkedin", "meta", "x", "buffer", "mailchimp", "slack", "zapier"]}
-          defaultConnected={["linkedin"]}
         />
       </WorkspaceCanvas>
 

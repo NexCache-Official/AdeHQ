@@ -8,7 +8,7 @@ const FEATURES = [
   { icon: Bot, text: "Hire AI employees with real roles & tools" },
   { icon: Brain, text: "They remember decisions in project memory" },
   { icon: CheckCircle2, text: "They request approvals before risky actions" },
-  { icon: Phone, text: "Jump on simulated calls with your workforce" },
+  { icon: Phone, text: "Voice calls with your AI workforce" },
 ];
 
 export function AuthShell({ children }: { children: React.ReactNode }) {

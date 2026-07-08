@@ -3,13 +3,15 @@
 import { Tool } from "@/lib/types";
 import { useStore } from "@/lib/demo-store";
 import { toolIcon, TOOL_STATUS_META } from "@/lib/icons";
+import { displayToolStatus } from "@/lib/tools/catalog";
 import { cn } from "@/lib/utils";
 import { Users } from "lucide-react";
 
 export function ToolCard({ tool, onClick }: { tool: Tool; onClick?: () => void }) {
   const { state } = useStore();
   const Icon = toolIcon(tool.id);
-  const meta = TOOL_STATUS_META[tool.status];
+  const displayStatus = displayToolStatus(tool.id, tool.status);
+  const meta = TOOL_STATUS_META[displayStatus];
   const employeesWithAccess = state.employees.filter((e) =>
     e.tools.some((t) => t.toolId === tool.id),
   ).length;

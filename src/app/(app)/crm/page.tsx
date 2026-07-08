@@ -379,7 +379,6 @@ export default function CrmPage() {
         <IntegrationsStrip
           title="CRM integrations"
           ids={["hubspot", "salesforce", "pipedrive", "gmail", "outlook", "slack", "gsheets", "calendly", "zapier", "stripe"]}
-          defaultConnected={["gmail"]}
         />
       </WorkspaceCanvas>
 

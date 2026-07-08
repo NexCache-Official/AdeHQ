@@ -305,7 +305,6 @@ export default function TasksPage() {
         <IntegrationsStrip
           title="Task integrations"
           ids={["linear", "jira", "githubapp", "notion", "slack", "gcal", "zapier", "make", "webhook"]}
-          defaultConnected={["slack"]}
         />
       </WorkspaceCanvas>
 

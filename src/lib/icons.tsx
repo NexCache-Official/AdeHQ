@@ -57,6 +57,13 @@ export const TOOL_ICONS: Record<string, LucideIcon> = {
   discord: MessageSquare,
   gmail: Mail,
   calendar: Calendar,
+  "adehq-crm": Briefcase,
+  "adehq-email": Mail,
+  "adehq-tasks": ClipboardList,
+  "adehq-drive": HardDrive,
+  "adehq-calendar": Calendar,
+  "adehq-investors": TrendingUp,
+  "adehq-team": UserPlus,
   unity: Boxes,
   godot: Gamepad2,
   blender: Boxes,
@@ -127,8 +134,9 @@ export const TOOL_STATUS_META: Record<
   { label: string; color: string; dot: string }
 > = {
   connected: { label: "Connected", color: "text-emerald-700", dot: "bg-emerald-400" },
-  mock: { label: "Simulated", color: "text-sky-700", dot: "bg-sky-400" },
-  not_connected: { label: "Not connected", color: "text-slate-400", dot: "bg-slate-500" },
+  coming_soon: { label: "Coming soon", color: "text-amber-700", dot: "bg-amber-400" },
+  mock: { label: "Coming soon", color: "text-amber-700", dot: "bg-amber-400" },
+  not_connected: { label: "Not connected", color: "text-slate-500", dot: "bg-slate-400" },
 };
 
 export {

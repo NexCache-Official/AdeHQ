@@ -388,7 +388,6 @@ export default function InvestorsPage() {
         <IntegrationsStrip
           title="Fundraising integrations"
           ids={["affinity", "airtable", "docsend", "crunchbase", "gsheets", "gmail", "calendly", "notion", "zapier"]}
-          defaultConnected={["docsend"]}
         />
       </WorkspaceCanvas>
 
