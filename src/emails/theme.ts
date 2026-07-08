@@ -78,10 +78,15 @@ export const layout = {
   contentPadding: "32px",
 } as const;
 
-/** From identity + optional reply-to, resolved from env with sane defaults. */
-export const EMAIL_FROM =
-  process.env.EMAIL_FROM?.trim() || "AdeHQ <noreply@nexcache.com>";
-export const EMAIL_REPLY_TO = process.env.EMAIL_REPLY_TO?.trim() || undefined;
+/** Default sender when EMAIL_FROM is unset (override in Vercel / .env.local). */
+export const DEFAULT_EMAIL_FROM = "AdeHQ <noreply@adehq.com>";
+/** Default reply-to for human responses when EMAIL_REPLY_TO is unset. */
+export const DEFAULT_EMAIL_REPLY_TO = "AdeHQ <hello@adehq.com>";
+
+/** From identity + reply-to, resolved from env with sane defaults. */
+export const EMAIL_FROM = process.env.EMAIL_FROM?.trim() || DEFAULT_EMAIL_FROM;
+export const EMAIL_REPLY_TO =
+  process.env.EMAIL_REPLY_TO?.trim() || DEFAULT_EMAIL_REPLY_TO;
 
 export const theme = { colors, spacing, radius, fonts, fontSize, layout } as const;
 export type EmailTheme = typeof theme;

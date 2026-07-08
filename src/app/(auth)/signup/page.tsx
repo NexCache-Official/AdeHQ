@@ -118,7 +118,7 @@ export default function SignupPage() {
             )}
           </p>
           <p className="mt-3 text-xs text-emerald-700">
-            The email comes from Supabase (<span className="font-mono">noreply@mail.app.supabase.io</span>
+            The email comes from AdeHQ (<span className="font-mono">noreply@adehq.com</span>
             ). Check spam or promotions if you do not see it within a minute.
           </p>
           <p className="mt-2 text-xs text-emerald-700">

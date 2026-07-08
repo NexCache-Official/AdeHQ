@@ -1,54 +1,99 @@
 import * as React from "react";
-import { Link, Section, Text } from "@react-email/components";
+import { Hr, Link, Section, Text } from "@react-email/components";
 import { getSiteUrl } from "@/lib/site-url";
-import { colors, fontSize } from "../theme";
+import { colors, fontSize, spacing } from "../theme";
 
 const wrap: React.CSSProperties = {
-  padding: "24px 12px 0",
+  padding: `${spacing.lg} 12px 0`,
   textAlign: "center",
 };
 
-const line: React.CSSProperties = {
-  margin: "0 0 6px",
+const divider: React.CSSProperties = {
+  borderColor: colors.border,
+  borderTopWidth: "1px",
+  margin: `${spacing.md} auto ${spacing.md}`,
+  width: "100%",
+  maxWidth: "320px",
+};
+
+const brandLine: React.CSSProperties = {
+  margin: "0 0 4px",
+  fontSize: fontSize.sm,
+  lineHeight: "20px",
+};
+
+const navLine: React.CSSProperties = {
+  margin: `0 0 ${spacing.sm}`,
   fontSize: fontSize.xs,
-  color: colors.faint,
   lineHeight: "18px",
 };
 
-const link: React.CSSProperties = {
+const legalLine: React.CSSProperties = {
+  margin: 0,
+  fontSize: "11px",
+  color: colors.faint,
+  lineHeight: "17px",
+  maxWidth: "420px",
+  marginLeft: "auto",
+  marginRight: "auto",
+};
+
+const brandLink: React.CSSProperties = {
+  color: colors.heading,
+  fontWeight: 600,
+  textDecoration: "none",
+};
+
+const navLink: React.CSSProperties = {
   color: colors.muted,
   textDecoration: "underline",
 };
 
+const tagline: React.CSSProperties = {
+  color: colors.muted,
+  fontWeight: 400,
+};
+
+const legalTagline: React.CSSProperties = {
+  color: colors.muted,
+};
+
 export function EmailFooter({ unsubscribeUrl }: { unsubscribeUrl?: string }) {
   const site = getSiteUrl();
+  const year = new Date().getFullYear();
+
   return (
     <Section style={wrap}>
-      <Text style={line}>
-        <Link href={site} style={{ ...link, fontWeight: 600, color: colors.body }}>
+      <Text style={brandLine}>
+        <Link href={site} style={brandLink}>
           AdeHQ
-        </Link>{" "}
-        · Your company&apos;s AI headquarters
+        </Link>
+        <span style={tagline}> · Hire employees, not models.</span>
       </Text>
-      <Text style={line}>
+
+      <Text style={navLine}>
         {unsubscribeUrl ? (
           <>
-            <Link href={`${site}/settings/notifications`} style={link}>
+            <Link href={`${site}/settings/notifications`} style={navLink}>
               Manage email preferences
             </Link>
             {"  ·  "}
-            <Link href={unsubscribeUrl} style={link}>
+            <Link href={unsubscribeUrl} style={navLink}>
               Unsubscribe
             </Link>
           </>
         ) : (
-          <Link href={`${site}/settings`} style={link}>
+          <Link href={`${site}/settings`} style={navLink}>
             Account settings
           </Link>
         )}
       </Text>
-      <Text style={{ ...line, color: colors.faint }}>
-        © {new Date().getFullYear()} AdeHQ. All rights reserved.
+
+      <Hr style={divider} />
+
+      <Text style={legalLine}>
+        © {year} NexCache Limited · Trading as AdeHQ · All rights reserved
+        <span style={legalTagline}> — Hire employees, not models.</span>
       </Text>
     </Section>
   );

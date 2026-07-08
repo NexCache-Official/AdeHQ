@@ -87,6 +87,14 @@ REVOLUT_MERCHANT_API_KEY=...           # Merchant API secret key (server-only)
 REVOLUT_WEBHOOK_SECRET=...             # Verifies ORDER_COMPLETED webhook signatures
 # REVOLUT_API_BASE_URL=...             # Optional override; defaults per environment
 # REVOLUT_API_VERSION=2024-09-01       # Optional Revolut-Api-Version override
+
+# Transactional email (Resend + Supabase Send Email hook)
+RESEND_API_KEY=...
+SEND_EMAIL_HOOK_SECRET=...             # Supabase Auth → Hooks → Send Email
+EMAIL_FROM="AdeHQ <noreply@adehq.com>"
+EMAIL_REPLY_TO="AdeHQ <hello@adehq.com>"
+# EMAIL_TEST_MODE=true                 # Preview/staging: redirect all mail
+# EMAIL_TEST_INBOX=you@example.com
 ```
 
 Apply `supabase/migrations/20250629120000_ai_runtime_and_work_graph.sql` (or the synced

@@ -119,10 +119,10 @@ npx tsx scripts/test-email.ts welcome --to you@x.io   # Send one (needs RESEND_A
 
 | Var | Where | Notes |
 | --- | --- | --- |
-| `RESEND_API_KEY` | server | Resend API key. `nexcache.com` is already Resend-verified. |
+| `RESEND_API_KEY` | server | Resend API key. `adehq.com` must be verified in Resend. |
 | `SEND_EMAIL_HOOK_SECRET` | server | From Supabase → Auth → Hooks → Send Email (`v1,whsec_…`). |
-| `EMAIL_FROM` | server | e.g. `AdeHQ <noreply@nexcache.com>` |
-| `EMAIL_REPLY_TO` | server | optional |
+| `EMAIL_FROM` | server | e.g. `AdeHQ <noreply@adehq.com>` (defaults to this if unset) |
+| `EMAIL_REPLY_TO` | server | e.g. `AdeHQ <hello@adehq.com>` (defaults to this if unset) |
 | `EMAIL_TEST_MODE` | server | `true` on dev/staging |
 | `EMAIL_TEST_INBOX` | server | used when test mode is on |
 

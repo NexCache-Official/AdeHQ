@@ -65,7 +65,7 @@ function ConfirmEmailInner() {
       <div className="mt-6 rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 text-left text-sm text-amber-950">
         <p className="font-medium">Didn&apos;t receive the email?</p>
         <ul className="mt-2 list-disc space-y-1 pl-5 text-xs leading-relaxed text-amber-900">
-          <li>Check spam or promotions for mail from Supabase (<code className="font-mono">noreply@mail.app.supabase.io</code>).</li>
+          <li>Check spam or promotions for mail from AdeHQ (<code className="font-mono">noreply@adehq.com</code>).</li>
           <li>Confirmation links must open on <span className="font-mono">{getSiteUrl()}</span>.</li>
           <li>If you signed up again with the same email, use resend below — duplicate signups do not always send a new message.</li>
         </ul>
