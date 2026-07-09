@@ -15,7 +15,9 @@ import { MAYA_WORKFORCE_BADGE } from "@/lib/hiring/maya";
 import { useStore } from "@/lib/demo-store";
 import { ENABLE_DEMO_MODE, WORKFORCE_CALLS_ENABLED } from "@/lib/config/features";
 import { useShellUI } from "./AppShell";
+import { useDebugTrace } from "./DebugProvider";
 import { WorkspaceSwitcher } from "./WorkspaceSwitcher";
+import { Toggle } from "./ui";
 import { EmployeeAvatar } from "./EmployeeAvatar";
 import {
   SidebarCollapsibleSection,
@@ -43,6 +45,8 @@ import {
   LogOut,
   RotateCcw,
   ChevronUp,
+  UserPlus,
+  Bug,
 } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
 
@@ -65,8 +69,10 @@ export function Sidebar() {
   const router = useRouter();
   const { state, actions, backend } = useStore();
   const ui = useShellUI();
+  const { enabled: debugEnabled, setEnabled: setDebugEnabled } = useDebugTrace();
   const [profileOpen, setProfileOpen] = useState(false);
 
+  const workingCount = state.employees.filter((e) => e.status === "working").length;
   const pendingApprovals = state.approvals.filter((a) => a.status === "pending").length;
   const openTasks = state.tasks.filter((t) => t.status !== "done").length;
   const rooms = getGroupRooms(state.rooms);
@@ -269,7 +275,23 @@ export function Sidebar() {
         })}
       </div>
 
-      <div className="relative mt-auto px-3 pb-3 pt-3">
+      <div className="relative mt-auto shrink-0 space-y-2 border-t border-[var(--rail-edge)] px-3 pb-3 pt-3">
+        {workingCount > 0 && (
+          <div className="flex items-center gap-1.5 rounded-[10px] border border-green/20 bg-green-soft px-2.5 py-1.5 text-[11px] font-medium text-green">
+            <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-green animate-glowpulse" />
+            {workingCount} working now
+          </div>
+        )}
+
+        <button
+          type="button"
+          onClick={ui.openHire}
+          className="flex w-full items-center justify-center gap-2 rounded-[11px] bg-accent px-3 py-2.5 text-[12.5px] font-semibold text-white shadow-glow transition-all hover:brightness-105 active:scale-[0.99]"
+        >
+          <UserPlus className="h-4 w-4" strokeWidth={2} />
+          Hire AI Employee
+        </button>
+
         <button
           type="button"
           onClick={() => setProfileOpen((v) => !v)}
@@ -326,6 +348,13 @@ export function Sidebar() {
                   >
                     <Settings className="h-4 w-4" strokeWidth={1.8} /> Settings
                   </button>
+                  <div className="flex items-center justify-between gap-3 rounded-lg px-2.5 py-2">
+                    <div className="flex min-w-0 items-center gap-2.5 text-sm text-ink-2">
+                      <Bug className="h-4 w-4 shrink-0" strokeWidth={1.8} />
+                      <span>Debug trace</span>
+                    </div>
+                    <Toggle checked={debugEnabled} onChange={setDebugEnabled} />
+                  </div>
                   {backend === "demo" && ENABLE_DEMO_MODE && (
                     <button
                       type="button"

@@ -33,7 +33,7 @@ import {
   reconcileMessageArtifacts,
   replaceQueuedArtifactInList,
 } from "@/lib/integrations/reconcile-queued-artifacts";
-import { jobFromRow } from "@/lib/integrations/jobs/queue";
+import { jobFromRow } from "@/lib/integrations/jobs/job-from-row";
 import { isEmailConfirmed } from "@/lib/auth/session";
 import { mayaWelcomeMessage, MAYA_EMPLOYEE_ID } from "@/lib/hiring/maya";
 import { isMayaEmployee, mergeMayaIntoState, effectiveEmployeeStatus } from "@/lib/maya-employee";

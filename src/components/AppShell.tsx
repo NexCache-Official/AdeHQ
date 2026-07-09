@@ -10,7 +10,6 @@ import {
 import { usePathname, useRouter } from "next/navigation";
 import { useStore } from "@/lib/demo-store";
 import { Sidebar } from "./Sidebar";
-import { Topbar } from "./Topbar";
 import { CommandBar } from "./CommandBar";
 import { CreateRoomModal } from "./CreateRoomModal";
 import { LoadingState } from "./States";
@@ -132,7 +131,6 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
       <div className="flex h-screen overflow-hidden bg-canvas text-ink">
         <Sidebar />
         <div className="flex min-w-0 flex-1 flex-col">
-          <Topbar />
           {maintenanceMessage && (
             <div className="border-b border-amber-200 bg-amber-50 px-4 py-2 text-center text-sm text-amber-900">
               {maintenanceMessage}
