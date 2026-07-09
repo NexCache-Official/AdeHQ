@@ -8,7 +8,6 @@ import {
   getFastFactSearchPreset,
   getGatewaySearchCostUsd,
   getGatewaySearchModelId,
-  isGatewaySearchConfigured,
 } from "./config";
 
 export type GatewaySearchOptions = {
@@ -38,6 +37,23 @@ type GatewayToolsModule = {
   parallelSearch?: (opts?: Record<string, unknown>) => unknown;
 };
 
+type GatewayGenerateTextResult = {
+  text?: string;
+  sources?: Array<{
+    sourceType?: string;
+    url?: string;
+    title?: string;
+  }>;
+  steps?: Array<{
+    sources?: Array<{
+      sourceType?: string;
+      url?: string;
+      title?: string;
+    }>;
+    toolResults?: Array<{ output?: unknown }>;
+  }>;
+};
+
 let cachedGatewayTools: GatewayToolsModule | null | undefined;
 
 async function loadGatewayTools(): Promise<GatewayToolsModule | null> {
@@ -53,42 +69,6 @@ async function loadGatewayTools(): Promise<GatewayToolsModule | null> {
   return cachedGatewayTools;
 }
 
-function buildSearchPrompt(
-  query: string,
-  employeeName?: string,
-  searchMode: SearchMode = "standard",
-): string {
-  const who = employeeName ? `${employeeName} (AI employee)` : "An AdeHQ AI employee";
-  if (searchMode === "fast_fact") {
-    return [
-      `${who} is answering a quick factual question in chat.`,
-      "",
-      `Question: ${query.trim()}`,
-      "",
-      "Instructions:",
-      "- Answer in 2-4 short paragraphs max.",
-      "- For private companies, distinguish revenue vs ARR vs run-rate; say estimated/reported, not audited.",
-      "- Give a range when sources disagree; name the best-supported estimate.",
-      "- Do not include a Sources section or markdown links — sources are shown separately.",
-      "- If you cannot verify, say so plainly.",
-    ].join("\n");
-  }
-
-  return [
-    `${who} is answering a quick factual question in chat.`,
-    "",
-    `Question: ${query.trim()}`,
-    "",
-    "Instructions:",
-    "- Use web search tools to find current, credible sources.",
-    "- Answer concisely in plain language (2-5 short paragraphs max).",
-    "- For private companies, say when revenue/funding figures are estimates or ARR run-rate, not audited annual revenue.",
-    "- Do not invent a single exact number when sources disagree — give a range or the best-supported estimate.",
-    "- Do not include a Sources section — sources are shown separately.",
-    "- If sources are weak or conflicting, say so explicitly.",
-  ].join("\n");
-}
-
 function extractSourcesFromText(text: string): SearchSource[] {
   const sources: SearchSource[] = [];
   const linkPattern = /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g;
@@ -96,7 +76,159 @@ function extractSourcesFromText(text: string): SearchSource[] {
   while ((match = linkPattern.exec(text)) !== null) {
     sources.push({ title: match[1].trim(), url: match[2].trim() });
   }
+
+  const bareUrlPattern = /https?:\/\/[^\s)\]>,"']+/g;
+  while ((match = bareUrlPattern.exec(text)) !== null) {
+    const url = match[0].replace(/[.,;:!?)]+$/, "");
+    sources.push({ title: url, url });
+  }
+
   return sources;
+}
+
+function extractSourcesFromUnknown(value: unknown, depth = 0): SearchSource[] {
+  if (depth > 6 || value == null) return [];
+  if (typeof value === "string") {
+    return extractSourcesFromText(value);
+  }
+  if (Array.isArray(value)) {
+    return value.flatMap((item) => extractSourcesFromUnknown(item, depth + 1));
+  }
+  if (typeof value !== "object") return [];
+
+  const record = value as Record<string, unknown>;
+  const url =
+    (typeof record.url === "string" && record.url) ||
+    (typeof record.link === "string" && record.link) ||
+    (typeof record.href === "string" && record.href);
+  if (url && /^https?:\/\//i.test(url)) {
+    const title =
+      (typeof record.title === "string" && record.title.trim()) ||
+      (typeof record.name === "string" && record.name.trim()) ||
+      url;
+    const snippet =
+      (typeof record.snippet === "string" && record.snippet) ||
+      (typeof record.content === "string" && record.content) ||
+      (typeof record.description === "string" && record.description) ||
+      (typeof record.text === "string" && record.text);
+    return [{ title, url, snippet: snippet?.slice(0, 600) }];
+  }
+
+  const nested: SearchSource[] = [];
+  for (const key of ["sources", "results", "citations", "search_results", "output", "content"]) {
+    if (key in record) {
+      nested.push(...extractSourcesFromUnknown(record[key], depth + 1));
+    }
+  }
+  return nested;
+}
+
+function mergeSearchSources(...groups: SearchSource[][]): SearchSource[] {
+  const seen = new Set<string>();
+  const merged: SearchSource[] = [];
+  for (const group of groups) {
+    for (const source of group) {
+      const url = source.url.trim();
+      if (!url || seen.has(url)) continue;
+      seen.add(url);
+      merged.push({
+        title: source.title.trim() || url,
+        url,
+        snippet: source.snippet?.trim(),
+      });
+    }
+  }
+  return merged;
+}
+
+/** Extract URL sources from AI SDK generateText results (model sources + tool outputs). */
+export function extractSourcesFromGenerateTextResult(
+  result: GatewayGenerateTextResult,
+): SearchSource[] {
+  const fromModel: SearchSource[] = [];
+  for (const source of result.sources ?? []) {
+    if (source.sourceType === "document") continue;
+    if (source.url) {
+      fromModel.push({ title: source.title?.trim() || source.url, url: source.url });
+    }
+  }
+  for (const step of result.steps ?? []) {
+    for (const source of step.sources ?? []) {
+      if (source.sourceType === "document") continue;
+      if (source.url) {
+        fromModel.push({ title: source.title?.trim() || source.url, url: source.url });
+      }
+    }
+    for (const toolResult of step.toolResults ?? []) {
+      fromModel.push(...extractSourcesFromUnknown(toolResult.output));
+    }
+  }
+  return mergeSearchSources(fromModel, extractSourcesFromText(result.text ?? ""));
+}
+
+function buildSynthesisPromptFromSources(
+  query: string,
+  sources: SearchSource[],
+  employeeName?: string,
+  searchMode: SearchMode = "standard",
+): string {
+  const who = employeeName ? `${employeeName} (AI employee)` : "An AdeHQ AI employee";
+  const sourceBlock = sources
+    .map((source, index) => {
+      const lines = [`[${index + 1}] ${source.title}`, `URL: ${source.url}`];
+      if (source.snippet?.trim()) lines.push(source.snippet.trim().slice(0, 500));
+      return lines.join("\n");
+    })
+    .join("\n\n");
+
+  const lengthHint =
+    searchMode === "fast_fact"
+      ? "Answer in 2-4 short paragraphs max."
+      : "Answer concisely in plain language (2-5 short paragraphs max).";
+
+  return [
+    `${who} is answering a factual question using numbered web sources.`,
+    "",
+    `Question: ${query.trim()}`,
+    "",
+    "Sources:",
+    sourceBlock || "(no sources returned)",
+    "",
+    "Instructions:",
+    `- ${lengthHint}`,
+    "- Cite sources inline after each factual claim using [1], [2], etc. matching the numbered sources above.",
+    "- Only state facts that are supported by the numbered sources.",
+    "- For private companies, distinguish revenue vs ARR vs run-rate; say estimated/reported when appropriate.",
+    "- If sources disagree, give a range and cite each supporting source.",
+    "- Do not add a separate Sources section — source links are shown separately in the UI.",
+    "- If the sources do not support an answer, say you could not verify from current sources.",
+  ].join("\n");
+}
+
+function buildSonarFallbackPrompt(
+  query: string,
+  employeeName?: string,
+  searchMode: SearchMode = "standard",
+): string {
+  const who = employeeName ? `${employeeName} (AI employee)` : "An AdeHQ AI employee";
+  const lengthHint =
+    searchMode === "fast_fact"
+      ? "Answer in 2-4 short paragraphs max."
+      : "Answer concisely in plain language (2-5 short paragraphs max).";
+
+  return [
+    `${who} is answering a factual question using live web search.`,
+    "",
+    `Question: ${query.trim()}`,
+    "",
+    "Instructions:",
+    `- ${lengthHint}`,
+    "- Cite sources inline after factual claims using [1], [2], etc.",
+    "- For private companies, distinguish revenue vs ARR vs run-rate; say estimated/reported when appropriate.",
+    "- If sources disagree, give a range and cite each.",
+    "- Do not add a separate Sources section — source links are shown separately in the UI.",
+    "- If you cannot verify from current sources, say so plainly.",
+  ].join("\n");
 }
 
 function buildToolConfig(
@@ -147,28 +279,87 @@ function buildToolConfig(
   return null;
 }
 
-async function runSonarSearchAnswer(
-  prompt: string,
-  maxOutputTokens: number,
-  timeoutMs: number,
-): Promise<{ text: string; sources: SearchSource[]; synthesisLatencyMs: number }> {
-  const started = Date.now();
-  const sonarResult = await generateText({
-    model: gateway("perplexity/sonar"),
-    prompt,
-    maxOutputTokens,
-    temperature: 0.2,
-    abortSignal: AbortSignal.timeout(timeoutMs),
+async function runGatewaySearchQuery(
+  options: GatewaySearchOptions,
+  route: GatewaySearchOptions["route"],
+  preset: ReturnType<typeof getFastFactSearchPreset>,
+  modelId: string,
+): Promise<{ sources: SearchSource[]; searchLatencyMs: number; usedTool: boolean }> {
+  await loadGatewayTools();
+  const toolConfig = buildToolConfig(route, options, preset);
+  if (!toolConfig) {
+    return { sources: [], searchLatencyMs: 0, usedTool: false };
+  }
+
+  const searchStarted = Date.now();
+  const result = await generateText({
+    model: gateway(modelId),
+    prompt: `Search the web for current, credible information to answer: ${options.query.trim()}`,
+    tools: { [toolConfig.toolName]: toolConfig.tool } as Record<string, never>,
+    toolChoice: { type: "tool", toolName: toolConfig.toolName },
+    stopWhen: stepCountIs(2),
+    maxOutputTokens: 256,
+    temperature: 0,
+    abortSignal: AbortSignal.timeout(preset.timeoutMs),
   });
-  const text = sonarResult.text.trim();
+
   return {
-    text,
-    sources: extractSourcesFromText(text),
+    sources: extractSourcesFromGenerateTextResult(result),
+    searchLatencyMs: Date.now() - searchStarted,
+    usedTool: true,
+  };
+}
+
+async function synthesizeFromSources(
+  options: GatewaySearchOptions,
+  sources: SearchSource[],
+  modelId: string,
+  preset: ReturnType<typeof getFastFactSearchPreset>,
+  searchMode: SearchMode,
+): Promise<{ text: string; synthesisLatencyMs: number }> {
+  const started = Date.now();
+  const prompt = buildSynthesisPromptFromSources(
+    options.query,
+    sources,
+    options.employeeName,
+    searchMode,
+  );
+  const result = await generateText({
+    model: gateway(modelId),
+    prompt,
+    maxOutputTokens: preset.synthesisMaxOutputTokens,
+    temperature: 0.2,
+    abortSignal: AbortSignal.timeout(preset.timeoutMs),
+  });
+  return {
+    text: result.text.trim(),
     synthesisLatencyMs: Date.now() - started,
   };
 }
 
-/** Fast search via Vercel AI Gateway search tools, with sonar model fallback. */
+async function runSonarSearchAnswer(
+  options: GatewaySearchOptions,
+  searchMode: SearchMode,
+  preset: ReturnType<typeof getFastFactSearchPreset>,
+): Promise<{ text: string; sources: SearchSource[]; synthesisLatencyMs: number }> {
+  const started = Date.now();
+  const prompt = buildSonarFallbackPrompt(options.query, options.employeeName, searchMode);
+  const sonarResult = await generateText({
+    model: gateway("perplexity/sonar"),
+    prompt,
+    maxOutputTokens: preset.synthesisMaxOutputTokens,
+    temperature: 0.2,
+    abortSignal: AbortSignal.timeout(preset.timeoutMs),
+  });
+  const text = sonarResult.text.trim();
+  return {
+    text,
+    sources: extractSourcesFromGenerateTextResult(sonarResult),
+    synthesisLatencyMs: Date.now() - started,
+  };
+}
+
+/** Fast search via Vercel AI Gateway — search tool for sources, then cited synthesis. */
 export async function runGatewaySearchAnswer(
   options: GatewaySearchOptions,
 ): Promise<GatewaySearchAnswerResult> {
@@ -187,79 +378,43 @@ export async function runGatewaySearchAnswer(
   if (credential?.apiKey) process.env.AI_GATEWAY_API_KEY = credential.apiKey;
 
   try {
-  const route = options.route ?? "gateway_perplexity";
-  const searchMode = options.searchMode ?? "standard";
-  const preset = getFastFactSearchPreset();
-  const prompt = buildSearchPrompt(options.query, options.employeeName, searchMode);
-  const modelId =
-    resolveVercelGatewayModelId({ runtimeMode: "efficient" }) || getGatewaySearchModelId();
-  const synthesisModel =
-    searchMode === "fast_fact" ? "perplexity/sonar" : modelId;
-  const totalStarted = Date.now();
+    const route = options.route ?? "gateway_perplexity";
+    const searchMode = options.searchMode ?? "standard";
+    const preset = getFastFactSearchPreset();
+    const modelId =
+      resolveVercelGatewayModelId({ runtimeMode: "efficient" }) || getGatewaySearchModelId();
 
-  if (searchMode === "fast_fact") {
-    const sonar = await runSonarSearchAnswer(
-      prompt,
-      preset.synthesisMaxOutputTokens,
-      preset.timeoutMs,
-    );
-    return {
-      text: sonar.text,
-      sources: sonar.sources,
-      usedTool: false,
-      synthesisModel: "perplexity/sonar",
-      searchLatencyMs: 0,
-      synthesisLatencyMs: sonar.synthesisLatencyMs,
-    };
-  }
+    const searchQuery = await runGatewaySearchQuery(options, route, preset, modelId);
+    let sources = searchQuery.sources;
+    let text = "";
+    let synthesisLatencyMs = 0;
+    let usedTool = searchQuery.usedTool;
+    let synthesisModel = modelId;
 
-  await loadGatewayTools();
-  const toolConfig = buildToolConfig(route, options, preset);
-
-  if (toolConfig) {
-    const toolStarted = Date.now();
-    const tools = { [toolConfig.toolName]: toolConfig.tool } as Record<string, never>;
-    const result = await generateText({
-      model: gateway(modelId),
-      prompt,
-      tools,
-      stopWhen: stepCountIs(3),
-      maxOutputTokens: preset.synthesisMaxOutputTokens,
-      temperature: 0.2,
-      abortSignal: AbortSignal.timeout(preset.timeoutMs),
-    });
-
-    const text = result.text.trim();
-    const searchLatencyMs = Date.now() - toolStarted;
-    if (text.length > 0) {
-      return {
-        text,
-        sources: extractSourcesFromText(text),
-        usedTool: true,
-        synthesisModel: modelId,
-        searchLatencyMs,
-        synthesisLatencyMs: searchLatencyMs,
-      };
+    if (sources.length > 0) {
+      const synthesis = await synthesizeFromSources(options, sources, modelId, preset, searchMode);
+      text = synthesis.text;
+      synthesisLatencyMs = synthesis.synthesisLatencyMs;
+    } else {
+      console.warn(
+        "[AdeHQ gateway search] Search tool returned no sources — falling back to perplexity/sonar.",
+      );
+      const sonar = await runSonarSearchAnswer(options, searchMode, preset);
+      text = sonar.text;
+      sources = sonar.sources;
+      synthesisLatencyMs = sonar.synthesisLatencyMs;
+      usedTool = false;
+      synthesisModel = "perplexity/sonar";
     }
 
-    console.warn(
-      "[AdeHQ gateway search] Tool path returned empty text — falling back to perplexity/sonar.",
-    );
-  }
-
-  const sonar = await runSonarSearchAnswer(
-    prompt,
-    preset.synthesisMaxOutputTokens,
-    preset.timeoutMs,
-  );
-  return {
-    text: sonar.text,
-    sources: sonar.sources,
-    usedTool: false,
-    synthesisModel: "perplexity/sonar",
-    searchLatencyMs: Date.now() - totalStarted - sonar.synthesisLatencyMs,
-    synthesisLatencyMs: sonar.synthesisLatencyMs,
-  };
+    return {
+      text,
+      sources,
+      usedTool,
+      synthesisModel,
+      searchLatencyMs: searchQuery.searchLatencyMs,
+      synthesisLatencyMs,
+    };
   } finally {
     if (credential?.apiKey) {
       if (previousGatewayKey === undefined) delete process.env.AI_GATEWAY_API_KEY;

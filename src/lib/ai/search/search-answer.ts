@@ -48,6 +48,14 @@ const SEARCH_UNAVAILABLE_MESSAGE =
 const NO_SOURCES_MESSAGE =
   "I searched but couldn't find credible sources to verify that. I'd rather not guess — want me to try a broader search?";
 
+/** Search answers must include verifiable sources — never return unsourced factual claims. */
+export function shouldReturnNoSourcesMessage(
+  _text: string,
+  normalized: { usedSourceCount: number; sourceCount: number },
+): boolean {
+  return normalized.usedSourceCount === 0 && normalized.sourceCount === 0;
+}
+
 function buildDecision(params: ExecuteSearchAnswerParams): SearchRouteDecision {
   if (params.routeOverride) {
     const routed = decideSearchRoute(params.query, { preferAgentMode: params.preferAgentMode });
@@ -173,7 +181,7 @@ export async function executeSearchAnswer(
       searchLatencyMs = result.searchLatencyMs;
       synthesisLatencyMs = result.synthesisLatencyMs;
 
-      if (!text.trim() && isTavilySearchConfigured()) {
+      if ((!text.trim() || rawSources.length === 0) && isTavilySearchConfigured()) {
         const tavilyStarted = Date.now();
         const tavilyResult = await runTavilySearchAnswer({
           query: params.query,
@@ -232,7 +240,7 @@ export async function executeSearchAnswer(
       };
     }
 
-    if (normalized.usedSourceCount === 0 && normalized.sourceCount === 0) {
+    if (shouldReturnNoSourcesMessage(text, normalized)) {
       return {
         answer: NO_SOURCES_MESSAGE,
         sources: [],

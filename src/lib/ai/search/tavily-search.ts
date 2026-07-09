@@ -32,7 +32,8 @@ function buildTavilySynthesisPrompt(
     sourceBlock || "(no results)",
     "",
     "Write a concise answer. Note uncertainty for private-company revenue/funding.",
-    "End with Sources as markdown links [title](url).",
+    "Cite sources inline after each claim using [1], [2], etc. matching the numbered results above.",
+    "Do not add a separate Sources section — source links are shown separately in the UI.",
   ].join("\n");
 }
 

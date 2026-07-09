@@ -5,6 +5,8 @@
 
 import { decideSearchRoute } from "@/lib/ai/search/search-router";
 import { getFastFactSearchPreset } from "@/lib/ai/search/config";
+import { shouldReturnNoSourcesMessage } from "@/lib/ai/search/search-answer";
+import { extractSourcesFromGenerateTextResult } from "@/lib/ai/search/vercel-gateway-search";
 import {
   normalizeGatewaySearchSources,
   rankSearchSources,
@@ -114,6 +116,51 @@ async function main() {
     );
     expectTrue(!/\*\*Sources\*\*/i.test(stripped));
     expectTrue(stripped.startsWith("Answer body."));
+  });
+
+  await test("search answers without sources are always rejected", () => {
+    const answer =
+      "Apple reported approximately $391 billion in revenue for fiscal 2025, based on its annual earnings release.";
+    expectTrue(
+      shouldReturnNoSourcesMessage(answer, { usedSourceCount: 0, sourceCount: 0 }),
+      "expected unsourced factual answer to be rejected",
+    );
+    expectTrue(
+      !shouldReturnNoSourcesMessage(answer, { usedSourceCount: 1, sourceCount: 1 }),
+      "expected sourced answer to pass",
+    );
+  });
+
+  await test("gateway result sources extract from AI SDK source parts and tool output", () => {
+    const extracted = extractSourcesFromGenerateTextResult({
+      sources: [
+        {
+          sourceType: "url",
+          url: "https://www.apple.com/newsroom/2025/10/apple-reports-fourth-quarter-results/",
+          title: "Apple reports Q4 results",
+        },
+      ],
+      steps: [
+        {
+          toolResults: [
+            {
+              output: {
+                results: [
+                  {
+                    title: "Apple Investor Relations",
+                    url: "https://investor.apple.com/",
+                    snippet: "Revenue and earnings data.",
+                  },
+                ],
+              },
+            },
+          ],
+        },
+      ],
+    });
+    expectTrue(extracted.length >= 2);
+    expectTrue(extracted.some((source) => source.url.includes("apple.com/newsroom")));
+    expectTrue(extracted.some((source) => source.url.includes("investor.apple.com")));
   });
 
   await test("filterLowQualitySources removes unrelated entries", () => {
