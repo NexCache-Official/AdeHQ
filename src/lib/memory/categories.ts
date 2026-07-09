@@ -34,6 +34,7 @@ export type MemorySourceType =
   | "artifact"
   | "manual"
   | "ai_suggestion"
+  | "search_distill"
   | "work_log"
   | "hiring_session";
 

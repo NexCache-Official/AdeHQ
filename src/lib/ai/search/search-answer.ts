@@ -296,7 +296,10 @@ export async function executeSearchAnswer(
     };
 
     if (params.client && result.answer.trim()) {
-      await setSearchCache(params.client, params.workspaceId, params.query, result);
+      await setSearchCache(params.client, params.workspaceId, params.query, result, {
+        topicId: params.topicId,
+        sourceAgentRunId: params.agentRunId,
+      });
     }
 
     return result;

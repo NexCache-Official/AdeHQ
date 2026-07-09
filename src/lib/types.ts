@@ -653,7 +653,8 @@ export type MemorySourceType =
   | "manual"
   | "ai_suggestion"
   | "work_log"
-  | "hiring_session";
+  | "hiring_session"
+  | "search_distill";
 
 export type MemoryScope =
   | "workspace"

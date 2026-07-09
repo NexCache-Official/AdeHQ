@@ -107,6 +107,7 @@ export type IntelligenceContext = {
   backgroundLearning?: {
     queued: boolean;
     memoryId?: string;
+    autoSaved?: boolean;
   };
   steps: IntelligenceStep[];
 };

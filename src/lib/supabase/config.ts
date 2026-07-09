@@ -107,6 +107,7 @@ export const SUPABASE_WORKSPACE_TABLES = [
   "ai_work_units",
   "browser_research_runs",
   "workspace_search_cache",
+  "topic_search_inflight",
   "topic_orchestration_state",
   "topic_context_imports",
   "ai_work_minutes_ledger",

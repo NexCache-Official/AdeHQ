@@ -107,6 +107,7 @@ export async function POST(
       metrics: result.metrics,
       searchMeta: result.searchMeta,
       dmSteward: result.dmSteward,
+      intelligenceTrace: result.intelligenceTrace,
     });
   } catch (error) {
     if (error instanceof AgentRunClaimError) {

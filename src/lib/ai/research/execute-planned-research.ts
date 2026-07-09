@@ -7,6 +7,15 @@ import {
 import type { BrowserResearchRun } from "@/lib/ai/browser-research/types";
 import { sanitizeReplyForChat } from "@/lib/ai/normalize-model-response";
 import { executeSearchAnswer } from "@/lib/ai/search/search-answer";
+import {
+  cachedAnswerToSearchResult,
+  getSearchCache,
+} from "@/lib/ai/search/search-cache";
+import {
+  completeTopicSearch,
+  coordinateTopicSearch,
+  failTopicSearch,
+} from "@/lib/ai/search/topic-search-coordination";
 import { isGatewayResearchProvider } from "@/lib/ai/research/research-provider";
 import {
   assertGatewaySearchPlanAccess,
@@ -105,24 +114,62 @@ export async function executePlannedResearch(
   if (isGatewayResearchProvider(params.plan.provider) || params.plan.provider === "tavily") {
     await assertGatewaySearchPlanAccess(client, params.workspaceId);
     const employee = await loadWorkspaceEmployee(client, params.workspaceId, params.employeeId);
-    const searchResult = await executeSearchAnswer({
-      client,
-      workspaceId: params.workspaceId,
-      roomId: params.roomId,
-      topicId: params.topicId,
-      employeeId: params.employeeId,
-      employeeName: employee?.name,
-      query,
-      agentRunId: params.agentRunId,
-      routeOverride:
-        params.plan.provider === "gateway_exa"
-          ? "gateway_exa"
-          : params.plan.provider === "gateway_parallel"
-            ? "gateway_parallel"
-            : params.plan.provider === "tavily"
-              ? "tavily"
-            : "gateway_perplexity",
-    });
+
+    let coordination:
+      | Awaited<ReturnType<typeof coordinateTopicSearch>>
+      | undefined;
+    if (params.agentRunId) {
+      coordination = await coordinateTopicSearch(client, {
+        workspaceId: params.workspaceId,
+        topicId: params.topicId,
+        query,
+        agentRunId: params.agentRunId,
+      });
+    }
+
+    let searchResult;
+    if (coordination && !coordination.acquired) {
+      const cached = await getSearchCache(client, params.workspaceId, query);
+      if (cached?.answer?.trim()) {
+        searchResult = {
+          ...cachedAnswerToSearchResult(cached),
+          fromCache: true,
+          cacheKey: cached.cacheKey,
+        };
+      }
+    }
+
+    if (!searchResult) {
+      try {
+        searchResult = await executeSearchAnswer({
+          client,
+          workspaceId: params.workspaceId,
+          roomId: params.roomId,
+          topicId: params.topicId,
+          employeeId: params.employeeId,
+          employeeName: employee?.name,
+          query,
+          agentRunId: params.agentRunId,
+          routeOverride:
+            params.plan.provider === "gateway_exa"
+              ? "gateway_exa"
+              : params.plan.provider === "gateway_parallel"
+                ? "gateway_parallel"
+                : params.plan.provider === "tavily"
+                  ? "tavily"
+                  : "gateway_perplexity",
+        });
+      } catch (error) {
+        if (coordination?.acquired) {
+          await failTopicSearch(client, {
+            workspaceId: params.workspaceId,
+            topicId: params.topicId,
+            cacheKey: coordination.cacheKey,
+          });
+        }
+        throw error;
+      }
+    }
 
     const artifacts = searchResult.webSourcesArtifact
       ? [searchResult.webSourcesArtifact]
@@ -141,6 +188,17 @@ export async function executePlannedResearch(
       agentRunId: params.agentRunId,
       triggerMessageId: params.triggerMessageId,
     });
+
+    if (coordination?.acquired) {
+      await completeTopicSearch(client, {
+        workspaceId: params.workspaceId,
+        topicId: params.topicId,
+        cacheKey: coordination.cacheKey,
+        agentRunId: params.agentRunId!,
+        resultMessageId: chatReply.id,
+        sharedFromRunId: coordination.sharedFromRunId,
+      });
+    }
 
     return {
       chatReply,

@@ -125,7 +125,9 @@ export async function setSearchCache(
     | "providerRoute"
     | "searchMeta"
     | "searchSourcesArtifact"
+    | "webSourcesArtifact"
   >,
+  options?: { topicId?: string; sourceAgentRunId?: string },
 ): Promise<string> {
   const cacheKey = normalizeSearchCacheKey(query);
   const expiresAt = new Date(
@@ -143,6 +145,8 @@ export async function setSearchCache(
       provider_route: result.providerRoute,
       search_meta: result.searchMeta ?? {},
       hit_count: 0,
+      topic_id: options?.topicId ?? null,
+      source_agent_run_id: options?.sourceAgentRunId ?? null,
       expires_at: expiresAt,
       updated_at: nowISO(),
     },

@@ -81,6 +81,13 @@ import {
   ParticipantAvatarStack,
   requestOpenPeopleTab,
 } from "@/components/people/RoomMembersPopover";
+import { RunStatusChip } from "@/components/chat/RunStatusChip";
+import {
+  minimumReplyHoldMs,
+  statusChipForIntelligence,
+  type RunStatusChip as RunStatusChipType,
+} from "@/lib/ai/intelligence/adaptive-timing";
+import type { ConversationDebugTrace } from "@/lib/ai/intelligence/intelligence-debug-trace";
 
 type PendingSend = {
   clientMessageId: string;
@@ -103,6 +110,7 @@ type ActiveRun = {
   error?: string;
   collaborationRole?: string;
   waitingOnEmployeeName?: string;
+  statusChip?: RunStatusChipType;
 };
 
 type QueuedRunClient = {
@@ -650,7 +658,7 @@ export function RoomChat({
           }
           setActiveRuns((prev) =>
             prev.map((r) =>
-              r.runId === run.runId ? { ...r, phase: "reading" } : r,
+              r.runId === run.runId ? { ...r, phase: "reading", statusChip: "reading" } : r,
             ),
           );
 
@@ -659,7 +667,7 @@ export function RoomChat({
           }
           setActiveRuns((prev) =>
             prev.map((r) =>
-              r.runId === run.runId ? { ...r, phase: "thinking" } : r,
+              r.runId === run.runId ? { ...r, phase: "thinking", statusChip: "thinking" } : r,
             ),
           );
 
@@ -667,7 +675,9 @@ export function RoomChat({
           try {
             setActiveRuns((prev) =>
               prev.map((r) =>
-                r.runId === run.runId ? { ...r, phase: "typing" } : r,
+                r.runId === run.runId
+                  ? { ...r, phase: "typing", statusChip: "searching" }
+                  : r,
               ),
             );
 
@@ -733,6 +743,34 @@ export function RoomChat({
                 label: a.label,
               })),
             });
+
+            const intelligenceTrace = data.intelligenceTrace as ConversationDebugTrace | undefined;
+            if (intelligenceTrace) {
+              trace("intelligence", "info", `${run.employeeName} intelligence pipeline (${intelligenceTrace.roomKind})`, {
+                runId: run.runId,
+                roomKind: intelligenceTrace.roomKind,
+                workMode: intelligenceTrace.workMode,
+                researchLevel: intelligenceTrace.researchLevel,
+                aiMode: intelligenceTrace.aiMode,
+                intelligence: intelligenceTrace.intelligence,
+                dmSteward: intelligenceTrace.dmSteward,
+                gatewaySearch: intelligenceTrace.gatewaySearch,
+                timeline: intelligenceTrace.timeline,
+              });
+            }
+
+            const holdMs = minimumReplyHoldMs(undefined, data.aiMode);
+            const elapsed = Date.now() - started;
+            if (holdMs > elapsed) {
+              await new Promise((resolve) => setTimeout(resolve, holdMs - elapsed));
+            }
+
+            const replyChip = statusChipForIntelligence(undefined, data.aiMode);
+            setActiveRuns((prev) =>
+              prev.map((r) =>
+                r.runId === run.runId ? { ...r, statusChip: replyChip } : r,
+              ),
+            );
 
             if (data.researchRun) {
               setBrowserResearchRuns((current) =>
@@ -1040,6 +1078,8 @@ export function RoomChat({
         response.ok || response.status === 207 ? "success" : "error",
         `Message API ${response.status} (${Date.now() - sendStarted}ms)`,
         {
+          workMode: options?.workMode,
+          roomKind: isDm ? "dm" : "room",
           queuedRuns: payload.queuedRuns,
           blockedRuns: payload.blockedRuns,
           code: payload.code,
@@ -1630,7 +1670,8 @@ export function RoomChat({
                         <span className="inline-block h-9 w-9 rounded-full bg-muted" />
                       )}
                     </div>
-                    <div className="flex w-fit items-center gap-1.5 rounded-[13px] border border-border bg-surface px-3.5 py-2.5">
+                    <div className="flex w-fit items-center gap-2 rounded-[13px] border border-border bg-surface px-3.5 py-2.5">
+                      {run.statusChip ? <RunStatusChip chip={run.statusChip} /> : null}
                       <span className="typing-dot" />
                       <span className="typing-dot" />
                       <span className="typing-dot" />

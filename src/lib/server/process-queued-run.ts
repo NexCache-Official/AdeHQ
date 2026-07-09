@@ -91,6 +91,16 @@ import {
   withComposerMetadata,
 } from "@/lib/ai/intelligence/response-composer";
 import { queueBackgroundLearningFromSearch } from "@/lib/ai/intelligence/background-learning";
+import {
+  attachArtifactToMessage,
+  createGatewaySearchResearchReport,
+} from "@/lib/ai/intelligence/gateway-search-report";
+import { assignResearchLevel } from "@/lib/ai/intelligence/research-level";
+import {
+  buildConversationDebugTrace,
+  type ConversationDebugTrace,
+} from "@/lib/ai/intelligence/intelligence-debug-trace";
+import { appendIntelligenceStep } from "@/lib/ai/intelligence/telemetry";
 
 function formatResearchError(error: unknown): string {
   return serializeUnknownError(error);
@@ -133,6 +143,60 @@ type DbRow = Record<string, unknown>;
 
 function dmStewardUsesArchivedSummary(chatClearedAt: string | null): boolean {
   return !chatClearedAt;
+}
+
+async function persistConversationDebugTrace(
+  client: SupabaseClient,
+  workspaceId: string,
+  runId: string,
+  runMetadata: Record<string, unknown>,
+  trace: ConversationDebugTrace,
+) {
+  runMetadata.debugTrace = trace;
+  await client
+    .from("agent_runs")
+    .update({ run_metadata: runMetadata })
+    .eq("workspace_id", workspaceId)
+    .eq("id", runId);
+}
+
+async function buildAndPersistIntelligenceTrace(
+  client: SupabaseClient,
+  params: {
+    workspaceId: string;
+    runId: string;
+    runMetadata: Record<string, unknown>;
+    roomKind: "dm" | "room" | "unknown";
+    intelligence?: IntelligenceContext;
+    employeeId: string;
+    employeeName: string;
+    triggerMessageId: string;
+    aiMode?: string;
+    dmSteward?: Record<string, unknown>;
+    gatewaySearch?: Record<string, unknown>;
+    extraTimeline?: ConversationDebugTrace["timeline"];
+  },
+): Promise<ConversationDebugTrace> {
+  const trace = buildConversationDebugTrace({
+    roomKind: params.roomKind,
+    intelligence: params.intelligence,
+    dmSteward: params.dmSteward,
+    gatewaySearch: params.gatewaySearch,
+    employeeId: params.employeeId,
+    employeeName: params.employeeName,
+    triggerMessageId: params.triggerMessageId,
+    agentRunId: params.runId,
+    aiMode: params.aiMode,
+    extraTimeline: params.extraTimeline,
+  });
+  await persistConversationDebugTrace(
+    client,
+    params.workspaceId,
+    params.runId,
+    params.runMetadata,
+    trace,
+  );
+  return trace;
 }
 
 export class AgentRunClaimError extends Error {
@@ -188,6 +252,7 @@ export async function processQueuedAgentRun(
   collaborationPlan?: ConversationPlan;
   searchMeta?: import("@/lib/ai/search/types").GatewaySearchRunMeta;
   dmSteward?: Record<string, unknown>;
+  intelligenceTrace?: ConversationDebugTrace;
 }> {
   const claim = await claimAgentRun(client, workspaceId, runId);
   if (!claim.ok) {
@@ -498,6 +563,23 @@ export async function processQueuedAgentRun(
           }
         }
 
+        const intelligenceTrace = buildConversationDebugTrace({
+          roomKind: ctx.room.kind === "dm" ? "dm" : "room",
+          intelligence,
+          employeeId,
+          employeeName: employee.name,
+          triggerMessageId,
+          agentRunId: runId,
+          aiMode: "knowledge",
+        });
+        await persistConversationDebugTrace(
+          client,
+          workspaceId,
+          runId,
+          runMetadata,
+          intelligenceTrace,
+        );
+
         return {
           reply: knowledgeReply.content,
           aiMessageId: knowledgeReply.id,
@@ -505,6 +587,7 @@ export async function processQueuedAgentRun(
           employeeId,
           employeeName: employee.name,
           artifacts: knowledgeReply.artifacts,
+          intelligenceTrace,
           metrics: {
             provider: employee.provider,
             model: "knowledge",
@@ -779,6 +862,25 @@ export async function processQueuedAgentRun(
         });
       }
 
+      if (isIntelligenceV1Enabled() && intelligence) {
+        const level = assignResearchLevel(intelligence, researchPlan);
+        intelligence = {
+          ...intelligence,
+          researchLevel: level,
+        };
+        intelligence = appendIntelligenceStep(intelligence, {
+          layer: "tool",
+          decision: `research_level_${level}`,
+          confidence: 1,
+          durationMs: 0,
+          metadata: {
+            action: researchPlan?.action,
+            provider: researchPlan?.provider,
+          },
+        });
+        runMetadata.intelligence = intelligenceMetadata(intelligence);
+      }
+
       if (researchPlan.action === "search" || researchPlan.action === "browse") {
         const isGatewaySearch =
           researchPlan.provider === "gateway_perplexity" ||
@@ -854,6 +956,28 @@ export async function processQueuedAgentRun(
               failed: false,
             });
 
+            const intelligenceTrace =
+              isIntelligenceV1Enabled() && intelligence
+                ? await buildAndPersistIntelligenceTrace(client, {
+                    workspaceId,
+                    runId,
+                    runMetadata,
+                    roomKind: isDmRoom ? "dm" : "room",
+                    intelligence: appendIntelligenceStep(intelligence, {
+                      layer: "tool",
+                      decision: "research_async_started",
+                      confidence: 1,
+                      durationMs: 0,
+                      metadata: { runId: researchResult.run.id },
+                    }),
+                    employeeId,
+                    employeeName: employee.name,
+                    triggerMessageId,
+                    aiMode: "research_async",
+                    dmSteward: runMetadata.dmSteward as Record<string, unknown> | undefined,
+                  })
+                : undefined;
+
             return {
               reply: "",
               aiMessageId: "",
@@ -862,6 +986,7 @@ export async function processQueuedAgentRun(
               employeeName: employee.name,
               researchRun: researchResult.run,
               pendingResearch: true,
+              intelligenceTrace,
               metrics: {
                 provider: researchResult.run.provider,
                 model: researchResult.run.provider,
@@ -1006,15 +1131,19 @@ export async function processQueuedAgentRun(
                 searchAnswer: researchResult.chatReply.content,
                 messageId: researchResult.chatReply.id,
                 agentRunId: runId,
+                searchConfidence: searchMeta?.usedSourceCount
+                  ? Math.min(0.98, 0.7 + searchMeta.usedSourceCount * 0.05)
+                  : 0.85,
                 sourcesArtifact: researchResult.chatReply.artifacts?.find(
-                  (artifact) => artifact.type === "search_sources",
+                  (artifact) => artifact.type === "search_sources" || artifact.type === "web_sources",
                 ),
               });
               intelligence = {
                 ...intelligence,
                 backgroundLearning: {
                   queued: learning.queued,
-                  memoryId: learning.memorySuggestionKey,
+                  memoryId: learning.memoryId ?? learning.memorySuggestionKey,
+                  autoSaved: learning.autoSaved,
                 },
               };
 
@@ -1031,6 +1160,46 @@ export async function processQueuedAgentRun(
                 }
               }
 
+              if (
+                intelligence.researchLevel === 2 &&
+                researchResult.searchAnswer &&
+                !researchResult.searchAnswer.fromCache
+              ) {
+                try {
+                  const report = await createGatewaySearchResearchReport(client, {
+                    workspaceId,
+                    roomId,
+                    topicId,
+                    employeeId,
+                    createdBy,
+                    query: researchPlan.resolved.query,
+                    answer: researchResult.chatReply.content,
+                    sourcesArtifact: researchResult.chatReply.artifacts?.find(
+                      (artifact) =>
+                        artifact.type === "search_sources" || artifact.type === "web_sources",
+                    ),
+                    agentRunId: runId,
+                    provider: researchResult.searchAnswer.route,
+                  });
+                  if (report) {
+                    researchResult.chatReply.artifacts = await attachArtifactToMessage(client, {
+                      workspaceId,
+                      messageId: researchResult.chatReply.id,
+                      artifact: report.messageArtifact,
+                    });
+                    intelligence = appendIntelligenceStep(intelligence, {
+                      layer: "tool",
+                      decision: "l2_gateway_report",
+                      confidence: 1,
+                      durationMs: 0,
+                      metadata: { artifactId: report.artifactId },
+                    });
+                  }
+                } catch (error) {
+                  console.warn("[AdeHQ L2 gateway report]", error);
+                }
+              }
+
               runMetadata.intelligence = intelligenceMetadata(intelligence);
             }
 
@@ -1042,6 +1211,25 @@ export async function processQueuedAgentRun(
                 .eq("id", runId);
             }
 
+            const intelligenceTrace = buildConversationDebugTrace({
+              roomKind: isDmRoom ? "dm" : "room",
+              intelligence,
+              dmSteward: runMetadata.dmSteward as Record<string, unknown> | undefined,
+              gatewaySearch: searchMeta,
+              employeeId,
+              employeeName: employee.name,
+              triggerMessageId,
+              agentRunId: runId,
+              aiMode: researchResult.searchAnswer ? "gateway_search" : "research",
+            });
+            await persistConversationDebugTrace(
+              client,
+              workspaceId,
+              runId,
+              runMetadata,
+              intelligenceTrace,
+            );
+
             return {
               reply: researchResult.chatReply.content,
               aiMessageId: researchResult.chatReply.id,
@@ -1052,6 +1240,7 @@ export async function processQueuedAgentRun(
               researchRun: researchResult.run,
               searchMeta,
               dmSteward: runMetadata.dmSteward as Record<string, unknown> | undefined,
+              intelligenceTrace,
               metrics: {
                 provider: searchProvider,
                 model: searchMeta?.synthesisModel ?? searchProvider,
@@ -1119,6 +1308,28 @@ export async function processQueuedAgentRun(
             .eq("workspace_id", workspaceId)
             .eq("id", employeeId);
 
+          const intelligenceTrace =
+            isIntelligenceV1Enabled() && intelligence
+              ? await buildAndPersistIntelligenceTrace(client, {
+                  workspaceId,
+                  runId,
+                  runMetadata,
+                  roomKind: isDmRoom ? "dm" : "room",
+                  intelligence: appendIntelligenceStep(intelligence, {
+                    layer: "tool",
+                    decision: "research_failed",
+                    confidence: 0,
+                    durationMs: 0,
+                    metadata: { error: researchErrorMessage },
+                  }),
+                  employeeId,
+                  employeeName: employee.name,
+                  triggerMessageId,
+                  aiMode: "research_failed",
+                  dmSteward: runMetadata.dmSteward as Record<string, unknown> | undefined,
+                })
+              : undefined;
+
           return {
             reply: fallbackReply,
             aiMessageId: aiMessage.id,
@@ -1126,6 +1337,7 @@ export async function processQueuedAgentRun(
             employeeId,
             employeeName: employee.name,
             artifacts,
+            intelligenceTrace,
             metrics: {
               provider: employee.provider,
               model: employee.model,
@@ -1490,6 +1702,37 @@ export async function processQueuedAgentRun(
       aiMessage = { ...aiMessage, artifacts: payload ?? undefined };
     }
 
+    let intelligenceTrace: ConversationDebugTrace | undefined;
+    if (isIntelligenceV1Enabled() && intelligence) {
+      intelligence = appendIntelligenceStep(intelligence, {
+        layer: "composer",
+        decision:
+          failed || aiMode === "error" ? "employee_model_failed" : "employee_model_reply",
+        confidence: failed || aiMode === "error" ? 0.2 : metrics?.fallbackUsed ? 0.7 : 0.95,
+        durationMs: metrics?.durationMs ?? 0,
+        metadata: {
+          aiMode,
+          provider: employee.provider,
+          model: metrics?.model,
+          inputTokens: metrics?.inputTokens,
+          outputTokens: metrics?.outputTokens,
+        },
+      });
+      runMetadata.intelligence = intelligenceMetadata(intelligence);
+      intelligenceTrace = await buildAndPersistIntelligenceTrace(client, {
+        workspaceId,
+        runId,
+        runMetadata,
+        roomKind: ctx.room.kind === "dm" ? "dm" : "room",
+        intelligence,
+        employeeId,
+        employeeName: employee.name,
+        triggerMessageId,
+        aiMode,
+        dmSteward: runMetadata.dmSteward as Record<string, unknown> | undefined,
+      });
+    }
+
     return {
       reply: response.reply,
       aiMessageId: aiMessage.id,
@@ -1500,6 +1743,7 @@ export async function processQueuedAgentRun(
       followUpRuns,
       activatedRuns,
       collaborationPlan,
+      intelligenceTrace,
       metrics: metrics
         ? {
             ...metrics,

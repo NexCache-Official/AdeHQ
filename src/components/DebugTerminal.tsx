@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   formatDebugTime,
   serializeDebugData,
@@ -10,6 +10,17 @@ import {
 import { useDebugTrace } from "./DebugProvider";
 import { cn } from "@/lib/utils";
 import { ChevronDown, ChevronUp, Copy, Terminal, Trash2, X } from "lucide-react";
+
+const DEBUG_CATEGORIES = [
+  "all",
+  "system",
+  "message",
+  "agent-run",
+  "intelligence",
+  "orchestration",
+] as const;
+
+type DebugCategoryFilter = (typeof DEBUG_CATEGORIES)[number];
 
 const LEVEL_STYLES: Record<DebugLevel, string> = {
   info: "text-sky-300",
@@ -49,15 +60,21 @@ function EntryLine({ entry }: { entry: DebugEntry }) {
 export function DebugTerminal() {
   const { enabled, panelOpen, entries, clear, setPanelOpen, setEnabled } = useDebugTrace();
   const bottomRef = useRef<HTMLDivElement>(null);
+  const [categoryFilter, setCategoryFilter] = useState<DebugCategoryFilter>("all");
+
+  const filteredEntries = useMemo(() => {
+    if (categoryFilter === "all") return entries;
+    return entries.filter((entry) => entry.category === categoryFilter);
+  }, [categoryFilter, entries]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [entries.length]);
+  }, [filteredEntries.length]);
 
   if (!enabled) return null;
 
   const copyAll = async () => {
-    const text = entries
+    const text = filteredEntries
       .map((e) => {
         const data = e.data ? `\n${serializeDebugData(e.data)}` : "";
         return `${formatDebugTime(e.at)} [${e.level}] [${e.category}] ${e.message}${data}`;
@@ -72,9 +89,27 @@ export function DebugTerminal() {
         <Terminal className="h-4 w-4 text-emerald-400" />
         <span className="text-xs font-semibold text-slate-200">AdeHQ Debug Trace</span>
         <span className="rounded-full bg-emerald-500/20 px-2 py-0.5 text-[10px] font-medium text-emerald-300">
-          {entries.length} events
+          {filteredEntries.length}
+          {categoryFilter !== "all" ? ` / ${entries.length}` : ""} events
         </span>
-        <div className="ml-auto flex items-center gap-1">
+        <div className="ml-auto flex flex-wrap items-center gap-1">
+          {DEBUG_CATEGORIES.map((category) => (
+            <button
+              key={category}
+              type="button"
+              onClick={() => setCategoryFilter(category)}
+              className={cn(
+                "rounded-md px-2 py-1 text-[10px] capitalize",
+                categoryFilter === category
+                  ? "bg-violet-500/25 text-violet-200"
+                  : "text-slate-400 hover:bg-white/10 hover:text-slate-200",
+              )}
+            >
+              {category}
+            </button>
+          ))}
+        </div>
+        <div className="flex items-center gap-1">
           <button
             type="button"
             onClick={copyAll}
@@ -111,12 +146,14 @@ export function DebugTerminal() {
       </div>
       {panelOpen && (
         <div className="max-h-[220px] min-h-[120px] overflow-y-auto px-3 py-2">
-          {entries.length === 0 ? (
+          {filteredEntries.length === 0 ? (
             <p className="py-4 text-center font-mono text-xs text-slate-500">
-              Waiting for actions… send a message or mention an AI employee.
+              {entries.length === 0
+                ? "Waiting for actions… send a message or mention an AI employee."
+                : `No events in "${categoryFilter}" — try another filter or send a message.`}
             </p>
           ) : (
-            entries.map((entry) => <EntryLine key={entry.id} entry={entry} />)
+            filteredEntries.map((entry) => <EntryLine key={entry.id} entry={entry} />)
           )}
           <div ref={bottomRef} />
         </div>
