@@ -822,6 +822,7 @@ export function RoomMessageItem({
               employeeId: message.senderType === "ai" ? message.senderId : undefined,
               roomId: messageRoomId,
               topicId: message.topicId,
+              messageId: message.id,
             }}
           />
         ))}

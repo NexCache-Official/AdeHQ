@@ -25,6 +25,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { WORKFORCE_CALLS_ENABLED } from "@/lib/config/features";
 
 type Item = {
   id: string;
@@ -76,7 +77,7 @@ export function CommandBar({
       { id: "n-approvals", label: "Approvals", icon: ClipboardCheck, run: go("/approvals") },
       { id: "n-worklog", label: "Work Log", icon: ScrollText, run: go("/work-log") },
       { id: "n-tools", label: "Tools", icon: Wrench, run: go("/tools") },
-      { id: "n-calls", label: "Calls", icon: Phone, run: go("/calls") },
+      { id: "n-calls", label: WORKFORCE_CALLS_ENABLED ? "Calls" : "Calls (soon)", icon: Phone, run: go("/calls") },
       { id: "n-settings", label: "Settings", icon: Settings, run: go("/settings") },
     ];
     const actions: Item[] = [

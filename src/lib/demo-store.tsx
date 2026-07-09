@@ -11,7 +11,7 @@ import {
 } from "react";
 import type { User } from "@supabase/supabase-js";
 import { buildDemoState, TOOL_CATALOG } from "@/lib/demo";
-import { ENABLE_DEMO_MODE } from "@/lib/config/features";
+import { ENABLE_DEMO_MODE, WORKFORCE_CALLS_ENABLED } from "@/lib/config/features";
 import {
   clearActiveWorkspaceId,
   getActiveWorkspaceId,
@@ -1750,12 +1750,14 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       },
 
       startCall: (call) => {
+        if (!WORKFORCE_CALLS_ENABLED) return call;
         set((s) => ({ ...s, calls: [call, ...s.calls] }));
         runRemote((workspaceId) => persistCall(workspaceId, call));
         return call;
       },
 
       addTranscriptLine: (callId, line) => {
+        if (!WORKFORCE_CALLS_ENABLED) return;
         const current = stateRef.current.calls.find((call) => call.id === callId);
         if (!current) return;
         const updated = { ...current, transcript: [...current.transcript, line] };
@@ -1770,6 +1772,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       },
 
       setSpeaking: (callId, speakerId) => {
+        if (!WORKFORCE_CALLS_ENABLED) return;
         const current = stateRef.current.calls.find((call) => call.id === callId);
         if (!current) return;
         const updated = {
@@ -1787,6 +1790,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       },
 
       addActionItem: (callId, item) => {
+        if (!WORKFORCE_CALLS_ENABLED) return;
         const current = stateRef.current.calls.find((call) => call.id === callId);
         if (!current || current.actionItems.includes(item)) return;
         const updated = { ...current, actionItems: [...current.actionItems, item] };
@@ -1798,6 +1802,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       },
 
       endCall: (callId) => {
+        if (!WORKFORCE_CALLS_ENABLED) return;
         const current = stateRef.current.calls.find((call) => call.id === callId);
         if (!current) return;
         const endedAt = nowISO();

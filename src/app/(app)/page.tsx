@@ -6,6 +6,7 @@ import { useStore } from "@/lib/demo-store";
 import { partitionWorkforce } from "@/lib/maya-employee";
 import { MAYA_EMPLOYEE_NAME } from "@/lib/hiring/maya";
 import { getGroupRooms } from "@/lib/rooms";
+import { WORKFORCE_CALLS_ENABLED } from "@/lib/config/features";
 import { useShellUI } from "@/components/AppShell";
 import { PageContainer } from "@/components/Page";
 import { EmployeeCard } from "@/components/EmployeeCard";
@@ -106,7 +107,7 @@ export default function HomePage() {
               onClick={() => router.push("/calls")}
               className="inline-flex items-center gap-2 rounded-xl border border-white/16 bg-white/[0.06] px-4 py-2.5 text-[13px] font-medium text-white transition-colors hover:bg-white/10"
             >
-              <Phone className="h-4 w-4" /> Start workforce call
+              <Phone className="h-4 w-4" /> {WORKFORCE_CALLS_ENABLED ? "Start workforce call" : "Workforce calls — soon"}
             </button>
             <button
               type="button"

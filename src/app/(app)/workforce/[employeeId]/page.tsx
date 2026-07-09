@@ -14,7 +14,7 @@ import { EmptyState } from "@/components/States";
 import { toolIcon, TOOL_STATUS_META } from "@/lib/icons";
 import { displayToolStatus } from "@/lib/tools/catalog";
 import { cn, timeAgo } from "@/lib/utils";
-import { ENABLE_DEMO_MODE, normalizeLiveProvider } from "@/lib/config/features";
+import { ENABLE_DEMO_MODE, WORKFORCE_CALLS_ENABLED, normalizeLiveProvider } from "@/lib/config/features";
 import { EmployeeStatus } from "@/lib/types";
 import { EmployeeIntelligencePanel } from "@/components/workforce/EmployeeIntelligencePanel";
 import { EmployeeCapabilitiesPanel } from "@/components/workforce/EmployeeCapabilitiesPanel";
@@ -25,6 +25,7 @@ import {
 import { isMayaEmployee, isSystemEmployee, effectiveEmployeeStatus } from "@/lib/maya-employee";
 import { MAYA_EMPLOYEE_NAME } from "@/lib/hiring/maya";
 import { storeMayaEmployeeContext } from "@/components/maya/MayaDmEmptyState";
+import { WorkforceCallButton } from "@/components/calls/WorkforceCallButton";
 import {
   ArrowLeft,
   Bot,
@@ -71,7 +72,7 @@ export default function EmployeeProfilePage() {
     { label: "Create tasks", on: employee.permissions.createTasks },
     { label: "Assign tasks", on: employee.permissions.assignTasks },
     { label: "Message other employees", on: employee.permissions.messageEmployees },
-    { label: "Start calls", on: employee.permissions.startCalls },
+    { label: WORKFORCE_CALLS_ENABLED ? "Start calls" : "Start calls (coming soon)", on: employee.permissions.startCalls },
     { label: "Request human approval", on: employee.permissions.requestApproval },
     { label: "Approval before external actions", on: employee.permissions.approvalBeforeExternal },
     { label: "Approval before sending emails", on: employee.permissions.approvalBeforeEmails },
@@ -147,9 +148,7 @@ export default function EmployeeProfilePage() {
             <Button size="sm" onClick={() => router.push(room ? `/rooms/${room.id}` : "/rooms")}>
               <MessageSquare className="h-4 w-4" /> Message
             </Button>
-            <Button size="sm" variant="secondary" onClick={() => router.push(`/calls?room=${employee.defaultRoomId ?? ""}`)}>
-              <Phone className="h-4 w-4" /> Call
-            </Button>
+            <WorkforceCallButton roomId={employee.defaultRoomId ?? undefined} size="sm" variant="secondary" />
             <Button size="sm" variant="secondary" onClick={() => setTaskOpen(true)}>
               <Plus className="h-4 w-4" /> Assign task
             </Button>

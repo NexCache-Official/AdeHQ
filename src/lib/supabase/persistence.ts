@@ -27,6 +27,13 @@ import type {
 } from "@/lib/types";
 import { normalizeLiveProvider } from "@/lib/config/features";
 import { authHeaders } from "@/lib/api/auth-client";
+import {
+  artifactFromCompletedJob,
+  collectQueuedArtifactJobIds,
+  reconcileMessageArtifacts,
+  replaceQueuedArtifactInList,
+} from "@/lib/integrations/reconcile-queued-artifacts";
+import { jobFromRow } from "@/lib/integrations/jobs/queue";
 import { isEmailConfirmed } from "@/lib/auth/session";
 import { mayaWelcomeMessage, MAYA_EMPLOYEE_ID } from "@/lib/hiring/maya";
 import { isMayaEmployee, mergeMayaIntoState, effectiveEmployeeStatus } from "@/lib/maya-employee";
@@ -493,9 +500,12 @@ export async function loadWorkspaceState(
   const workLog = ((workLogResult.data as DbRow[] | null) ?? [])
     .map(workLogFromRow)
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-  const messages = ((messagesResult.data as DbRow[] | null) ?? [])
-    .map(messageFromRow)
-    .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  const messages = await hydrateQueuedToolArtifacts(
+    workspaceId,
+    ((messagesResult.data as DbRow[] | null) ?? [])
+      .map(messageFromRow)
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt)),
+  );
 
   const topics = ((topicsResult.data as DbRow[] | null) ?? [])
     .map(topicFromRow)
@@ -572,9 +582,12 @@ export async function loadWorkspaceState(
         }
         if (!roomRefresh.error && roomRefresh.data) {
           const refreshedMembers = (memberRefresh.data as DbRow[] | null) ?? [];
-          const refreshedMessages = ((msgRefresh.data as DbRow[] | null) ?? [])
-            .map(messageFromRow)
-            .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+          const refreshedMessages = await hydrateQueuedToolArtifacts(
+            workspaceId,
+            ((msgRefresh.data as DbRow[] | null) ?? [])
+              .map(messageFromRow)
+              .sort((a, b) => a.createdAt.localeCompare(b.createdAt)),
+          );
           const refreshedMessagesByRoom = groupBy(refreshedMessages, (message) => message.roomId);
           const dmRooms = (roomRefresh.data as DbRow[]).map((row) =>
             roomFromRow(
@@ -864,6 +877,52 @@ function messageFromRow(row: DbRow): RoomMessage {
     clientMessageId: row.client_message_id ? String(row.client_message_id) : undefined,
     createdAt: row.created_at ?? nowISO(),
   });
+}
+
+/** Resolve stale "Generating…" chips when their background jobs already finished. */
+async function hydrateQueuedToolArtifacts(
+  workspaceId: string,
+  messages: RoomMessage[],
+): Promise<RoomMessage[]> {
+  const jobIds = collectQueuedArtifactJobIds(messages);
+  if (!jobIds.length) return messages;
+
+  const { data, error } = await supabase
+    .from("integration_jobs")
+    .select("*")
+    .eq("workspace_id", workspaceId)
+    .in("id", jobIds);
+  if (error || !data?.length) return messages;
+
+  const jobsById = new Map(
+    (data as DbRow[]).map((row) => {
+      const job = jobFromRow(row);
+      return [job.id, job] as const;
+    }),
+  );
+
+  const persistUpdates: RoomMessage[] = [];
+  const reconciled = messages.map((message) => {
+    const { artifacts, changed } = reconcileMessageArtifacts(message.artifacts, jobsById);
+    if (!changed) return message;
+    const next = { ...message, artifacts };
+    persistUpdates.push(next);
+    return next;
+  });
+
+  if (persistUpdates.length) {
+    void Promise.all(
+      persistUpdates.map((message) =>
+        supabase
+          .from("messages")
+          .update({ artifacts: message.artifacts ?? null })
+          .eq("workspace_id", workspaceId)
+          .eq("id", message.id),
+      ),
+    ).catch((err) => console.warn("[AdeHQ] reconcile queued artifacts persist failed", err));
+  }
+
+  return reconciled;
 }
 
 function taskFromRow(row: DbRow): Task {

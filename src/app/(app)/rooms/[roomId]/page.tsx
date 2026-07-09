@@ -11,6 +11,7 @@ import { AddEmployeeToRoomModal } from "@/components/AddEmployeeToRoomModal";
 import { AutonomousLauncher } from "@/components/autonomy/AutonomousLauncher";
 import { EmployeeAvatar } from "@/components/EmployeeAvatar";
 import { Button } from "@/components/ui";
+import { WorkforceCallButton } from "@/components/calls/WorkforceCallButton";
 import { EmptyState } from "@/components/States";
 import { authHeaders } from "@/lib/api/auth-client";
 import { generalTopicForRoom, isGeneralTopic, topicsForRoom } from "@/lib/topics";
@@ -974,9 +975,7 @@ export default function RoomDetailPage() {
           <Button variant="ghost" size="sm" onClick={() => setNewTopicOpen(true)}>
             <Plus className="h-4 w-4" /> New topic
           </Button>
-          <Button variant="secondary" size="sm" onClick={() => router.push(`/calls?room=${roomId}`)}>
-            <Phone className="h-4 w-4" /> Call
-          </Button>
+          <WorkforceCallButton roomId={roomId} size="sm" variant="secondary" />
         </div>
       </div>
 

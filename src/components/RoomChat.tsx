@@ -34,6 +34,7 @@ import { ChatComposer, type ComposerUploadedFile, type SlashCommandResult } from
 import type { MessageActionHandlers } from "@/lib/message-actions";
 import { EmptyState } from "./States";
 import { Button } from "./ui";
+import { WorkforceCallButton } from "@/components/calls/WorkforceCallButton";
 import { EmployeeAvatar } from "./EmployeeAvatar";
 import { extractMentions, uid, cn } from "@/lib/utils";
 import { readDebugMode } from "@/lib/debug-trace";
@@ -1462,14 +1463,7 @@ export function RoomChat({
               Add employee
             </button>
           )}
-          <button
-            type="button"
-            onClick={() => router.push(`/calls?room=${room.id}`)}
-            className="flex h-[34px] w-[34px] items-center justify-center rounded-[10px] border border-border bg-surface text-ink-2 transition-colors hover:bg-muted"
-            aria-label="Start call"
-          >
-            <Phone className="h-[15px] w-[15px]" strokeWidth={1.9} />
-          </button>
+          <WorkforceCallButton roomId={room.id} iconOnly />
           <button
             type="button"
             className="hidden h-[34px] w-[34px] items-center justify-center rounded-[10px] border border-border bg-surface text-ink-2 transition-colors hover:bg-muted xl:flex"

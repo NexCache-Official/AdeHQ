@@ -1,9 +1,15 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import type { MessageArtifact } from "@/lib/types";
 import { authHeaders } from "@/lib/api/auth-client";
+import {
+  artifactFromCompletedJob,
+  queuedArtifactJobId,
+  replaceQueuedArtifactInList,
+} from "@/lib/integrations/reconcile-queued-artifacts";
+import { useStore } from "@/lib/demo-store";
 import { cn } from "@/lib/utils";
 import { AlertCircle, CheckCircle2, Clock, Loader2, RefreshCw, ShieldAlert } from "lucide-react";
 import { Button } from "@/components/ui";
@@ -13,6 +19,7 @@ type ToolResultContext = {
   employeeId?: string;
   roomId?: string;
   topicId?: string;
+  messageId?: string;
 };
 
 type IntegrationJobResponse = {
@@ -23,38 +30,6 @@ type IntegrationJobResponse = {
   };
 };
 
-function successArtifactFromJob(
-  prior: MessageArtifact,
-  job: NonNullable<IntegrationJobResponse["job"]>,
-): MessageArtifact {
-  const artifactId = job.result?.artifactId;
-  const title = job.result?.title ?? "file";
-  const tool = prior.meta?.toolName ?? "";
-  const kind = tool.includes("Spreadsheet") || tool.includes("spreadsheet")
-    ? "Spreadsheet"
-    : tool.includes("Pdf") || tool.includes("pdf")
-      ? "Report"
-      : tool.includes("Docx") || tool.includes("docx")
-        ? "Document"
-        : tool.includes("Presentation") || tool.includes("presentation")
-          ? "Presentation"
-          : "File";
-
-  return {
-    type: "tool_result",
-    id: artifactId ?? prior.id,
-    label: `${kind} ready — ${title}`,
-    meta: {
-      toolName: prior.meta?.toolName,
-      toolStatus: "success",
-      href: artifactId
-        ? `/drive?artifact=${encodeURIComponent(artifactId)}`
-        : "/drive?section=exports",
-      subtitle: "Open in Drive (check Exports for the .xlsx download)",
-    },
-  };
-}
-
 export function ToolResultInlineCard({
   artifact,
   context,
@@ -62,9 +37,14 @@ export function ToolResultInlineCard({
   artifact: MessageArtifact;
   context?: ToolResultContext;
 }) {
-  const [display, setDisplay] = useState(artifact);
+  const { state, actions } = useStore();
+  const stateRef = useRef(state);
+  stateRef.current = state;
+  const [display, setDisplay] = useState<MessageArtifact>(artifact);
+  const [checking, setChecking] = useState(artifact.meta?.toolStatus === "queued");
   const [retrying, setRetrying] = useState(false);
   const [retryMessage, setRetryMessage] = useState<string | null>(null);
+  const persistedRef = useRef(false);
 
   const status = display.meta?.toolStatus ?? "failed";
   const href = display.meta?.href;
@@ -75,23 +55,41 @@ export function ToolResultInlineCard({
     context?.employeeId &&
     display.meta?.retryArgs;
 
+  const persistResolvedArtifact = (resolved: MessageArtifact, jobId: string) => {
+    if (persistedRef.current || !context?.roomId || !context?.messageId) return;
+    if (resolved.meta?.toolStatus !== "success" && resolved.meta?.toolStatus !== "failed") return;
+
+    const room = stateRef.current.rooms.find((r) => r.id === context.roomId);
+    const message = room?.messages.find((m) => m.id === context.messageId);
+    if (!message) return;
+
+    persistedRef.current = true;
+    actions.updateMessage(context.roomId, context.messageId, {
+      artifacts: replaceQueuedArtifactInList(message.artifacts, jobId, resolved),
+    });
+  };
+
   useEffect(() => {
     setDisplay(artifact);
+    setChecking(artifact.meta?.toolStatus === "queued");
+    persistedRef.current = false;
   }, [artifact]);
 
   useEffect(() => {
-    const jobId =
-      artifact.meta?.jobId ??
-      (artifact.meta?.toolStatus === "queued" && artifact.meta?.toolName?.startsWith("artifact.")
-        ? artifact.id
-        : undefined);
-    if (artifact.meta?.toolStatus !== "queued" || !jobId) return;
+    const jobId = queuedArtifactJobId(artifact);
+    if (artifact.meta?.toolStatus !== "queued" || !jobId) {
+      setChecking(false);
+      return;
+    }
 
     let cancelled = false;
     let attempts = 0;
 
     const poll = async () => {
-      if (cancelled || attempts > 30) return;
+      if (cancelled || attempts > 30) {
+        if (!cancelled) setChecking(false);
+        return;
+      }
       attempts += 1;
       try {
         const headers = await authHeaders();
@@ -99,16 +97,39 @@ export function ToolResultInlineCard({
           headers,
           credentials: "include",
         });
-        if (!res.ok) return;
+        if (!res.ok) {
+          if (!cancelled) {
+            if (attempts >= 3) setChecking(false);
+            window.setTimeout(() => void poll(), attempts === 1 ? 0 : 2000);
+          }
+          return;
+        }
         const body = (await res.json()) as IntegrationJobResponse;
-        if (cancelled || !body.job) return;
+        if (cancelled || !body.job) {
+          if (!cancelled) setChecking(false);
+          return;
+        }
 
         if (body.job.status === "success") {
-          setDisplay(successArtifactFromJob(artifact, body.job));
+          const resolved = artifactFromCompletedJob(artifact, {
+            id: jobId,
+            workspaceId: context?.workspaceId ?? "",
+            jobType: artifact.meta?.toolName ?? "artifact",
+            status: "success",
+            payload: {},
+            result: body.job.result ?? {},
+            attempts: 0,
+            maxAttempts: 3,
+            scheduledAt: "",
+            createdAt: "",
+          });
+          setDisplay(resolved);
+          setChecking(false);
+          persistResolvedArtifact(resolved, jobId);
           return;
         }
         if (body.job.status === "failed") {
-          setDisplay({
+          const resolved: MessageArtifact = {
             ...artifact,
             label: `Failed: ${artifact.meta?.toolName?.split(".").pop() ?? "action"}`,
             meta: {
@@ -117,13 +138,18 @@ export function ToolResultInlineCard({
               error: body.job.errorMessage ?? "Background job failed.",
               subtitle: body.job.errorMessage ?? "Background job failed.",
             },
-          });
+          };
+          setDisplay(resolved);
+          setChecking(false);
+          persistResolvedArtifact(resolved, jobId);
           return;
         }
       } catch {
         // keep polling
       }
+
       if (!cancelled) {
+        if (attempts === 1) setChecking(false);
         window.setTimeout(() => void poll(), 2000);
       }
     };
@@ -132,28 +158,7 @@ export function ToolResultInlineCard({
     return () => {
       cancelled = true;
     };
-  }, [artifact]);
-
-  const Icon =
-    status === "success"
-      ? CheckCircle2
-      : status === "queued"
-        ? Loader2
-        : status === "approval_pending"
-          ? ShieldAlert
-          : status === "blocked"
-            ? ShieldAlert
-            : AlertCircle;
-  const tone =
-    status === "success"
-      ? "border-emerald-200 bg-emerald-50 text-emerald-950"
-      : status === "queued"
-        ? "border-sky-200 bg-sky-50 text-sky-900"
-        : status === "approval_pending"
-          ? "border-amber-200 bg-amber-50 text-amber-950"
-          : status === "blocked"
-            ? "border-amber-200 bg-amber-50 text-amber-900"
-            : "border-rose-200 bg-rose-50 text-rose-900";
+  }, [artifact, context?.messageId, context?.roomId, context?.workspaceId, actions]);
 
   const retry = async () => {
     if (!canRetry || !display.meta?.toolName) return;
@@ -206,17 +211,49 @@ export function ToolResultInlineCard({
     }
   };
 
+  const showQueued = status === "queued" && !checking;
+
+  const Icon =
+    checking
+      ? Loader2
+      : status === "success"
+        ? CheckCircle2
+        : status === "queued"
+          ? Loader2
+          : status === "approval_pending"
+            ? ShieldAlert
+            : status === "blocked"
+              ? ShieldAlert
+              : AlertCircle;
+  const tone =
+    checking
+      ? "border-border bg-surface text-ink-2"
+      : status === "success"
+        ? "border-emerald-200 bg-emerald-50 text-emerald-950"
+        : status === "queued"
+          ? "border-sky-200 bg-sky-50 text-sky-900"
+          : status === "approval_pending"
+            ? "border-amber-200 bg-amber-50 text-amber-950"
+            : status === "blocked"
+              ? "border-amber-200 bg-amber-50 text-amber-900"
+              : "border-rose-200 bg-rose-50 text-rose-900";
+
   const body = (
     <>
       <Icon
-        className={cn("mt-0.5 h-4 w-4 shrink-0", status === "queued" && "animate-spin")}
+        className={cn(
+          "mt-0.5 h-4 w-4 shrink-0",
+          (checking || status === "queued") && "animate-spin",
+        )}
       />
       <div className="min-w-0 flex-1">
-        <div className="font-medium">{display.label}</div>
-        {display.meta?.subtitle && (
+        <div className="font-medium">
+          {checking ? "Checking file status…" : display.label}
+        </div>
+        {display.meta?.subtitle && !checking && (
           <p className="mt-1 text-xs opacity-90">{display.meta.subtitle}</p>
         )}
-        {status === "queued" && !display.meta?.subtitle && (
+        {showQueued && !display.meta?.subtitle && (
           <p className="mt-1 flex items-center gap-1 text-xs opacity-80">
             <Clock className="h-3 w-3" />
             Generating file — will update when ready.
@@ -239,7 +276,7 @@ export function ToolResultInlineCard({
           </Button>
         )}
       </div>
-      {href && (
+      {href && !canRetry && !checking && (
         <span className="shrink-0 text-xs font-medium opacity-80">Open →</span>
       )}
     </>
@@ -248,10 +285,10 @@ export function ToolResultInlineCard({
   const className = cn(
     "mt-2 flex items-start gap-3 rounded-xl border px-3.5 py-3 text-sm shadow-sm transition",
     tone,
-    href && !canRetry && "hover:brightness-[0.98]",
+    href && !canRetry && !checking && "hover:brightness-[0.98]",
   );
 
-  if (href && !canRetry) {
+  if (href && !canRetry && !checking) {
     return (
       <Link href={href} className={className}>
         {body}

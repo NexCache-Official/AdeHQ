@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Call, CallParticipant } from "@/lib/types";
+import { WORKFORCE_CALLS_ENABLED } from "@/lib/config/features";
 import { useStore } from "@/lib/demo-store";
 import { EmployeeAvatar, HumanAvatar } from "./EmployeeAvatar";
 import { Button } from "./ui";
@@ -62,6 +63,24 @@ const ACTION_ITEMS = [
 ];
 
 export function CallRoom({ call, onEnd }: { call: Call; onEnd: () => void }) {
+  if (!WORKFORCE_CALLS_ENABLED) {
+    return <CallRoomDisabled onEnd={onEnd} />;
+  }
+  return <CallRoomLive call={call} onEnd={onEnd} />;
+}
+
+function CallRoomDisabled({ onEnd }: { onEnd: () => void }) {
+  const dismissedRef = useRef(false);
+  useEffect(() => {
+    if (!dismissedRef.current) {
+      dismissedRef.current = true;
+      onEnd();
+    }
+  }, [onEnd]);
+  return null;
+}
+
+function CallRoomLive({ call, onEnd }: { call: Call; onEnd: () => void }) {
   const { actions } = useStore();
   const [transcript, setTranscript] = useState(call.transcript);
   const [speaking, setSpeaking] = useState<string | null>(null);

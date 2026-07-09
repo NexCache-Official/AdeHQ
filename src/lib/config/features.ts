@@ -2,6 +2,10 @@
 export const ENABLE_DEMO_MODE =
   process.env.NEXT_PUBLIC_ENABLE_DEMO_MODE === "true";
 
+/** Live workforce voice calls (transcript, memory, tasks). Off until real audio ships. */
+export const WORKFORCE_CALLS_ENABLED =
+  process.env.NEXT_PUBLIC_WORKFORCE_CALLS_ENABLED === "true";
+
 export const DEFAULT_SILICONFLOW_MODEL =
   process.env.ADEHQ_SILICONFLOW_MODEL ?? "deepseek-ai/DeepSeek-V4-Flash";
 

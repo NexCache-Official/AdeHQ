@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import { getDirectMessages, getGroupRooms } from "@/lib/rooms";
 import { useStore } from "@/lib/demo-store";
 import { useShellUI } from "./AppShell";
+import { WORKFORCE_CALLS_ENABLED } from "@/lib/config/features";
 import { EmployeeAvatar } from "./EmployeeAvatar";
 import {
   Bot,
@@ -151,6 +152,11 @@ export function Sidebar() {
           <Link href="/calls" className={cn("nav-link", isActive("/calls") && "nav-link-active")}>
             <Phone className="h-[18px] w-[18px]" strokeWidth={isActive("/calls") ? 2.2 : 1.8} />
             <span className="flex-1">Calls</span>
+            {!WORKFORCE_CALLS_ENABLED && (
+              <span className="rounded-full bg-amber-500/10 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-amber-700">
+                Soon
+              </span>
+            )}
           </Link>
         </div>
 

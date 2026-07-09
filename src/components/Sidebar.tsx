@@ -13,7 +13,7 @@ import {
 import { isMayaEmployee, partitionWorkforce } from "@/lib/maya-employee";
 import { MAYA_WORKFORCE_BADGE } from "@/lib/hiring/maya";
 import { useStore } from "@/lib/demo-store";
-import { ENABLE_DEMO_MODE } from "@/lib/config/features";
+import { ENABLE_DEMO_MODE, WORKFORCE_CALLS_ENABLED } from "@/lib/config/features";
 import { useShellUI } from "./AppShell";
 import { WorkspaceSwitcher } from "./WorkspaceSwitcher";
 import { EmployeeAvatar } from "./EmployeeAvatar";
@@ -230,6 +230,11 @@ export function Sidebar() {
         <Link href="/calls" className={cn("nav-link", isActive("/calls") && "nav-link-active")}>
           <Phone className="h-[17px] w-[17px]" strokeWidth={1.8} />
           <span className="flex-1">Calls</span>
+          {!WORKFORCE_CALLS_ENABLED && (
+            <span className="rounded-full bg-amber-500/10 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-amber-700">
+              Soon
+            </span>
+          )}
         </Link>
 
         <p className="px-2.5 pb-1 pt-3.5 text-[10.5px] font-semibold uppercase tracking-[0.08em] text-[var(--rail-ink-3)]">

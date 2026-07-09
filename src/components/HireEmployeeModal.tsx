@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ENABLE_DEMO_MODE } from "@/lib/config/features";
+import { ENABLE_DEMO_MODE, WORKFORCE_CALLS_ENABLED } from "@/lib/config/features";
 import {
   defaultModelModeForRole,
   MODEL_MODE_LABELS,
@@ -38,7 +38,7 @@ const PERMISSION_LABELS: { key: keyof EmployeePermissions; label: string; sensit
   { key: "createTasks", label: "Can create tasks" },
   { key: "assignTasks", label: "Can assign tasks" },
   { key: "messageEmployees", label: "Can message other AI employees" },
-  { key: "startCalls", label: "Can start calls" },
+  { key: "startCalls", label: WORKFORCE_CALLS_ENABLED ? "Can start calls" : "Can start calls (coming soon)" },
   { key: "requestApproval", label: "Can request human approval" },
   { key: "approvalBeforeExternal", label: "Needs approval before external actions", sensitive: true },
   { key: "approvalBeforeEmails", label: "Needs approval before sending emails", sensitive: true },
@@ -376,10 +376,15 @@ export function HireEmployeeModal({
             {step === 3 && (
               <div className="space-y-1.5">
                 <p className="mb-3 text-sm text-slate-500">Set what this employee can do on its own — and what needs your approval.</p>
-                {PERMISSION_LABELS.map((p) => (
+                {PERMISSION_LABELS.map((p) => {
+                  const callsDisabled = p.key === "startCalls" && !WORKFORCE_CALLS_ENABLED;
+                  return (
                   <label
                     key={p.key}
-                    className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5"
+                    className={cn(
+                      "flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5",
+                      callsDisabled && "opacity-60",
+                    )}
                   >
                     <span className="flex items-center gap-2 text-sm text-slate-700">
                       {p.label}
@@ -390,11 +395,13 @@ export function HireEmployeeModal({
                       )}
                     </span>
                     <Toggle
-                      checked={perms[p.key]}
+                      checked={callsDisabled ? false : perms[p.key]}
+                      disabled={callsDisabled}
                       onChange={(v) => setPerms((prev) => ({ ...prev, [p.key]: v }))}
                     />
                   </label>
-                ))}
+                  );
+                })}
               </div>
             )}
 
