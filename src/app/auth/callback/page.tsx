@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase/client";
 import { completeAuthRedirect } from "@/lib/auth/callback-session";
 import { parseAuthError } from "@/lib/auth/confirmation";
+import { isPasswordRecoveryPending } from "@/lib/auth/recovery";
 import { ResendConfirmation } from "@/components/auth/ResendConfirmation";
 import { loadWorkspaceState } from "@/lib/supabase/persistence";
 import { getSiteUrl } from "@/lib/site-url";
@@ -53,8 +54,7 @@ function AuthCallbackInner() {
             router.replace("/confirm-email");
             return;
           }
-          const recoveryNext = searchParams.get("next") === "/reset-password";
-          if (recoveryNext || parsed.linkExpired) {
+          if (isPasswordRecoveryPending() || parsed.linkExpired) {
             router.replace("/reset-password");
             return;
           }
@@ -68,6 +68,12 @@ function AuthCallbackInner() {
         setEmailHint(result.email);
 
         if (result.next === "/reset-password") {
+          if (!active) return;
+          router.replace("/reset-password");
+          return;
+        }
+
+        if (isPasswordRecoveryPending()) {
           if (!active) return;
           router.replace("/reset-password");
           return;

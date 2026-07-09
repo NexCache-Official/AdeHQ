@@ -34,6 +34,7 @@ import {
 } from "./types";
 import { getEmailRedirectUrl, setAuthNextPath } from "@/lib/auth/callback-session";
 import { isEmailConfirmed } from "@/lib/auth/session";
+import { isPasswordRecoveryPending, clearPasswordRecoveryPending } from "@/lib/auth/recovery";
 import { isRepeatedSignup } from "@/lib/auth/guards";
 import { resendSignupConfirmation } from "@/lib/auth/confirmation";
 import { mergeRoomMessages } from "@/lib/message-delivery";
@@ -346,6 +347,14 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         if (sessionError) throw sessionError;
 
         if (data.session?.user) {
+          if (isPasswordRecoveryPending()) {
+            authUserRef.current = data.session.user;
+            if (!active) return;
+            setBackend("demo");
+            setState(buildSignedOutState());
+            setHydrated(true);
+            return;
+          }
           if (!isEmailConfirmed(data.session.user)) {
             await supabase.auth.signOut();
             if (!active) return;
@@ -393,6 +402,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       if (!active || authBusyRef.current) return;
 
       if (event === "SIGNED_OUT" || !session?.user) {
+        clearPasswordRecoveryPending();
         authUserRef.current = null;
         setBackend("demo");
         setState(buildSignedOutState());
@@ -400,7 +410,14 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         return;
       }
 
+      if (event === "PASSWORD_RECOVERY") {
+        return;
+      }
+
       if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED") {
+        if (isPasswordRecoveryPending()) {
+          return;
+        }
         if (!isEmailConfirmed(session.user)) {
           void supabase.auth.signOut();
           return;
@@ -935,6 +952,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         authBusyRef.current = true;
         try {
           await supabase.auth.signOut();
+          clearPasswordRecoveryPending();
           authUserRef.current = null;
           setBackend("demo");
           setUserWorkspaces([]);

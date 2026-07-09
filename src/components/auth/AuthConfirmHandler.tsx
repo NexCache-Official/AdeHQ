@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase/client";
 import { completeAuthRedirect, hasAuthParamsInUrl } from "@/lib/auth/callback-session";
 import { parseAuthError } from "@/lib/auth/confirmation";
+import { isPasswordRecoveryPending } from "@/lib/auth/recovery";
 import { loadWorkspaceState } from "@/lib/supabase/persistence";
 
 /**
@@ -17,7 +18,9 @@ export function AuthConfirmHandler() {
 
   useEffect(() => {
     if (busyRef.current) return;
-    if (pathname === "/auth/callback") return;
+    if (pathname === "/auth/callback" || pathname === "/reset-password" || pathname === "/forgot-password") {
+      return;
+    }
 
     const search = typeof window !== "undefined" ? window.location.search : "";
     const hash = typeof window !== "undefined" ? window.location.hash : "";
@@ -42,8 +45,7 @@ export function AuthConfirmHandler() {
             router.replace("/confirm-email");
             return;
           }
-          const recoveryNext = new URLSearchParams(search).get("next") === "/reset-password";
-          if (recoveryNext || parsed.linkExpired) {
+          if (isPasswordRecoveryPending() || parsed.linkExpired) {
             router.replace("/reset-password");
             return;
           }
@@ -52,6 +54,11 @@ export function AuthConfirmHandler() {
             return;
           }
           router.replace("/auth/callback?error=confirmation_failed");
+          return;
+        }
+
+        if (isPasswordRecoveryPending() || result.next === "/reset-password") {
+          router.replace("/reset-password");
           return;
         }
 

@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { OnboardingFlow } from "@/components/OnboardingFlow";
 import { useConfirmedEmailGate } from "@/components/auth/useConfirmedEmailGate";
+import { isPasswordRecoveryPending } from "@/lib/auth/recovery";
 import { LoadingState } from "@/components/States";
 import { useStore } from "@/lib/demo-store";
 
@@ -13,6 +14,10 @@ export default function OnboardingPage() {
   const emailGate = useConfirmedEmailGate();
 
   useEffect(() => {
+    if (isPasswordRecoveryPending()) {
+      router.replace("/reset-password");
+      return;
+    }
     if (!hydrated || emailGate !== "allowed") return;
     if (!state.user) router.replace("/login");
     else if (state.onboardingComplete) router.replace("/");

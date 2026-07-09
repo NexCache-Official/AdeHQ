@@ -8,6 +8,11 @@ import { PasswordStrengthField } from "@/components/auth/PasswordStrengthField";
 import { Button } from "@/components/ui";
 import { getPasswordStrength, passwordsMatch } from "@/lib/auth/password";
 import { establishSessionFromUrl } from "@/lib/auth/callback-session";
+import {
+  captureRecoveryIntentFromUrl,
+  clearPasswordRecoveryPending,
+  markPasswordRecoveryPending,
+} from "@/lib/auth/recovery";
 import { authHeaders } from "@/lib/api/auth-client";
 import { supabase } from "@/lib/supabase/client";
 import { ArrowRight, KeyRound, ShieldCheck } from "lucide-react";
@@ -30,6 +35,7 @@ function ResetPasswordForm() {
 
     const verifySession = async () => {
       try {
+        captureRecoveryIntentFromUrl();
         await establishSessionFromUrl();
 
         const { data, error: sessionError } = await supabase.auth.getSession();
@@ -53,6 +59,7 @@ function ResetPasswordForm() {
 
     const { data: listener } = supabase.auth.onAuthStateChange((event) => {
       if (event === "PASSWORD_RECOVERY") {
+        markPasswordRecoveryPending();
         setSessionReady(true);
         setChecking(false);
         setError(null);
@@ -94,6 +101,7 @@ function ResetPasswordForm() {
       }
 
       await supabase.auth.signOut();
+      clearPasswordRecoveryPending();
       setDone(true);
       setTimeout(() => router.replace("/login?reset=1"), 1800);
     } catch (err) {

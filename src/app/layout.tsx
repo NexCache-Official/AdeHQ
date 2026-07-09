@@ -5,6 +5,7 @@ import { Analytics } from "@vercel/analytics/next";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import { StoreProvider } from "@/lib/demo-store";
 import { AuthConfirmHandler } from "@/components/auth/AuthConfirmHandler";
+import { PasswordRecoveryGate } from "@/components/auth/PasswordRecoveryGate";
 import { ThemeProvider, themeInitScript } from "@/components/ThemeProvider";
 
 const sans = Schibsted_Grotesk({
@@ -41,6 +42,7 @@ export default function RootLayout({
         <ThemeProvider>
           <StoreProvider>
             <AuthConfirmHandler />
+            <PasswordRecoveryGate />
             {children}
           </StoreProvider>
         </ThemeProvider>

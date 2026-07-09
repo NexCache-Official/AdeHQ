@@ -19,6 +19,7 @@ import { cn } from "@/lib/utils";
 import { DebugTerminal } from "./DebugTerminal";
 import { JUMP_TO_SOURCE_EVENT, type JumpSource } from "@/lib/navigation/jump-to-source";
 import { crmEntityHref } from "@/lib/crm/client";
+import { isPasswordRecoveryPending } from "@/lib/auth/recovery";
 
 type ShellUI = {
   openCommand: () => void;
@@ -75,6 +76,10 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!hydrated) return;
+    if (isPasswordRecoveryPending()) {
+      router.replace("/reset-password");
+      return;
+    }
     if (!state.user) {
       router.replace("/login");
     } else if (!state.onboardingComplete) {

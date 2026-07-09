@@ -2,6 +2,12 @@ import { supabase } from "@/lib/supabase/client";
 import { getSiteUrl } from "@/lib/site-url";
 import { isConfirmationLinkError } from "@/lib/auth/confirmation";
 import { isEmailConfirmed } from "@/lib/auth/session";
+import {
+  captureRecoveryIntentFromUrl,
+  isPasswordRecoveryPending,
+  markPasswordRecoveryPending,
+  peekAuthIntentFromUrl,
+} from "@/lib/auth/recovery";
 
 export const AUTH_NEXT_KEY = "adehq_auth_next";
 
@@ -26,7 +32,14 @@ export function consumeAuthNextPath(defaultPath = "/onboarding"): string {
 
 function clearAuthParamsFromUrl(): void {
   if (typeof window === "undefined") return;
-  window.history.replaceState({}, "", window.location.pathname);
+  const { pathname, search } = window.location;
+  // Keep non-auth query params (e.g. next=/reset-password) when clearing tokens.
+  const params = new URLSearchParams(search);
+  params.delete("code");
+  params.delete("token_hash");
+  params.delete("type");
+  const next = params.toString();
+  window.history.replaceState({}, "", next ? `${pathname}?${next}` : pathname);
 }
 
 function hasAuthParamsInUrl(): boolean {
@@ -48,16 +61,9 @@ async function getExistingSession() {
 }
 
 function readRecoveryNextFromUrl(): string | null {
-  if (typeof window === "undefined") return null;
-  const searchParams = new URLSearchParams(window.location.search);
-  if (searchParams.get("type") === "recovery") return "/reset-password";
-  const next = searchParams.get("next");
-  if (next === "/reset-password") return next;
-  const hash = window.location.hash.replace(/^#/, "");
-  if (hash) {
-    const hashParams = new URLSearchParams(hash);
-    if (hashParams.get("type") === "recovery") return "/reset-password";
-  }
+  if (isPasswordRecoveryPending()) return "/reset-password";
+  const intent = peekAuthIntentFromUrl();
+  if (intent.recovery || intent.next === "/reset-password") return "/reset-password";
   return null;
 }
 
@@ -96,6 +102,8 @@ function waitForAuthSession(timeoutMs = 8000): Promise<boolean> {
 export async function establishSessionFromUrl(): Promise<boolean> {
   if (typeof window === "undefined") return false;
 
+  captureRecoveryIntentFromUrl();
+
   const existing = await getExistingSession();
   if (existing?.user) {
     clearAuthParamsFromUrl();
@@ -114,6 +122,7 @@ export async function establishSessionFromUrl(): Promise<boolean> {
 
   try {
     if (tokenHash && type) {
+      if (type === "recovery") markPasswordRecoveryPending();
       const { error } = await supabase.auth.verifyOtp({
         token_hash: tokenHash,
         type: type as "signup" | "email" | "recovery" | "invite" | "email_change",
@@ -132,6 +141,9 @@ export async function establishSessionFromUrl(): Promise<boolean> {
 
     if (hash) {
       const hashParams = new URLSearchParams(hash);
+      if (hashParams.get("type") === "recovery") {
+        markPasswordRecoveryPending();
+      }
       const accessToken = hashParams.get("access_token");
       const refreshToken = hashParams.get("refresh_token");
 
@@ -174,6 +186,11 @@ export async function completeAuthRedirect(nextPath?: string): Promise<{
   linkError: boolean;
 }> {
   try {
+    const intent = peekAuthIntentFromUrl();
+    if (intent.recovery || intent.next === "/reset-password" || nextPath === "/reset-password") {
+      captureRecoveryIntentFromUrl();
+    }
+
     const established = await establishSessionFromUrl();
     const session = await getExistingSession();
 
@@ -197,7 +214,12 @@ export async function completeAuthRedirect(nextPath?: string): Promise<{
       (typeof window !== "undefined"
         ? new URLSearchParams(window.location.search).get("next") ?? consumeAuthNextPath("/onboarding")
         : "/onboarding");
-    const safeNext = next.startsWith("/") && !next.startsWith("//") ? next : "/onboarding";
+    const safeNext =
+      isPasswordRecoveryPending() || next === "/reset-password"
+        ? "/reset-password"
+        : next.startsWith("/") && !next.startsWith("//")
+          ? next
+          : "/onboarding";
 
     return { ok: true, next: safeNext, email: session.user.email ?? "" };
   } catch (error) {
