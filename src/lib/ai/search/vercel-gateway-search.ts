@@ -103,14 +103,14 @@ function extractSourcesFromUnknown(value: unknown, depth = 0): SearchSource[] {
     (typeof record.href === "string" && record.href);
   if (url && /^https?:\/\//i.test(url)) {
     const title =
-      (typeof record.title === "string" && record.title.trim()) ||
-      (typeof record.name === "string" && record.name.trim()) ||
+      (typeof record.title === "string" ? record.title.trim() : "") ||
+      (typeof record.name === "string" ? record.name.trim() : "") ||
       url;
     const snippet =
-      (typeof record.snippet === "string" && record.snippet) ||
-      (typeof record.content === "string" && record.content) ||
-      (typeof record.description === "string" && record.description) ||
-      (typeof record.text === "string" && record.text);
+      (typeof record.snippet === "string" ? record.snippet : undefined) ||
+      (typeof record.content === "string" ? record.content : undefined) ||
+      (typeof record.description === "string" ? record.description : undefined) ||
+      (typeof record.text === "string" ? record.text : undefined);
     return [{ title, url, snippet: snippet?.slice(0, 600) }];
   }
 
