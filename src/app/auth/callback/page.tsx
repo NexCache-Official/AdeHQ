@@ -53,6 +53,11 @@ function AuthCallbackInner() {
             router.replace("/confirm-email");
             return;
           }
+          const recoveryNext = searchParams.get("next") === "/reset-password";
+          if (recoveryNext || parsed.linkExpired) {
+            router.replace("/reset-password");
+            return;
+          }
           setFailed(true);
           setNeedsResend(parsed.needsEmailConfirmation);
           setAlreadyConfirmed(parsed.alreadyConfirmedHint || result.linkError);
@@ -61,6 +66,13 @@ function AuthCallbackInner() {
         }
 
         setEmailHint(result.email);
+
+        if (result.next === "/reset-password") {
+          if (!active) return;
+          router.replace("/reset-password");
+          return;
+        }
+
         const { data: userData } = await supabase.auth.getUser();
         if (userData.user) {
           await loadWorkspaceState(userData.user);

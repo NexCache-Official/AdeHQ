@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useStore } from "@/lib/demo-store";
 import { PageHeader } from "@/components/Page";
 import { PlatformAdminLink } from "@/components/admin/PlatformAdminLink";
+import { AccountSecurityCard } from "@/components/settings/AccountSecurityCard";
 import { Card, Button } from "@/components/ui";
 import { HumanAvatar } from "@/components/EmployeeAvatar";
 import { Check, UserCircle } from "lucide-react";
@@ -50,6 +51,10 @@ export default function SettingsProfilePage() {
           </Button>
         </div>
       </Card>
+
+      <div className="mt-6">
+        <AccountSecurityCard />
+      </div>
     </>
   );
 }

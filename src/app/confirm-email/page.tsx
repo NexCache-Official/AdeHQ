@@ -8,7 +8,7 @@ import { ResendConfirmation } from "@/components/auth/ResendConfirmation";
 import { LoadingState } from "@/components/States";
 import { assertConfirmedSession } from "@/lib/auth/guards";
 import { getSiteUrl } from "@/lib/site-url";
-import { Mail } from "lucide-react";
+import { Mail, ShieldCheck } from "lucide-react";
 
 function ConfirmEmailInner() {
   const router = useRouter();
@@ -54,21 +54,36 @@ function ConfirmEmailInner() {
 
   return (
     <AuthShell>
-      <div className="mb-8 flex h-12 w-12 items-center justify-center rounded-2xl bg-[var(--accent-soft)]">
-        <Mail className="h-6 w-6 text-[var(--accent-d)]" />
+      <div className="relative mb-7 h-[82px] w-[82px]">
+        <span className="absolute inset-0 animate-ping rounded-full bg-accent/15" />
+        <span className="absolute inset-2 animate-ping rounded-full bg-emerald-400/15 [animation-delay:500ms]" />
+        <div className="relative flex h-[82px] w-[82px] items-center justify-center rounded-[24px] bg-slate-950 text-white shadow-lg">
+          <Mail className="h-8 w-8" />
+        </div>
       </div>
-      <h1 className="text-2xl font-semibold tracking-tight text-slate-900">Confirm your email</h1>
-      <p className="mt-2 text-sm leading-relaxed text-slate-600">
-        You need to verify your email before AdeHQ can create your workspace or open onboarding.
+      <h1 className="text-[30px] font-semibold leading-tight tracking-[-0.03em] text-slate-950">
+        Confirm your email.
+      </h1>
+      <p className="mt-2 text-[15px] leading-relaxed text-slate-500">
+        We sent a workspace activation link to{" "}
+        {email ? <span className="font-semibold text-slate-950">{email}</span> : "your inbox"}.
       </p>
 
-      <div className="mt-6 rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 text-left text-sm text-amber-950">
-        <p className="font-medium">Didn&apos;t receive the email?</p>
-        <ul className="mt-2 list-disc space-y-1 pl-5 text-xs leading-relaxed text-amber-900">
-          <li>Check spam or promotions for mail from AdeHQ (<code className="font-mono">noreply@adehq.com</code>).</li>
-          <li>Confirmation links must open on <span className="font-mono">{getSiteUrl()}</span>.</li>
-          <li>If you signed up again with the same email, use resend below — duplicate signups do not always send a new message.</li>
-        </ul>
+      <div className="mt-6 rounded-[18px] border border-amber-200 bg-amber-50 px-5 py-4 text-left text-sm text-amber-950">
+        <div className="flex gap-3">
+          <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-white text-amber-700">
+            <ShieldCheck className="h-4 w-4" />
+          </span>
+          <div>
+            <p className="font-semibold">Didn&apos;t receive the email?</p>
+            <p className="mt-2 text-xs leading-relaxed text-amber-900">
+              Check spam or promotions for mail from AdeHQ at{" "}
+              <code className="font-mono">noreply@adehq.com</code>. Confirmation links must open on{" "}
+              <span className="font-mono">{getSiteUrl()}</span>. If you signed up again with the
+              same email, use resend below.
+            </p>
+          </div>
+        </div>
       </div>
 
       <div className="mt-6">

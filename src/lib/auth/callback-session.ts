@@ -47,6 +47,20 @@ async function getExistingSession() {
   return data.session;
 }
 
+function readRecoveryNextFromUrl(): string | null {
+  if (typeof window === "undefined") return null;
+  const searchParams = new URLSearchParams(window.location.search);
+  if (searchParams.get("type") === "recovery") return "/reset-password";
+  const next = searchParams.get("next");
+  if (next === "/reset-password") return next;
+  const hash = window.location.hash.replace(/^#/, "");
+  if (hash) {
+    const hashParams = new URLSearchParams(hash);
+    if (hashParams.get("type") === "recovery") return "/reset-password";
+  }
+  return null;
+}
+
 function waitForAuthSession(timeoutMs = 8000): Promise<boolean> {
   return new Promise((resolve) => {
     let settled = false;
@@ -179,6 +193,7 @@ export async function completeAuthRedirect(nextPath?: string): Promise<{
 
     const next =
       nextPath ??
+      readRecoveryNextFromUrl() ??
       (typeof window !== "undefined"
         ? new URLSearchParams(window.location.search).get("next") ?? consumeAuthNextPath("/onboarding")
         : "/onboarding");

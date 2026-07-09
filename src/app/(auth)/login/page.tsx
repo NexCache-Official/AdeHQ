@@ -10,8 +10,7 @@ import { useStore } from "@/lib/demo-store";
 import { parseAuthError } from "@/lib/auth/confirmation";
 import { ENABLE_DEMO_MODE } from "@/lib/config/features";
 import { supabase } from "@/lib/supabase/client";
-import { ArrowRight, Sparkles } from "lucide-react";
-import { BrandLockup } from "@/components/brand/Brand";
+import { ArrowRight, Eye, EyeOff, Sparkles } from "lucide-react";
 
 function LoginForm() {
   const { actions, error: storeError } = useStore();
@@ -23,6 +22,7 @@ function LoginForm() {
   const [error, setError] = useState<string | null>(null);
   const [needsConfirmation, setNeedsConfirmation] = useState(false);
   const [showResend, setShowResend] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   const [info, setInfo] = useState<string | null>(null);
 
   useEffect(() => {
@@ -33,6 +33,11 @@ function LoginForm() {
   useEffect(() => {
     if (searchParams.get("confirmed") === "1") {
       setInfo("Your email is already confirmed. Sign in with your password below.");
+      setShowResend(false);
+      setNeedsConfirmation(false);
+    }
+    if (searchParams.get("reset") === "1") {
+      setInfo("Your password was updated. Sign in with your new password.");
       setShowResend(false);
       setNeedsConfirmation(false);
     }
@@ -73,15 +78,11 @@ function LoginForm() {
 
   return (
     <AuthShell>
-      <div className="mb-8 lg:hidden flex justify-center">
-        <BrandLockup size={40} />
-      </div>
-
-      <h1 className="text-2xl font-semibold tracking-tight text-slate-900">
-        Welcome back to AdeHQ.
+      <h1 className="text-[30px] font-semibold leading-tight tracking-[-0.03em] text-slate-950">
+        Welcome back.
       </h1>
-      <p className="mt-1.5 text-sm text-slate-500">
-        Your AI employees are ready to work.
+      <p className="mt-2 text-[15px] leading-relaxed text-slate-500">
+        Sign in to see what your <span className="font-serif italic">AI workforce</span> got done.
       </p>
 
       <form
@@ -92,7 +93,7 @@ function LoginForm() {
         }}
       >
         <label className="block space-y-1.5">
-          <span className="text-xs font-medium text-slate-500">Email</span>
+          <span className="text-xs font-semibold text-slate-500">Email</span>
           <input
             type="email"
             className="input-field"
@@ -102,16 +103,31 @@ function LoginForm() {
           />
         </label>
         <label className="block space-y-1.5">
-          <span className="text-xs font-medium text-slate-500">Password</span>
-          <input
-            type="password"
-            className="input-field"
-            placeholder="••••••••"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-          />
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-xs font-semibold text-slate-500">Password</span>
+            <Link href="/forgot-password" className="text-xs font-medium text-accent-600 hover:text-accent-700">
+              Forgot password?
+            </Link>
+          </div>
+          <div className="relative">
+            <input
+              type={showPassword ? "text" : "password"}
+              className="input-field pr-11"
+              placeholder="Enter your password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+            <button
+              type="button"
+              aria-label={showPassword ? "Hide password" : "Show password"}
+              className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
+              onClick={() => setShowPassword((value) => !value)}
+            >
+              {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+            </button>
+          </div>
         </label>
-        <Button type="submit" size="lg" className="w-full">
+        <Button type="submit" size="lg" className="w-full" disabled={loading}>
           {loading ? "Entering..." : "Enter workspace"} <ArrowRight className="h-4 w-4" />
         </Button>
       </form>

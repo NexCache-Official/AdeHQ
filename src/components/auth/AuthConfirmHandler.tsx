@@ -42,6 +42,11 @@ export function AuthConfirmHandler() {
             router.replace("/confirm-email");
             return;
           }
+          const recoveryNext = new URLSearchParams(search).get("next") === "/reset-password";
+          if (recoveryNext || parsed.linkExpired) {
+            router.replace("/reset-password");
+            return;
+          }
           if (result.linkError || parsed.alreadyConfirmedHint) {
             router.replace("/login?confirmed=1");
             return;
@@ -51,7 +56,7 @@ export function AuthConfirmHandler() {
         }
 
         const { data: userData } = await supabase.auth.getUser();
-        if (userData.user) {
+        if (userData.user && result.next !== "/reset-password") {
           await loadWorkspaceState(userData.user);
         }
         router.replace(result.next);

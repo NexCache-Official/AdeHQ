@@ -32,7 +32,7 @@ export function ResendConfirmation({ email: initialEmail = "", showEmailInput = 
 
   if (sent) {
     return (
-      <div className={`rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800 ${className ?? ""}`}>
+      <div className={`rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm leading-relaxed text-emerald-800 ${className ?? ""}`}>
         New confirmation link sent to <span className="font-medium">{email}</span>. Check your inbox and spam
         folder.
       </div>
@@ -43,7 +43,7 @@ export function ResendConfirmation({ email: initialEmail = "", showEmailInput = 
     <div className={`space-y-3 ${className ?? ""}`}>
       {showEmailInput && (
         <label className="block space-y-1.5 text-left">
-          <span className="text-xs font-medium text-slate-500">Email</span>
+          <span className="text-xs font-semibold text-slate-500">Email</span>
           <input
             type="email"
             className="input-field"
