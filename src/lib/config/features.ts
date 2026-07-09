@@ -6,6 +6,14 @@ export const ENABLE_DEMO_MODE =
 export const WORKFORCE_CALLS_ENABLED =
   process.env.NEXT_PUBLIC_WORKFORCE_CALLS_ENABLED === "true";
 
+/**
+ * Layered employee intelligence pipeline. Enabled by default; set
+ * INTELLIGENCE_V1_ENABLED=false to fall back to the legacy research path.
+ */
+export function isIntelligenceV1Enabled(): boolean {
+  return process.env.INTELLIGENCE_V1_ENABLED !== "false";
+}
+
 export const DEFAULT_SILICONFLOW_MODEL =
   process.env.ADEHQ_SILICONFLOW_MODEL ?? "deepseek-ai/DeepSeek-V4-Flash";
 

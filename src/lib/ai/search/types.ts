@@ -46,7 +46,10 @@ export type SearchAnswerResult = {
   estimatedWorkMinutes: number;
   uncertaintyNote?: string;
   searchMeta?: GatewaySearchRunMeta;
+  webSourcesArtifact?: MessageArtifact;
   searchSourcesArtifact?: MessageArtifact;
+  fromCache?: boolean;
+  cacheKey?: string;
 };
 
 export type GatewaySearchRunMeta = {

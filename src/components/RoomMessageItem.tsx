@@ -30,7 +30,7 @@ import { CrmInlineCard } from "@/components/crm/CrmInlineCard";
 import { ToolResultInlineCard } from "@/components/integrations/ToolResultInlineCard";
 import { AutonomousLauncher } from "@/components/autonomy/AutonomousLauncher";
 import { AutonomousSessionChip } from "@/components/autonomy/AutonomousSessionChip";
-import { SearchSourceCards } from "@/components/search/SearchSourceCards";
+import { CompactSourcesRow } from "@/components/search/CompactSourcesRow";
 import { MessageMarkdown } from "./MessageMarkdown";
 import {
   BrainCircuit,
@@ -687,13 +687,18 @@ export function RoomMessageItem({
     (a) => a.type === "file" && !a.meta?.chunkId,
   ) ?? [];
   const workLogArtifacts = message.artifacts?.filter((a) => a.type === "work_log") ?? [];
-  const searchSourceArtifacts =
-    message.artifacts?.filter((a) => a.type === "search_sources") ?? [];
+  const webSourceArtifacts =
+    message.artifacts?.filter(
+      (a) => a.type === "web_sources" || a.type === "search_sources",
+    ) ?? [];
+  const knowledgeSourceArtifacts =
+    message.artifacts?.filter((a) => a.type === "knowledge_sources") ?? [];
   const crmArtifacts =
     message.artifacts?.filter(
       (a) => a.type === "crm_contact" || a.type === "crm_deal" || a.type === "crm_company",
     ) ?? [];
   const toolResultArtifacts = message.artifacts?.filter((a) => a.type === "tool_result") ?? [];
+  const workModeArtifacts = message.artifacts?.filter((a) => a.type === "work_mode") ?? [];
   const sessionArtifacts = message.artifacts?.filter((a) => a.type === "autonomous_session") ?? [];
   const autopilotOfferArtifacts =
     message.artifacts?.filter((a) => a.type === "autopilot_offer") ?? [];
@@ -709,6 +714,8 @@ export function RoomMessageItem({
       a.type !== "file" &&
       a.type !== "work_log" &&
       a.type !== "search_sources" &&
+      a.type !== "web_sources" &&
+      a.type !== "knowledge_sources" &&
       a.type !== "crm_contact" &&
       a.type !== "crm_deal" &&
       a.type !== "crm_company" &&
@@ -773,6 +780,29 @@ export function RoomMessageItem({
 
         {isHuman ? (
           <>
+            {workModeArtifacts.map((artifact) => {
+              const mode = artifact.meta?.workMode;
+              const label =
+                mode === "fast"
+                  ? "⚡ Fast"
+                  : mode === "balanced"
+                    ? "⚖️ Balanced"
+                    : mode === "deep"
+                      ? "🧠 Deep Thinking"
+                      : mode === "research"
+                        ? "🌍 Research"
+                        : mode === "collaboration"
+                          ? "🤝 Collaboration"
+                          : artifact.label;
+              return (
+                <span
+                  key={artifact.id}
+                  className="mb-1 inline-flex rounded-full border border-accent/20 bg-accent-soft px-2 py-0.5 text-[10.5px] font-medium text-accent-d"
+                >
+                  {label}
+                </span>
+              );
+            })}
             <div
               className={cn(
                 message.pending ? "text-ink-2" : "text-ink",
@@ -858,8 +888,12 @@ export function RoomMessageItem({
           />
         ))}
 
-        {searchSourceArtifacts.map((artifact) => (
-          <SearchSourceCards key={artifact.id} artifact={artifact} />
+        {webSourceArtifacts.map((artifact) => (
+          <CompactSourcesRow key={artifact.id} kind="web" artifact={artifact} />
+        ))}
+
+        {knowledgeSourceArtifacts.map((artifact) => (
+          <CompactSourcesRow key={artifact.id} kind="knowledge" artifact={artifact} />
         ))}
 
         {generatedArtifacts.map((artifact) => {

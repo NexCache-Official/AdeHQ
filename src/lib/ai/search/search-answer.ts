@@ -17,11 +17,17 @@ import type { SearchAnswerResult, SearchNeed, SearchRoute, SearchRouteDecision }
 import { estimateWorkMinutesFromCost } from "@/lib/ai/work-hours/estimate";
 import {
   buildSearchSourcesArtifact,
+  buildWebSourcesArtifact,
   ensurePrivateCompanyWording,
   normalizeGatewaySearchSources,
   stripInlineSourcesSection,
 } from "./source-normalizer";
 import type { MessageArtifact } from "@/lib/types";
+import {
+  cachedAnswerToSearchResult,
+  getSearchCache,
+  setSearchCache,
+} from "./search-cache";
 
 export type ExecuteSearchAnswerParams = {
   client?: SupabaseClient;
@@ -89,7 +95,8 @@ export async function executeSearchAnswer(
       employeeId: params.employeeId,
       workType: isGatewaySearchRoute(decision.route) ? "gateway_search_answer" : "quick_web_search",
       capability: "research_planning",
-      providerRoute: isGatewaySearchRoute(decision.route) ? "vercel_gateway" : "mock",
+      providerRoute: isGatewaySearchRoute(decision.route) ? "vercel_gateway" : undefined,
+      providerName: isGatewaySearchRoute(decision.route) ? "vercel_gateway" : "tavily",
       estimatedWorkMinutes: decision.estimatedWorkMinutes,
       metadata: {
         query: params.query.slice(0, 500),
@@ -104,6 +111,29 @@ export async function executeSearchAnswer(
   }
 
   try {
+    if (params.client) {
+      const cached = await getSearchCache(
+        params.client,
+        params.workspaceId,
+        params.query,
+      );
+      if (cached?.answer?.trim()) {
+        const cachedResult = cachedAnswerToSearchResult(cached);
+        if (workUnitId) {
+          await completeAiWorkUnit(params.client, params.workspaceId, workUnitId, {
+            actualWorkMinutes: 0,
+            actualCostUsd: 0,
+            metadata: {
+              cacheHit: true,
+              cacheKey: cached.cacheKey,
+              hitCount: cached.hitCount + 1,
+            },
+          });
+        }
+        return cachedResult;
+      }
+    }
+
     let text = "";
     let rawSources: SearchAnswerResult["sources"] = [];
     let providerRoute: SearchAnswerResult["providerRoute"] = "model_fallback";
@@ -246,7 +276,10 @@ export async function executeSearchAnswer(
       });
     }
 
-    return {
+    const webArtifact =
+      normalized.usedSourceCount > 0 ? buildWebSourcesArtifact(normalized) : undefined;
+
+    const result = {
       answer: text,
       sources: normalized.used.map((source) => ({
         title: source.title,
@@ -258,9 +291,15 @@ export async function executeSearchAnswer(
       estimatedCostUsd,
       estimatedWorkMinutes,
       searchMeta,
-      searchSourcesArtifact:
-        normalized.usedSourceCount > 0 ? buildSearchSourcesArtifact(normalized) : undefined,
+      webSourcesArtifact: webArtifact,
+      searchSourcesArtifact: webArtifact,
     };
+
+    if (params.client && result.answer.trim()) {
+      await setSearchCache(params.client, params.workspaceId, params.query, result);
+    }
+
+    return result;
   } catch (error) {
     if (params.client && workUnitId) {
       await failAiWorkUnit(

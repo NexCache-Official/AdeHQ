@@ -256,6 +256,7 @@ export type OrchestratorInput = {
   messageId: string;
   messageText: string;
   mentionedEmployeeIds: string[];
+  mentionedHumanIds?: string[];
   roomEmployees: AIEmployeeProfile[];
   topicEmployees: AIEmployeeProfile[];
   recentMessages: OrchestratorMessage[];

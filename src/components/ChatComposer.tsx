@@ -5,6 +5,7 @@ import { AIEmployee, MentionRef, SavedArtifactType, WorkspaceMemberRole } from "
 import { STATUS_META } from "@/lib/icons";
 import { cn } from "@/lib/utils";
 import { BROWSER_RESEARCH_UI_COPY } from "@/lib/ai/browser-research/types";
+import type { WorkMode } from "@/lib/ai/intelligence/intelligence-context";
 import { resolveMessageMentions, type MentionParticipant } from "@/lib/mentions";
 import { EmployeeAvatar, HumanAvatar } from "./EmployeeAvatar";
 import { FileArtifactCard } from "./ArtifactCard";
@@ -44,6 +45,19 @@ export type ComposerUploadedFile = {
   parseStatus?: "pending" | "processing" | "parsed" | "no_text" | "failed" | null;
   errorMessage?: string | null;
 };
+
+const WORK_MODES: Array<{
+  id: WorkMode;
+  emoji: string;
+  label: string;
+  hint: string;
+}> = [
+  { id: "fast", emoji: "⚡", label: "Fast", hint: "Quick response with minimal reasoning" },
+  { id: "balanced", emoji: "⚖️", label: "Balanced", hint: "Balanced speed and depth" },
+  { id: "deep", emoji: "🧠", label: "Deep Thinking", hint: "More reasoning for complex decisions" },
+  { id: "research", emoji: "🌍", label: "Research", hint: "Use current sources and research tools" },
+  { id: "collaboration", emoji: "🤝", label: "Collaboration", hint: "Coordinate relevant teammates" },
+];
 
 type ComposerAttachment = {
   localId: string;
@@ -248,6 +262,7 @@ export function ChatComposer({
     mentionsJson?: MentionRef[],
     attachmentFileIds?: string[],
     contextFileIds?: string[],
+    workMode?: WorkMode,
   ) => void | Promise<void>;
   onUploadFiles?: (files: File[]) => Promise<ComposerUploadedFile[]>;
   onAddEmployee?: () => void;
@@ -277,6 +292,7 @@ export function ChatComposer({
   const [slashQuery, setSlashQuery] = useState<string | null>(null);
   const [trackedMentions, setTrackedMentions] = useState<MentionRef[]>([]);
   const [commandNotice, setCommandNotice] = useState<string | null>(null);
+  const [workMode, setWorkMode] = useState<WorkMode | undefined>();
   const [attachments, setAttachments] = useState<ComposerAttachment[]>([]);
   const [dragActive, setDragActive] = useState(false);
   const [sending, setSending] = useState(false);
@@ -593,7 +609,9 @@ export function ChatComposer({
         mentionsToSend,
         readyAttachmentIds.length ? readyAttachmentIds : undefined,
         contextFileIdsToSend,
+        workMode,
       );
+      setWorkMode(undefined);
       setAttachments((prev) => prev.filter((attachment) => attachment.status === "failed"));
       onContextConsumed?.();
     } catch {
@@ -990,6 +1008,30 @@ export function ChatComposer({
             ))}
           </div>
         )}
+
+        <div className="mb-1 flex gap-1 overflow-x-auto px-1 pb-0.5">
+          {WORK_MODES.map((mode) => {
+            const selected = workMode === mode.id;
+            return (
+              <button
+                key={mode.id}
+                type="button"
+                onClick={() => setWorkMode(selected ? undefined : mode.id)}
+                className={cn(
+                  "inline-flex shrink-0 items-center gap-1 rounded-full border px-2 py-0.5 text-[10.5px] font-medium transition-colors",
+                  selected
+                    ? "border-accent/30 bg-accent-soft text-accent-d"
+                    : "border-border bg-surface text-ink-3 hover:bg-muted hover:text-ink-2",
+                )}
+                title={mode.hint}
+                aria-pressed={selected}
+              >
+                <span aria-hidden>{mode.emoji}</span>
+                {mode.label}
+              </button>
+            );
+          })}
+        </div>
 
         {showFormatting && (
           <div className="mb-1 flex flex-wrap gap-0.5 border-b border-border-2 px-1 pb-1">

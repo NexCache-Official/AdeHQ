@@ -59,6 +59,14 @@ export function toUserFacingToolError(error: unknown): string {
     return "Web search isn't available on my side yet.";
   }
 
+  if (
+    internal.includes("plan_entitlement_denied") ||
+    internal.includes("current plan") ||
+    internal.includes("upgrade to enable")
+  ) {
+    return "Web search isn't included in this workspace's current plan.";
+  }
+
   if (internal.includes("timeout") || internal.includes("timed out") || internal.includes("abort")) {
     return "The search took too long.";
   }

@@ -8,8 +8,11 @@ import type { BrowserResearchRun } from "@/lib/ai/browser-research/types";
 import { sanitizeReplyForChat } from "@/lib/ai/normalize-model-response";
 import { executeSearchAnswer } from "@/lib/ai/search/search-answer";
 import { isGatewayResearchProvider } from "@/lib/ai/research/research-provider";
-import { PlanEntitlementError } from "@/lib/billing/plans/entitlements";
-import type { GatewaySearchRunMeta } from "@/lib/ai/search/types";
+import {
+  assertGatewaySearchPlanAccess,
+  PlanEntitlementError,
+} from "@/lib/billing/plans/entitlements";
+import type { GatewaySearchRunMeta, SearchAnswerResult } from "@/lib/ai/search/types";
 import type { MessageArtifact, RoomMessage } from "@/lib/types";
 import { nowISO, uid } from "@/lib/utils";
 import type { ResearchPlan } from "./research-planner";
@@ -32,9 +35,12 @@ export type ExecutePlannedResearchResult = {
   async: boolean;
   searchAnswer?: {
     route: string;
+    providerRoute?: SearchAnswerResult["providerRoute"];
     estimatedCostUsd: number;
     estimatedWorkMinutes: number;
     searchMeta?: GatewaySearchRunMeta;
+    fromCache?: boolean;
+    cacheKey?: string;
   };
 };
 
@@ -96,7 +102,8 @@ export async function executePlannedResearch(
     throw new Error("Research plan is missing a query.");
   }
 
-  if (isGatewayResearchProvider(params.plan.provider)) {
+  if (isGatewayResearchProvider(params.plan.provider) || params.plan.provider === "tavily") {
+    await assertGatewaySearchPlanAccess(client, params.workspaceId);
     const employee = await loadWorkspaceEmployee(client, params.workspaceId, params.employeeId);
     const searchResult = await executeSearchAnswer({
       client,
@@ -112,12 +119,16 @@ export async function executePlannedResearch(
           ? "gateway_exa"
           : params.plan.provider === "gateway_parallel"
             ? "gateway_parallel"
+            : params.plan.provider === "tavily"
+              ? "tavily"
             : "gateway_perplexity",
     });
 
-    const artifacts = searchResult.searchSourcesArtifact
-      ? [searchResult.searchSourcesArtifact]
-      : undefined;
+    const artifacts = searchResult.webSourcesArtifact
+      ? [searchResult.webSourcesArtifact]
+      : searchResult.searchSourcesArtifact
+        ? [searchResult.searchSourcesArtifact]
+        : undefined;
 
     const chatReply = await persistGatewaySearchChatReply(client, {
       workspaceId: params.workspaceId,
@@ -137,9 +148,12 @@ export async function executePlannedResearch(
       async: false,
       searchAnswer: {
         route: searchResult.route,
+        providerRoute: searchResult.providerRoute,
         estimatedCostUsd: searchResult.estimatedCostUsd,
         estimatedWorkMinutes: searchResult.estimatedWorkMinutes,
         searchMeta: searchResult.searchMeta,
+        fromCache: searchResult.fromCache,
+        cacheKey: searchResult.cacheKey,
       },
     };
   }

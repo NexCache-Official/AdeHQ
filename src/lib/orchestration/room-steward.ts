@@ -50,6 +50,7 @@ export type RoomStewardInput = {
   authorType: "human" | "ai";
   authorEmployeeId?: string;
   mentionedEmployeeIds?: string[];
+  mentionedHumanIds?: string[];
   participationMode:
     | RoomStewardParticipationMode
     | "silent_observation"
@@ -754,6 +755,41 @@ function classifyRoomMessageDeterministic(input: RoomStewardInput): RoomStewardD
     return baseDecision(input, "silent_note", "Empty message - no AI response.", {
       confidence: 0.95,
     });
+  }
+
+  if (
+    (input.mentionedHumanIds?.length ?? 0) > 0 &&
+    !mentionSelected
+  ) {
+    const professionMatch = rankEmployeesForMessage(
+      text,
+      toEmployeeProfiles(input),
+    ).find((candidate) => candidate.score >= 12);
+    if (!professionMatch) {
+      return baseDecision(
+        input,
+        "silent_note",
+        "Human-only @mention — AI employees stay silent.",
+        {
+          confidence: 0.97,
+          shouldRespond: false,
+        },
+      );
+    }
+    return finalizeDecision(
+      input,
+      baseDecision(
+        input,
+        "direct_question",
+        "Human-only @mention, but one employee has a strong professional role match.",
+        {
+          confidence: 0.82,
+          shouldRespond: true,
+          selectedEmployeeIds: [professionMatch.employeeId],
+          responseStyle: "answer",
+        },
+      ),
+    );
   }
 
   if (mentionSelected) {

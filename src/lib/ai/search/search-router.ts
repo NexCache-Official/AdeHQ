@@ -21,6 +21,9 @@ const CURRENT_FACT_PATTERNS = [
   /\b(revenue|arr|funding|raised|valuation|series [a-d]|market cap|stock price|share price|ceo|cfo|founder)\b/i,
   /\b(latest|recent|current|today|this week|this month|in 20\d{2})\b/i,
   /\b(tell me about|look up|find out|search for)\b/i,
+  /\b(world cup|fifa|olympics?|super bowl|nba|nfl|mlb|nhl|premier league|champions league)\b.{0,100}\b(sponsors?|partners?|schedule|host|venue|winner|score|standings)\b/i,
+  /\b(sponsors?|partners?|schedule|host|venue|winner|score|standings)\b.{0,100}\b(world cup|fifa|olympics?|super bowl|nba|nfl|mlb|nhl|premier league|champions league)\b/i,
+  /\b(biggest|top|major|main|official)\b.{0,80}\b(sponsors?|partners?)\b/i,
 ];
 
 const DEEP_BROWSER_PATTERNS = [

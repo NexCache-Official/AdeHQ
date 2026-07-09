@@ -8,6 +8,7 @@ import {
   isQuickFactLookup,
   requiresDeepBrowserResearch,
 } from "@/lib/ai/search";
+import { planResearchSync } from "@/lib/ai/research/research-planner";
 
 function expectTrue(condition: boolean, message = "assertion failed") {
   if (!condition) throw new Error(message);
@@ -69,6 +70,59 @@ async function main() {
     const decision = decideSearchRoute("Who is the CEO of Stripe?");
     expectTrue(decision.need === "current_fact" || decision.need === "company_fact");
     expectTrue(!decision.browserRequired);
+  });
+
+  await test("general factual question routes to fast search", () => {
+    const decision = decideSearchRoute("What was Apple's revenue in 2025?");
+    expectTrue(decision.browserRequired === false);
+    expectTrue(decision.route !== "browserbase");
+  });
+
+  await test("tax regulation question routes to fast search", () => {
+    const decision = decideSearchRoute("What are the current UK visa requirements for tech workers?");
+    expectTrue(decision.browserRequired === false);
+    expectTrue(decision.route !== "browserbase");
+  });
+  await test("World Cup sponsor question routes to fast search, not browser", () => {
+    const decision = decideSearchRoute("Who are the biggest sponsors of the FIFA World Cup this year?");
+    expectTrue(decision.need === "current_fact", `expected current_fact, got ${decision.need}`);
+    expectTrue(decision.browserRequired === false, "browserRequired should be false");
+    expectTrue(decision.route !== "browserbase", "must not route to browserbase");
+  });
+
+  await test("event sponsor shorthand routes to fast search", () => {
+    const decision = decideSearchRoute("World Cup sponsors 2026");
+    expectTrue(decision.need === "current_fact", `expected current_fact, got ${decision.need}`);
+    expectTrue(decision.browserRequired === false, "browserRequired should be false");
+  });
+
+  await test("workspace search is not blocked by employee browserAccess none", () => {
+    const originalGatewayKey = process.env.AI_GATEWAY_API_KEY;
+    process.env.AI_GATEWAY_API_KEY = originalGatewayKey || "test_gateway_key";
+
+    try {
+      const plan = planResearchSync({
+        messages: [],
+        userMessage: "Look up World Cup sponsors 2026",
+        employee: {
+          roleKey: "research",
+          modelMode: "balanced",
+          intelligencePolicy: {
+            defaultMode: "balanced",
+            allowedModes: ["balanced"],
+            workHourProfile: "moderate",
+            browserAccess: "none",
+            routingPreference: "auto",
+          },
+        },
+      });
+
+      expectTrue(plan.action === "search", `expected search, got ${plan.action}`);
+      expectTrue(plan.provider === "gateway_perplexity", `expected gateway_perplexity, got ${plan.provider}`);
+    } finally {
+      if (originalGatewayKey == null) delete process.env.AI_GATEWAY_API_KEY;
+      else process.env.AI_GATEWAY_API_KEY = originalGatewayKey;
+    }
   });
 
   if (!process.env.AI_GATEWAY_API_KEY?.trim()) {

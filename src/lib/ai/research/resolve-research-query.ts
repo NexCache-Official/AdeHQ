@@ -13,6 +13,7 @@ export type ResolvedResearchQuery = {
 const META_RESEARCH_PATTERNS = [
   /\b(using the browser|use the browser|with the browser|in the browser)\b/i,
   /\b(look (that|it|this) up|look up (that|it|this))\b/i,
+  /\b(look up|look into|search for|check the web for)\b/i,
   /\b(search for (that|it|this)|search (that|it|this))\b/i,
   /\b(find out|please find out|can you find out)\b/i,
   /\b(can you (search|look|check|browse|google))\b/i,
@@ -43,6 +44,7 @@ function hasSubstantiveTopicAfterMetaPhrases(text: string): boolean {
 
   const stripped = trimmed
     .replace(/\b(please|can you|could you|using the browser|use the browser|look it up|find out)\b/gi, "")
+    .replace(/\b(look up|look into|search for|check the web for)\b/gi, "")
     .replace(/\s+/g, " ")
     .trim();
   return stripped.length >= MIN_SUBSTANTIVE_LENGTH;
@@ -72,6 +74,7 @@ export function isMostlyMetaInstruction(text: string): boolean {
 
   const stripped = trimmed
     .replace(/\b(please|can you|could you|using the browser|use the browser|look it up|find out)\b/gi, "")
+    .replace(/\b(look up|look into|search for|check the web for)\b/gi, "")
     .replace(/\s+/g, " ")
     .trim();
   return stripped.length < MIN_SUBSTANTIVE_LENGTH;

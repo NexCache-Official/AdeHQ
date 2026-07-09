@@ -283,3 +283,52 @@ export function buildSearchSourcesArtifact(
     },
   };
 }
+
+export function buildWebSourcesArtifact(
+  normalized: NormalizedSearchSources,
+): import("@/lib/types").MessageArtifact {
+  return {
+    type: "web_sources",
+    id: uid("web"),
+    label: "Sources",
+    meta: {
+      sourceCount: normalized.sourceCount,
+      usedSourceCount: normalized.usedSourceCount,
+      excludedSourceCount: normalized.excludedSourceCount,
+      webSources: normalized.used.map((source) => ({
+        id: source.id,
+        title: source.title,
+        url: source.url,
+        domain: source.domain,
+        confidence: source.confidence,
+      })),
+    },
+  };
+}
+
+export function buildKnowledgeSourcesArtifact(input: {
+  sources: Array<{
+    id: string;
+    label: string;
+    providerId?: string;
+    memoryId?: string;
+    fileId?: string;
+    chunkId?: string;
+    quote?: string;
+    locator?: string;
+    href?: string;
+  }>;
+  confidence?: number;
+  providerId?: string;
+}): import("@/lib/types").MessageArtifact {
+  return {
+    type: "knowledge_sources",
+    id: uid("know"),
+    label: "From project knowledge",
+    meta: {
+      knowledgeSources: input.sources,
+      knowledgeConfidence: input.confidence,
+      providerId: input.providerId,
+    },
+  };
+}

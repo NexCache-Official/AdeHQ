@@ -24,6 +24,7 @@ import type { TopicContextImportRecord } from "@/lib/topics/context-imports";
 import type { SuggestedConversationAction } from "@/lib/orchestration/types";
 import { useStore } from "@/lib/demo-store";
 import { ENABLE_DEMO_MODE } from "@/lib/config/features";
+import type { WorkMode } from "@/lib/ai/intelligence/intelligence-context";
 import { useResponder } from "@/lib/ai/use-responder";
 import { authHeaders } from "@/lib/api/auth-client";
 import { parseJsonResponse } from "@/lib/api/parse-json-response";
@@ -934,6 +935,7 @@ export function RoomChat({
       throwOnError?: boolean;
       preferTavily?: boolean;
       preferAgentMode?: boolean;
+      workMode?: WorkMode;
     },
   ) => {
     if (!topic || topic.status === "archived" || room.status === "archived") return;
@@ -970,6 +972,16 @@ export function RoomChat({
       senderName: state.user?.name ?? "You",
       content: text,
       mentions,
+      artifacts: options?.workMode
+        ? [
+            {
+              type: "work_mode",
+              id: `work-mode-${messageId}`,
+              label: options.workMode,
+              meta: { workMode: options.workMode },
+            },
+          ]
+        : undefined,
       pending: true,
       deliveryStatus: "sending",
     });
@@ -987,6 +999,7 @@ export function RoomChat({
         ...(options?.skipOrchestration ? { skipAiOrchestration: true } : {}),
         ...(options?.preferTavily ? { preferTavily: true } : {}),
         ...(options?.preferAgentMode ? { preferAgentMode: true } : {}),
+        ...(options?.workMode ? { workMode: options.workMode } : {}),
       };
 
       trace("message", "info", `POST /api/rooms/${room.id}/messages`, body);
@@ -1294,6 +1307,7 @@ export function RoomChat({
     mentionsJson?: import("@/lib/types").MentionRef[],
     attachmentFileIds?: string[],
     contextFileIds?: string[],
+    workMode?: WorkMode,
   ) => {
     if (!topic || topic.status === "archived" || room.status === "archived") return;
 
@@ -1309,6 +1323,7 @@ export function RoomChat({
           agentModeEnabled &&
           browserResearchAvailable &&
           (browserResearchConfig?.liveReady ?? false),
+        workMode,
       });
       if (isMayaGeneralChat && topic.id) {
         await mayaResponder.handleUserMessage(text);

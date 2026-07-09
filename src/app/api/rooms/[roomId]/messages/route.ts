@@ -59,6 +59,8 @@ type MessageBody = {
   preferBrowserbase?: boolean;
   /** Agent mode toggle — prefer Browserbase live browse. */
   preferAgentMode?: boolean;
+  /** Human-visible work mode tag; controls intelligence budget and routing. */
+  workMode?: import("@/lib/ai/intelligence/intelligence-context").WorkMode;
   mentionsJson?: MentionRef[];
   slashCommand?: string;
   attachmentFileIds?: string[];
@@ -175,6 +177,23 @@ export async function POST(
     }
     humanMessage.mentions = mentions;
     if (mentionsJson) humanMessage.mentionsJson = mentionsJson;
+    const workModeArtifact: MessageArtifact | undefined = body.workMode
+      ? {
+          type: "work_mode",
+          id: `work-mode-${humanMessage.id}`,
+          label: body.workMode,
+          meta: { workMode: body.workMode },
+        }
+      : undefined;
+    if (workModeArtifact) {
+      const { error: workModeError } = await client
+        .from("messages")
+        .update({ artifacts: [workModeArtifact] })
+        .eq("workspace_id", workspaceId)
+        .eq("id", humanMessage.id);
+      if (workModeError) throw workModeError;
+      humanMessage.artifacts = [workModeArtifact];
+    }
 
     const attachmentFileIds = [...new Set((body.attachmentFileIds ?? []).filter(Boolean))];
     const contextFileIds = [...new Set((body.contextFileIds ?? []).filter(Boolean))];
@@ -218,13 +237,17 @@ export async function POST(
       );
       if (attachError) throw attachError;
 
+      const allMessageArtifacts = [
+        ...(workModeArtifact ? [workModeArtifact] : []),
+        ...fileArtifacts,
+      ];
       const { error: updateMessageError } = await client
         .from("messages")
-        .update({ artifacts: fileArtifacts })
+        .update({ artifacts: allMessageArtifacts })
         .eq("workspace_id", workspaceId)
         .eq("id", humanMessage.id);
       if (updateMessageError) throw updateMessageError;
-      humanMessage.artifacts = fileArtifacts;
+      humanMessage.artifacts = allMessageArtifacts;
     }
 
     if (body.skipAiOrchestration) {
@@ -297,6 +320,10 @@ export async function POST(
       messageId: humanMessage.id,
       messageText: trimmed,
       mentionedEmployeeIds: mentions,
+      mentionedHumanIds:
+        mentionsJson
+          ?.filter((mention) => mention.type === "human")
+          .map((mention) => mention.id) ?? [],
       roomEmployees: orchestrationEmployees,
       topicEmployees: orchestrationEmployees,
       recentMessages,
@@ -410,6 +437,7 @@ export async function POST(
       preferAgentMode: Boolean(body.preferAgentMode ?? body.preferBrowserbase),
       preferResearch: Boolean(body.preferTavily ?? body.preferResearch),
       preferBrowserbase: Boolean(body.preferAgentMode ?? body.preferBrowserbase),
+      workMode: body.workMode,
     };
 
     if (stopDetection.isStop) {

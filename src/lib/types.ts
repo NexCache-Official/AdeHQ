@@ -194,10 +194,13 @@ export type MessageArtifact = {
     | "artifact"
     | "file"
     | "search_sources"
+    | "web_sources"
+    | "knowledge_sources"
     | "crm_contact"
     | "crm_deal"
     | "crm_company"
     | "tool_result"
+    | "work_mode"
     | "autonomous_session"
     | "autopilot_offer";
   id: string;
@@ -230,6 +233,26 @@ export type MessageArtifact = {
       confidence?: "high" | "medium" | "low";
       publishedAt?: string;
     }>;
+    webSources?: Array<{
+      id: string;
+      title: string;
+      url: string;
+      domain?: string;
+      confidence?: "high" | "medium" | "low";
+    }>;
+    knowledgeSources?: Array<{
+      id: string;
+      label: string;
+      providerId?: string;
+      memoryId?: string;
+      fileId?: string;
+      chunkId?: string;
+      quote?: string;
+      locator?: string;
+      href?: string;
+    }>;
+    knowledgeConfidence?: number;
+    providerId?: string;
     fileName?: string;
     fileExtension?: string;
     fileSizeLabel?: string;
@@ -251,6 +274,7 @@ export type MessageArtifact = {
     triggerMessageId?: string;
     idempotencyKey?: string;
     retryArgs?: Record<string, unknown>;
+    workMode?: import("@/lib/ai/intelligence/intelligence-context").WorkMode;
     /** Autopilot offer chip. */
     objective?: string;
     autopilotEmployeeId?: string;

@@ -361,6 +361,38 @@ async function main() {
     assert(decision.costPolicy.selectedEmployeeCalls === decision.selectedEmployeeIds.length, "cost metadata should match selection");
   });
 
+  await run("human-only mention keeps AI silent without role relevance", async () => {
+    const decision = await classifyRoomMessageWithSteward(
+      baseInput({
+        messageContent: "@Shubham can you review this?",
+        mentionedHumanIds: ["human_shubham"],
+        mentionedEmployeeIds: [],
+        topicState: baseTopicState({ pendingQuestions: [] }),
+      }),
+    );
+    assert(!decision.shouldRespond, "AI should stay silent for a human-only mention");
+    assert(
+      /human-only/i.test(decision.reason),
+      "reason should identify the human-only mention gate",
+    );
+  });
+
+  await run("strong profession match may assist a human-only mention", async () => {
+    const decision = await classifyRoomMessageWithSteward(
+      baseInput({
+        messageContent: "@Shubham our sales pipeline needs an outreach plan",
+        mentionedHumanIds: ["human_shubham"],
+        mentionedEmployeeIds: [],
+        topicState: baseTopicState({ pendingQuestions: [] }),
+      }),
+    );
+    assert(decision.shouldRespond, "strong sales relevance should select a specialist");
+    assert(
+      decision.selectedEmployeeIds.includes(ALEX_ID),
+      "sales specialist should be selected",
+    );
+  });
+
   console.log(`\n--- Summary ---\nPASS: ${passed}  FAIL: 0  TOTAL: ${passed}`);
 }
 

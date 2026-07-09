@@ -1,4 +1,8 @@
 import type { MessageArtifact, RoomMessage } from "@/lib/types";
+import {
+  resolveKnowledgeSources,
+  resolveWebSources,
+} from "@/lib/message-artifacts/resolve-source-artifacts";
 
 export type ParsedInlineSource = {
   fileName: string;
@@ -13,6 +17,7 @@ export type MessageSourceRef = {
   chunkId?: string;
   quote?: string;
   locator?: string;
+  href?: string;
 };
 
 export type MessageActionHandlers = {
@@ -38,6 +43,28 @@ export function parseInlineSources(content: string): ParsedInlineSource[] {
 }
 
 export function collectMessageSources(message: RoomMessage): MessageSourceRef[] {
+  const fromWeb =
+    message.artifacts?.flatMap((artifact) =>
+      resolveWebSources(artifact).map((source) => ({
+        id: source.id,
+        label: source.domain || source.title,
+        href: source.url,
+      })),
+    ) ?? [];
+
+  const fromKnowledge =
+    message.artifacts?.flatMap((artifact) =>
+      resolveKnowledgeSources(artifact).map((source) => ({
+        id: source.id,
+        label: source.label,
+        fileId: source.fileId,
+        chunkId: source.chunkId,
+        quote: source.quote,
+        locator: source.locator,
+        href: source.href,
+      })),
+    ) ?? [];
+
   const fromArtifacts =
     message.artifacts
       ?.filter((artifact) => artifact.type === "file" && artifact.meta?.chunkId)
@@ -50,7 +77,11 @@ export function collectMessageSources(message: RoomMessage): MessageSourceRef[] 
         locator: artifact.meta?.locator,
       })) ?? [];
 
-  const seen = new Set(fromArtifacts.map((item) => item.label));
+  const seen = new Set([
+    ...fromWeb.map((item) => item.id),
+    ...fromKnowledge.map((item) => item.id),
+    ...fromArtifacts.map((item) => item.id),
+  ]);
   const fromInline = parseInlineSources(message.content)
     .filter((source) => {
       const label = source.locator
@@ -67,7 +98,7 @@ export function collectMessageSources(message: RoomMessage): MessageSourceRef[] 
       locator: source.locator,
     }));
 
-  return [...fromArtifacts, ...fromInline];
+  return [...fromWeb, ...fromKnowledge, ...fromArtifacts, ...fromInline];
 }
 
 export function messageHasSources(message: RoomMessage): boolean {

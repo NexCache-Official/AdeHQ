@@ -55,6 +55,7 @@ import {
 import { canEmployeeUseBrowserResearch } from "@/lib/ai/browser-research/permissions";
 import {
   executePlannedResearch,
+  getResearchCapabilities,
   planResearch,
   type ResearchPlan,
 } from "@/lib/ai/research";
@@ -69,6 +70,27 @@ import {
   detectWorkStopRequest,
 } from "@/lib/orchestration/work-stop";
 import { cancelActiveTopicWork } from "@/lib/server/cancel-active-topic-work";
+import { isIntelligenceV1Enabled } from "@/lib/config/features";
+import type {
+  IntelligenceContext,
+  WorkMode,
+} from "@/lib/ai/intelligence/intelligence-context";
+import type { SearchRoute } from "@/lib/ai/search/types";
+import {
+  enrichIntelligenceContext,
+  shouldAnswerFromKnowledge,
+} from "@/lib/ai/intelligence/pipeline";
+import { intelligenceMetadata } from "@/lib/ai/intelligence/telemetry";
+import {
+  researchPlanFromIntelligence,
+  shouldSkipLegacyResearchPlanner,
+} from "@/lib/ai/intelligence/research-plan-from-intelligence";
+import {
+  composeKnowledgeReply,
+  persistComposedIntelligenceReply,
+  withComposerMetadata,
+} from "@/lib/ai/intelligence/response-composer";
+import { queueBackgroundLearningFromSearch } from "@/lib/ai/intelligence/background-learning";
 
 function formatResearchError(error: unknown): string {
   return serializeUnknownError(error);
@@ -338,8 +360,178 @@ export async function processQueuedAgentRun(
           userMessage: content,
           priorityFileIds: attachmentFileIds,
         });
-    const fileContextPrompt = buildFileContextPrompt(fileContextBundle);
+    let fileContextPrompt = buildFileContextPrompt(fileContextBundle);
     const usedFileContext = fileContextBundle.chunks.length > 0;
+    let intelligence: IntelligenceContext | undefined;
+
+    if (isIntelligenceV1Enabled()) {
+      const rawWorkMode = runMetadata.workMode;
+      const workMode: WorkMode | undefined =
+        rawWorkMode === "fast" ||
+        rawWorkMode === "balanced" ||
+        rawWorkMode === "deep" ||
+        rawWorkMode === "research" ||
+        rawWorkMode === "collaboration"
+          ? rawWorkMode
+          : undefined;
+      intelligence = await enrichIntelligenceContext(client, {
+        workspaceId,
+        roomId,
+        topicId,
+        messageId: triggerMessageId,
+        userMessage: content,
+        selectedEmployeeId: employeeId,
+        workMode,
+        preferFastSearch: Boolean(
+          runMetadata.preferTavily ?? runMetadata.preferResearch,
+        ),
+        preferAgentMode: Boolean(
+          runMetadata.preferAgentMode ?? runMetadata.preferBrowserbase,
+        ),
+        hasRecentContext: ctx.room.messages.length > 1,
+        memoryEntries: ctx.recentMemory,
+        topicSummary: ctx.topicSummary?.summary ?? null,
+        fileContext: fileContextBundle,
+        recentMessages: ctx.room.messages,
+        capabilitiesSummary: (() => {
+          const caps = getResearchCapabilities(employee);
+          const lines = [
+            caps.gatewaySearch
+              ? "- Fast web search (Vercel AI Gateway) is configured."
+              : "- Fast web search is not configured.",
+            caps.tavily
+              ? "- Backup web search (Tavily) is configured."
+              : "- Backup web search is not configured.",
+            caps.browserbase
+              ? "- Live browser agent is configured."
+              : "- Live browser agent is not configured.",
+          ];
+          return lines.join("\n");
+        })(),
+      });
+      runMetadata.intelligence = intelligenceMetadata(intelligence);
+      await client
+        .from("agent_runs")
+        .update({ run_metadata: runMetadata })
+        .eq("workspace_id", workspaceId)
+        .eq("id", runId);
+
+      if (shouldAnswerFromKnowledge(intelligence) && intelligence.knowledge?.answer) {
+        const composed = composeKnowledgeReply(intelligence);
+        intelligence = withComposerMetadata(intelligence, composed);
+        runMetadata.intelligence = intelligenceMetadata(intelligence);
+        await client
+          .from("agent_runs")
+          .update({ run_metadata: runMetadata })
+          .eq("workspace_id", workspaceId)
+          .eq("id", runId);
+
+        const knowledgeReply = await persistComposedIntelligenceReply(client, {
+          workspaceId,
+          roomId,
+          topicId,
+          employeeId,
+          employeeName: employee.name,
+          composed,
+          agentRunId: runId,
+          triggerMessageId,
+        });
+
+        await persistRunOrchestrationPhase(
+          client,
+          workspaceId,
+          runMetadata,
+          employeeId,
+          "completed",
+          { runId },
+        );
+
+        if (usageId) {
+          await finalizeAiRun({
+            client,
+            workspaceId,
+            runId,
+            usageId,
+            responseMessageId: knowledgeReply.id,
+            actualCostUsd: 0,
+            failed: false,
+          });
+        } else {
+          await completeAgentRun(client, workspaceId, runId, {
+            status: "completed",
+            responseMessageId: knowledgeReply.id,
+          });
+        }
+
+        await client
+          .from("ai_employees")
+          .update({ status: "idle", last_active_at: nowISO() })
+          .eq("workspace_id", workspaceId)
+          .eq("id", employeeId);
+
+        if (!isGreetingRun) {
+          if (ctx.room.kind === "dm") {
+            try {
+              await refreshTopicSummary(client, {
+                workspaceId,
+                roomId,
+                topicId,
+                topicTitle: ctx.topic.title,
+                topicDescription: ctx.topic.description,
+                trigger: "meaningful_ai_reply",
+                employeeId,
+                logWorkEvents: false,
+              });
+            } catch (error) {
+              console.warn("[AdeHQ dm summary refresh]", error);
+            }
+          } else {
+            scheduleTopicSummaryRefresh(client, {
+              workspaceId,
+              roomId,
+              topicId,
+              topicTitle: ctx.topic.title,
+              topicDescription: ctx.topic.description,
+              trigger: "meaningful_ai_reply",
+              employeeId,
+            });
+          }
+        }
+
+        return {
+          reply: knowledgeReply.content,
+          aiMessageId: knowledgeReply.id,
+          aiMode: "knowledge",
+          employeeId,
+          employeeName: employee.name,
+          artifacts: knowledgeReply.artifacts,
+          metrics: {
+            provider: employee.provider,
+            model: "knowledge",
+            modelMode: "efficient",
+            inputTokens: 0,
+            outputTokens: 0,
+            fallbackUsed: false,
+            estimatedCostUsd: 0,
+            durationMs: 0,
+            usageId,
+            agentRunId: runId,
+          },
+        };
+      }
+
+      fileContextPrompt = [
+        fileContextPrompt,
+        intelligence.knowledge?.found && intelligence.knowledge.answer
+          ? [
+              "Related workspace knowledge (use when helpful; search may still be needed):",
+              intelligence.knowledge.answer,
+            ].join("\n")
+          : null,
+      ]
+        .filter(Boolean)
+        .join("\n\n");
+    }
 
     if (
       (collaborationRole === "collaborator" || collaborationRole === "panelist") &&
@@ -469,11 +661,38 @@ export async function processQueuedAgentRun(
       !isGreetingRun &&
       !collaborationOnly &&
       !artifactIntent &&
-      canEmployeeUseBrowserResearch(employee)
+      !shouldAnswerFromKnowledge(intelligence) &&
+      (getResearchCapabilities(employee).canSearch ||
+        canEmployeeUseBrowserResearch(employee))
     ) {
       let researchPlan: ResearchPlan | null = null;
 
-      if (isDmRoom) {
+      if (isIntelligenceV1Enabled() && intelligence) {
+        researchPlan = researchPlanFromIntelligence({
+          intelligence,
+          messages: roomWithMessages.messages,
+          userMessage: content,
+          employee,
+          preferTavily,
+          preferAgentMode,
+          excludeMessageId: triggerMessageId,
+        });
+        if (researchPlan) {
+          runMetadata.intelligenceResearchPlan = {
+            action: researchPlan.action,
+            provider: researchPlan.provider,
+            query: researchPlan.researchQuery,
+            reasoning: researchPlan.reasoning,
+            confidence: researchPlan.confidence,
+          };
+        }
+      }
+
+      if (
+        !researchPlan &&
+        isDmRoom &&
+        !(isIntelligenceV1Enabled() && shouldSkipLegacyResearchPlanner(intelligence))
+      ) {
         const [chatClearedAt, epochId, topicSummary] = await Promise.all([
           fetchTopicChatClearedAtColumn(client, workspaceId, topicId),
           fetchTopicContextEpochId(client, workspaceId, topicId),
@@ -745,6 +964,77 @@ export async function processQueuedAgentRun(
 
             if (searchMeta) {
               runMetadata.gatewaySearch = searchMeta;
+            }
+
+            if (isIntelligenceV1Enabled() && intelligence && researchResult.searchAnswer) {
+              const activeIntelligence = intelligence;
+              if (researchResult.searchAnswer.fromCache) {
+                intelligence = {
+                  ...activeIntelligence,
+                  cache: {
+                    hit: true,
+                    key: researchResult.searchAnswer.cacheKey,
+                  },
+                  composer: {
+                    skippedEmployeeModel: true,
+                    answerSource: "cache",
+                  },
+                };
+              } else {
+                intelligence = {
+                  ...activeIntelligence,
+                  search: {
+                    route: researchResult.searchAnswer.route as SearchRoute,
+                    provider: researchResult.searchAnswer.providerRoute,
+                    query: researchPlan.resolved.query,
+                    sourceCount: searchMeta?.usedSourceCount,
+                  },
+                  composer: {
+                    skippedEmployeeModel: true,
+                    answerSource: "search",
+                  },
+                };
+              }
+
+              const learning = await queueBackgroundLearningFromSearch(client, {
+                workspaceId,
+                roomId,
+                topicId,
+                employeeId,
+                userQuestion: content,
+                searchQuery: researchPlan.resolved.query,
+                searchAnswer: researchResult.chatReply.content,
+                messageId: researchResult.chatReply.id,
+                agentRunId: runId,
+                sourcesArtifact: researchResult.chatReply.artifacts?.find(
+                  (artifact) => artifact.type === "search_sources",
+                ),
+              });
+              intelligence = {
+                ...intelligence,
+                backgroundLearning: {
+                  queued: learning.queued,
+                  memoryId: learning.memorySuggestionKey,
+                },
+              };
+
+              if (learning.queued) {
+                const { data: refreshedMessage } = await client
+                  .from("messages")
+                  .select("artifacts")
+                  .eq("workspace_id", workspaceId)
+                  .eq("id", researchResult.chatReply.id)
+                  .maybeSingle();
+                if (refreshedMessage?.artifacts) {
+                  researchResult.chatReply.artifacts =
+                    refreshedMessage.artifacts as typeof researchResult.chatReply.artifacts;
+                }
+              }
+
+              runMetadata.intelligence = intelligenceMetadata(intelligence);
+            }
+
+            if (searchMeta || runMetadata.intelligence) {
               await client
                 .from("agent_runs")
                 .update({ run_metadata: runMetadata })

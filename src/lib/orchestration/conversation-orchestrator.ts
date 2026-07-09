@@ -451,6 +451,7 @@ export async function orchestrateConversation(
       messageContent: input.messageText,
       authorType: "human",
       mentionedEmployeeIds: input.mentionedEmployeeIds,
+      mentionedHumanIds: input.mentionedHumanIds,
       participationMode: input.participationMode,
       roster: employees.map((employee) => ({
         employeeId: employee.id,

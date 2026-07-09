@@ -1,6 +1,6 @@
 import {
-  canEmployeeUseBrowserResearch,
   getEmployeeBrowserAccess,
+  canEmployeeUseBrowserResearch,
 } from "@/lib/ai/browser-research/permissions";
 import {
   isBrowserResearchLiveReady,
@@ -44,6 +44,7 @@ export type ResearchCapabilities = {
   tavily: boolean;
   browserbase: boolean;
   browserAccess: BrowserAccess;
+  canBrowse: boolean;
   canSearch: boolean;
 };
 
@@ -64,9 +65,10 @@ export function getResearchCapabilities(
   const browserAccess = getEmployeeBrowserAccess(employee);
   const gatewaySearch = isGatewaySearchConfigured();
   const tavily = isTavilyConfigured();
-  const browserbase = isBrowserResearchLiveReady();
-  const canSearch = canEmployeeUseBrowserResearch(employee);
-  return { gatewaySearch, tavily, browserbase, browserAccess, canSearch };
+  const canBrowse = canEmployeeUseBrowserResearch(employee);
+  const browserbase = canBrowse && isBrowserResearchLiveReady();
+  const canSearch = gatewaySearch || tavily;
+  return { gatewaySearch, tavily, browserbase, browserAccess, canBrowse, canSearch };
 }
 
 function buildSearchPlan(
@@ -141,9 +143,9 @@ export function resolveUserDirectedResearchPlan(
       base,
       input,
       capabilities,
-      preferAgentMode
+      preferAgentMode && capabilities.browserbase
         ? "User enabled Agent mode — running live browser research as requested."
-        : "User enabled Browse — running fast web search as requested.",
+        : "User requested research — running fast web search with available workspace search.",
       0.98,
       { preferTavily, preferAgentMode },
     );
@@ -208,11 +210,11 @@ export async function planResearch(input: ResearchPlannerInput): Promise<Researc
     resolved,
   };
 
-  if (capabilities.browserAccess === "none" || !capabilities.canSearch) {
+  if (!capabilities.canSearch && !capabilities.canBrowse) {
     return {
       ...base,
       action: "reply",
-      reasoning: "Browser research is not enabled for this employee.",
+      reasoning: "Web research tools are not available for this employee.",
       confidence: 0.95,
     };
   }
@@ -239,11 +241,11 @@ export function planResearchSync(input: ResearchPlannerInput): ResearchPlan {
     resolved,
   };
 
-  if (capabilities.browserAccess === "none" || !capabilities.canSearch) {
+  if (!capabilities.canSearch && !capabilities.canBrowse) {
     return {
       ...base,
       action: "reply",
-      reasoning: "Browser research is not enabled for this employee.",
+      reasoning: "Web research tools are not available for this employee.",
       confidence: 0.95,
     };
   }

@@ -6,9 +6,12 @@ import { buildIntegrationToolsPrompt } from "@/lib/integrations/prompt";
 import type { TopicSummary } from "@/lib/topic-summary/types";
 
 export type ResearchCapabilitiesPrompt = {
+  gatewaySearch: boolean;
   tavily: boolean;
   browserbase: boolean;
   browserAccess: BrowserAccess;
+  canSearch?: boolean;
+  canBrowse?: boolean;
 };
 
 type PromptContext = {
@@ -122,25 +125,38 @@ function connectedLiveTools(tools: AIEmployee["tools"]): boolean {
 }
 
 function researchCapabilityRules(caps?: ResearchCapabilitiesPrompt): string {
-  if (!caps || caps.browserAccess === "none") {
+  if (!caps) {
     return "";
   }
 
-  const hasProviders = caps.tavily || caps.browserbase;
+  const hasFastSearch = caps.gatewaySearch || caps.tavily || caps.canSearch === true;
+  const hasBrowser = caps.browserbase && caps.browserAccess !== "none";
+  const hasProviders = hasFastSearch || hasBrowser;
   if (!hasProviders) {
-    return `- Browser research access is enabled (${caps.browserAccess}) but live search providers are not configured yet — note when verified data requires setup.`;
+    return `- Live web research providers are not configured yet — note when verified data requires setup.`;
   }
 
-  return [
-    `- Web research is available in this workspace${
-      caps.tavily ? " (fast search for recent facts)" : ""
-    }${caps.browserbase ? " (live browsing for complex sites)" : ""}.`,
+  const capabilities = [
+    hasFastSearch ? "fast web search for recent or public facts" : "",
+    hasBrowser ? "live browsing for complex sites" : "",
+  ].filter(Boolean);
+
+  const rules = [
+    `- Web research is available in this workspace (${capabilities.join("; ")}).`,
     "- A lightweight planning step may run first to decide whether search is needed — you will receive findings when search runs.",
-    "- When the user enables Browse or Agent mode on a message, web research runs for that send — answer from those findings; do not refuse or substitute training data.",
+    "- When the user enables Browse or asks to search, fast web search can run for that send — answer from those findings; do not refuse or substitute training data.",
     "- When no search ran, you may answer from training data with a clear date caveat and ask: 'Want me to search for the latest?'",
     "- Do NOT say you are searching, looking it up, or browsing unless research results are already in this thread.",
     "- Never send a placeholder like 'Let me look that up' — either use provided findings or offer to search explicitly.",
-  ].join("\n");
+  ];
+
+  if (!hasBrowser) {
+    rules.push(
+      "- Live browser automation may be unavailable for you, but that does not mean fast web search is unavailable.",
+    );
+  }
+
+  return rules.join("\n");
 }
 
 function coordinationAndTrustRules(
@@ -148,9 +164,12 @@ function coordinationAndTrustRules(
   researchCapabilities?: ResearchCapabilitiesPrompt,
 ): string {
   const hasConnectedTools = connectedLiveTools(tools);
-  const hasResearch =
-    Boolean(researchCapabilities?.tavily || researchCapabilities?.browserbase) &&
-    researchCapabilities?.browserAccess !== "none";
+  const hasResearch = Boolean(
+    researchCapabilities?.gatewaySearch ||
+      researchCapabilities?.tavily ||
+      researchCapabilities?.canSearch ||
+      (researchCapabilities?.browserbase && researchCapabilities.browserAccess !== "none"),
+  );
   const hasLiveTools = hasConnectedTools || hasResearch;
   const researchRules = researchCapabilityRules(researchCapabilities);
   return `
