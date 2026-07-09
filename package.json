@@ -75,6 +75,7 @@
     "@react-email/render": "^2.0.10",
     "@supabase/supabase-js": "^2.108.2",
     "@vercel/analytics": "^2.0.1",
+    "@vercel/speed-insights": "^2.0.0",
     "ai": "^7.0.15",
     "clsx": "^2.1.1",
     "csv-parse": "^7.0.1",
