@@ -279,10 +279,10 @@ async function main() {
 
   const hasSupabase =
     Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL?.trim()) &&
-    Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY?.trim());
+    Boolean(process.env.SUPABASE_SECRET_KEY?.trim());
 
   if (!hasSupabase) {
-    skip("live Supabase ledger insert", "Supabase service role env missing");
+    skip("live Supabase ledger insert", "Supabase secret key env missing");
   } else {
     skip("live Supabase ledger insert", "mock coverage sufficient — apply migration before live writes");
   }

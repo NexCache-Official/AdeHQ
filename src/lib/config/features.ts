@@ -19,8 +19,8 @@ export const DEFAULT_SILICONFLOW_MODEL =
 
 export const SILICONFLOW_MODEL = DEFAULT_SILICONFLOW_MODEL;
 
-/** Verified on SiliconFlow API — reliable, low cost, no reasoning-token burn. */
-export const SILICONFLOW_CHEAP_MODEL_FALLBACK = "deepseek-ai/DeepSeek-V3";
+/** V4 Flash is cheaper than V3 for output-heavy workloads — use for efficient/balanced. */
+export const SILICONFLOW_CHEAP_MODEL_FALLBACK = "deepseek-ai/DeepSeek-V4-Flash";
 
 export const SILICONFLOW_CHEAP_MODEL =
   process.env.ADEHQ_SILICONFLOW_CHEAP_MODEL ?? SILICONFLOW_CHEAP_MODEL_FALLBACK;

@@ -1,7 +1,7 @@
 import type { SupabaseClient, User } from "@supabase/supabase-js";
 import { NextRequest } from "next/server";
 import { AuthError, requireAuthUser } from "@/lib/supabase/auth-server";
-import { createServiceRoleClient } from "@/lib/supabase/server";
+import { createSupabaseSecretClient } from "@/lib/supabase/server";
 import type { PlatformPermission } from "./permissions";
 import { hasPlatformPermission, permissionsForRole } from "./permissions";
 import type { PlatformAdmin, PlatformAdminRole } from "./types";
@@ -64,7 +64,7 @@ export async function requirePlatformAdmin(
   request: NextRequest,
 ): Promise<PlatformAdminContext> {
   const { user } = await requireAuthUser(request);
-  const serviceClient = createServiceRoleClient();
+  const serviceClient = createSupabaseSecretClient();
 
   const { data, error } = await serviceClient
     .from("platform_admins")

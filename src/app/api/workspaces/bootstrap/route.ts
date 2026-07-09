@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { AuthError, requireAuthUser } from "@/lib/supabase/auth-server";
-import { createServiceRoleClient } from "@/lib/supabase/server";
+import { createSupabaseSecretClient } from "@/lib/supabase/server";
 import { AccountLifecycleError } from "@/lib/server/account-lifecycle";
 import { bootstrapWorkspaceForUser } from "@/lib/server/workspace-bootstrap";
 import { isPlatformFlagEnabled, preloadPlatformFlags } from "@/lib/admin/platform-flags";
@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
 
 export async function POST(request: NextRequest) {
   try {
-    const serviceClient = createServiceRoleClient();
+    const serviceClient = createSupabaseSecretClient();
     await preloadPlatformFlags(serviceClient);
 
     if (!(await isPlatformFlagEnabled("signups_enabled", serviceClient))) {

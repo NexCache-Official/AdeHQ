@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { createServiceRoleClient } from "@/lib/supabase/server";
+import { createSupabaseSecretClient } from "@/lib/supabase/server";
 
 /**
  * Platform feature flags — server-side only.
@@ -66,7 +66,7 @@ function parseEnvBoolean(raw: string | undefined): boolean | undefined {
 }
 
 async function loadGlobalFlags(client?: SupabaseClient): Promise<Map<string, unknown>> {
-  const serviceClient = client ?? createServiceRoleClient();
+  const serviceClient = client ?? createSupabaseSecretClient();
   const { data, error } = await serviceClient
     .from("platform_feature_flags")
     .select("key, value")

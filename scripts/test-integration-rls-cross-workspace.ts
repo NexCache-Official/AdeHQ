@@ -9,17 +9,17 @@ function assert(condition: boolean, message: string): void {
 }
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const secretKey = process.env.SUPABASE_SECRET_KEY;
 const workspaceA = process.env.TEST_WORKSPACE_ID;
 const workspaceB = process.env.TEST_WORKSPACE_B_ID;
 
 async function main(): Promise<void> {
-  if (!url || !serviceKey || !workspaceA || !workspaceB) {
-    console.log("⊘ Skipping cross-workspace RLS test — set NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, TEST_WORKSPACE_ID, TEST_WORKSPACE_B_ID");
+  if (!url || !secretKey || !workspaceA || !workspaceB) {
+    console.log("⊘ Skipping cross-workspace RLS test — set NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SECRET_KEY, TEST_WORKSPACE_ID, TEST_WORKSPACE_B_ID");
     process.exit(0);
   }
 
-  const client = createClient(url, serviceKey, { auth: { persistSession: false } });
+  const client = createClient(url, secretKey, { auth: { persistSession: false } });
 
   const tables = [
     "crm_companies",

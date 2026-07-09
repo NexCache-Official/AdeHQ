@@ -182,7 +182,7 @@ export function resolvePinnedPolicyRouteByKey(
         providerRoute: "vercel_gateway",
         modelId: spec.modelId.includes("/")
           ? spec.modelId
-          : `openai/gpt-4o-mini`,
+          : `deepseek/deepseek-v4-flash`,
         gatewayProviderSlug: "default",
       };
     } else if (isMockFallbackAllowed()) {

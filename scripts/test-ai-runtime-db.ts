@@ -1,6 +1,6 @@
 /**
  * V19.9.0b — AI work unit DB helper smoke test.
- * SKIPs cleanly when Supabase service role is unavailable.
+ * SKIPs cleanly when Supabase secret key is unavailable.
  */
 
 import { existsSync, readFileSync } from "fs";
@@ -45,12 +45,12 @@ async function main() {
   loadEnvLocalIfPresent();
 
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? process.env.SUPABASE_URL;
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
+  const secretKey = process.env.SUPABASE_SECRET_KEY?.trim();
 
   if (!url) skip("NEXT_PUBLIC_SUPABASE_URL not configured");
-  if (!serviceKey) skip("SUPABASE_SERVICE_ROLE_KEY not configured");
+  if (!secretKey) skip("SUPABASE_SECRET_KEY not configured");
 
-  const client = createClient(url!, serviceKey!, {
+  const client = createClient(url!, secretKey!, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
 

@@ -57,7 +57,7 @@ Legacy env names (`AI_RUNTIME_V2_ENABLED`, `AI_RUNTIME_V2_SHADOW_MODE`) must **n
 | `src/lib/orchestration/conversation-orchestrator.ts` | Calls `maybeEnhanceWithLlm` → `classifyWithLlm` (A2) |
 | `src/lib/server/queue-agent-runs.ts` | Creates `agent_runs` + reserves usage; no LLM |
 | `src/lib/topic-summary/refresh.ts` | Calls `generateTopicSummaryPayload` (A1) |
-| `src/app/api/topics/[topicId]/summarize/route.ts` | Triggers refresh |
+| `src/app/api/topics/[topicId]/summary/refresh/route.ts` | Triggers refresh |
 | `src/app/api/topics/[topicId]/summary/refresh/route.ts` | Triggers refresh |
 
 ### Tier D — Mock / deterministic (no runtime migration for LLM)
@@ -431,5 +431,5 @@ npx tsc --noEmit
 npm run build
 npm run test:runtime:mock
 npm run test:work-hours
-npm run test:runtime:db   # SKIPs if Supabase service role missing
+npm run test:runtime:db   # SKIPs if SUPABASE_SECRET_KEY missing
 ```

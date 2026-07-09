@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { AuthError, requireAuthUser, requirePasswordReauth } from "@/lib/supabase/auth-server";
-import { createServiceRoleClient } from "@/lib/supabase/server";
+import { createSupabaseSecretClient } from "@/lib/supabase/server";
 import {
   AccountLifecycleError,
   getAccountDeletionContext,
@@ -13,7 +13,7 @@ export const dynamic = "force-dynamic";
 export async function GET(request: NextRequest) {
   try {
     const { user, client } = await requireAuthUser(request);
-    const serviceClient = createServiceRoleClient();
+    const serviceClient = createSupabaseSecretClient();
     const ctx = await getAccountDeletionContext(
       serviceClient,
       user.id,
@@ -48,7 +48,7 @@ export async function DELETE(request: NextRequest) {
 
     await requirePasswordReauth(user, body.password);
 
-    const serviceClient = createServiceRoleClient();
+    const serviceClient = createSupabaseSecretClient();
     const result = await purgeUserAccount(serviceClient, user.id, user.email ?? "", {
       confirmEmail: body.confirmEmail,
       deleteOwnedWorkspaces: Boolean(body.deleteOwnedWorkspaces),

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { runBrowserResearchRun } from "@/lib/ai/browser-research/server";
 import { getBrowserResearchExecuteSecret } from "@/lib/ai/browser-research/async-execute";
-import { createServiceRoleClient } from "@/lib/supabase/server";
+import { createSupabaseSecretClient } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -35,7 +35,7 @@ export async function POST(
       return NextResponse.json({ error: "workspaceId is required." }, { status: 400 });
     }
 
-    const client = createServiceRoleClient();
+    const client = createSupabaseSecretClient();
     const { run, chatReply } = await runBrowserResearchRun(client, workspaceId, params.runId, {
       agentRunId: body.agentRunId?.trim() || undefined,
     });

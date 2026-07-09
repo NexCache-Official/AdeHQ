@@ -5,7 +5,7 @@ import {
   requirePasswordReauth,
   requireWorkspaceMembership,
 } from "@/lib/supabase/auth-server";
-import { createServiceRoleClient } from "@/lib/supabase/server";
+import { createSupabaseSecretClient } from "@/lib/supabase/server";
 import { AccountLifecycleError, purgeWorkspace } from "@/lib/server/account-lifecycle";
 
 export const runtime = "nodejs";
@@ -33,7 +33,7 @@ export async function DELETE(
 
     await requirePasswordReauth(user, body.password);
 
-    const serviceClient = createServiceRoleClient();
+    const serviceClient = createSupabaseSecretClient();
     const result = await purgeWorkspace(
       serviceClient,
       params.workspaceId,

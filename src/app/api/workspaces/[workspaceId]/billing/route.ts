@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { AuthError, requireAuthUser, requireWorkspaceMembership } from "@/lib/supabase/auth-server";
-import { createServiceRoleClient } from "@/lib/supabase/server";
+import { createSupabaseSecretClient } from "@/lib/supabase/server";
 import { getWorkspaceBillingSummary } from "@/lib/billing/subscription";
 import {
   canApplyPromoCode,
@@ -23,7 +23,7 @@ export async function GET(
       return NextResponse.json({ error: "You cannot view billing for this workspace." }, { status: 403 });
     }
 
-    const service = createServiceRoleClient();
+    const service = createSupabaseSecretClient();
     const summary = await getWorkspaceBillingSummary(service, params.workspaceId);
 
     return NextResponse.json({

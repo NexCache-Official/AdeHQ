@@ -4,7 +4,7 @@ import {
   requireAuthUser,
   requireWorkspaceMembership,
 } from "@/lib/supabase/auth-server";
-import { createServiceRoleClient } from "@/lib/supabase/server";
+import { createSupabaseSecretClient } from "@/lib/supabase/server";
 import { canManageMembers } from "@/lib/workspace/permissions";
 import { sendEmail } from "@/lib/email/send";
 import { getSiteUrl } from "@/lib/site-url";
@@ -17,7 +17,7 @@ const VALID_ROLES = new Set(["admin", "manager", "member", "viewer"]);
 /**
  * Create a workspace invitation and send the branded invite email.
  * Authorizes the caller via workspace membership + canManageMembers, inserts
- * the pending invite with the service-role client, then emails the invitee.
+ * the pending invite with the secret-key client, then emails the invitee.
  */
 export async function POST(
   request: NextRequest,
@@ -47,7 +47,7 @@ export async function POST(
       return NextResponse.json({ error: "Invalid role." }, { status: 400 });
     }
 
-    const service = createServiceRoleClient();
+    const service = createSupabaseSecretClient();
 
     // Insert (or refresh) the pending invite.
     const { data: invite, error: inviteError } = await service
@@ -95,7 +95,7 @@ export async function POST(
 }
 
 async function sendInviteEmail(
-  service: ReturnType<typeof createServiceRoleClient>,
+  service: ReturnType<typeof createSupabaseSecretClient>,
   workspaceId: string,
   invitedEmail: string,
   role: string,

@@ -17,7 +17,7 @@ import { ensureGeneralTopic } from "@/lib/server/topic-helpers";
 import { queueAgentRuns } from "@/lib/server/queue-agent-runs";
 import { processQueuedAgentRun } from "@/lib/server/process-queued-run";
 import { drainQueuedAgentRunsForRoot } from "@/lib/server/background-agent-drainer";
-import { createServiceRoleClient } from "@/lib/supabase/server";
+import { createSupabaseSecretClient } from "@/lib/supabase/server";
 import { nowISO, uid } from "@/lib/utils";
 
 type DbRow = Record<string, unknown>;
@@ -233,7 +233,7 @@ export async function coordinateWithColleague(
   // Queue the target's run in that room/topic and drive it once (stamped with
   // coordinationDepth so it can't spawn another cross-room hop).
   const aiClient = (() => {
-    try { return createServiceRoleClient(); } catch { return client; }
+    try { return createSupabaseSecretClient(); } catch { return client; }
   })();
 
   let targetResponded = false;

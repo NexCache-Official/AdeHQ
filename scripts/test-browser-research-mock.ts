@@ -393,16 +393,16 @@ async function main() {
 
   const hasSupabase =
     Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL?.trim()) &&
-    Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY?.trim());
+    Boolean(process.env.SUPABASE_SECRET_KEY?.trim());
 
   if (!hasSupabase) {
     console.log("SKIP  live Supabase browser research integration");
-    console.log("      Supabase service role env missing");
+    console.log("      Supabase secret key env missing");
   } else {
     await run("live Supabase integration — create + complete mock run", async () => {
-      const { createServiceRoleClient } = await import("@/lib/supabase/server");
+      const { createSupabaseSecretClient } = await import("@/lib/supabase/server");
       const { loadWorkspaceEmployee } = await import("@/lib/ai/browser-research/orchestrator");
-      const client = createServiceRoleClient();
+      const client = createSupabaseSecretClient();
       const { data: employees } = await client
         .from("ai_employees")
         .select("id, workspace_id")

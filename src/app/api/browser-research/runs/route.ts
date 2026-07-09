@@ -10,7 +10,7 @@ import {
   listBrowserResearchRuns,
 } from "@/lib/ai/browser-research/server";
 import { AuthError, requireAuthUser, requireWorkspaceMembership } from "@/lib/supabase/auth-server";
-import { createServiceRoleClient } from "@/lib/supabase/server";
+import { createSupabaseSecretClient } from "@/lib/supabase/server";
 import { isPlatformFlagEnabled, preloadPlatformFlags } from "@/lib/admin/platform-flags";
 import { PlanEntitlementError } from "@/lib/billing/plans/entitlements";
 import type { RoomMessage } from "@/lib/types";
@@ -85,7 +85,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "query is required." }, { status: 400 });
     }
 
-    const serviceClient = createServiceRoleClient();
+    const serviceClient = createSupabaseSecretClient();
     await preloadPlatformFlags(serviceClient);
 
     if (!(await isPlatformFlagEnabled("browser_research_enabled", serviceClient))) {
@@ -133,7 +133,7 @@ export async function POST(request: NextRequest) {
       );
     }
     const message = error instanceof Error ? error.message : "Failed to create research run.";
-    if (message.includes("SECRET_KEY") || message.includes("secret key") || message.includes("SERVICE_ROLE")) {
+    if (message.includes("SECRET_KEY") || message.includes("secret key")) {
       return NextResponse.json(
         {
           error:

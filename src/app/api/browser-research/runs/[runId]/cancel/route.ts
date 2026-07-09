@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cancelBrowserResearchRun } from "@/lib/ai/browser-research/server";
 import { AuthError, requireAuthUser, requireWorkspaceMembership } from "@/lib/supabase/auth-server";
-import { createServiceRoleClient } from "@/lib/supabase/server";
+import { createSupabaseSecretClient } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -20,7 +20,7 @@ export async function POST(
     const { user, client } = await requireAuthUser(request);
     await requireWorkspaceMembership(client, workspaceId, user.id);
 
-    const serviceClient = createServiceRoleClient();
+    const serviceClient = createSupabaseSecretClient();
     const run = await cancelBrowserResearchRun(
       serviceClient,
       workspaceId,

@@ -18,7 +18,7 @@ import {
 import type { AiAdapter } from "./adapters/base";
 import { resolveProviderCredential } from "@/lib/providers/credentials/resolve-provider-credential";
 import { recordCredentialEvent } from "@/lib/providers/credentials/record-credential-event";
-import { createServiceRoleClient } from "@/lib/supabase/server";
+import { createSupabaseSecretClient } from "@/lib/supabase/server";
 import type { ManagedProviderId, ResolvedCredential } from "@/lib/providers/credentials/types";
 import type {
   CapabilityRouteDecision,
@@ -40,8 +40,8 @@ export type RuntimeInvokeOptions = {
 
 async function resolveCatalogOffers(): Promise<import("./pricing/types").ModelEndpointOffer[] | undefined> {
   try {
-    const { createServiceRoleClient } = await import("@/lib/supabase/server");
-    const client = createServiceRoleClient();
+    const { createSupabaseSecretClient } = await import("@/lib/supabase/server");
+    const client = createSupabaseSecretClient();
     return await loadEnabledOffers(client);
   } catch {
     return undefined;
@@ -105,7 +105,7 @@ function recordRuntimeCredentialUse(
 ): void {
   if (!credential?.credentialId) return;
   try {
-    const client = createServiceRoleClient();
+    const client = createSupabaseSecretClient();
     void recordCredentialEvent(client, {
       credentialId: credential.credentialId,
       workspaceId,

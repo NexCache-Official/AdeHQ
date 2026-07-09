@@ -322,7 +322,7 @@ function EnvFormModal({
     }
   };
 
-  const isProtected = initial && ["VERCEL_API_TOKEN", "VERCEL_ACCESS_TOKEN", "SUPABASE_SECRET_KEY", "SUPABASE_SERVICE_ROLE_KEY", "PLATFORM_SUPER_ADMIN_EMAIL", "REVOLUT_MERCHANT_API_KEY", "REVOLUT_WEBHOOK_SECRET"].includes(initial.key);
+  const isProtected = initial && ["VERCEL_API_TOKEN", "VERCEL_ACCESS_TOKEN", "SUPABASE_SECRET_KEY", "PLATFORM_SUPER_ADMIN_EMAIL", "REVOLUT_MERCHANT_API_KEY", "REVOLUT_WEBHOOK_SECRET"].includes(initial.key);
 
   return (
     <Modal open onClose={onClose} size="lg">

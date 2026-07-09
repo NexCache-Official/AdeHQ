@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { enforceEmployeePermissions } from "@/lib/ai/enforce-permissions";
 import { sanitizeEffects } from "@/lib/ai/sanitize-effects";
-import { applyMentionEtiquette } from "@/lib/ai/mention-etiquette";
+import { applyMentionEtiquette } from "@/lib/mentions";
 import { type LiveCallMetrics } from "@/lib/ai/model-router";
 import { dispatchEmployeeQueuedResponse } from "@/lib/ai/runtime/employee-queued-runtime";
 import { finalizeAiRun } from "@/lib/ai/cost-guard";
@@ -64,7 +64,7 @@ import {
   fetchTopicSummary,
 } from "@/lib/topic-summary/persistence";
 import { fetchTopicChatClearedAtColumn, fetchTopicContextEpochId } from "@/lib/conversation-context/epochs";
-import { createServiceRoleClient } from "@/lib/supabase/server";
+import { createSupabaseSecretClient } from "@/lib/supabase/server";
 import {
   buildWorkStopAcknowledgment,
   detectWorkStopRequest,
@@ -913,7 +913,7 @@ export async function processQueuedAgentRun(
         const researchStartedAt = Date.now();
 
         try {
-          const serviceClient = createServiceRoleClient();
+          const serviceClient = createSupabaseSecretClient();
           const researchResult = await executePlannedResearch(serviceClient, {
             workspaceId,
             roomId,

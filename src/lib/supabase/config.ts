@@ -9,38 +9,38 @@ function trim(value: string | undefined): string | undefined {
   return v || undefined;
 }
 
-/** A legacy Supabase API key (anon / service_role) is a JWT starting with `eyJ`. */
+/** Legacy Supabase API keys (anon / service_role JWTs) start with `eyJ`. */
 export function isLegacyJwtKey(key: string | undefined): boolean {
   return Boolean(key && key.startsWith("eyJ"));
 }
 
-/** The new publishable API key format (safe for the browser). */
+/** New publishable API key format (safe for the browser). */
 export function isNewPublishableKey(key: string | undefined): boolean {
   return Boolean(key && key.startsWith("sb_publishable_"));
 }
 
-/** Never use secret/service keys in the browser. */
-export function isPlausiblePublishableKey(key: string | undefined): key is string {
-  if (!key || key.length < 24) return false;
-  const lower = key.toLowerCase();
-  if (lower.includes("your-") || lower.includes("placeholder") || lower.includes("example")) {
-    return false;
+/** New secret API key format (server-only, bypasses RLS). */
+export function isNewSecretKey(key: string | undefined): boolean {
+  return Boolean(key && key.startsWith("sb_secret_"));
+}
+
+function assertNewPublishableKey(key: string, envName: string): string {
+  if (isNewPublishableKey(key)) return key;
+  if (isLegacyJwtKey(key)) {
+    throw new Error(
+      `${envName} must be a new-format publishable key (sb_publishable_…), not a legacy anon JWT. ` +
+        "Create one in Supabase → Settings → API Keys.",
+    );
   }
-  if (key.startsWith("sb_secret_")) return false;
-  // Prefer the new `sb_publishable_` format; still accept a legacy anon JWT as a
-  // fallback so the app keeps working until legacy keys are disabled.
-  return isNewPublishableKey(key) || isLegacyJwtKey(key);
+  throw new Error(
+    `${envName} is not a valid Supabase publishable key (expected sb_publishable_…).`,
+  );
 }
 
 function pickEnvPublishableKey(): string | undefined {
-  const candidates = [
-    trim(process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY),
-    trim(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY),
-    trim(process.env.SUPABASE_PUBLISHABLE_KEY),
-    trim(process.env.SUPABASE_ANON_KEY),
-  ].filter((key): key is string => isPlausiblePublishableKey(key));
-  // Prefer a new-format publishable key over any legacy anon JWT that is also set.
-  return candidates.find(isNewPublishableKey) ?? candidates[0];
+  const key = trim(process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY);
+  if (!key) return undefined;
+  return assertNewPublishableKey(key, "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY");
 }
 
 export function resolveSupabaseUrl(): string {
@@ -48,15 +48,15 @@ export function resolveSupabaseUrl(): string {
 }
 
 /**
- * Resolves the Supabase publishable (anon) key.
- * For the default AdeHQ project, falls back to the verified key when Vercel env is missing or invalid.
+ * Resolves the Supabase publishable key for browser / user-scoped clients.
+ * For the default AdeHQ project, falls back to the verified key when Vercel env is missing.
  */
 export function resolveSupabasePublishableKey(): string {
   const url = resolveSupabaseUrl();
   const envKey = pickEnvPublishableKey();
 
   if (url === DEFAULT_SUPABASE_URL) {
-    if (envKey?.startsWith("sb_publishable_")) return envKey;
+    if (envKey) return envKey;
     return DEFAULT_SUPABASE_PUBLISHABLE_KEY;
   }
 
@@ -64,6 +64,25 @@ export function resolveSupabasePublishableKey(): string {
 
   throw new Error(
     "Supabase is not configured. Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY.",
+  );
+}
+
+/**
+ * Resolves the Supabase secret key for server-side writes (bypasses RLS).
+ * Only accepts the new `sb_secret_…` format.
+ */
+export function resolveSupabaseSecretKey(): string | undefined {
+  const key = trim(process.env.SUPABASE_SECRET_KEY);
+  if (!key) return undefined;
+  if (isNewSecretKey(key)) return key;
+  if (isLegacyJwtKey(key)) {
+    throw new Error(
+      "SUPABASE_SECRET_KEY must be a new-format secret key (sb_secret_…), not a legacy service_role JWT. " +
+        "Create one in Supabase → Settings → API Keys.",
+    );
+  }
+  throw new Error(
+    "SUPABASE_SECRET_KEY is not a valid Supabase secret key (expected sb_secret_…).",
   );
 }
 

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createServiceRoleClient } from "@/lib/supabase/server";
+import { createSupabaseSecretClient } from "@/lib/supabase/server";
 import { getSiteUrl } from "@/lib/site-url";
 import {
   PREFERENCE_COLUMNS,
@@ -25,7 +25,7 @@ async function applyUnsubscribe(
   if (!token || !category || !isPreferenceCategory(category)) {
     return { ok: false };
   }
-  const service = createServiceRoleClient();
+  const service = createSupabaseSecretClient();
   const column = PREFERENCE_COLUMNS[category];
 
   const { data, error } = await service

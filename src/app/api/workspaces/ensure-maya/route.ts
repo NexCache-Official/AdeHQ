@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { AuthError, requireAuthUser } from "@/lib/supabase/auth-server";
-import { createServiceRoleClient } from "@/lib/supabase/server";
+import { createSupabaseSecretClient } from "@/lib/supabase/server";
 import { ensureMayaWorkspaceBundle } from "@/lib/server/ensure-maya";
 import { resolveUserFirstName } from "@/lib/server/resolve-user-first-name";
 
@@ -15,7 +15,7 @@ export async function POST(request: NextRequest) {
       firstName?: string;
     };
 
-    const serviceClient = createServiceRoleClient();
+    const serviceClient = createSupabaseSecretClient();
     const { data: member, error: memberError } = await serviceClient
       .from("workspace_members")
       .select("workspace_id")

@@ -1,4 +1,4 @@
-import type { ResponderDecision } from "@/lib/server/decide-responders";
+import type { ResponderDecision } from "@/lib/server/conversation-orchestrator";
 import type {
   ConversationMode,
   ConversationPlan,

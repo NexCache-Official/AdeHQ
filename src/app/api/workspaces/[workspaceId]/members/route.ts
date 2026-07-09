@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { AuthError, requireAuthUser, requireWorkspaceMembership } from "@/lib/supabase/auth-server";
-import { createServiceRoleClient } from "@/lib/supabase/server";
+import { createSupabaseSecretClient } from "@/lib/supabase/server";
 import { assignableRoles, canManageMembers } from "@/lib/workspace/permissions";
 
 export const runtime = "nodejs";
@@ -14,7 +14,7 @@ export async function GET(
     const { user, client } = await requireAuthUser(request);
     await requireWorkspaceMembership(client, params.workspaceId, user.id);
 
-    const service = createServiceRoleClient();
+    const service = createSupabaseSecretClient();
     const [membersRes, invitesRes] = await Promise.all([
       service
         .from("workspace_members")
@@ -81,7 +81,7 @@ export async function PATCH(
       return NextResponse.json({ error: "Invalid role." }, { status: 400 });
     }
 
-    const service = createServiceRoleClient();
+    const service = createSupabaseSecretClient();
     const { data: target, error: targetError } = await service
       .from("workspace_members")
       .select("role")
@@ -130,7 +130,7 @@ export async function DELETE(
       return NextResponse.json({ error: "You cannot remove yourself." }, { status: 400 });
     }
 
-    const service = createServiceRoleClient();
+    const service = createSupabaseSecretClient();
     const { data: target, error: targetError } = await service
       .from("workspace_members")
       .select("role")

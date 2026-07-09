@@ -63,13 +63,24 @@ NEXT_PUBLIC_ENABLE_DEMO_MODE=false   # default
 Server-only:
 
 ```bash
+# Supabase (new API key format — create in Supabase → Settings → API Keys)
+SUPABASE_SECRET_KEY=sb_secret_...
+
 # SiliconFlow (primary live provider)
 SILICONFLOW_API_KEY=...
 ADEHQ_SILICONFLOW_MODEL=deepseek-ai/DeepSeek-V4-Flash
-ADEHQ_SILICONFLOW_CHEAP_MODEL=deepseek-ai/DeepSeek-V3
+ADEHQ_SILICONFLOW_CHEAP_MODEL=deepseek-ai/DeepSeek-V4-Flash
 ADEHQ_SILICONFLOW_CODER_MODEL=Qwen/Qwen3-Coder-30B-A3B-Instruct
 ADEHQ_SILICONFLOW_LONG_CONTEXT_MODEL=MiniMaxAI/MiniMax-M2.5
+ADEHQ_SILICONFLOW_STRONG_MODEL=deepseek-ai/DeepSeek-V4-Pro
 ADEHQ_DEFAULT_PROVIDER=siliconflow
+AI_GATEWAY_API_KEY=...
+# Gateway mirrors SiliconFlow families (strong/long route here when cheaper)
+AI_GATEWAY_MODEL_EFFICIENT=deepseek/deepseek-v4-flash
+AI_GATEWAY_MODEL_BALANCED=deepseek/deepseek-v4-flash
+AI_GATEWAY_MODEL_STRONG=deepseek/deepseek-v4-pro
+AI_GATEWAY_MODEL_LONG_CONTEXT=minimax/minimax-m2.5
+AI_GATEWAY_MODEL_CODING=qwen/qwen3-coder-30b-a3b-instruct
 
 # Provider Credential Management V1 (server-only)
 # Use a 32-byte base64, hex, or raw UTF-8 key. Rotate by bumping the version

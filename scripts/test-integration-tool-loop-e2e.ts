@@ -2,7 +2,7 @@
  * Phase 1.5 — Live Supabase E2E matrix for the internal tool loop.
  *
  * Runs the full Sales employee tool chain against a real workspace using the
- * service role (bypasses HTTP auth). SKIPs cleanly when env is missing.
+ * Supabase secret key (bypasses HTTP auth). SKIPs cleanly when env is missing.
  *
  * Usage:
  *   npm run test:integration-loop:e2e
@@ -151,11 +151,11 @@ async function main() {
   loadEnvLocalIfPresent();
 
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? process.env.SUPABASE_URL;
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
+  const secretKey = process.env.SUPABASE_SECRET_KEY?.trim();
   if (!url) skip("NEXT_PUBLIC_SUPABASE_URL not configured");
-  if (!serviceKey) skip("SUPABASE_SERVICE_ROLE_KEY not configured");
+  if (!secretKey) skip("SUPABASE_SECRET_KEY not configured");
 
-  const client = createClient(url!, serviceKey!, {
+  const client = createClient(url!, secretKey!, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
 

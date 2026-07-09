@@ -61,17 +61,15 @@ async function main() {
   const { dryRun, providers } = parseArgs(process.argv.slice(2));
 
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? process.env.SUPABASE_URL;
-  const serviceKey =
-    process.env.SUPABASE_SECRET_KEY?.trim() ??
-    process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
+  const secretKey = process.env.SUPABASE_SECRET_KEY?.trim();
 
   let client = null;
-  if (url && serviceKey) {
-    client = createClient(url, serviceKey, {
+  if (url && secretKey) {
+    client = createClient(url, secretKey, {
       auth: { persistSession: false, autoRefreshToken: false },
     });
   } else if (!dryRun) {
-    console.warn("Supabase service key missing — running sync without DB writes.");
+    console.warn("Supabase secret key missing — running sync without DB writes.");
   }
 
   console.log(`Model pricing sync (dryRun=${dryRun}, providers=${providers.join(",")})\n`);

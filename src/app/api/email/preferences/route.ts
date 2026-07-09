@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { AuthError, requireAuthUser } from "@/lib/supabase/auth-server";
-import { createServiceRoleClient } from "@/lib/supabase/server";
+import { createSupabaseSecretClient } from "@/lib/supabase/server";
 import { getOrCreatePreferences, PREFERENCE_COLUMNS } from "@/lib/email/preferences";
 
 export const runtime = "nodejs";
@@ -17,7 +17,7 @@ function serialize(row: { product_updates: boolean; weekly_reports: boolean; act
 export async function GET(request: NextRequest) {
   try {
     const { user } = await requireAuthUser(request);
-    const service = createServiceRoleClient();
+    const service = createSupabaseSecretClient();
     const row = await getOrCreatePreferences(user.email ?? "", {
       userId: user.id,
       client: service,
@@ -45,7 +45,7 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: "No valid preferences provided." }, { status: 400 });
     }
 
-    const service = createServiceRoleClient();
+    const service = createSupabaseSecretClient();
     // Ensure a row exists (defaults opted-in), then apply the toggle(s).
     await getOrCreatePreferences(user.email ?? "", { userId: user.id, client: service });
     const { data, error } = await service

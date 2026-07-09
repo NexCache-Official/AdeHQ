@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { AuthError, requireAuthUser, requireWorkspaceMembership } from "@/lib/supabase/auth-server";
-import { createServiceRoleClient } from "@/lib/supabase/server";
+import { createSupabaseSecretClient } from "@/lib/supabase/server";
 import { canStartCheckout } from "@/lib/workspace/permissions";
 import { startCheckout } from "@/lib/billing/checkout";
 
@@ -29,7 +29,7 @@ export async function POST(
       return NextResponse.json({ error: "planSlug is required." }, { status: 400 });
     }
 
-    const service = createServiceRoleClient();
+    const service = createSupabaseSecretClient();
     const result = await startCheckout(service, {
       workspaceId: params.workspaceId,
       userId: user.id,

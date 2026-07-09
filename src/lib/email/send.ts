@@ -23,7 +23,7 @@ export type SendEmailArgs<K extends TemplateKey> = {
   props: TemplateProps<K>;
   workspaceId?: string | null;
   userId?: string | null;
-  /** Reuse a service-role client (e.g. inside a route that already made one). */
+  /** Reuse a Supabase secret-key client (e.g. inside a route that already made one). */
   client?: SupabaseClient;
 };
 

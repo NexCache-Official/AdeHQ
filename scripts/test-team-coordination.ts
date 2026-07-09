@@ -4,7 +4,7 @@
  * Covers shared-room resolution (group rooms only, never DMs), topic-hint
  * targeting, the "no shared room" path, and the one-hop loop guard — using an
  * in-memory fake Supabase client. The queue/process side is skipped when the
- * service-role env is absent (resolveSharedRoom is the pure, testable core).
+ * Supabase secret key env is absent (resolveSharedRoom is the pure, testable core).
  */
 import { resolveSharedRoom, coordinateWithColleague } from "../src/lib/server/team-coordination";
 

@@ -9,7 +9,7 @@ import {
   MAX_SAME_EMPLOYEE_REENTRY,
 } from "@/lib/server/room-governance";
 import { isAiQueueingBlocked, isEmployeeBlockedInTopic } from "@/lib/topic-ai-control";
-import type { ResponderDecision } from "@/lib/server/decide-responders";
+import type { ResponderDecision } from "@/lib/server/conversation-orchestrator";
 import { queueAgentRuns, type QueuedRun } from "@/lib/server/queue-agent-runs";
 
 type DbRow = Record<string, unknown>;

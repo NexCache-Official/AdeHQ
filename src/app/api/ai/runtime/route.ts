@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { buildOptimizerPreview, getAiRuntimeSnapshot } from "@/lib/ai/runtime-log";
 import { AuthError, requireAuthUser, requireWorkspaceMembership } from "@/lib/supabase/auth-server";
 import { listCatalogOffersForAdmin } from "@/lib/supabase/model-catalog";
-import { createServiceRoleClient } from "@/lib/supabase/server";
+import { createSupabaseSecretClient } from "@/lib/supabase/server";
 import type { AiCapability } from "@/lib/ai/runtime/types";
 
 export const runtime = "nodejs";
@@ -28,7 +28,7 @@ export async function GET(request: NextRequest) {
 
     let catalog: Awaited<ReturnType<typeof listCatalogOffersForAdmin>> | null = null;
     try {
-      const serviceClient = createServiceRoleClient();
+      const serviceClient = createSupabaseSecretClient();
       catalog = await listCatalogOffersForAdmin(serviceClient);
     } catch {
       catalog = null;

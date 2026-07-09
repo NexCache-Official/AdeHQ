@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { AuthError, requireAuthUser, requireWorkspaceMembership } from "@/lib/supabase/auth-server";
-import { createServiceRoleClient } from "@/lib/supabase/server";
+import { createSupabaseSecretClient } from "@/lib/supabase/server";
 import { assertCanAccessRoom } from "@/lib/server/room-access";
 import { clearRoomChatHistory } from "@/lib/server/clear-chat-history";
 import { loadRoom } from "@/lib/server/room-helpers";
@@ -36,7 +36,7 @@ export async function POST(
     }
 
     const result = await clearRoomChatHistory(
-      createServiceRoleClient(),
+      createSupabaseSecretClient(),
       workspaceId,
       params.roomId,
     );

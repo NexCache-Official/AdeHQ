@@ -213,7 +213,7 @@ async function main() {
     );
   });
 
-  await run("provider pref auto does not force Vercel as primary when SiliconFlow configured", async () => {
+  await run("provider pref auto routes strong to Gateway with SiliconFlow fallback", async () => {
     await withEnv(
       {
         AI_GATEWAY_API_KEY: "test-gateway-key",
@@ -226,13 +226,13 @@ async function main() {
           "auto",
         );
         assert(
-          route.providerRoute === "siliconflow_direct",
-          `expected siliconflow primary, got ${route.providerRoute}`,
+          route.providerRoute === "vercel_gateway",
+          `expected gateway strong primary, got ${route.providerRoute}`,
         );
-        const hasVercelFallback = route.fallbackCandidates.some(
-          (c) => c.providerRoute === "vercel_gateway",
+        const hasSfFallback = route.fallbackCandidates.some(
+          (c) => c.providerRoute === "siliconflow_direct",
         );
-        assert(hasVercelFallback, "expected vercel_gateway as fallback candidate");
+        assert(hasSfFallback, "expected siliconflow_direct as fallback candidate");
       },
     );
   });

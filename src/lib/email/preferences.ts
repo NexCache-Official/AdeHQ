@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { createServiceRoleClient } from "@/lib/supabase/server";
+import { createSupabaseSecretClient } from "@/lib/supabase/server";
 
 /** Every template declares one of these categories in the registry. */
 export type EmailCategory =
@@ -74,7 +74,7 @@ export async function getOrCreatePreferences(
   recipient: string,
   options: { userId?: string | null; client?: SupabaseClient } = {},
 ): Promise<EmailPreferencesRow | null> {
-  const client = options.client ?? createServiceRoleClient();
+  const client = options.client ?? createSupabaseSecretClient();
   const email = recipient.trim().toLowerCase();
 
   // Prefer lookup by user_id, else by email.

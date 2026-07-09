@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createServiceRoleClient } from "@/lib/supabase/server";
+import { createSupabaseSecretClient } from "@/lib/supabase/server";
 import { listActivePlanConfigs } from "@/lib/billing/plans/resolve-workspace-plan";
 
 export const runtime = "nodejs";
@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 /** Public, customer-safe plan catalog for the marketing pricing page. */
 export async function GET() {
   try {
-    const service = createServiceRoleClient();
+    const service = createSupabaseSecretClient();
     const plans = await listActivePlanConfigs(service);
     return NextResponse.json({
       plans: plans.map((plan) => {

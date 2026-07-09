@@ -1,12 +1,12 @@
 import type { AiCapability, RuntimeMode } from "../types";
 
-/** Conservative default Gateway model IDs — override via AI_GATEWAY_MODEL_* env vars. */
+/** Gateway defaults mirror SiliconFlow families (DeepSeek / MiniMax / Qwen) — override via AI_GATEWAY_MODEL_* env vars. */
 export const VERCEL_GATEWAY_DEFAULT_MODELS = {
-  efficient: "openai/gpt-4o-mini",
-  balanced: "openai/gpt-4o-mini",
-  strong: "anthropic/claude-sonnet-4",
-  long_context: "google/gemini-2.5-flash",
-  coding: "openai/gpt-4o-mini",
+  efficient: "deepseek/deepseek-v4-flash",
+  balanced: "deepseek/deepseek-v4-flash",
+  strong: "deepseek/deepseek-v4-pro",
+  long_context: "minimax/minimax-m2.5",
+  coding: "qwen/qwen3-coder-30b-a3b-instruct",
   embedding: "openai/text-embedding-3-small",
 } as const;
 

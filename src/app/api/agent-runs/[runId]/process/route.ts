@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { AuthError, requireAuthUser, requireWorkspaceMembership } from "@/lib/supabase/auth-server";
 import { assertCanAccessRoom } from "@/lib/server/room-access";
 import { processQueuedAgentRun, AgentRunClaimError } from "@/lib/server/process-queued-run";
-import { createServiceRoleClient } from "@/lib/supabase/server";
+import { createSupabaseSecretClient } from "@/lib/supabase/server";
 import { debugErrorPayload, serializeUnknownError } from "@/lib/server/message-errors";
 import { roomIdFromRow } from "@/lib/server/db-row";
 import { nowISO } from "@/lib/utils";
@@ -47,7 +47,7 @@ export async function POST(
     const debug = request.headers.get("X-AdeHQ-Debug") === "true";
     let serviceClient;
     try {
-      serviceClient = createServiceRoleClient();
+      serviceClient = createSupabaseSecretClient();
     } catch (err) {
       const hint =
         "SUPABASE_SECRET_KEY (sb_secret_…) is not set on the server. Add it in Vercel env vars.";
@@ -55,7 +55,7 @@ export async function POST(
         {
           ok: false,
           error: hint,
-          debug: debug ? { step: "createServiceRoleClient", detail: String(err) } : undefined,
+          debug: debug ? { step: "createSupabaseSecretClient", detail: String(err) } : undefined,
         },
         { status: 500 },
       );
@@ -122,7 +122,7 @@ export async function POST(
     console.error("[AdeHQ process agent run]", error);
     const message = serializeUnknownError(error);
     try {
-      const serviceClient = createServiceRoleClient();
+      const serviceClient = createSupabaseSecretClient();
       await serviceClient
         .from("agent_runs")
         .update({
@@ -145,7 +145,7 @@ export async function POST(
               ...debugErrorPayload(error),
               hint: message.includes("SILICONFLOW") || message.includes("API key")
                 ? "Set SILICONFLOW_API_KEY in Vercel environment variables."
-                : message.includes("SECRET_KEY") || message.includes("secret key") || message.includes("service role")
+                : message.includes("SECRET_KEY") || message.includes("secret key")
                   ? "Set SUPABASE_SECRET_KEY (sb_secret_…) in Vercel environment variables."
                   : message.includes("null value") && message.includes("id")
                     ? "Database insert missing required id — redeploy latest code."

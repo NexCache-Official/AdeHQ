@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { ResolvedWorkspacePlan } from "@/lib/billing/plans/types";
 import { resolveWorkspacePlan } from "@/lib/billing/plans/resolve-workspace-plan";
-import { createServiceRoleClient } from "@/lib/supabase/server";
+import { createSupabaseSecretClient } from "@/lib/supabase/server";
 import {
   checkUploadQuota as checkUploadQuotaWithClient,
   recordStorageUsage as recordStorageUsageWithClient,
@@ -19,7 +19,7 @@ import {
 export const UNLIMITED_STORAGE_BYTES = 1024 ** 4;
 
 function getAdminClient(): SupabaseClient {
-  return createServiceRoleClient();
+  return createSupabaseSecretClient();
 }
 
 export function storageLimitsFromPlan(plan: ResolvedWorkspacePlan): {
@@ -55,7 +55,7 @@ async function syncQuotaLimits(
   }
 }
 
-/** Server-side quota ensure — uses service role and syncs limits from the commercial plan. */
+/** Server-side quota ensure — uses the Supabase secret key and syncs limits from the commercial plan. */
 export async function ensureWorkspaceQuota(workspaceId: string): Promise<WorkspaceStorageQuota> {
   const client = getAdminClient();
   const limits = await syncQuotaLimits(client, workspaceId);

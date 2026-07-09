@@ -16,7 +16,6 @@ import {
 const GLOBAL_FALLBACKS = [
   DEFAULT_SILICONFLOW_MODEL,
   "deepseek-ai/DeepSeek-V4-Flash",
-  "deepseek-ai/DeepSeek-V3",
   "Qwen/Qwen3-8B",
 ] as const;
 
@@ -65,7 +64,7 @@ export function siliconFlowModelsForMode(
   modelMode: string,
 ): string[] {
   const modeFallbacks: Record<string, string[]> = {
-    cheap: [SILICONFLOW_CHEAP_MODEL, "deepseek-ai/DeepSeek-V3", "Qwen/Qwen3-8B"],
+    cheap: [SILICONFLOW_CHEAP_MODEL, "deepseek-ai/DeepSeek-V4-Flash", "Qwen/Qwen3-8B"],
     balanced: [DEFAULT_SILICONFLOW_MODEL, "deepseek-ai/DeepSeek-V4-Flash"],
     strong: [SILICONFLOW_STRONG_MODEL, DEFAULT_SILICONFLOW_MODEL],
     long_context: [

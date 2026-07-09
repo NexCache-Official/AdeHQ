@@ -120,17 +120,17 @@ async function main() {
   );
 
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const secretKey = process.env.SUPABASE_SECRET_KEY;
   const workspaceId = process.env.ADEHQ_E2E_WORKSPACE_ID;
 
-  if (!url || !serviceKey) {
-    skip("Missing NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY");
+  if (!url || !secretKey) {
+    skip("Missing NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SECRET_KEY");
   }
   if (!workspaceId) {
     skip("Missing ADEHQ_E2E_WORKSPACE_ID — set in .env.local for live chat tool path test");
   }
 
-  const client = createClient(url, serviceKey, { auth: { persistSession: false } });
+  const client = createClient(url, secretKey, { auth: { persistSession: false } });
   let employee = await findSalesEmployee(client, workspaceId);
   if (!employee) skip("No AI employee found in workspace");
 

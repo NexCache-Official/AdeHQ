@@ -8,9 +8,9 @@ import {
   buildRunEstimate,
 } from "@/lib/supabase/ai-runtime";
 import { getOutputTokenCap, type ModelMode } from "@/lib/ai/model-catalog";
-import type { ResponderDecision } from "@/lib/server/decide-responders";
+import type { ResponderDecision } from "@/lib/server/conversation-orchestrator";
 import { GREETING_MAX_OUTPUT_TOKENS } from "@/lib/server/room-governance";
-import { createServiceRoleClient } from "@/lib/supabase/server";
+import { createSupabaseSecretClient } from "@/lib/supabase/server";
 
 export type QueuedRun = {
   runId: string;
@@ -42,7 +42,7 @@ export async function queueAgentRuns(
   const settings = await loadWorkspaceAiSettings(client, params.workspaceId);
   const aiClient = (() => {
     try {
-      return createServiceRoleClient();
+      return createSupabaseSecretClient();
     } catch {
       return client;
     }

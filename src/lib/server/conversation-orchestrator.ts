@@ -29,7 +29,13 @@ import {
   employeesFromReferenceIds,
   resolveParticipantReferences,
 } from "@/lib/orchestration/participant-reference-resolver";
-import type { ResponderDecision } from "@/lib/server/decide-responders";
+
+export type ResponderDecision = {
+  employee: AIEmployee;
+  reason: ResponseReason;
+  isGreetingRun?: boolean;
+  runMetadata?: Record<string, unknown>;
+};
 
 const LEAD_COLLAB_PATTERNS = [
   /\bwork with\b/i,

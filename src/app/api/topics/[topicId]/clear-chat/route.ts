@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { AuthError, requireAuthUser, requireWorkspaceMembership } from "@/lib/supabase/auth-server";
-import { createServiceRoleClient } from "@/lib/supabase/server";
+import { createSupabaseSecretClient } from "@/lib/supabase/server";
 import { assertCanAccessRoom } from "@/lib/server/room-access";
 import { isGeneralTopic } from "@/lib/topics";
 import { clearTopicChatHistory } from "@/lib/server/clear-chat-history";
@@ -37,7 +37,7 @@ export async function POST(
       return NextResponse.json({ error: "You cannot clear chat history for this topic." }, { status: 403 });
     }
 
-    const serviceClient = createServiceRoleClient();
+    const serviceClient = createSupabaseSecretClient();
     const result = await clearTopicChatHistory(
       serviceClient,
       topic.workspaceId,

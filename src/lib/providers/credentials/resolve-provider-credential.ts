@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { createServiceRoleClient } from "@/lib/supabase/server";
+import { createSupabaseSecretClient } from "@/lib/supabase/server";
 import { getSecret } from "@/lib/security/secrets/store";
 import { getCredentialBudgetStatus } from "./budget";
 import { envBaseUrlForProvider, envKeyForProvider, allowProviderEnvFallback } from "./env";
@@ -147,7 +147,7 @@ export async function resolveProviderCredential(input: {
     if (cached && cached.expiresAt > Date.now()) return cached.value;
   }
 
-  const client = input.client ?? createServiceRoleClient();
+  const client = input.client ?? createSupabaseSecretClient();
   let candidates: Awaited<ReturnType<typeof candidateRows>> = [];
   try {
     candidates = await candidateRows(client, input.workspaceId, input.provider);

@@ -57,7 +57,7 @@ export function getGatewaySearchModelId(): string {
   return (
     process.env.AI_GATEWAY_MODEL_EFFICIENT?.trim() ||
     process.env.AI_GATEWAY_MODEL_BALANCED?.trim() ||
-    "openai/gpt-4o-mini"
+    "deepseek/deepseek-v4-flash"
   );
 }
 

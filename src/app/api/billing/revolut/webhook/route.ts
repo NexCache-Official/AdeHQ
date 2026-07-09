@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createServiceRoleClient } from "@/lib/supabase/server";
+import { createSupabaseSecretClient } from "@/lib/supabase/server";
 import { handleRevolutWebhook, verifyRevolutSignature } from "@/lib/billing/revolut/webhooks";
 
 export const runtime = "nodejs";
@@ -24,7 +24,7 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const service = createServiceRoleClient();
+    const service = createSupabaseSecretClient();
     const result = await handleRevolutWebhook(service, payload);
     return NextResponse.json({ ok: true, ...result });
   } catch (error) {

@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { createServiceRoleClient } from "@/lib/supabase/server";
+import { createSupabaseSecretClient } from "@/lib/supabase/server";
 import type { EmailCategory } from "./preferences";
 
 export type EmailSendStatus =
@@ -31,7 +31,7 @@ export async function recordEmailSend(
   client?: SupabaseClient,
 ): Promise<void> {
   try {
-    const db = client ?? createServiceRoleClient();
+    const db = client ?? createSupabaseSecretClient();
     await db.from("email_send_log").insert({
       template: input.template,
       category: input.category,

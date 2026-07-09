@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { syncModelPricing } from "@/lib/ai/runtime/pricing";
 import { AuthError } from "@/lib/supabase/auth-server";
-import { createServiceRoleClient } from "@/lib/supabase/server";
+import { createSupabaseSecretClient } from "@/lib/supabase/server";
 import { requirePlatformAdmin } from "@/lib/admin/require-platform-admin";
 import { writeAuditLog } from "@/lib/admin/audit";
 
@@ -30,7 +30,7 @@ export async function POST(request: NextRequest) {
       adminUserId = admin.userId;
     }
 
-    const serviceClient = createServiceRoleClient();
+    const serviceClient = createSupabaseSecretClient();
     const summary = await syncModelPricing(serviceClient, {
       providers: [...providers],
       dryRun,
