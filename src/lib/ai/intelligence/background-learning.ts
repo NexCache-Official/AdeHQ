@@ -29,6 +29,16 @@ export type BackgroundLearningResult = {
   autoSaved?: boolean;
 };
 
+function extractSourceUrls(artifact?: MessageArtifact): string[] {
+  if (!artifact) return [];
+  const webSources = artifact.meta?.webSources ?? artifact.meta?.searchSources;
+  if (!Array.isArray(webSources)) return [];
+  return webSources
+    .map((source) => (typeof source.url === "string" ? source.url : ""))
+    .filter(Boolean)
+    .slice(0, 8);
+}
+
 function buildDistillText(input: BackgroundLearningInput): string | null {
   const answer = input.searchAnswer.trim();
   if (!answer || answer.length < 40) return null;
@@ -90,6 +100,8 @@ async function persistSearchDistillMemory(
       searchQuery: input.searchQuery.slice(0, 300),
       sourceAgentRunId: input.agentRunId,
       distilledAt: nowISO(),
+      sourceUrls: extractSourceUrls(input.sourcesArtifact),
+      searchConfidence: input.searchConfidence,
     },
     created_at: nowISO(),
   });

@@ -11,6 +11,7 @@ export type {
 export {
   DEFAULT_SEARCH_ROUTE_POLICY,
   decideSearchRoute,
+  classifySearchNeed,
   requiresDeepBrowserResearch,
   isQuickFactLookup,
   searchRouteToResearchProvider,
@@ -19,11 +20,16 @@ export {
 
 export {
   isGatewaySearchConfigured,
+  isExaSearchConfigured,
   isTavilySearchConfigured,
   getSearchPrimaryProvider,
   getSearchBackupProvider,
   isBrowserResearchRequiresExplicitDeepTask,
   getFastFactSearchPreset,
+  getExaSearchType,
+  getExaNumResults,
+  getExaSearchCostUsd,
+  getResearchSessionTtlDays,
 } from "./config";
 
 export {
@@ -38,5 +44,34 @@ export {
 } from "./source-normalizer";
 
 export { runGatewaySearchAnswer, estimateGatewaySearchCostUsd } from "./vercel-gateway-search";
+export { runExaSearchAnswer, estimateExaSearchCostUsd } from "./exa-search";
 export { runTavilySearchAnswer, estimateTavilySearchAnswerCostUsd } from "./tavily-search";
-export { executeSearchAnswer, type ExecuteSearchAnswerParams } from "./search-answer";
+export {
+  executeSearchAnswer,
+  shouldReturnNoSourcesMessage,
+  type ExecuteSearchAnswerParams,
+  type ExecuteSearchAnswerMeta,
+} from "./search-answer";
+export {
+  decideSearchSteward,
+  defaultSearchStewardCapabilities,
+  stewardDecisionToRouteDecision,
+  stewardDecisionToResearchProvider,
+  searchStewardDebugSnapshot,
+  enrichSearchStewardDebugSnapshot,
+  type SearchStewardDecision,
+  type SearchStewardCapabilities,
+} from "./search-steward";
+export {
+  normalizeSearchCacheKey,
+  normalizeSearchCacheKeys,
+  stripFillerWords,
+  computeSearchConfidence,
+  getSearchCache,
+  setSearchCache,
+} from "./search-cache";
+export {
+  getReusableSessionFindings,
+  recordSessionSearchEvent,
+  type ResearchSessionReuse,
+} from "./research-session";

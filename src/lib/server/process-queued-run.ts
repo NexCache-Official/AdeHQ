@@ -59,6 +59,15 @@ import {
   planResearch,
   type ResearchPlan,
 } from "@/lib/ai/research";
+import {
+  pickResearchProvider,
+  getResearchProviderCapabilitiesFromEnv,
+} from "@/lib/ai/research/research-provider";
+import {
+  decideSearchSteward,
+  enrichSearchStewardDebugSnapshot,
+  searchStewardDebugSnapshot,
+} from "@/lib/ai/search/search-steward";
 import { classifyDmMessageWithSteward } from "@/lib/orchestration/dm-steward";
 import {
   fetchTopicSummary,
@@ -816,11 +825,23 @@ export async function processQueuedAgentRun(
         };
 
         if (dmSteward.route === "gateway_search" || dmSteward.route === "tavily_search") {
+          const dmCapabilities = {
+            ...getResearchProviderCapabilitiesFromEnv(),
+            browserbase: canEmployeeUseBrowserResearch(employee),
+          };
+          const dmProvider =
+            pickResearchProvider(content.trim(), { preferTavily, preferAgentMode }, dmCapabilities) ??
+            (dmSteward.route === "tavily_search" ? "tavily" : "gateway_perplexity");
+          const stewardDecision = decideSearchSteward(
+            content.trim(),
+            { preferAgentMode, preferFastSearch: preferTavily },
+            dmCapabilities,
+          );
+          runMetadata.searchSteward = searchStewardDebugSnapshot(stewardDecision);
           researchPlan = {
             action: "search",
             researchQuery: content.trim(),
-            provider:
-              dmSteward.route === "tavily_search" ? "tavily" : "gateway_perplexity",
+            provider: dmProvider,
             reasoning: dmSteward.reason,
             confidence: 0.95,
             userQuestion: content.trim(),
@@ -1091,6 +1112,25 @@ export async function processQueuedAgentRun(
               runMetadata.gatewaySearch = searchMeta;
             }
 
+            const stewardMeta = researchResult.searchAnswer?.stewardMeta;
+            if (runMetadata.searchSteward && stewardMeta?.steward) {
+              runMetadata.searchSteward = enrichSearchStewardDebugSnapshot(stewardMeta.steward, {
+                cacheHit: researchResult.searchAnswer?.fromCache,
+                cacheKey: researchResult.searchAnswer?.cacheKey,
+                sessionId: stewardMeta.sessionId,
+                sessionReused: stewardMeta.sessionReused,
+                attempts: stewardMeta.attempts,
+              });
+            } else if (stewardMeta?.steward) {
+              runMetadata.searchSteward = enrichSearchStewardDebugSnapshot(stewardMeta.steward, {
+                cacheHit: researchResult.searchAnswer?.fromCache,
+                cacheKey: researchResult.searchAnswer?.cacheKey,
+                sessionId: stewardMeta.sessionId,
+                sessionReused: stewardMeta.sessionReused,
+                attempts: stewardMeta.attempts,
+              });
+            }
+
             if (isIntelligenceV1Enabled() && intelligence && researchResult.searchAnswer) {
               const activeIntelligence = intelligence;
               if (researchResult.searchAnswer.fromCache) {
@@ -1215,7 +1255,10 @@ export async function processQueuedAgentRun(
               roomKind: isDmRoom ? "dm" : "room",
               intelligence,
               dmSteward: runMetadata.dmSteward as Record<string, unknown> | undefined,
-              gatewaySearch: searchMeta,
+              searchSteward: runMetadata.searchSteward as Record<string, unknown> | undefined,
+              gatewaySearch: {
+                ...(searchMeta ?? {}),
+              },
               employeeId,
               employeeName: employee.name,
               triggerMessageId,

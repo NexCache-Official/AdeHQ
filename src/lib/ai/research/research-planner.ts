@@ -6,7 +6,7 @@ import {
   isBrowserResearchLiveReady,
   isTavilyConfigured,
 } from "@/lib/ai/browser-research/provider-config";
-import { isGatewaySearchConfigured } from "@/lib/ai/search/config";
+import { isExaSearchConfigured, isGatewaySearchConfigured } from "@/lib/ai/search/config";
 import { decideSearchRoute } from "@/lib/ai/search/search-router";
 import type { BrowserAccess } from "@/lib/ai/intelligence-policy";
 import type { AIEmployee, RoomMessage } from "@/lib/types";
@@ -41,6 +41,7 @@ export type ResearchPlan = {
 
 export type ResearchCapabilities = {
   gatewaySearch: boolean;
+  exa: boolean;
   tavily: boolean;
   browserbase: boolean;
   browserAccess: BrowserAccess;
@@ -64,11 +65,12 @@ export function getResearchCapabilities(
 ): ResearchCapabilities {
   const browserAccess = getEmployeeBrowserAccess(employee);
   const gatewaySearch = isGatewaySearchConfigured();
+  const exa = isExaSearchConfigured();
   const tavily = isTavilyConfigured();
   const canBrowse = canEmployeeUseBrowserResearch(employee);
   const browserbase = canBrowse && isBrowserResearchLiveReady();
-  const canSearch = gatewaySearch || tavily;
-  return { gatewaySearch, tavily, browserbase, browserAccess, canBrowse, canSearch };
+  const canSearch = gatewaySearch || exa || tavily;
+  return { gatewaySearch, exa, tavily, browserbase, browserAccess, canBrowse, canSearch };
 }
 
 function buildSearchPlan(

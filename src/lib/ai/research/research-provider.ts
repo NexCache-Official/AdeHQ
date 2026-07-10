@@ -3,11 +3,18 @@ import {
   resolveBrowserResearchProviderForQuery,
 } from "@/lib/ai/browser-research/provider-config";
 import {
-  decideSearchRoute,
   isGatewaySearchRoute,
-  searchRouteToResearchProvider,
 } from "@/lib/ai/search/search-router";
-import { isGatewaySearchConfigured, isTavilySearchConfigured } from "@/lib/ai/search/config";
+import {
+  isExaSearchConfigured,
+  isGatewaySearchConfigured,
+  isTavilySearchConfigured,
+} from "@/lib/ai/search/config";
+import {
+  decideSearchSteward,
+  defaultSearchStewardCapabilities,
+  stewardDecisionToResearchProvider,
+} from "@/lib/ai/search/search-steward";
 
 export type ResearchProviderChoice =
   | "gateway_perplexity"
@@ -18,11 +25,12 @@ export type ResearchProviderChoice =
 
 export type ResearchProviderCapabilities = {
   gatewaySearch: boolean;
+  exa: boolean;
   tavily: boolean;
   browserbase: boolean;
 };
 
-/** Pick provider for a resolved query; user toggles override routing heuristics. */
+/** Pick provider for a resolved query via Search Steward v1. */
 export function pickResearchProvider(
   query: string,
   prefs: { preferTavily: boolean; preferAgentMode: boolean },
@@ -32,23 +40,29 @@ export function pickResearchProvider(
     return "browserbase";
   }
 
-  const routeDecision = decideSearchRoute(query, {
-    preferAgentMode: prefs.preferAgentMode,
-    preferFastSearch: prefs.preferTavily,
-  });
+  const steward = decideSearchSteward(
+    query,
+    {
+      preferAgentMode: prefs.preferAgentMode,
+      preferFastSearch: prefs.preferTavily,
+    },
+    capabilities,
+  );
 
-  if (!routeDecision.browserRequired && routeDecision.route !== "none") {
-    const mapped = searchRouteToResearchProvider(routeDecision.route);
-    if (mapped && isGatewaySearchRoute(routeDecision.route) && capabilities.gatewaySearch) {
+  const mapped = stewardDecisionToResearchProvider(steward);
+  if (mapped) {
+    if (mapped === "gateway_exa" && (capabilities.exa || capabilities.gatewaySearch)) {
+      return "gateway_exa";
+    }
+    if (isGatewaySearchRoute(mapped) && capabilities.gatewaySearch) {
       return mapped;
     }
     if (mapped === "tavily" && capabilities.tavily) {
       return "tavily";
     }
-    if (capabilities.gatewaySearch && isGatewaySearchRoute(routeDecision.route)) {
-      return "gateway_perplexity";
+    if (mapped === "browserbase" && capabilities.browserbase) {
+      return "browserbase";
     }
-    if (capabilities.tavily) return "tavily";
   }
 
   if (prefs.preferTavily) {
@@ -66,33 +80,36 @@ export function pickResearchProvider(
 
   const routed = resolveBrowserResearchProviderForQuery(query);
   if (routed.provider === "tavily" && capabilities.tavily) return "tavily";
-  if (routed.provider === "browserbase" && capabilities.browserbase && routeDecision.browserRequired) {
+  if (routed.provider === "browserbase" && capabilities.browserbase && steward.browserRequired) {
     return "browserbase";
   }
 
-  if (isFastSearchQuery(query) || isQuickFactLookupCompat(query)) {
+  if (isFastSearchQuery(query)) {
     if (capabilities.gatewaySearch) return "gateway_perplexity";
     if (capabilities.tavily) return "tavily";
   }
 
   if (capabilities.gatewaySearch) return "gateway_perplexity";
+  if (capabilities.exa) return "gateway_exa";
   if (capabilities.tavily) return "tavily";
-  if (capabilities.browserbase && routeDecision.browserRequired) return "browserbase";
+  if (capabilities.browserbase && steward.browserRequired) return "browserbase";
   return undefined;
-}
-
-function isQuickFactLookupCompat(query: string): boolean {
-  return decideSearchRoute(query).need === "current_fact" ||
-    decideSearchRoute(query).need === "company_fact" ||
-    decideSearchRoute(query).need === "news";
 }
 
 export function getResearchProviderCapabilitiesFromEnv(): ResearchProviderCapabilities {
   return {
     gatewaySearch: isGatewaySearchConfigured(),
+    exa: isExaSearchConfigured(),
     tavily: isTavilySearchConfigured(),
     browserbase: false,
   };
+}
+
+export function mergeResearchCapabilities(
+  base: ResearchProviderCapabilities,
+  overrides?: Partial<ResearchProviderCapabilities>,
+): ResearchProviderCapabilities {
+  return { ...base, ...overrides };
 }
 
 export function isGatewayResearchProvider(
@@ -104,3 +121,5 @@ export function isGatewayResearchProvider(
     provider === "gateway_parallel"
   );
 }
+
+export { defaultSearchStewardCapabilities };

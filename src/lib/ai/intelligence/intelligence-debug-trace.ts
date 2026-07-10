@@ -11,6 +11,7 @@ export type ConversationDebugTrace = {
   researchLevel?: number;
   intelligence?: ReturnType<typeof summarizeIntelligence>;
   dmSteward?: Record<string, unknown>;
+  searchSteward?: Record<string, unknown>;
   gatewaySearch?: Record<string, unknown>;
   timeline: DebugTimelineEntry[];
 };
@@ -62,6 +63,7 @@ export function buildConversationDebugTrace(input: {
   roomKind: "dm" | "room" | "unknown";
   intelligence?: IntelligenceContext;
   dmSteward?: Record<string, unknown>;
+  searchSteward?: Record<string, unknown>;
   gatewaySearch?: Record<string, unknown>;
   employeeId?: string;
   employeeName?: string;
@@ -82,6 +84,7 @@ export function buildConversationDebugTrace(input: {
     researchLevel: intelligence?.researchLevel,
     intelligence: summarizeIntelligence(intelligence),
     dmSteward: input.dmSteward,
+    searchSteward: input.searchSteward,
     gatewaySearch: input.gatewaySearch,
     timeline: [
       ...(intelligence ? stepsToTimeline(intelligence.steps) : []),

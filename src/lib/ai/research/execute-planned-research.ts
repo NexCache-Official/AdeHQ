@@ -50,6 +50,7 @@ export type ExecutePlannedResearchResult = {
     searchMeta?: GatewaySearchRunMeta;
     fromCache?: boolean;
     cacheKey?: string;
+    stewardMeta?: import("@/lib/ai/search/search-answer").ExecuteSearchAnswerMeta;
   };
 };
 
@@ -212,6 +213,7 @@ export async function executePlannedResearch(
         searchMeta: searchResult.searchMeta,
         fromCache: searchResult.fromCache,
         cacheKey: searchResult.cacheKey,
+        stewardMeta: searchResult.stewardMeta,
       },
     };
   }

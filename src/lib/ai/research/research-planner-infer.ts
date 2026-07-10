@@ -6,7 +6,7 @@ import {
   isBrowserResearchLiveReady,
   isTavilyConfigured,
 } from "@/lib/ai/browser-research/provider-config";
-import { isGatewaySearchConfigured } from "@/lib/ai/search/config";
+import { isGatewaySearchConfigured, isExaSearchConfigured } from "@/lib/ai/search/config";
 import { decideSearchRoute } from "@/lib/ai/search/search-router";
 import type { BrowserAccess } from "@/lib/ai/intelligence-policy";
 import { resolveModel, getOutputTokenCap, getTimeoutMs } from "@/lib/ai/model-catalog";
@@ -37,6 +37,8 @@ function capabilitySummary(caps: ResearchCapabilities): string {
   const lines = [`Browser access: ${caps.browserAccess}`];
   if (caps.gatewaySearch) lines.push("- Fast web search (Vercel AI Gateway) is configured.");
   else lines.push("- Fast web search (Vercel AI Gateway) is not configured.");
+  if (caps.exa || isExaSearchConfigured()) lines.push("- Semantic research search (Exa) is configured.");
+  else lines.push("- Semantic research search (Exa) is not configured.");
   if (caps.tavily) lines.push("- Backup web search (Tavily) is configured.");
   else lines.push("- Backup web search (Tavily) is not configured.");
   if (caps.browserbase) lines.push("- Live browser agent (Browserbase) is configured.");

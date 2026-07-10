@@ -5,6 +5,7 @@ import type { MessageArtifact } from "@/lib/types";
 import {
   buildWebSourcesArtifact,
   normalizeGatewaySearchSources,
+  type NormalizedSearchSources,
 } from "./source-normalizer";
 import { nowISO } from "@/lib/utils";
 
@@ -19,11 +20,30 @@ export type CachedSearchAnswer = {
   webSourcesArtifact?: MessageArtifact;
   searchSourcesArtifact?: MessageArtifact;
   hitCount: number;
+  confidence?: number;
 };
 
 const DEFAULT_TTL_HOURS = 24;
 const FAST_FACT_TTL_HOURS = 6;
 const STABLE_FACT_TTL_HOURS = 72;
+
+const FILLER_WORDS =
+  /\b(what|was|is|are|the|a|an|how|much|many|please|tell|me|about|in|for|of|did|does|do|can|you|find|search|look up)\b/gi;
+
+export function stripFillerWords(query: string): string {
+  return query
+    .replace(FILLER_WORDS, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+export function computeSearchConfidence(
+  normalized: Pick<NormalizedSearchSources, "usedSourceCount" | "sourceCount">,
+): number {
+  if (normalized.usedSourceCount <= 0) return 0;
+  const base = 0.65 + Math.min(normalized.usedSourceCount, 5) * 0.06;
+  return Math.min(0.98, base);
+}
 
 function ttlHoursForQuery(query: string): number {
   if (
@@ -37,6 +57,10 @@ function ttlHoursForQuery(query: string): number {
   return DEFAULT_TTL_HOURS;
 }
 
+function hashNormalizedQuery(normalized: string): string {
+  return createHash("sha256").update(normalized).digest("hex").slice(0, 40);
+}
+
 export function normalizeSearchCacheKey(query: string): string {
   const normalized = query
     .toLowerCase()
@@ -44,7 +68,14 @@ export function normalizeSearchCacheKey(query: string): string {
     .replace(/[^a-z0-9\s]/g, " ")
     .replace(/\s+/g, " ")
     .trim();
-  return createHash("sha256").update(normalized).digest("hex").slice(0, 40);
+  return hashNormalizedQuery(normalized);
+}
+
+/** Try primary and compact (filler-stripped) cache keys for cross-phrasing hits. */
+export function normalizeSearchCacheKeys(query: string): string[] {
+  const primary = normalizeSearchCacheKey(query);
+  const compact = normalizeSearchCacheKey(stripFillerWords(query));
+  return [...new Set([primary, compact].filter(Boolean))];
 }
 
 type CacheRow = {
@@ -76,6 +107,7 @@ function rowToCachedAnswer(row: CacheRow): CachedSearchAnswer {
     searchSourcesArtifact: artifact,
     webSourcesArtifact: artifact,
     hitCount: row.hit_count,
+    confidence: row.search_meta?.confidence,
   };
 }
 
@@ -84,33 +116,38 @@ export async function getSearchCache(
   workspaceId: string,
   query: string,
 ): Promise<CachedSearchAnswer | null> {
-  const cacheKey = normalizeSearchCacheKey(query);
-  const { data, error } = await client
-    .from("workspace_search_cache")
-    .select(
-      "cache_key, query, answer, sources, route, provider_route, search_meta, hit_count",
-    )
-    .eq("workspace_id", workspaceId)
-    .eq("cache_key", cacheKey)
-    .gt("expires_at", nowISO())
-    .maybeSingle();
+  const cacheKeys = normalizeSearchCacheKeys(query);
 
-  if (error) {
-    console.warn("[AdeHQ search-cache] lookup failed", error.message);
-    return null;
+  for (const cacheKey of cacheKeys) {
+    const { data, error } = await client
+      .from("workspace_search_cache")
+      .select(
+        "cache_key, query, answer, sources, route, provider_route, search_meta, hit_count",
+      )
+      .eq("workspace_id", workspaceId)
+      .eq("cache_key", cacheKey)
+      .gt("expires_at", nowISO())
+      .maybeSingle();
+
+    if (error) {
+      console.warn("[AdeHQ search-cache] lookup failed", error.message);
+      continue;
+    }
+    if (!data) continue;
+
+    await client
+      .from("workspace_search_cache")
+      .update({
+        hit_count: (data.hit_count ?? 0) + 1,
+        updated_at: nowISO(),
+      })
+      .eq("workspace_id", workspaceId)
+      .eq("cache_key", cacheKey);
+
+    return rowToCachedAnswer(data as CacheRow);
   }
-  if (!data) return null;
 
-  await client
-    .from("workspace_search_cache")
-    .update({
-      hit_count: (data.hit_count ?? 0) + 1,
-      updated_at: nowISO(),
-    })
-    .eq("workspace_id", workspaceId)
-    .eq("cache_key", cacheKey);
-
-  return rowToCachedAnswer(data as CacheRow);
+  return null;
 }
 
 export async function setSearchCache(
@@ -127,12 +164,21 @@ export async function setSearchCache(
     | "searchSourcesArtifact"
     | "webSourcesArtifact"
   >,
-  options?: { topicId?: string; sourceAgentRunId?: string },
+  options?: {
+    topicId?: string;
+    sourceAgentRunId?: string;
+    confidence?: number;
+  },
 ): Promise<string> {
   const cacheKey = normalizeSearchCacheKey(query);
   const expiresAt = new Date(
     Date.now() + ttlHoursForQuery(query) * 60 * 60 * 1000,
   ).toISOString();
+
+  const searchMeta = {
+    ...(result.searchMeta ?? {}),
+    ...(options?.confidence != null ? { confidence: options.confidence } : {}),
+  };
 
   const { error } = await client.from("workspace_search_cache").upsert(
     {
@@ -143,7 +189,7 @@ export async function setSearchCache(
       sources: result.sources ?? [],
       route: result.route,
       provider_route: result.providerRoute,
-      search_meta: result.searchMeta ?? {},
+      search_meta: searchMeta,
       hit_count: 0,
       topic_id: options?.topicId ?? null,
       source_agent_run_id: options?.sourceAgentRunId ?? null,

@@ -2,6 +2,7 @@ import {
   getSearchPrimaryProvider,
   getSearchBackupProvider,
   isBrowserResearchRequiresExplicitDeepTask,
+  isExaSearchConfigured,
   isGatewaySearchConfigured,
   isTavilySearchConfigured,
 } from "./config";
@@ -26,15 +27,28 @@ const CURRENT_FACT_PATTERNS = [
   /\b(biggest|top|major|main|official)\b.{0,80}\b(sponsors?|partners?)\b/i,
 ];
 
-const DEEP_BROWSER_PATTERNS = [
-  /\b(browse live|open websites?|take screenshots?|show evidence|live browser|browser agent)\b/i,
-  /\b(multi[- ]step|navigate|log in|sign in|fill out|click through|scrape|extract from multiple)\b/i,
-  /\b(create a report|research report|competitive report|pricing page|screenshot)\b/i,
-  /\b(open sources?,.{0,40}screenshots?|screenshots?.{0,40}report)\b/i,
+const INTERACTION_REQUIRED_PATTERNS = [
+  /\b(log in|sign in|fill out|click through|navigate to|open the website)\b/i,
+  /\b(linkedin|salesforce|hubspot|gmail)\b.{0,40}\b(log|login|message|post|update)\b/i,
+  /\b(browse live|live browser|browser agent|take screenshots?)\b/i,
+  /\b(multi[- ]step|scrape|extract from multiple pages)\b/i,
 ];
+
+/** Browser is reserved for interaction-required tasks, not current facts. */
+const DEEP_BROWSER_PATTERNS = INTERACTION_REQUIRED_PATTERNS;
 
 const MARKET_RESEARCH_PATTERNS = [
   /\b(market size|tam|sam|som|competitive landscape|industry analysis|market research)\b/i,
+];
+
+const SEMANTIC_RESEARCH_PATTERNS = [
+  /\bresearch (the )?(entire |whole )?\b/i,
+  /\bfind (all |every )?(series [a-d]|startups?|companies|papers?)\b/i,
+  /\b(yc companies|y combinator companies)\b/i,
+  /\bfind every paper about\b/i,
+  /\bcompanies building\b/i,
+  /\bsemantic search\b/i,
+  /\blandscape of\b/i,
 ];
 
 const NEWS_PATTERNS = [/\b(news|headlines?|breaking news|just announced)\b/i];
@@ -43,7 +57,7 @@ const SOURCE_VERIFICATION_PATTERNS = [
   /\b(verify|fact check|confirm from source|cross[- ]check|primary source)\b/i,
 ];
 
-function classifySearchNeed(query: string, opts?: { preferAgentMode?: boolean }): SearchNeed {
+export function classifySearchNeed(query: string, opts?: { preferAgentMode?: boolean }): SearchNeed {
   const trimmed = query.trim();
   if (!trimmed) return "none";
 
@@ -55,7 +69,10 @@ function classifySearchNeed(query: string, opts?: { preferAgentMode?: boolean })
     return "source_verification";
   }
 
-  if (MARKET_RESEARCH_PATTERNS.some((p) => p.test(trimmed))) {
+  if (
+    MARKET_RESEARCH_PATTERNS.some((p) => p.test(trimmed)) ||
+    SEMANTIC_RESEARCH_PATTERNS.some((p) => p.test(trimmed))
+  ) {
     return "market_research";
   }
 
@@ -91,6 +108,9 @@ function applyProviderAvailability(route: SearchRoute): {
   const backup = getSearchBackupProvider();
 
   const tryRoute = (candidate: SearchRoute): boolean => {
+    if (candidate === "gateway_exa") {
+      return isExaSearchConfigured() || isGatewaySearchConfigured();
+    }
     if (candidate.startsWith("gateway_")) return isGatewaySearchConfigured();
     if (candidate === "tavily") return isTavilySearchConfigured();
     return false;

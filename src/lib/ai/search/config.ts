@@ -6,6 +6,31 @@ export type SearchProviderPref =
 
 const GATEWAY_SEARCH_COST_USD_DEFAULT = 0.005;
 const GATEWAY_SEARCH_WORK_MINUTES_DEFAULT = 1.5;
+const EXA_SEARCH_COST_USD_DEFAULT = 0.007;
+const RESEARCH_SESSION_TTL_DAYS_DEFAULT = 7;
+
+export function isExaSearchConfigured(): boolean {
+  return Boolean(process.env.EXA_API_KEY?.trim());
+}
+
+export function getExaSearchType(): string {
+  return process.env.EXA_SEARCH_TYPE?.trim() || "auto";
+}
+
+export function getExaNumResults(): number {
+  const raw = Number(process.env.EXA_NUM_RESULTS);
+  return Number.isFinite(raw) && raw > 0 ? Math.min(raw, 25) : 10;
+}
+
+export function getExaSearchCostUsd(): number {
+  const raw = Number(process.env.EXA_SEARCH_COST_USD);
+  return Number.isFinite(raw) && raw > 0 ? raw : EXA_SEARCH_COST_USD_DEFAULT;
+}
+
+export function getResearchSessionTtlDays(): number {
+  const raw = Number(process.env.RESEARCH_SESSION_TTL_DAYS);
+  return Number.isFinite(raw) && raw > 0 ? raw : RESEARCH_SESSION_TTL_DAYS_DEFAULT;
+}
 
 export function isGatewaySearchConfigured(): boolean {
   return Boolean(process.env.AI_GATEWAY_API_KEY?.trim());

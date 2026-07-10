@@ -5,29 +5,38 @@ import {
   failAiWorkUnit,
 } from "@/lib/supabase/ai-work-units";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { decideSearchRoute, isGatewaySearchRoute } from "./search-router";
+import { isGatewaySearchRoute } from "./search-router";
 import {
   getGatewaySearchWorkMinutes,
+  isExaSearchConfigured,
   isGatewaySearchConfigured,
   isTavilySearchConfigured,
 } from "./config";
 import { runGatewaySearchAnswer, estimateGatewaySearchCostUsd } from "./vercel-gateway-search";
+import { runExaSearchAnswer, estimateExaSearchCostUsd } from "./exa-search";
 import { runTavilySearchAnswer, estimateTavilySearchAnswerCostUsd } from "./tavily-search";
 import type { SearchAnswerResult, SearchNeed, SearchRoute, SearchRouteDecision } from "./types";
 import { estimateWorkMinutesFromCost } from "@/lib/ai/work-hours/estimate";
 import {
-  buildSearchSourcesArtifact,
   buildWebSourcesArtifact,
   ensurePrivateCompanyWording,
   normalizeGatewaySearchSources,
   stripInlineSourcesSection,
 } from "./source-normalizer";
-import type { MessageArtifact } from "@/lib/types";
 import {
   cachedAnswerToSearchResult,
+  computeSearchConfidence,
   getSearchCache,
   setSearchCache,
 } from "./search-cache";
+import {
+  decideSearchSteward,
+  defaultSearchStewardCapabilities,
+  stewardDecisionToRouteDecision,
+  type SearchStewardAttempt,
+  type SearchStewardDecision,
+} from "./search-steward";
+import { getReusableSessionFindings, recordSessionSearchEvent } from "./research-session";
 
 export type ExecuteSearchAnswerParams = {
   client?: SupabaseClient;
@@ -40,6 +49,13 @@ export type ExecuteSearchAnswerParams = {
   preferAgentMode?: boolean;
   agentRunId?: string;
   routeOverride?: SearchRoute;
+};
+
+export type ExecuteSearchAnswerMeta = {
+  steward?: SearchStewardDecision;
+  attempts?: SearchStewardAttempt[];
+  sessionId?: string;
+  sessionReused?: boolean;
 };
 
 const SEARCH_UNAVAILABLE_MESSAGE =
@@ -57,28 +73,125 @@ export function shouldReturnNoSourcesMessage(
 }
 
 function buildDecision(params: ExecuteSearchAnswerParams): SearchRouteDecision {
+  const steward = decideSearchSteward(
+    params.query,
+    { preferAgentMode: params.preferAgentMode },
+    defaultSearchStewardCapabilities(),
+  );
   if (params.routeOverride) {
-    const routed = decideSearchRoute(params.query, { preferAgentMode: params.preferAgentMode });
+    const base = stewardDecisionToRouteDecision(steward);
     return {
-      need: routed.need === "none" ? "current_fact" : routed.need,
+      ...base,
+      need: base.need === "none" ? "current_fact" : base.need,
       route: params.routeOverride,
       browserRequired: params.routeOverride === "browserbase",
-      searchMode: routed.searchMode ?? "fast_fact",
       reason: "route_override",
-      maxResults: routed.maxResults ?? 5,
-      recency: routed.recency,
-      estimatedWorkMinutes: isGatewaySearchRoute(params.routeOverride) ? 1.5 : 2,
+      maxResults: base.maxResults ?? 5,
     };
   }
-  return decideSearchRoute(params.query, { preferAgentMode: params.preferAgentMode });
+  return stewardDecisionToRouteDecision(steward);
+}
+
+async function runProviderSearch(
+  route: SearchRoute,
+  params: ExecuteSearchAnswerParams,
+  decision: SearchRouteDecision,
+): Promise<{
+  text: string;
+  sources: SearchAnswerResult["sources"];
+  providerRoute: SearchAnswerResult["providerRoute"];
+  estimatedCostUsd: number;
+  estimatedWorkMinutes: number;
+  synthesisModel: string;
+  searchLatencyMs: number;
+  synthesisLatencyMs: number;
+}> {
+  const searchMode = decision.searchMode ?? "standard";
+
+  if (route === "gateway_exa" && isExaSearchConfigured()) {
+    const result = await runExaSearchAnswer({
+      query: params.query,
+      maxResults: decision.maxResults,
+      employeeName: params.employeeName,
+      searchMode,
+    });
+    return {
+      text: result.text,
+      sources: result.sources,
+      providerRoute: "exa",
+      estimatedCostUsd: estimateExaSearchCostUsd(),
+      estimatedWorkMinutes: 2,
+      synthesisModel: result.synthesisModel,
+      searchLatencyMs: result.searchLatencyMs,
+      synthesisLatencyMs: result.synthesisLatencyMs,
+    };
+  }
+
+  if (isGatewaySearchRoute(route) && isGatewaySearchConfigured()) {
+    const result = await runGatewaySearchAnswer({
+      query: params.query,
+      route: route as Extract<
+        SearchRoute,
+        "gateway_perplexity" | "gateway_exa" | "gateway_parallel"
+      >,
+      searchMode,
+      maxResults: decision.maxResults,
+      recency: decision.recency,
+      domains: decision.domains,
+      employeeName: params.employeeName,
+      workspaceId: params.workspaceId,
+      client: params.client,
+    });
+    return {
+      text: result.text,
+      sources: result.sources,
+      providerRoute: "vercel_gateway",
+      estimatedCostUsd: estimateGatewaySearchCostUsd(),
+      estimatedWorkMinutes: getGatewaySearchWorkMinutes(),
+      synthesisModel: result.synthesisModel,
+      searchLatencyMs: result.searchLatencyMs,
+      synthesisLatencyMs: result.synthesisLatencyMs,
+    };
+  }
+
+  if (route === "tavily" && isTavilySearchConfigured()) {
+    const started = Date.now();
+    const result = await runTavilySearchAnswer({
+      query: params.query,
+      maxResults: decision.maxResults,
+      employeeName: params.employeeName,
+    });
+    return {
+      text: result.text,
+      sources: result.sources,
+      providerRoute: "tavily",
+      estimatedCostUsd: estimateTavilySearchAnswerCostUsd(),
+      estimatedWorkMinutes: Math.max(1, estimateWorkMinutesFromCost(estimateTavilySearchAnswerCostUsd())),
+      synthesisModel: "tavily",
+      searchLatencyMs: 0,
+      synthesisLatencyMs: Date.now() - started,
+    };
+  }
+
+  throw new Error(`Search provider unavailable for route: ${route}`);
+}
+
+function isSearchFailure(text: string, sourceCount: number): boolean {
+  return !text.trim() || sourceCount === 0;
 }
 
 export async function executeSearchAnswer(
   params: ExecuteSearchAnswerParams,
-): Promise<SearchAnswerResult> {
+): Promise<SearchAnswerResult & { stewardMeta?: ExecuteSearchAnswerMeta }> {
+  const steward = decideSearchSteward(
+    params.query,
+    { preferAgentMode: params.preferAgentMode },
+    defaultSearchStewardCapabilities(),
+  );
   const decision = buildDecision(params);
   const searchMode = decision.searchMode ?? "standard";
   const totalStarted = Date.now();
+  const attempts: SearchStewardAttempt[] = [];
 
   if (decision.browserRequired || decision.route === "browserbase" || decision.route === "none") {
     if (decision.route === "none") {
@@ -89,6 +202,7 @@ export async function executeSearchAnswer(
         providerRoute: "model_fallback",
         estimatedCostUsd: 0,
         estimatedWorkMinutes: 0,
+        stewardMeta: { steward, attempts },
       };
     }
     throw new Error("Browser research must not run through executeSearchAnswer.");
@@ -101,10 +215,22 @@ export async function executeSearchAnswer(
       roomId: params.roomId,
       topicId: params.topicId,
       employeeId: params.employeeId,
-      workType: isGatewaySearchRoute(decision.route) ? "gateway_search_answer" : "quick_web_search",
+      workType:
+        decision.route === "gateway_exa" && isExaSearchConfigured()
+          ? "gateway_search_answer"
+          : isGatewaySearchRoute(decision.route)
+            ? "gateway_search_answer"
+            : "quick_web_search",
       capability: "research_planning",
-      providerRoute: isGatewaySearchRoute(decision.route) ? "vercel_gateway" : undefined,
-      providerName: isGatewaySearchRoute(decision.route) ? "vercel_gateway" : "tavily",
+      providerRoute: isGatewaySearchRoute(decision.route)
+        ? "vercel_gateway"
+        : undefined,
+      providerName:
+        decision.route === "gateway_exa" && isExaSearchConfigured()
+          ? "exa"
+          : isGatewaySearchRoute(decision.route)
+            ? "vercel_gateway"
+            : "tavily",
       estimatedWorkMinutes: decision.estimatedWorkMinutes,
       metadata: {
         query: params.query.slice(0, 500),
@@ -120,11 +246,7 @@ export async function executeSearchAnswer(
 
   try {
     if (params.client) {
-      const cached = await getSearchCache(
-        params.client,
-        params.workspaceId,
-        params.query,
-      );
+      const cached = await getSearchCache(params.client, params.workspaceId, params.query);
       if (cached?.answer?.trim()) {
         const cachedResult = cachedAnswerToSearchResult(cached);
         if (workUnitId) {
@@ -138,7 +260,45 @@ export async function executeSearchAnswer(
             },
           });
         }
-        return cachedResult;
+        return {
+          ...cachedResult,
+          stewardMeta: {
+            steward,
+            attempts,
+            sessionReused: false,
+          },
+        };
+      }
+
+      const sessionReuse = await getReusableSessionFindings(params.client, {
+        workspaceId: params.workspaceId,
+        topicId: params.topicId,
+        query: params.query,
+      });
+      if (sessionReuse) {
+        if (workUnitId) {
+          await completeAiWorkUnit(params.client, params.workspaceId, workUnitId, {
+            actualWorkMinutes: 0,
+            actualCostUsd: 0,
+            metadata: { sessionReused: true, sessionId: sessionReuse.sessionId },
+          });
+        }
+        return {
+          answer: sessionReuse.answer,
+          sources: sessionReuse.sources,
+          route: sessionReuse.route,
+          providerRoute: sessionReuse.providerRoute,
+          estimatedCostUsd: 0,
+          estimatedWorkMinutes: 0,
+          webSourcesArtifact: sessionReuse.webSourcesArtifact,
+          searchSourcesArtifact: sessionReuse.searchSourcesArtifact,
+          stewardMeta: {
+            steward,
+            attempts,
+            sessionId: sessionReuse.sessionId,
+            sessionReused: true,
+          },
+        };
       }
     }
 
@@ -150,74 +310,82 @@ export async function executeSearchAnswer(
     let synthesisModel = "unknown";
     let searchLatencyMs = 0;
     let synthesisLatencyMs = 0;
+    let activeRoute: SearchRoute = decision.route;
 
-    const tryGateway =
-      isGatewaySearchRoute(decision.route) && isGatewaySearchConfigured();
-    const tryTavily =
-      (decision.route === "tavily" || !tryGateway) && isTavilySearchConfigured();
-
-    if (tryGateway) {
-      const gatewayRoute = decision.route as Extract<
-        SearchRoute,
-        "gateway_perplexity" | "gateway_exa" | "gateway_parallel"
-      >;
-      const result = await runGatewaySearchAnswer({
-        query: params.query,
-        route: gatewayRoute,
-        searchMode,
-        maxResults: decision.maxResults,
-        recency: decision.recency,
-        domains: decision.domains,
-        employeeName: params.employeeName,
-        workspaceId: params.workspaceId,
-        client: params.client,
+    try {
+      const primaryStarted = Date.now();
+      const primary = await runProviderSearch(activeRoute, params, decision);
+      text = primary.text;
+      rawSources = primary.sources;
+      providerRoute = primary.providerRoute;
+      estimatedCostUsd = primary.estimatedCostUsd;
+      estimatedWorkMinutes = primary.estimatedWorkMinutes;
+      synthesisModel = primary.synthesisModel;
+      searchLatencyMs = primary.searchLatencyMs;
+      synthesisLatencyMs = primary.synthesisLatencyMs;
+      attempts.push({
+        provider: activeRoute,
+        sourceCount: rawSources.length,
+        latencyMs: Date.now() - primaryStarted,
+        failed: isSearchFailure(text, rawSources.length),
       });
-      text = result.text;
-      rawSources = result.sources;
-      providerRoute = "vercel_gateway";
-      estimatedCostUsd = estimateGatewaySearchCostUsd();
-      estimatedWorkMinutes = getGatewaySearchWorkMinutes();
-      synthesisModel = result.synthesisModel;
-      searchLatencyMs = result.searchLatencyMs;
-      synthesisLatencyMs = result.synthesisLatencyMs;
+    } catch (error) {
+      attempts.push({
+        provider: activeRoute,
+        sourceCount: 0,
+        latencyMs: 0,
+        failed: true,
+      });
+      console.warn("[AdeHQ search] Primary provider failed:", error);
+    }
 
-      if ((!text.trim() || rawSources.length === 0) && isTavilySearchConfigured()) {
-        const tavilyStarted = Date.now();
-        const tavilyResult = await runTavilySearchAnswer({
-          query: params.query,
-          maxResults: decision.maxResults,
-          employeeName: params.employeeName,
-        });
-        text = tavilyResult.text;
-        rawSources = tavilyResult.sources;
-        providerRoute = "tavily";
-        estimatedCostUsd = estimateTavilySearchAnswerCostUsd();
-        estimatedWorkMinutes = Math.max(1, estimateWorkMinutesFromCost(estimatedCostUsd));
-        synthesisModel = "tavily";
-        synthesisLatencyMs = Date.now() - tavilyStarted;
+    if (isSearchFailure(text, rawSources.length) && steward.backupProvider) {
+      const backupRoute = steward.backupProvider;
+      if (backupRoute !== activeRoute) {
+        try {
+          const backupStarted = Date.now();
+          const backup = await runProviderSearch(backupRoute, params, {
+            ...decision,
+            route: backupRoute,
+          });
+          if (!isSearchFailure(backup.text, backup.sources.length)) {
+            text = backup.text;
+            rawSources = backup.sources;
+            providerRoute = backup.providerRoute;
+            estimatedCostUsd = backup.estimatedCostUsd;
+            estimatedWorkMinutes = backup.estimatedWorkMinutes;
+            synthesisModel = backup.synthesisModel;
+            searchLatencyMs = backup.searchLatencyMs;
+            synthesisLatencyMs = backup.synthesisLatencyMs;
+            activeRoute = backupRoute;
+          }
+          attempts.push({
+            provider: backupRoute,
+            sourceCount: backup.sources.length,
+            latencyMs: Date.now() - backupStarted,
+            failed: isSearchFailure(backup.text, backup.sources.length),
+          });
+        } catch (error) {
+          attempts.push({
+            provider: backupRoute,
+            sourceCount: 0,
+            latencyMs: 0,
+            failed: true,
+          });
+          console.warn("[AdeHQ search] Backup provider failed:", error);
+        }
       }
-    } else if (tryTavily) {
-      const tavilyStarted = Date.now();
-      const result = await runTavilySearchAnswer({
-        query: params.query,
-        maxResults: decision.maxResults,
-        employeeName: params.employeeName,
-      });
-      text = result.text;
-      rawSources = result.sources;
-      providerRoute = "tavily";
-      estimatedCostUsd = estimateTavilySearchAnswerCostUsd();
-      estimatedWorkMinutes = Math.max(1, estimateWorkMinutesFromCost(estimatedCostUsd));
-      synthesisModel = "tavily";
-      synthesisLatencyMs = Date.now() - tavilyStarted;
-    } else {
+    }
+
+    if (!text.trim() && rawSources.length === 0 && !attempts.some((a) => a.sourceCount > 0)) {
       return {
         answer: SEARCH_UNAVAILABLE_MESSAGE,
         sources: [],
-        route: decision.route,
+        route: activeRoute,
         providerRoute: "model_fallback",
         estimatedCostUsd: 0,
         estimatedWorkMinutes: 0,
+        stewardMeta: { steward, attempts },
       };
     }
 
@@ -233,10 +401,11 @@ export async function executeSearchAnswer(
       return {
         answer: SEARCH_UNAVAILABLE_MESSAGE,
         sources: [],
-        route: decision.route,
+        route: activeRoute,
         providerRoute: "model_fallback",
         estimatedCostUsd: 0,
         estimatedWorkMinutes: 0,
+        stewardMeta: { steward, attempts },
       };
     }
 
@@ -244,20 +413,22 @@ export async function executeSearchAnswer(
       return {
         answer: NO_SOURCES_MESSAGE,
         sources: [],
-        route: decision.route,
+        route: activeRoute,
         providerRoute,
         estimatedCostUsd,
         estimatedWorkMinutes,
+        stewardMeta: { steward, attempts },
       };
     }
 
+    const confidence = computeSearchConfidence(normalized);
     const totalLatencyMs = Date.now() - totalStarted;
     const searchMeta = {
-      searchRoute: decision.route,
+      searchRoute: activeRoute,
       searchNeed: decision.need as SearchNeed,
       searchMode,
       browserRequired: false as const,
-      searchRequests: 1,
+      searchRequests: attempts.length,
       sourceCount: normalized.sourceCount,
       usedSourceCount: normalized.usedSourceCount,
       excludedSourceCount: normalized.excludedSourceCount,
@@ -266,6 +437,7 @@ export async function executeSearchAnswer(
       totalLatencyMs,
       searchLatencyMs,
       synthesisLatencyMs,
+      confidence,
       excludedSourceReasons: normalized.excluded
         .map((source) => source.excludedReason)
         .filter(Boolean) as string[],
@@ -280,6 +452,7 @@ export async function executeSearchAnswer(
           usedSourceCount: normalized.usedSourceCount,
           excludedSourceCount: normalized.excludedSourceCount,
           totalLatencyMs,
+          confidence,
         },
       });
     }
@@ -294,19 +467,35 @@ export async function executeSearchAnswer(
         url: source.url,
         snippet: source.snippet,
       })),
-      route: decision.route,
+      route: activeRoute,
       providerRoute,
       estimatedCostUsd,
       estimatedWorkMinutes,
       searchMeta,
       webSourcesArtifact: webArtifact,
       searchSourcesArtifact: webArtifact,
+      stewardMeta: { steward, attempts },
     };
 
     if (params.client && result.answer.trim()) {
       await setSearchCache(params.client, params.workspaceId, params.query, result, {
         topicId: params.topicId,
         sourceAgentRunId: params.agentRunId,
+        confidence,
+      });
+
+      await recordSessionSearchEvent(params.client, {
+        workspaceId: params.workspaceId,
+        topicId: params.topicId,
+        employeeId: params.employeeId,
+        agentRunId: params.agentRunId,
+        query: params.query,
+        answer: result.answer,
+        sources: result.sources,
+        route: activeRoute,
+        providerRoute,
+        confidence,
+        webSourcesArtifact: webArtifact,
       });
     }
 

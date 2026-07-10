@@ -5,12 +5,18 @@ import {
   type CreateBrowserResearchRunParams,
 } from "@/lib/ai/browser-research/server";
 import { executeSearchAnswer } from "@/lib/ai/search/search-answer";
+import {
+  decideSearchSteward,
+  defaultSearchStewardCapabilities,
+  stewardDecisionToResearchProvider,
+} from "@/lib/ai/search/search-steward";
 import type { SearchAnswerResult } from "@/lib/ai/search/types";
 import type { BrowserResearchRun } from "@/lib/ai/browser-research/types";
 import type { RoomMessage } from "@/lib/types";
 
 export type IntelligenceToolName =
   | "search.gateway"
+  | "search.exa"
   | "search.tavily"
   | "browser.research"
   | `internal.${string}`
@@ -74,6 +80,7 @@ export async function executeIntelligenceTool(
 ): Promise<unknown> {
   switch (request.tool) {
     case "search.gateway":
+    case "search.exa":
     case "search.tavily":
       return executeSearchTool(request, ctx);
     case "browser.research":
@@ -94,6 +101,19 @@ async function executeSearchTool(
   const query = asString(args.query, "query");
   const employee = await loadWorkspaceEmployee(ctx.client, ctx.workspaceId, ctx.employeeId);
 
+  const steward = decideSearchSteward(query, {}, defaultSearchStewardCapabilities());
+  const stewardRoute = stewardDecisionToResearchProvider(steward);
+  const defaultRoute =
+    request.tool === "search.exa"
+      ? "gateway_exa"
+      : request.tool === "search.tavily"
+        ? "tavily"
+        : stewardRoute === "gateway_exa"
+          ? "gateway_exa"
+          : stewardRoute === "gateway_parallel"
+            ? "gateway_parallel"
+            : "gateway_perplexity";
+
   return executeSearchAnswer({
     client: ctx.client,
     workspaceId: ctx.workspaceId,
@@ -103,9 +123,7 @@ async function executeSearchTool(
     employeeName: employee?.name,
     query,
     agentRunId: ctx.agentRunId,
-    routeOverride:
-      args.routeOverride ??
-      (request.tool === "search.tavily" ? "tavily" : "gateway_perplexity"),
+    routeOverride: args.routeOverride ?? defaultRoute,
   });
 }
 

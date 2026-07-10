@@ -3,10 +3,23 @@
  * Usage: npm run test:search-answer-quality
  */
 
-import { decideSearchRoute } from "@/lib/ai/search/search-router";
+import { decideSearchRoute, classifySearchNeed } from "@/lib/ai/search/search-router";
 import { getFastFactSearchPreset } from "@/lib/ai/search/config";
 import { shouldReturnNoSourcesMessage } from "@/lib/ai/search/search-answer";
 import { extractSourcesFromGenerateTextResult } from "@/lib/ai/search/vercel-gateway-search";
+import {
+  decideSearchSteward,
+  stewardDecisionToResearchProvider,
+} from "@/lib/ai/search/search-steward";
+import {
+  normalizeSearchCacheKey,
+  normalizeSearchCacheKeys,
+  stripFillerWords,
+} from "@/lib/ai/search/search-cache";
+import {
+  pickResearchProvider,
+  type ResearchProviderCapabilities,
+} from "@/lib/ai/research/research-provider";
 import {
   normalizeGatewaySearchSources,
   rankSearchSources,
@@ -187,6 +200,95 @@ async function main() {
     const filtered = filterLowQualitySources(cards, "What was Perplexity's revenue in 2025?");
     expectTrue(filtered.used.length === 1);
     expectTrue(filtered.excluded.length === 1);
+  });
+
+  await test("search steward routes current facts to Perplexity not Exa", () => {
+    const caps: ResearchProviderCapabilities = {
+      gatewaySearch: true,
+      exa: true,
+      tavily: true,
+      browserbase: false,
+    };
+    const steward = decideSearchSteward(
+      "What is Apple's revenue in 2026?",
+      {},
+      caps,
+    );
+    expectTrue(steward.provider === "gateway_perplexity");
+    expectTrue(steward.backupProvider !== "gateway_exa");
+    expectTrue(classifySearchNeed("What is Apple's revenue in 2026?") === "company_fact");
+  });
+
+  await test("search steward routes semantic research to Exa", () => {
+    const caps: ResearchProviderCapabilities = {
+      gatewaySearch: true,
+      exa: true,
+      tavily: false,
+      browserbase: false,
+    };
+    const steward = decideSearchSteward(
+      "Research the entire AI HR software landscape",
+      {},
+      caps,
+    );
+    expectTrue(steward.provider === "gateway_exa");
+    expectTrue(steward.need === "market_research");
+    const provider = pickResearchProvider(
+      "Research the entire AI HR software landscape",
+      { preferTavily: false, preferAgentMode: false },
+      caps,
+    );
+    expectTrue(provider === "gateway_exa");
+    expectTrue(stewardDecisionToResearchProvider(steward) === "gateway_exa");
+  });
+
+  await test("fuzzy cache keys match compact phrasing", () => {
+    const full = normalizeSearchCacheKey("What was Anthropic revenue in 2025?");
+    const compact = normalizeSearchCacheKey(stripFillerWords("Anthropic revenue 2025"));
+    const keys = normalizeSearchCacheKeys("What was Anthropic revenue in 2025?");
+    expectTrue(keys.includes(full));
+    expectTrue(keys.includes(compact));
+  });
+
+  await test("DM path preserves Exa for market research", () => {
+    const caps: ResearchProviderCapabilities = {
+      gatewaySearch: true,
+      exa: true,
+      tavily: true,
+      browserbase: false,
+    };
+    const content = "Research the entire AI HR software landscape";
+    const dmProvider =
+      pickResearchProvider(content, { preferTavily: false, preferAgentMode: false }, caps) ??
+      "gateway_perplexity";
+    expectTrue(dmProvider === "gateway_exa");
+    expectTrue(dmProvider !== "gateway_perplexity");
+  });
+
+  await test("Exa is not used as Perplexity failure backup", () => {
+    const caps: ResearchProviderCapabilities = {
+      gatewaySearch: true,
+      exa: true,
+      tavily: true,
+      browserbase: false,
+    };
+    const steward = decideSearchSteward("What is Apple's revenue in 2026?", {}, caps);
+    expectTrue(steward.provider === "gateway_perplexity");
+    expectTrue(steward.backupProvider !== "gateway_exa");
+  });
+
+  await test("Exa results map highlights to source snippets", async () => {
+    const { mapExaResultsToSources } = await import("@/lib/ai/search/exa-search");
+    const sources = mapExaResultsToSources([
+      {
+        title: "AI HR Landscape",
+        url: "https://example.com/ai-hr",
+        highlights: ["Series A startups", "market map"],
+      },
+    ]);
+    expectTrue(sources.length === 1);
+    expectTrue(Boolean(sources[0].snippet?.includes("Series A startups")));
+    expectTrue(sources[0].title === "AI HR Landscape");
   });
 
   console.log("\nAll search answer quality tests passed.");

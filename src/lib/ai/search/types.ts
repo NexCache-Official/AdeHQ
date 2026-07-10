@@ -41,7 +41,7 @@ export type SearchAnswerResult = {
   answer: string;
   sources: SearchSource[];
   route: SearchRoute;
-  providerRoute: "vercel_gateway" | "tavily" | "model_fallback";
+  providerRoute: "vercel_gateway" | "exa" | "tavily" | "model_fallback";
   estimatedCostUsd: number;
   estimatedWorkMinutes: number;
   uncertaintyNote?: string;
@@ -66,5 +66,6 @@ export type GatewaySearchRunMeta = {
   totalLatencyMs: number;
   searchLatencyMs: number;
   synthesisLatencyMs: number;
+  confidence?: number;
   excludedSourceReasons?: string[];
 };
