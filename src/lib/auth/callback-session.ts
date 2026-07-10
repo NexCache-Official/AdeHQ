@@ -83,7 +83,7 @@ function waitForAuthSession(timeoutMs = 8000): Promise<boolean> {
     const timer = setTimeout(() => finish(false), timeoutMs);
 
     const listener = supabase.auth.onAuthStateChange((event, session) => {
-      if (session && (event === "SIGNED_IN" || event === "INITIAL_SESSION" || event === "TOKEN_REFRESHED")) {
+      if (session && (event === "SIGNED_IN" || event === "INITIAL_SESSION" || event === "TOKEN_REFRESHED" || event === "PASSWORD_RECOVERY")) {
         finish(true);
       }
     });
@@ -104,18 +104,27 @@ export async function establishSessionFromUrl(): Promise<boolean> {
 
   captureRecoveryIntentFromUrl();
 
+  const hasParams = hasAuthParamsInUrl();
+  const intent = peekAuthIntentFromUrl();
+  const isRecoveryFlow = intent.recovery || isPasswordRecoveryPending();
+
   const existing = await getExistingSession();
-  if (existing?.user) {
-    clearAuthParamsFromUrl();
+  if (existing?.user && !hasParams) {
     return true;
   }
 
-  if (!hasAuthParamsInUrl()) {
+  // Recovery links must not reuse a stale workspace session — clear it before consuming tokens.
+  if (hasParams && existing?.user && isRecoveryFlow) {
+    markPasswordRecoveryPending();
+    await supabase.auth.signOut();
+  }
+
+  if (!hasParams) {
     return false;
   }
 
   const searchParams = new URLSearchParams(window.location.search);
-  const tokenHash = searchParams.get("token_hash");
+  const tokenHash = searchParams.get("token_hash") ?? searchParams.get("token");
   const type = searchParams.get("type");
   const code = searchParams.get("code");
   const hash = window.location.hash.replace(/^#/, "");
@@ -203,7 +212,13 @@ export async function completeAuthRedirect(nextPath?: string): Promise<{
       );
     }
 
-    if (!isEmailConfirmed(session.user)) {
+    const recoveryFlow =
+      isPasswordRecoveryPending() ||
+      intent.recovery ||
+      nextPath === "/reset-password" ||
+      readRecoveryNextFromUrl() === "/reset-password";
+
+    if (!isEmailConfirmed(session.user) && !recoveryFlow) {
       await supabase.auth.signOut();
       throw new Error("Email not confirmed");
     }

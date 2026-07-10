@@ -402,7 +402,9 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       if (!active || authBusyRef.current) return;
 
       if (event === "SIGNED_OUT" || !session?.user) {
-        clearPasswordRecoveryPending();
+        if (!isPasswordRecoveryPending()) {
+          clearPasswordRecoveryPending();
+        }
         authUserRef.current = null;
         setBackend("demo");
         setState(buildSignedOutState());

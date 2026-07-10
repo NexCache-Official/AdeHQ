@@ -8,6 +8,7 @@ import { ResendConfirmation } from "@/components/auth/ResendConfirmation";
 import { Button } from "@/components/ui";
 import { useStore } from "@/lib/demo-store";
 import { parseAuthError } from "@/lib/auth/confirmation";
+import { isPasswordRecoveryPending } from "@/lib/auth/recovery";
 import { ENABLE_DEMO_MODE } from "@/lib/config/features";
 import { supabase } from "@/lib/supabase/client";
 import { ArrowRight, Eye, EyeOff, Sparkles } from "lucide-react";
@@ -27,7 +28,9 @@ function LoginForm() {
 
   useEffect(() => {
     actions.clearError();
-    void supabase.auth.signOut();
+    if (!isPasswordRecoveryPending()) {
+      void supabase.auth.signOut();
+    }
   }, [actions]);
 
   useEffect(() => {

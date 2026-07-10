@@ -57,8 +57,8 @@ function ResetPasswordForm() {
       }
     };
 
-    const { data: listener } = supabase.auth.onAuthStateChange((event) => {
-      if (event === "PASSWORD_RECOVERY") {
+    const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === "PASSWORD_RECOVERY" && session?.user) {
         markPasswordRecoveryPending();
         setSessionReady(true);
         setChecking(false);
@@ -88,6 +88,13 @@ function ResetPasswordForm() {
 
     setLoading(true);
     try {
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError || !sessionData.session?.user) {
+        setSessionReady(false);
+        setError("Your reset session expired. Request a new reset link.");
+        return;
+      }
+
       const { error: updateError } = await supabase.auth.updateUser({ password });
       if (updateError) throw updateError;
 

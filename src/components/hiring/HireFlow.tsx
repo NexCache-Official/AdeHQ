@@ -875,6 +875,10 @@ export function HireFlow({ onboarding = false, entrySource = "hire_route" }: Hir
       actions.updateEmployee(hiredIds[0], { defaultRoomId: roomId });
       actions.addEmployeeToRoom(roomId, hiredIds[0]);
     }
+    if (onboarding) {
+      actions.completeOnboarding();
+      clearOnboardingDrafts();
+    }
     clearHiringSession(scope);
     router.replace(session.dmRoomId ? `/rooms/${session.dmRoomId}` : "/workforce");
   };

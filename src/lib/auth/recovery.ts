@@ -1,4 +1,5 @@
 import { getSiteUrl } from "@/lib/site-url";
+import { supabase } from "@/lib/supabase/client";
 
 /** Session flag: user must finish /reset-password before accessing the workspace. */
 export const PASSWORD_RECOVERY_PENDING_KEY = "adehq_password_recovery_pending";
@@ -54,14 +55,12 @@ export async function requestPasswordReset(email: string): Promise<void> {
   const trimmed = email.trim();
   if (!trimmed) throw new Error("Enter your email address.");
 
-  const response = await fetch("/api/auth/forgot-password", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email: trimmed }),
+  // Must run in the browser so PKCE state is stored for the reset link callback.
+  const { error } = await supabase.auth.resetPasswordForEmail(trimmed, {
+    redirectTo: getPasswordResetRedirectUrl(),
   });
 
-  const payload = (await response.json().catch(() => null)) as { error?: string } | null;
-  if (!response.ok) {
-    throw new Error(payload?.error ?? "Unable to send reset email. Try again in a moment.");
+  if (error) {
+    throw new Error(error.message || "Unable to send reset email. Try again in a moment.");
   }
 }

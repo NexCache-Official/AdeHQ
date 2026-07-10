@@ -309,6 +309,7 @@ export type CompleteHireFromSessionParams = {
       workLog: import("@/lib/types").WorkLogEvent;
       defaultRoomId?: string;
     }) => Promise<{ dmRoomId: string }>;
+    completeOnboarding?: () => void;
   };
   candidate: AiEmployeeApplicant;
   candidatesToHire?: AiEmployeeApplicant[];
@@ -413,6 +414,9 @@ export async function completeHireFromSession(
         workLog,
         defaultRoomId: params.onboarding.defaultRoomId,
       });
+      params.onboarding.onComplete?.();
+    } else if (params.onboarding) {
+      params.actions.completeOnboarding?.();
       params.onboarding.onComplete?.();
     }
 
