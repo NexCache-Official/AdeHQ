@@ -16,6 +16,7 @@ export function minimumReplyHoldMs(
   if (!intelligence) return 1200;
 
   const fp = intelligence.fastPath?.decision;
+  if (fp === "instant_answer" || intelligence.composer?.answerSource === "instant") return 650;
   if (fp === "greeting" || fp === "clarify") return 0;
   if (intelligence.composer?.answerSource === "knowledge") return 800;
   if (intelligence.composer?.answerSource === "cache") return 600;
@@ -34,6 +35,12 @@ export function statusChipForIntelligence(
 ): RunStatusChip {
   if (intelligence?.cache?.hit || intelligence?.composer?.answerSource === "cache") {
     return "from_cache";
+  }
+  if (
+    intelligence?.fastPath?.decision === "instant_answer" ||
+    intelligence?.composer?.answerSource === "instant"
+  ) {
+    return "typing";
   }
   if (aiMode === "gateway_search" || intelligence?.search) return "searching";
   if (aiMode === "research" || aiMode === "research_async") return "research_report";

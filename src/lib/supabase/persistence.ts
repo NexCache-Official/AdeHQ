@@ -859,7 +859,7 @@ function roomFromRow(
   };
 }
 
-function messageFromRow(row: DbRow): RoomMessage {
+export function messageFromRow(row: DbRow): RoomMessage {
   return normalizeHumanDelivery({
     id: row.id,
     roomId: roomIdFromRow(row),

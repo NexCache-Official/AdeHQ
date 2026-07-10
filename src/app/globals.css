@@ -259,6 +259,30 @@ body {
   animation-delay: -0.16s;
 }
 
+/* Blinking caret appended to the last line of a reply that is still streaming. */
+.streaming-caret > .message-markdown > *:last-child::after {
+  content: "";
+  display: inline-block;
+  width: 0.5em;
+  height: 1em;
+  margin-left: 1px;
+  vertical-align: text-bottom;
+  background: var(--accent, currentColor);
+  opacity: 0.7;
+  border-radius: 1px;
+  animation: streamingCaretBlink 1s steps(2, start) infinite;
+}
+
+@keyframes streamingCaretBlink {
+  0%,
+  100% {
+    opacity: 0.7;
+  }
+  50% {
+    opacity: 0;
+  }
+}
+
 @keyframes hireMsgIn {
   from {
     opacity: 0;

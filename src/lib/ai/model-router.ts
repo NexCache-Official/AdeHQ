@@ -13,6 +13,7 @@ import {
   resolveRouteGenerationParams,
   toEmployeeResponseFromReplyAndEffect,
   type EmployeeRouteInput,
+  type EmployeePromptBuildOptions,
   type LiveCallMetrics,
 } from "@/lib/ai/employee-response-contract";
 import {
@@ -44,6 +45,7 @@ export type RouteOptions = {
   leadEmployeeName?: string;
   leadReply?: string;
   conversationMode?: string;
+  promptTier?: EmployeePromptBuildOptions["promptTier"];
   context?: RouteContext;
 };
 

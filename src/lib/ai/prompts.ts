@@ -1,6 +1,11 @@
 import type { AIEmployee, MemoryEntry, ProjectRoom, RoomMessage, RoomTopic, SavedArtifactType, Workspace } from "@/lib/types";
 import type { EmployeeRoleKey } from "@/lib/types";
 import type { BrowserAccess } from "@/lib/ai/intelligence-policy";
+import {
+  buildAmbientBlock,
+  createAmbientContext,
+  type AmbientContext,
+} from "@/lib/ai/ambient-context";
 import { isMayaEmployee } from "@/lib/maya-employee";
 import { buildIntegrationToolsPrompt } from "@/lib/integrations/prompt";
 import type { TopicSummary } from "@/lib/topic-summary/types";
@@ -13,6 +18,8 @@ export type ResearchCapabilitiesPrompt = {
   canSearch?: boolean;
   canBrowse?: boolean;
 };
+
+export type EmployeePromptTier = "core" | "work" | "full";
 
 type PromptContext = {
   employee: AIEmployee;
@@ -30,6 +37,7 @@ type PromptContext = {
   artifactIntent?: { type: SavedArtifactType; instruction?: string } | null;
   researchCapabilities?: ResearchCapabilitiesPrompt;
   importedContextPrompt?: string;
+  ambientContext?: AmbientContext;
 };
 
 function formatTopicSummaryForPrompt(summary: TopicSummary): string {
@@ -159,6 +167,41 @@ function researchCapabilityRules(caps?: ResearchCapabilitiesPrompt): string {
   return rules.join("\n");
 }
 
+/**
+ * Ground-truth roster of who is actually in this conversation. Prevents the model
+ * from inventing teammates (it used to copy example names like "@Priya Nair") and
+ * keeps it from referencing anyone outside this workspace/conversation.
+ */
+function buildTeamRoster(ctx: PromptContext): string {
+  const teammates = ctx.roomEmployees.filter((e) => e.id !== ctx.employee.id);
+  const humans = ctx.humanParticipants;
+  const isDm = ctx.room.kind === "dm";
+
+  const teammateLines = teammates.length
+    ? teammates.map((e) => `- ${e.name} — ${e.role} (AI teammate)`).join("\n")
+    : isDm
+      ? "- (none — this is a private 1:1 DM; no other AI teammates are here)"
+      : "- (no other AI teammates in this room)";
+  const humanLines = humans.length
+    ? humans.map((h) => `- ${h.name} (person)`).join("\n")
+    : "- (no other people listed)";
+
+  return `People in this conversation (this is the COMPLETE list — no one else exists here):
+AI teammates you can @mention or hand off to:
+${teammateLines}
+People:
+${humanLines}
+
+Roster rules (strict):
+- ONLY @mention or hand off to a name in the list above. These are the only real people here.
+- NEVER invent, assume, or reference a teammate who is not listed — no made-up names, no people from other workspaces.
+- If the right specialist is not on this list, say so plainly and either do it yourself or suggest hiring/adding that role — do not pretend a colleague exists.${
+    isDm
+      ? "\n- This is a 1:1 DM. There are no other AI teammates to loop in here; if the work needs one, suggest moving it to a room, don't @mention someone who isn't present."
+      : ""
+  }`;
+}
+
 function coordinationAndTrustRules(
   tools: AIEmployee["tools"],
   researchCapabilities?: ResearchCapabilitiesPrompt,
@@ -174,8 +217,9 @@ function coordinationAndTrustRules(
   const researchRules = researchCapabilityRules(researchCapabilities);
   return `
 Mention etiquette:
-- When directly asking, assigning, handing off, challenging, or coordinating with another participant, use a real @mention (e.g. "@Priya Nair can you own…").
-- Plain names are fine for passive references ("Priya's research will inform the sales model").
+- When directly asking, assigning, handing off, challenging, or coordinating with another participant, use a real @mention of someone in the roster above (e.g. "@[teammate name] can you own…").
+- Only @mention names that appear in the roster. Never @mention or name a person who is not listed there.
+- Plain names are fine for passive references, but only for people who are actually on the roster.
 - Mention humans too when directly addressing them.
 
 Capability honesty:
@@ -220,7 +264,7 @@ function roleWorkflowRules(roleKey: EmployeeRoleKey): string {
   1. New lead mentioned → crm.createContact (execute) with name, email, company.
   2. Opportunity discussed → crm.createDeal (execute) when the user asked to create the deal — internal CRM records save immediately.
   3. Outreach needed → email.createDraft (execute) with the full subject and body. It saves a reviewable draft — never sends.
-  4. Follow-up needed → tasks.createTask (execute), e.g. "Follow up with Neil if no reply by Friday".
+  4. Follow-up needed → tasks.createTask (execute), e.g. "Follow up with the lead if no reply by Friday".
   5. Spreadsheet/document/deck/report needed → artifact.createSpreadsheet/createDocx/createPresentation/createPdfReport with complete args; these save to Drive.
 - Every toolCall MUST include a non-empty args object. Do not place required fields at the root of the toolCall.
 - When you learn durable lead context (ICP, preferences, account strategy), add effects.memory — do NOT save transactional "created contact/deal/task" activity as memory; CRM and Work Log already capture that.
@@ -273,8 +317,20 @@ export function buildEmployeeSystemPrompt(
     leadEmployeeName?: string;
     leadReply?: string;
     conversationMode?: string;
+    promptTier?: EmployeePromptTier;
+    /** Emit a plain-prose contract instead of the JSON envelope (for token streaming). */
+    plainProse?: boolean;
   },
 ): string {
+  const promptTier: EmployeePromptTier = options?.promptTier ?? "full";
+  const includeWorkRules = promptTier === "work" || promptTier === "full";
+  const includeFullRules = promptTier === "full";
+  const ambientContext =
+    ctx.ambientContext ??
+    createAmbientContext({
+      workspaceName: ctx.workspace.name,
+      userName: ctx.humanParticipants[0]?.name,
+    });
   const toolList =
     ctx.employee.tools.length > 0
       ? ctx.employee.tools
@@ -347,7 +403,51 @@ Panel response: the user asked for multiple independent perspectives.
 `
           : "";
 
-  return `You are ${ctx.employee.name}, an AI employee inside AdeHQ.
+  const topicBlock = ctx.topic
+    ? promptTier === "core"
+      ? `You are responding inside the topic: ${ctx.topic.title}.
+Stay focused on this topic unless the user explicitly asks for broader room/workspace context.`
+      : `You are responding inside the topic: ${ctx.topic.title}.
+Topic status: ${ctx.topic.status} · priority: ${ctx.topic.priority}
+Topic description: ${ctx.topic.description || "(none)"}
+${
+  ctx.topicSummary?.summary
+    ? `Topic workstream context (authoritative — stay consistent with this):\n${formatTopicSummaryForPrompt(ctx.topicSummary)}`
+    : ctx.topic.summary
+      ? `Topic summary: ${ctx.topic.summary}`
+      : ""
+}
+${
+  ctx.importedContextPrompt && includeFullRules
+    ? `\nImported context receipts (background only — do not repeat verbatim):\n${ctx.importedContextPrompt}`
+    : ""
+}
+Stay focused on this topic unless the user explicitly asks for broader room/workspace context.
+If you create tasks, memory, approvals, or logs, attach them to this topic.`
+    : "";
+
+  const toolBlock = includeWorkRules
+    ? `Your available tools:
+${toolList}
+
+${buildIntegrationToolsPrompt(ctx.employee)}
+
+Your permissions:
+${permissionList || "- Default employee permissions"}`
+    : `Tool/action mode:
+- This is a lightweight chat reply. Do not create tasks, memory, approvals, artifacts, or tool calls unless the user explicitly asks for work.`;
+
+  const advancedRules = [
+    includeWorkRules ? coordinationAndTrustRules(ctx.employee.tools, ctx.researchCapabilities) : "",
+    includeFullRules ? fileAwareRules(Boolean(ctx.fileContextPrompt), ctx.artifactIntent) : "",
+    includeWorkRules ? roleWorkflowRules(ctx.employee.roleKey) : "",
+  ]
+    .filter(Boolean)
+    .join("\n\n");
+
+  return `${buildAmbientBlock(ambientContext)}
+
+You are ${ctx.employee.name}, an AI employee inside AdeHQ.
 You are replying as one AI employee inside AdeHQ. Do not speak for all employees. Stay in your role. If another employee is leading, support them without repeating them. If you are the lead, give direction and make the next step clear. If this is a social greeting, keep it short and do not create work.
 ${greetingRules}${collaborationRules}
 Role:
@@ -374,31 +474,11 @@ ${ctx.room.name}
 Room brief:
 ${ctx.room.brief || ctx.room.description}
 
-${ctx.topic ? `You are responding inside the topic: ${ctx.topic.title}.
-Topic status: ${ctx.topic.status} · priority: ${ctx.topic.priority}
-Topic description: ${ctx.topic.description || "(none)"}
-${
-  ctx.topicSummary?.summary
-    ? `Topic workstream context (authoritative — stay consistent with this):\n${formatTopicSummaryForPrompt(ctx.topicSummary)}`
-    : ctx.topic.summary
-      ? `Topic summary: ${ctx.topic.summary}`
-      : ""
-}
-${
-  ctx.importedContextPrompt
-    ? `\nImported context receipts (background only — do not repeat verbatim):\n${ctx.importedContextPrompt}`
-    : ""
-}
-Stay focused on this topic unless the user explicitly asks for broader room/workspace context.
-If you create tasks, memory, approvals, or logs, attach them to this topic.` : ""}
+${buildTeamRoster(ctx)}
 
-Your available tools:
-${toolList}
+${topicBlock}
 
-${buildIntegrationToolsPrompt(ctx.employee)}
-
-Your permissions:
-${permissionList || "- Default employee permissions"}
+${toolBlock}
 
 ${ctx.room.kind === "dm" ? `This is a direct message (1:1 with a teammate). Write like Slack DM — casual, warm, no corporate filler.${isMayaEmployee(ctx.employee) ? " The user may ask how AdeHQ works — answer from your workspace guide knowledge in plain language." : ""}` : ""}
 
@@ -421,36 +501,46 @@ Important rules:
 - Whenever you complete meaningful work (drafts, research frameworks, outreach plans), populate effects — memory, tasks, workLog with business-meaningful actions only.
 - Chat-only replies are for greetings and clarifying questions — use empty effects.workLog for greetings and banter.
 
-${coordinationAndTrustRules(ctx.employee.tools, ctx.researchCapabilities)}
+${advancedRules}
 
-${fileAwareRules(Boolean(ctx.fileContextPrompt), ctx.artifactIntent)}
-
-${roleWorkflowRules(ctx.employee.roleKey)}
-
-Internal JSON format (reply = human speech, effects = backend only):
+${
+  options?.plainProse
+    ? `Output format:
+- Respond with ONLY your chat message, in natural prose (Markdown welcome — short headings and bullets when they help).
+- Do NOT output JSON, an "effects" object, code fences around the whole reply, or any schema.
+- Match depth to the question: a quick ask gets a line or two; a real strategy, analysis, or negotiation question gets a proper, well-organized answer with the concrete reasoning and numbers.
+- Write it like a sharp colleague typing in Slack — direct, specific, no filler.`
+    : `Internal JSON format (reply = human speech, effects = backend only):
 {
   "reply": "Natural language only — what you'd type in Slack.",
   "effects": {
     "workLog": [{ "action": "answered_question_about_file", "summary": "...", "status": "success" }],
-    "tasks": [{ "title": "Follow up with Neil", "status": "open", "assigneeType": "ai", "priority": "medium" }],
+    "tasks": [{ "title": "Follow up with the lead by Friday", "status": "open", "assigneeType": "ai", "priority": "medium" }],
     "memory": [],
     "memorySuggestions": [{ "text": "Pricing uses three tiers: Starter, Growth, Enterprise.", "reason": "Useful for future work", "sourceFileId": "...", "sourceChunkId": "..." }],
     "citations": [{ "fileId": "...", "chunkId": "...", "label": "Pricing.csv · rows 20–40", "quote": "..." }],
     "artifacts": [{ "title": "Q1 PRD", "artifactType": "prd", "contentMarkdown": "# Overview\\n...", "status": "saved", "sourceFileIds": ["..."], "sourceChunkIds": ["..."], "sourceCitations": [] }],
-    "emailDrafts": [{ "subject": "...", "body": "...", "recipient": "Neil", "company": "Green Cutting Inc." }],
-    "toolCalls": [{ "tool": "crm.createContact", "mode": "execute", "args": { "firstName": "Neil", "companyName": "Green Cutting Inc." } }],
-    "autopilot": { "mode": "offer", "objective": "Research target accounts, draft outreach, and create follow-up tasks", "employeeName": "Priya" },
+    "emailDrafts": [{ "subject": "...", "body": "...", "recipient": "<contact name>", "company": "<company name>" }],
+    "toolCalls": [{ "tool": "crm.createContact", "mode": "execute", "args": { "firstName": "<first name>", "companyName": "<company name>" } }],
+    "autopilot": { "mode": "offer", "objective": "Research target accounts, draft outreach, and create follow-up tasks" },
     "approvals": [],
     "statusChange": "working",
     "handoffTo": [],
     "currentTask": "..."
   }
+}`
 }`;
 }
 
-export function buildEmployeeUserPrompt(ctx: PromptContext): string {
+export function buildEmployeeUserPrompt(
+  ctx: PromptContext,
+  options?: { promptTier?: EmployeePromptTier },
+): string {
+  const promptTier = options?.promptTier ?? "full";
   const isShort = ctx.userMessage.trim().length <= 40;
-  const messageLimit = isShort ? 6 : 12;
+  const messageLimit = promptTier === "core" ? 4 : isShort ? 6 : 12;
+  const memoryLimit = promptTier === "core" ? 0 : promptTier === "work" ? 4 : 8;
+  const taskLimit = promptTier === "core" ? 0 : promptTier === "work" ? 5 : 10;
   const brevityHint = isShort
     ? "\n\n(The user's message is short — keep your reply equally short and casual.)"
     : "";
@@ -460,12 +550,12 @@ export function buildEmployeeUserPrompt(ctx: PromptContext): string {
     .join("\n");
 
   const memory = ctx.recentMemory
-    .slice(0, 8)
+    .slice(0, memoryLimit)
     .map((m) => `- ${m.title}: ${m.content.slice(0, 240)}`)
     .join("\n");
 
   const tasks = ctx.openTasks
-    .slice(0, 10)
+    .slice(0, taskLimit)
     .map((t) => `- [${t.status}] ${t.title} (${t.priority})`)
     .join("\n");
 
@@ -476,10 +566,10 @@ export function buildEmployeeUserPrompt(ctx: PromptContext): string {
 ${messages || "(none yet)"}
 
 Pinned/recent memory:
-${memory || "(none yet)"}
+${memory || (promptTier === "core" ? "(omitted for lightweight reply)" : "(none yet)")}
 
 Open tasks:
-${tasks || "(none yet)"}
+${tasks || (promptTier === "core" ? "(omitted for lightweight reply)" : "(none yet)")}
 
 Other AI employees in room:
 ${employees || "(none)"}

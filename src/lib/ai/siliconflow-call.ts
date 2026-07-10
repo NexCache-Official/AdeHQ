@@ -5,6 +5,7 @@ import {
   SILICONFLOW_LONG_CONTEXT_MODEL,
   SILICONFLOW_STRONG_MODEL,
 } from "@/lib/config/features";
+import { streamText } from "ai";
 import { callStructuredLlm, type StructuredLlmResult } from "./structured-llm-call";
 import { formatProviderError } from "./provider-errors";
 import {
@@ -57,6 +58,65 @@ export async function callSiliconFlowEmployee(
   }
 
   throw lastError ?? new Error("SiliconFlow request failed.");
+}
+
+export type SiliconFlowTextStreamResult = {
+  text: string;
+  model: string;
+  inputTokens?: number;
+  outputTokens?: number;
+};
+
+/**
+ * Streaming plain-prose employee reply via SiliconFlow using `streamText`.
+ *
+ * SiliconFlow's OpenAI-compatible endpoint does not stream JSON/structured
+ * output (streamObject hangs), so streaming is plain text only — used for
+ * conversational quick replies whose effects are empty. Streams the preferred
+ * model; on failure the caller reverts to the blocking structured path.
+ */
+export async function streamSiliconFlowText(
+  system: string,
+  prompt: string,
+  model: string,
+  maxTokens: number,
+  timeoutMs: number,
+  temperature = 0.45,
+  onReplyDelta: (delta: string) => void,
+): Promise<SiliconFlowTextStreamResult> {
+  const modelId = model.trim() || DEFAULT_SILICONFLOW_MODEL;
+  const abortController = new AbortController();
+  const timer = setTimeout(() => abortController.abort(), timeoutMs);
+  try {
+    const result = streamText({
+      model: siliconFlowChatModel(modelId),
+      system,
+      prompt,
+      temperature,
+      maxOutputTokens: maxTokens,
+      abortSignal: abortController.signal,
+      providerOptions: siliconFlowProviderOptions(modelId),
+    });
+
+    let text = "";
+    for await (const delta of result.textStream) {
+      if (!delta) continue;
+      text += delta;
+      onReplyDelta(delta);
+    }
+
+    const usage = await result.usage;
+    return {
+      text,
+      model: modelId,
+      inputTokens: usage?.inputTokens,
+      outputTokens: usage?.outputTokens,
+    };
+  } catch (error) {
+    throw new Error(formatProviderError(error, "siliconflow", modelId));
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 export function siliconFlowModelsForMode(

@@ -4,11 +4,17 @@ import {
   shouldSkipLegacyResearchPlanner,
 } from "@/lib/ai/intelligence/research-plan-from-intelligence";
 import { createIntelligenceContext } from "@/lib/ai/intelligence/intelligence-context";
-import { shouldAnswerFromKnowledge } from "@/lib/ai/intelligence/pipeline";
+import {
+  runIntelligencePrelude,
+  shouldAnswerFromKnowledge,
+  shouldAnswerInstantly,
+} from "@/lib/ai/intelligence/pipeline";
 import { normalizeSearchCacheKey } from "@/lib/ai/search/search-cache";
 import { getResearchCapabilities } from "@/lib/ai/research/research-planner";
+import { createAmbientContext } from "@/lib/ai/ambient-context";
+import { resolveEmployeePromptTier } from "@/lib/ai/employee-prompt-tier";
 
-function assert(condition: boolean, message: string) {
+function assert(condition: boolean, message: string): asserts condition {
   if (!condition) throw new Error(message);
 }
 
@@ -88,7 +94,61 @@ const cacheKeyA = normalizeSearchCacheKey("Who are the World Cup sponsors?");
 const cacheKeyB = normalizeSearchCacheKey("who are the world cup sponsors");
 assert(cacheKeyA === cacheKeyB, "cache keys must normalize equivalent queries");
 
-console.log("PASS  obvious_search → research plan");
-console.log("PASS  knowledge threshold short-circuit");
-console.log("PASS  search cache key normalization");
-console.log("\nAll intelligence pipeline tests passed.");
+assert(
+  resolveEmployeePromptTier({ message: "hey", isGreetingRun: true }) === "core",
+  "greetings should use core prompt tier",
+);
+assert(
+  resolveEmployeePromptTier({ message: "draft an outreach email" }) === "work",
+  "work requests should use work prompt tier",
+);
+assert(
+  resolveEmployeePromptTier({ message: "summarize this file", hasFileContext: true }) === "full",
+  "file-grounded requests should use full prompt tier",
+);
+assert(
+  resolveEmployeePromptTier({
+    message: "Add Marcus Webb (Webb Realty Group, marcus@webbrealty.com) as a CRM contact.",
+  }) !== "core",
+  // Regression: this message is short (<=120 chars) and its verb is "add", not a
+  // WORK_SIGNAL verb like "create" — it used to fall through to "core" tier,
+  // whose prompt explicitly says "Do not create tasks, memory, approvals,
+  // artifacts, or tool calls" — directly contradicting the user's explicit CRM
+  // request and silently suppressing the tool call the message asked for.
+  "a short CRM/tool-work request must never get the core tier, which suppresses tool calls",
+);
+
+async function main() {
+  const instantContext = await runIntelligencePrelude({} as never, {
+    workspaceId: "ws_test",
+    roomId: "room_test",
+    topicId: "topic_test",
+    messageId: "msg_instant",
+    userMessage: "what's the date today?",
+    ambientContext: createAmbientContext({
+      now: new Date("2026-07-10T15:32:00.000Z"),
+      timezone: "America/New_York",
+      locale: "en-US",
+      workspaceName: "NexCache",
+      userName: "Shubham Kumar",
+    }),
+  });
+  assert(shouldAnswerInstantly(instantContext), "instant answer must short-circuit prelude");
+  assert(
+    Boolean(instantContext.instantAnswer?.reply.includes("July 10, 2026")),
+    "instant reply must use ambient date",
+  );
+  assert(instantContext.researchLevel === 0, "instant answer research level must be 0");
+
+  console.log("PASS  obvious_search → research plan");
+  console.log("PASS  knowledge threshold short-circuit");
+  console.log("PASS  search cache key normalization");
+  console.log("PASS  prompt tier routing");
+  console.log("PASS  instant answer prelude short-circuit");
+  console.log("\nAll intelligence pipeline tests passed.");
+}
+
+main().catch((error) => {
+  console.error(error);
+  process.exit(1);
+});

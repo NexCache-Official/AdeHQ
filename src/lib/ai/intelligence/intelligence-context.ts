@@ -9,6 +9,7 @@ export type WorkMode =
 
 export type FastPathDecision =
   | "greeting"
+  | "instant_answer"
   | "direct"
   | "obvious_search"
   | "obvious_browser_research"
@@ -81,6 +82,12 @@ export type IntelligenceContext = {
     answer?: string;
     sources: KnowledgeSource[];
   };
+  instantAnswer?: {
+    reply: string;
+    kind: string;
+    confidence: number;
+    fact: string;
+  };
   cache?: {
     hit: boolean;
     key?: string;
@@ -102,7 +109,7 @@ export type IntelligenceContext = {
   };
   composer?: {
     skippedEmployeeModel: boolean;
-    answerSource: "knowledge" | "cache" | "search" | "model";
+    answerSource: "instant" | "knowledge" | "cache" | "search" | "model";
   };
   backgroundLearning?: {
     queued: boolean;

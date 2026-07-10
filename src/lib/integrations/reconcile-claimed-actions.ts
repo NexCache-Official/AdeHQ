@@ -32,8 +32,12 @@ export type ReconcileClaimedActionsResult = {
   falseClaim: boolean;
 };
 
+// Past-tense ("created X") AND present-continuous ("creating X") both read as an
+// active claim of action in chat vernacular when NOT preceded by an intent marker
+// (see INTENT_PREFIX below) — e.g. "Adding Marcus Webb to the CRM" standing alone
+// reads exactly like "Added Marcus Webb", but a bare past-tense-only list misses it.
 const COMPLETION_VERB =
-  "(?:created|added|logged|drafted|generated|saved|scheduled|set up|set a|built|registered|entered|prepared|updated|synced|pushed)";
+  "(?:created|creating|added|adding|logged|logging|drafted|drafting|generated|generating|saved|saving|scheduled|scheduling|set up|setting up|set a|built|building|registered|registering|entered|entering|prepared|preparing|updated|updating|synced|syncing|pushed|pushing)";
 
 const TOOL_NOUN =
   "(?:compan(?:y|ies)|contacts?|deals?|tasks?|follow[- ]?ups?|emails?|drafts?|spreadsheets?|workbooks?|pdfs?|reports?|pipelines?|records?|campaigns?|briefs?|crm)";

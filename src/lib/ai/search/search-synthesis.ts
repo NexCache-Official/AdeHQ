@@ -1,6 +1,6 @@
 import { generateText } from "ai";
 import { gateway } from "@ai-sdk/gateway";
-import { siliconFlowChatModel } from "@/lib/ai/siliconflow-client";
+import { siliconFlowChatModel, siliconFlowProviderOptions } from "@/lib/ai/siliconflow-client";
 import { resolveModel, getOutputTokenCap } from "@/lib/ai/model-catalog";
 import { SILICONFLOW_CHEAP_MODEL } from "@/lib/config/features";
 import {
@@ -41,6 +41,7 @@ export function buildSynthesisPromptFromSources(
     "",
     "Instructions:",
     `- ${lengthHint}`,
+    "- Answer directly like a colleague sharing what they found. Do NOT open with 'Based on the provided sources', 'According to the search results', or similar meta phrasing.",
     "- Cite sources inline after each factual claim using [1], [2], etc. matching the numbered sources above.",
     "- Only state facts that are supported by the numbered sources.",
     "- For private companies, distinguish revenue vs ARR vs run-rate; say estimated/reported when appropriate.",
@@ -92,6 +93,7 @@ export async function synthesizeAnswerFromSources(options: {
     maxOutputTokens: Math.min(900, getOutputTokenCap("cheap")),
     temperature: 0.2,
     abortSignal: AbortSignal.timeout(timeoutMs),
+    providerOptions: siliconFlowProviderOptions(model),
   });
   return {
     text: result.text.trim(),

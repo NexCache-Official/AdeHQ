@@ -20,6 +20,7 @@ export async function POST(
     const body = (await request.json().catch(() => ({}))) as {
       workspaceId?: string;
       mode?: "mock" | "live";
+      stream?: boolean;
     };
 
     const { data: runRow, error: runError } = await client
@@ -70,17 +71,9 @@ export async function POST(
       );
     }
 
-    const result = await processQueuedAgentRun(
-      serviceClient,
-      workspaceId,
-      params.runId,
-      {
-        mode: body.mode,
-      },
-    );
-
-    return NextResponse.json({
-      ok: true,
+    type ProcessResult = Awaited<ReturnType<typeof processQueuedAgentRun>>;
+    const buildPayload = (result: ProcessResult) => ({
+      ok: true as const,
       runId: params.runId,
       ...result,
       followUpRuns: result.followUpRuns ?? [],
@@ -109,6 +102,71 @@ export async function POST(
       dmSteward: result.dmSteward,
       intelligenceTrace: result.intelligenceTrace,
     });
+
+    // Streaming (SSE) path: emit reply-token deltas over the same request the
+    // client already awaits, then a final `done` event with the full payload.
+    if (body.stream) {
+      const encoder = new TextEncoder();
+      const stream = new ReadableStream<Uint8Array>({
+        async start(controller) {
+          const send = (event: string, data: unknown) => {
+            controller.enqueue(
+              encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`),
+            );
+          };
+          try {
+            const result = await processQueuedAgentRun(
+              serviceClient,
+              workspaceId,
+              params.runId,
+              {
+                mode: body.mode,
+                onReplyDelta: (text) => send("delta", { text }),
+              },
+            );
+            send("done", buildPayload(result));
+          } catch (error) {
+            if (error instanceof AgentRunClaimError) {
+              send("error", { error: error.code, code: error.code });
+            } else {
+              const message = serializeUnknownError(error);
+              try {
+                await serviceClient
+                  .from("agent_runs")
+                  .update({ status: "failed", error_message: message, completed_at: nowISO() })
+                  .eq("id", params.runId)
+                  .in("status", ["queued", "waiting", "running"]);
+              } catch {
+                // best-effort
+              }
+              send("error", { error: message });
+            }
+          } finally {
+            controller.close();
+          }
+        },
+      });
+
+      return new Response(stream, {
+        headers: {
+          "Content-Type": "text/event-stream; charset=utf-8",
+          "Cache-Control": "no-cache, no-transform",
+          Connection: "keep-alive",
+          "X-Accel-Buffering": "no",
+        },
+      });
+    }
+
+    const result = await processQueuedAgentRun(
+      serviceClient,
+      workspaceId,
+      params.runId,
+      {
+        mode: body.mode,
+      },
+    );
+
+    return NextResponse.json(buildPayload(result));
   } catch (error) {
     if (error instanceof AgentRunClaimError) {
       return NextResponse.json(

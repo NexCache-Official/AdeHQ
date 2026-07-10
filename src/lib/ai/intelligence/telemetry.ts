@@ -51,6 +51,13 @@ export function intelligenceMetadata(context: IntelligenceContext) {
           sourceCount: context.knowledge.sources.length,
         }
       : undefined,
+    instantAnswer: context.instantAnswer
+      ? {
+          kind: context.instantAnswer.kind,
+          confidence: context.instantAnswer.confidence,
+          fact: context.instantAnswer.fact,
+        }
+      : undefined,
     cache: context.cache,
     router: context.router,
     researchLevel: context.researchLevel,

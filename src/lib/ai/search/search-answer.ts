@@ -18,9 +18,10 @@ import { runTavilySearchAnswer, estimateTavilySearchAnswerCostUsd } from "./tavi
 import type { SearchAnswerResult, SearchNeed, SearchRoute, SearchRouteDecision } from "./types";
 import { estimateWorkMinutesFromCost } from "@/lib/ai/work-hours/estimate";
 import {
-  buildWebSourcesArtifact,
+  buildWebSourcesArtifactFromCards,
   ensurePrivateCompanyWording,
   normalizeGatewaySearchSources,
+  realignSearchCitations,
   stripInlineSourcesSection,
 } from "./source-normalizer";
 import {
@@ -397,6 +398,12 @@ export async function executeSearchAnswer(
     text = stripInlineSourcesSection(text);
     text = ensurePrivateCompanyWording(text, params.query, decision.need);
 
+    // Renumber inline [n] markers to match the sources we actually display, and
+    // pull back any lower-ranked source the answer cites so no citation is hidden.
+    const aligned = realignSearchCitations({ text, rawSources, normalized });
+    text = aligned.text;
+    const displaySources = aligned.sources;
+
     if (!text.trim()) {
       return {
         answer: SEARCH_UNAVAILABLE_MESSAGE,
@@ -423,6 +430,12 @@ export async function executeSearchAnswer(
 
     const confidence = computeSearchConfidence(normalized);
     const totalLatencyMs = Date.now() - totalStarted;
+    // Displayed count reflects the realigned set (ranked + any cited fallback).
+    const displayedSourceCount = displaySources.length;
+    const displayedExcludedCount = Math.max(
+      0,
+      normalized.sourceCount - displayedSourceCount,
+    );
     const searchMeta = {
       searchRoute: activeRoute,
       searchNeed: decision.need as SearchNeed,
@@ -430,8 +443,8 @@ export async function executeSearchAnswer(
       browserRequired: false as const,
       searchRequests: attempts.length,
       sourceCount: normalized.sourceCount,
-      usedSourceCount: normalized.usedSourceCount,
-      excludedSourceCount: normalized.excludedSourceCount,
+      usedSourceCount: displayedSourceCount,
+      excludedSourceCount: displayedExcludedCount,
       searchCostUsd: estimatedCostUsd,
       synthesisModel,
       totalLatencyMs,
@@ -439,6 +452,7 @@ export async function executeSearchAnswer(
       synthesisLatencyMs,
       confidence,
       excludedSourceReasons: normalized.excluded
+        .filter((source) => !displaySources.some((shown) => shown.url === source.url))
         .map((source) => source.excludedReason)
         .filter(Boolean) as string[],
     };
@@ -449,8 +463,8 @@ export async function executeSearchAnswer(
         actualCostUsd: estimatedCostUsd,
         metadata: {
           sourceCount: normalized.sourceCount,
-          usedSourceCount: normalized.usedSourceCount,
-          excludedSourceCount: normalized.excludedSourceCount,
+          usedSourceCount: displayedSourceCount,
+          excludedSourceCount: displayedExcludedCount,
           totalLatencyMs,
           confidence,
         },
@@ -458,11 +472,16 @@ export async function executeSearchAnswer(
     }
 
     const webArtifact =
-      normalized.usedSourceCount > 0 ? buildWebSourcesArtifact(normalized) : undefined;
+      displaySources.length > 0
+        ? buildWebSourcesArtifactFromCards(displaySources, {
+            sourceCount: normalized.sourceCount,
+            excludedSourceCount: displayedExcludedCount,
+          })
+        : undefined;
 
     const result = {
       answer: text,
-      sources: normalized.used.map((source) => ({
+      sources: displaySources.map((source) => ({
         title: source.title,
         url: source.url,
         snippet: source.snippet,

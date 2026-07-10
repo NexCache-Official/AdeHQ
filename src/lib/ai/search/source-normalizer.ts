@@ -231,6 +231,78 @@ export function filterLowQualitySources(
   return { used, excluded };
 }
 
+/**
+ * Align the inline `[n]` citation markers in a synthesized answer with the
+ * sources that will actually be displayed.
+ *
+ * The synthesis model numbers `[1]..[N]` against the full provider source list
+ * (in `rawSources` order). But `normalizeGatewaySearchSources` reranks and slices
+ * to the top-quality subset, so the stored numbering no longer matches, and any
+ * source cited beyond the cutoff (e.g. `[6]`, `[7]`) becomes invisible.
+ *
+ * This rebuilds a single ordered display list — ranked `used` sources first, then
+ * any lower-ranked source that the answer actually cites — and renumbers the
+ * markers in the text to match. Every `[n]` in the returned text resolves to
+ * `sources[n-1]`; markers whose source cannot be resolved are dropped.
+ */
+export function realignSearchCitations(params: {
+  text: string;
+  rawSources: SearchSource[];
+  normalized: NormalizedSearchSources;
+}): { text: string; sources: SearchSourceCard[] } {
+  const { text, rawSources, normalized } = params;
+  const markerPattern = /\[(\d{1,3})\]/g;
+
+  const cardByUrl = new Map<string, SearchSourceCard>();
+  for (const card of [...normalized.used, ...normalized.excluded]) {
+    const key = card.url.trim();
+    if (key && !cardByUrl.has(key)) cardByUrl.set(key, card);
+  }
+
+  const citedRawNumbers: number[] = [];
+  const seenRaw = new Set<number>();
+  for (const match of text.matchAll(markerPattern)) {
+    const n = Number(match[1]);
+    if (n >= 1 && n <= rawSources.length && !seenRaw.has(n)) {
+      seenRaw.add(n);
+      citedRawNumbers.push(n);
+    }
+  }
+
+  const ordered: SearchSourceCard[] = [];
+  const includedUrls = new Set<string>();
+  const pushCard = (card: SearchSourceCard | undefined) => {
+    if (!card) return;
+    const key = card.url.trim();
+    if (!key || includedUrls.has(key)) return;
+    includedUrls.add(key);
+    ordered.push(card);
+  };
+
+  for (const card of normalized.used) pushCard(card);
+  for (const n of [...citedRawNumbers].sort((a, b) => a - b)) {
+    const url = rawSources[n - 1]?.url?.trim();
+    if (url) pushCard(cardByUrl.get(url));
+  }
+
+  const finalNumberByUrl = new Map<string, number>();
+  ordered.forEach((card, index) => finalNumberByUrl.set(card.url.trim(), index + 1));
+
+  const rewritten = text
+    .replace(markerPattern, (_whole, digits: string) => {
+      const url = rawSources[Number(digits) - 1]?.url?.trim();
+      const finalNumber = url ? finalNumberByUrl.get(url) : undefined;
+      return finalNumber ? `[${finalNumber}]` : "";
+    })
+    // Tidy spacing left behind when a marker was dropped or collapsed.
+    .replace(/[ \t]+([.,;:])/g, "$1")
+    .replace(/\[(\d+)\]\s*(?=\[\1\])/g, "")
+    .replace(/[ \t]{2,}/g, " ")
+    .trim();
+
+  return { text: rewritten, sources: ordered };
+}
+
 /** Remove inline Sources section — cards render separately. */
 export function stripInlineSourcesSection(text: string): string {
   return text
@@ -296,6 +368,33 @@ export function buildWebSourcesArtifact(
       usedSourceCount: normalized.usedSourceCount,
       excludedSourceCount: normalized.excludedSourceCount,
       webSources: normalized.used.map((source) => ({
+        id: source.id,
+        title: source.title,
+        url: source.url,
+        domain: source.domain,
+        confidence: source.confidence,
+      })),
+    },
+  };
+}
+
+/**
+ * Build a web_sources artifact from an explicit ordered card list so its order
+ * (and therefore the `[n]` chip numbering) matches the realigned answer text.
+ */
+export function buildWebSourcesArtifactFromCards(
+  cards: SearchSourceCard[],
+  counts: { sourceCount: number; excludedSourceCount: number },
+): import("@/lib/types").MessageArtifact {
+  return {
+    type: "web_sources",
+    id: uid("web"),
+    label: "Sources",
+    meta: {
+      sourceCount: counts.sourceCount,
+      usedSourceCount: cards.length,
+      excludedSourceCount: counts.excludedSourceCount,
+      webSources: cards.map((source) => ({
         id: source.id,
         title: source.title,
         url: source.url,

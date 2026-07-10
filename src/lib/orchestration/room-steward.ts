@@ -862,6 +862,19 @@ function classifyRoomMessageDeterministic(input: RoomStewardInput): RoomStewardD
     });
   }
 
+  if (
+    input.roster.length === 1 &&
+    participation !== "talent_observation" &&
+    (isTaskRequest(text) || isDirectQuestion(text) || wordCount(text) <= 24)
+  ) {
+    return baseDecision(input, "direct_question", "Single eligible employee in topic - deterministic reply.", {
+      confidence: 0.9,
+      shouldRespond: true,
+      selectedEmployeeIds: [input.roster[0].employeeId],
+      responseStyle: "answer",
+    });
+  }
+
   if (isTopicShift(text)) {
     return baseDecision(input, "topic_shift", "The message appears to start or shift to a new project/topic.", {
       confidence: 0.86,
@@ -919,6 +932,30 @@ function classifyRoomMessageDeterministic(input: RoomStewardInput): RoomStewardD
       shouldRespond: selected.length > 0,
       selectedEmployeeIds: selected,
       responseStyle: selected.length > 1 ? "panel" : "answer",
+    });
+  }
+
+  const rankedRoleMatches = rankEmployeesForMessage(text, toEmployeeProfiles(input));
+  const topMatch = rankedRoleMatches[0];
+  const runnerUp = rankedRoleMatches[1];
+  const strongSingleRoleMatch =
+    topMatch &&
+    topMatch.score >= 14 &&
+    (!runnerUp || topMatch.score >= runnerUp.score * 1.35);
+
+  if (strongSingleRoleMatch) {
+    if (participation === "talent_observation") {
+      return baseDecision(input, "offer_help", "Strong role match found; offer help in Talent Observation mode.", {
+        confidence: 0.82,
+        offerOnlyEmployeeIds: [topMatch.employeeId],
+        responseStyle: "offer_help",
+      });
+    }
+    return baseDecision(input, "direct_question", `Strong deterministic role match: ${topMatch.reason}.`, {
+      confidence: 0.84,
+      shouldRespond: true,
+      selectedEmployeeIds: [topMatch.employeeId],
+      responseStyle: "answer",
     });
   }
 

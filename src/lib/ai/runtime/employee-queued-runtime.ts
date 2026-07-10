@@ -5,6 +5,7 @@ import {
   resolveRouteGenerationParams,
   reasoningProfileForCapability,
   runtimeLiveMetricsFromUsage,
+  toEmployeeResponseFromReplyAndEffect,
   type EmployeeRouteInput,
 } from "@/lib/ai/employee-response-contract";
 import {
@@ -12,6 +13,10 @@ import {
   type LiveCallMetrics,
   type RouteOptions,
 } from "@/lib/ai/model-router";
+import { estimateCost, resolveModel } from "@/lib/ai/model-catalog";
+import { streamSiliconFlowText } from "@/lib/ai/siliconflow-call";
+import { sanitizeReplyForChat } from "@/lib/ai/normalize-model-response";
+import { isEmployeeReplyStreamingEnabled } from "@/lib/config/features";
 import { recordAiRuntime } from "@/lib/ai/runtime-log";
 import { generateObject as runtimeGenerateObject } from "@/lib/ai/runtime";
 import {
@@ -31,6 +36,7 @@ import { inferEmployeeReplyCapability } from "@/lib/ai/runtime/hot-path-shadow";
 import type { ModelMode } from "@/lib/ai/model-catalog";
 import { resolveEmployeeIntelligencePolicy } from "@/lib/ai/intelligence-policy";
 import { recordRouteOutcome } from "@/lib/ai/runtime/route-health";
+import { messageLikelyNeedsStructuredEffects } from "@/lib/ai/message-intent";
 
 export type EmployeeQueuedRuntimeDispatch = "old" | "shadow" | "legacy-guarded" | "runtime-on";
 
@@ -180,6 +186,7 @@ export async function generateEmployeeQueuedResponseRuntime(
       leadEmployeeName: options.leadEmployeeName,
       leadReply: options.leadReply,
       conversationMode: options.conversationMode ?? meta.conversationMode,
+      promptTier: options.promptTier,
     });
 
     if (ctx.client && ctx.agentRunId && ctx.workspaceId && ctx.roomId) {
@@ -305,6 +312,110 @@ export async function generateEmployeeQueuedResponseRuntime(
   }
 }
 
+export type EmployeeReplyStreaming = {
+  onReplyDelta: (delta: string) => void;
+};
+
+/** Providers whose employee composer path supports token streaming today. */
+function providerSupportsStreaming(provider: string): boolean {
+  return provider.trim().toLowerCase() === "siliconflow";
+}
+
+/**
+ * Conversational replies (greetings + Q&A, opinions, strategy, explanations) stream
+ * as plain prose. Anything that should produce structured effects — artifact drafts
+ * or explicit tool work (CRM/email/task/calendar creation) — stays on the blocking
+ * structured path. @mentions in the streamed prose still drive teammate follow-ups,
+ * and the topic-summary refresh still captures learnings, so delegation and memory
+ * are preserved without a JSON envelope.
+ */
+function capabilityAllowsStreaming(
+  input: EmployeeQueuedRouteInput,
+  options: EmployeeQueuedRouteOptions,
+  meta: EmployeeQueuedRuntimeMeta,
+): boolean {
+  if (input.artifactIntent) return false;
+  if (messageLikelyNeedsStructuredEffects(input.message)) return false;
+  const capability = inferEmployeeReplyCapability({
+    userMessage: input.message,
+    artifactIntent: input.artifactIntent,
+    isGreetingRun: options.isGreetingRun,
+    conversationMode: options.conversationMode ?? meta.conversationMode,
+  });
+  return capability === "quick_reply" || capability === "structured_chat";
+}
+
+/**
+ * Streaming composer path — plain-prose token streaming for conversational quick
+ * replies. Produces the same {@link EmployeeQueuedRouteResult} shape (with empty
+ * effects) as the blocking paths, plus incremental `onReplyDelta` calls, so
+ * everything downstream is unchanged. Throws on failure; the dispatcher then
+ * falls back to the blocking structured path.
+ */
+async function streamEmployeeQueuedResponse(
+  input: EmployeeQueuedRouteInput,
+  options: EmployeeQueuedRouteOptions,
+  meta: EmployeeQueuedRuntimeMeta,
+  streaming: EmployeeReplyStreaming,
+): Promise<EmployeeQueuedRouteResult> {
+  const modelMode = meta.resolvedRunModelMode;
+  const { maxOutputTokens, temperature, timeoutMs } = resolveRouteGenerationParams(
+    input.message,
+    options,
+  );
+  const { system, prompt } = buildEmployeePrompts(input, {
+    isGreetingRun: options.isGreetingRun,
+    collaborationRole: options.collaborationRole,
+    leadEmployeeName: options.leadEmployeeName,
+    leadReply: options.leadReply,
+    conversationMode: options.conversationMode ?? meta.conversationMode,
+    promptTier: options.promptTier,
+    plainProse: true,
+  });
+  const model = resolveModel(input.employee.provider, modelMode, input.employee.model);
+  const started = Date.now();
+
+  const result = await streamSiliconFlowText(
+    system,
+    prompt,
+    model,
+    maxOutputTokens,
+    timeoutMs,
+    temperature,
+    streaming.onReplyDelta,
+  );
+
+  const reply = sanitizeReplyForChat(result.text);
+  if (!reply.trim()) {
+    throw new Error("Streaming produced an empty reply.");
+  }
+
+  const response = toEmployeeResponseFromReplyAndEffect(
+    input.employee.id,
+    input.employee.name,
+    reply,
+    { workLog: [], tasks: [], memory: [], approvals: [] },
+  );
+
+  const inputTokens = result.inputTokens ?? 0;
+  const outputTokens = result.outputTokens ?? 0;
+
+  return {
+    response,
+    aiMode: "siliconflow-stream",
+    metrics: {
+      model: result.model,
+      inputTokens,
+      outputTokens,
+      fallbackUsed: false,
+      estimatedCostUsd: estimateCost(result.model, inputTokens, outputTokens),
+      durationMs: Date.now() - started,
+    },
+    usedRuntime: false,
+    runtimeFallback: false,
+  };
+}
+
 async function callLegacyQueuedRoute(
   input: EmployeeQueuedRouteInput,
   options: EmployeeQueuedRouteOptions,
@@ -334,8 +445,38 @@ export async function dispatchEmployeeQueuedResponse(
   input: EmployeeQueuedRouteInput,
   options: EmployeeQueuedRouteOptions,
   meta: EmployeeQueuedRuntimeMeta,
+  streaming?: EmployeeReplyStreaming,
 ): Promise<EmployeeQueuedRouteResult> {
   const dispatch = getEmployeeQueuedRuntimeDispatch();
+
+  // Streaming composer: token-streams the reply, then hands back the same result
+  // shape as the blocking paths. Any failure falls through to normal dispatch.
+  if (
+    streaming &&
+    isEmployeeReplyStreamingEnabled() &&
+    providerSupportsStreaming(input.employee.provider) &&
+    capabilityAllowsStreaming(input, options, meta)
+  ) {
+    try {
+      return await streamEmployeeQueuedResponse(input, options, meta, streaming);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      const ctx = options.context ?? {};
+      recordAiRuntime({
+        workspaceId: ctx.workspaceId,
+        roomId: ctx.roomId,
+        employeeId: input.employee.id,
+        agentRunId: meta.runId,
+        provider: "siliconflow-stream",
+        model: "siliconflow-stream",
+        modelMode: meta.resolvedRunModelMode,
+        mode: "fallback",
+        fallbackReason: "employee_reply_streaming_failed",
+        error: message,
+      });
+      // Fall through to the standard (blocking) dispatch below.
+    }
+  }
 
   if (dispatch === "runtime-on") {
     try {

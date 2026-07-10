@@ -53,6 +53,7 @@ import {
   resolveEmployeeShadowOldModel,
 } from "@/lib/ai/runtime/hot-path-shadow";
 import { canEmployeeUseBrowserResearch } from "@/lib/ai/browser-research/permissions";
+import { resolveEmployeePromptTier } from "@/lib/ai/employee-prompt-tier";
 import {
   executePlannedResearch,
   getResearchCapabilities,
@@ -87,6 +88,7 @@ import type {
 import type { SearchRoute } from "@/lib/ai/search/types";
 import {
   enrichIntelligenceContext,
+  shouldAnswerInstantly,
   shouldAnswerFromKnowledge,
 } from "@/lib/ai/intelligence/pipeline";
 import { intelligenceMetadata } from "@/lib/ai/intelligence/telemetry";
@@ -95,6 +97,7 @@ import {
   shouldSkipLegacyResearchPlanner,
 } from "@/lib/ai/intelligence/research-plan-from-intelligence";
 import {
+  composeInstantAnswerReply,
   composeKnowledgeReply,
   persistComposedIntelligenceReply,
   withComposerMetadata,
@@ -238,7 +241,11 @@ export async function processQueuedAgentRun(
   client: SupabaseClient,
   workspaceId: string,
   runId: string,
-  options: { mode?: "mock" | "live"; content?: string } = {},
+  options: {
+    mode?: "mock" | "live";
+    content?: string;
+    onReplyDelta?: (delta: string) => void;
+  } = {},
 ): Promise<{
   reply: string;
   aiMessageId: string;
@@ -437,17 +444,17 @@ export async function processQueuedAgentRun(
     let fileContextPrompt = buildFileContextPrompt(fileContextBundle);
     const usedFileContext = fileContextBundle.chunks.length > 0;
     let intelligence: IntelligenceContext | undefined;
+    const rawWorkMode = runMetadata.workMode;
+    const workMode: WorkMode | undefined =
+      rawWorkMode === "fast" ||
+      rawWorkMode === "balanced" ||
+      rawWorkMode === "deep" ||
+      rawWorkMode === "research" ||
+      rawWorkMode === "collaboration"
+        ? rawWorkMode
+        : undefined;
 
     if (isIntelligenceV1Enabled()) {
-      const rawWorkMode = runMetadata.workMode;
-      const workMode: WorkMode | undefined =
-        rawWorkMode === "fast" ||
-        rawWorkMode === "balanced" ||
-        rawWorkMode === "deep" ||
-        rawWorkMode === "research" ||
-        rawWorkMode === "collaboration"
-          ? rawWorkMode
-          : undefined;
       intelligence = await enrichIntelligenceContext(client, {
         workspaceId,
         roomId,
@@ -466,6 +473,23 @@ export async function processQueuedAgentRun(
         memoryEntries: ctx.recentMemory,
         topicSummary: ctx.topicSummary?.summary ?? null,
         fileContext: fileContextBundle,
+        workspaceName: ctx.workspaceName,
+        userName: ctx.humanParticipants[0]?.name,
+        roomName: ctx.room.name,
+        topicTitle: ctx.topic.title,
+        topicDescription: ctx.topic.description,
+        openTasks: ctx.openTasks.map((task) => ({
+          id: task.id,
+          title: task.title,
+          status: task.status,
+          priority: task.priority,
+        })),
+        roomEmployees: ctx.employees.map((member) => ({
+          id: member.id,
+          name: member.name,
+          role: member.role,
+        })),
+        humanParticipants: ctx.humanParticipants,
         recentMessages: ctx.room.messages,
         capabilitiesSummary: (() => {
           const caps = getResearchCapabilities(employee);
@@ -489,6 +513,99 @@ export async function processQueuedAgentRun(
         .update({ run_metadata: runMetadata })
         .eq("workspace_id", workspaceId)
         .eq("id", runId);
+
+      if (shouldAnswerInstantly(intelligence)) {
+        const composed = composeInstantAnswerReply(intelligence);
+        intelligence = withComposerMetadata(intelligence, composed);
+        runMetadata.intelligence = intelligenceMetadata(intelligence);
+        await client
+          .from("agent_runs")
+          .update({ run_metadata: runMetadata })
+          .eq("workspace_id", workspaceId)
+          .eq("id", runId);
+
+        const instantReply = await persistComposedIntelligenceReply(client, {
+          workspaceId,
+          roomId,
+          topicId,
+          employeeId,
+          employeeName: employee.name,
+          composed,
+          agentRunId: runId,
+          triggerMessageId,
+        });
+
+        await persistRunOrchestrationPhase(
+          client,
+          workspaceId,
+          runMetadata,
+          employeeId,
+          "completed",
+          { runId },
+        );
+
+        if (usageId) {
+          await finalizeAiRun({
+            client,
+            workspaceId,
+            runId,
+            usageId,
+            responseMessageId: instantReply.id,
+            actualCostUsd: 0,
+            failed: false,
+          });
+        } else {
+          await completeAgentRun(client, workspaceId, runId, {
+            status: "completed",
+            responseMessageId: instantReply.id,
+          });
+        }
+
+        await client
+          .from("ai_employees")
+          .update({ status: "idle", last_active_at: nowISO() })
+          .eq("workspace_id", workspaceId)
+          .eq("id", employeeId);
+
+        const intelligenceTrace = buildConversationDebugTrace({
+          roomKind: ctx.room.kind === "dm" ? "dm" : "room",
+          intelligence,
+          employeeId,
+          employeeName: employee.name,
+          triggerMessageId,
+          agentRunId: runId,
+          aiMode: "instant_answer",
+        });
+        await persistConversationDebugTrace(
+          client,
+          workspaceId,
+          runId,
+          runMetadata,
+          intelligenceTrace,
+        );
+
+        return {
+          reply: instantReply.content,
+          aiMessageId: instantReply.id,
+          aiMode: "instant_answer",
+          employeeId,
+          employeeName: employee.name,
+          artifacts: instantReply.artifacts,
+          intelligenceTrace,
+          metrics: {
+            provider: employee.provider,
+            model: "instant",
+            modelMode: "efficient",
+            inputTokens: 0,
+            outputTokens: 0,
+            fallbackUsed: false,
+            estimatedCostUsd: 0,
+            durationMs: 0,
+            usageId,
+            agentRunId: runId,
+          },
+        };
+      }
 
       if (shouldAnswerFromKnowledge(intelligence) && intelligence.knowledge?.answer) {
         const composed = composeKnowledgeReply(intelligence);
@@ -544,32 +661,17 @@ export async function processQueuedAgentRun(
           .eq("id", employeeId);
 
         if (!isGreetingRun) {
-          if (ctx.room.kind === "dm") {
-            try {
-              await refreshTopicSummary(client, {
-                workspaceId,
-                roomId,
-                topicId,
-                topicTitle: ctx.topic.title,
-                topicDescription: ctx.topic.description,
-                trigger: "meaningful_ai_reply",
-                employeeId,
-                logWorkEvents: false,
-              });
-            } catch (error) {
-              console.warn("[AdeHQ dm summary refresh]", error);
-            }
-          } else {
-            scheduleTopicSummaryRefresh(client, {
-              workspaceId,
-              roomId,
-              topicId,
-              topicTitle: ctx.topic.title,
-              topicDescription: ctx.topic.description,
-              trigger: "meaningful_ai_reply",
-              employeeId,
-            });
-          }
+          // Advisory background work — never block the already-computed reply on it,
+          // in DMs or rooms alike (this call does not use the summary result).
+          scheduleTopicSummaryRefresh(client, {
+            workspaceId,
+            roomId,
+            topicId,
+            topicTitle: ctx.topic.title,
+            topicDescription: ctx.topic.description,
+            trigger: "meaningful_ai_reply",
+            employeeId,
+          });
         }
 
         const intelligenceTrace = buildConversationDebugTrace({
@@ -666,6 +768,19 @@ export async function processQueuedAgentRun(
       typeof runMetadata.conversationMode === "string"
         ? runMetadata.conversationMode
         : undefined;
+    const promptTier = resolveEmployeePromptTier({
+      message: content,
+      isGreetingRun,
+      collaborationRole,
+      conversationMode,
+      workMode,
+      hasFileContext: usedFileContext,
+      hasArtifactIntent: Boolean(artifactIntent),
+      hasImportedContext: Boolean(ctx.importedContextBlock),
+      hasLeadReply: Boolean(leadReply),
+      fastPathDecision: intelligence?.fastPath?.decision,
+    });
+    runMetadata.promptTier = promptTier;
 
     await persistRunOrchestrationPhase(
       client,
@@ -1075,32 +1190,17 @@ export async function processQueuedAgentRun(
               .eq("id", employeeId);
 
             if (!isGreetingRun) {
-              if (isDmRoom) {
-                try {
-                  await refreshTopicSummary(client, {
-                    workspaceId,
-                    roomId,
-                    topicId,
-                    topicTitle: ctx.topic.title,
-                    topicDescription: ctx.topic.description,
-                    trigger: "meaningful_ai_reply",
-                    employeeId,
-                    logWorkEvents: false,
-                  });
-                } catch (error) {
-                  console.warn("[AdeHQ dm summary refresh]", error);
-                }
-              } else {
-                scheduleTopicSummaryRefresh(client, {
-                  workspaceId,
-                  roomId,
-                  topicId,
-                  topicTitle: ctx.topic.title,
-                  topicDescription: ctx.topic.description,
-                  trigger: "meaningful_ai_reply",
-                  employeeId,
-                });
-              }
+              // Advisory background work — never block the already-computed reply on
+              // it, in DMs or rooms alike (this call does not use the summary result).
+              scheduleTopicSummaryRefresh(client, {
+                workspaceId,
+                roomId,
+                topicId,
+                topicTitle: ctx.topic.title,
+                topicDescription: ctx.topic.description,
+                trigger: "meaningful_ai_reply",
+                employeeId,
+              });
             }
 
             const searchProvider =
@@ -1496,6 +1596,7 @@ export async function processQueuedAgentRun(
         typeof runMetadata.conversationMode === "string"
           ? runMetadata.conversationMode
           : undefined,
+      promptTier,
       context: {
         workspaceId,
         roomId,
@@ -1512,7 +1613,12 @@ export async function processQueuedAgentRun(
       failed,
       errorMessage,
       usedRuntime,
-    } = await dispatchEmployeeQueuedResponse(routeInput, routeOptions, queuedMeta);
+    } = await dispatchEmployeeQueuedResponse(
+      routeInput,
+      routeOptions,
+      queuedMeta,
+      options.onReplyDelta ? { onReplyDelta: options.onReplyDelta } : undefined,
+    );
 
     await recordEmployeeReplyShadowResult({
       client,
@@ -1700,27 +1806,45 @@ export async function processQueuedAgentRun(
 
       if (refreshTrigger) {
         if (isDm) {
-          // Summary refresh is advisory — never let it fail an already-posted reply.
-          try {
-            const refreshResult = await refreshTopicSummary(client, {
-              workspaceId,
-              roomId,
-              topicId,
-              topicTitle: ctx.topic.title,
-              topicDescription: ctx.topic.description,
-              trigger: refreshTrigger,
-              employeeId,
-              logWorkEvents: false,
-            });
-            if (refreshResult.summary?.suggestedMemory.length) {
-              artifacts = [
-                ...artifacts,
-                ...buildMemorySuggestionArtifacts(refreshResult.summary.suggestedMemory, topicId),
+          // Summary refresh (and any resulting memory-suggestion chip) is advisory —
+          // it must never block or delay an already-computed reply. Fire-and-forget;
+          // if it finds a suggestion, patch the message's artifacts in a separate,
+          // later write (same pattern as queueBackgroundLearningFromSearch).
+          const dmAiMessageId = aiMessage.id;
+          void refreshTopicSummary(client, {
+            workspaceId,
+            roomId,
+            topicId,
+            topicTitle: ctx.topic.title,
+            topicDescription: ctx.topic.description,
+            trigger: refreshTrigger,
+            employeeId,
+            logWorkEvents: false,
+          })
+            .then(async (refreshResult) => {
+              if (!refreshResult.summary?.suggestedMemory.length) return;
+              const { data: current } = await client
+                .from("messages")
+                .select("artifacts")
+                .eq("workspace_id", workspaceId)
+                .eq("id", dmAiMessageId)
+                .maybeSingle();
+              const existingArtifacts = Array.isArray(current?.artifacts)
+                ? (current.artifacts as typeof artifacts)
+                : [];
+              const nextArtifacts = [
+                ...existingArtifacts,
+                ...buildMemorySuggestionArtifacts(refreshResult.summary!.suggestedMemory, topicId),
               ];
-            }
-          } catch (error) {
-            console.warn("[AdeHQ dm summary refresh]", error);
-          }
+              await client
+                .from("messages")
+                .update({ artifacts: nextArtifacts })
+                .eq("workspace_id", workspaceId)
+                .eq("id", dmAiMessageId);
+            })
+            .catch((error) => {
+              console.warn("[AdeHQ dm summary refresh]", error);
+            });
         } else {
           scheduleTopicSummaryRefresh(client, {
             workspaceId,

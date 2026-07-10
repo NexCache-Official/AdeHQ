@@ -8,7 +8,7 @@ import {
 import { pickResearchProvider } from "@/lib/ai/research/research-provider";
 import { resolveResearchQuery } from "@/lib/ai/research/resolve-research-query";
 import type { IntelligenceContext } from "./intelligence-context";
-import { shouldAnswerFromKnowledge } from "./pipeline";
+import { shouldAnswerFromKnowledge, shouldAnswerInstantly } from "./pipeline";
 
 export type IntelligenceResearchPlanInput = {
   intelligence: IntelligenceContext;
@@ -105,6 +105,7 @@ export function researchPlanFromIntelligence(
   input: IntelligenceResearchPlanInput,
 ): ResearchPlan | null {
   const { intelligence } = input;
+  if (shouldAnswerInstantly(intelligence)) return null;
   if (shouldAnswerFromKnowledge(intelligence)) return null;
 
   if (
@@ -205,6 +206,14 @@ export function shouldSkipLegacyResearchPlanner(
   return (
     fastPath === "obvious_search" ||
     fastPath === "obvious_browser_research" ||
+    fastPath === "instant_answer" ||
+    // "direct" and "clarify" are decisions researchPlanFromIntelligence always
+    // resolves to null (no router runs for them, so it can never plan a search) —
+    // the legacy per-DM steward must not be allowed to override that with its own
+    // independent search classification.
+    fastPath === "direct" ||
+    fastPath === "clarify" ||
+    shouldAnswerInstantly(intelligence) ||
     (fastPath === "needs_router" &&
       Boolean(intelligence.router) &&
       intelligence.router!.confidence >= 0.65)

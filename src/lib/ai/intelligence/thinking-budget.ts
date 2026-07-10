@@ -14,6 +14,7 @@ const MODE_POINTS: Record<WorkMode, number> = {
 
 const FAST_PATH_POINTS: Record<FastPathDecision, number> = {
   greeting: 0,
+  instant_answer: 0,
   direct: 3,
   obvious_search: 2,
   obvious_browser_research: 10,

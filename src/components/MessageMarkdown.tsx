@@ -6,11 +6,13 @@ import { Check, Copy, FileSearch } from "lucide-react";
 import type { MentionRef } from "@/lib/types";
 import { findMentionSpans, type MentionParticipant } from "@/lib/mentions";
 import { markdownTypography, pickMarkdownTypography } from "@/lib/chat/layout";
+import type { ResolvedWebSource } from "@/lib/message-artifacts/resolve-source-artifacts";
 import { MentionChip } from "./MentionChip";
 
 type MentionRenderContext = {
   mentionsJson?: MentionRef[];
   participants?: MentionParticipant[];
+  citationSources?: ResolvedWebSource[];
 };
 
 type SourceChip = {
@@ -51,6 +53,25 @@ function SourceChipView({ source, chipClassName }: { source: SourceChip; chipCla
       <span className="truncate">{source.fileName}</span>
       {source.locator && <span className="shrink-0 text-accent-d/75">{source.locator}</span>}
     </span>
+  );
+}
+
+function CitationChip({ number, source }: { number: number; source: ResolvedWebSource }) {
+  const label = source.domain || source.title || `Source ${number}`;
+  return (
+    <a
+      href={source.url}
+      target="_blank"
+      rel="noopener noreferrer"
+      title={source.title ? `${source.title} — ${source.domain ?? ""}`.trim() : label}
+      className={cn(
+        "mx-px inline-flex h-[15px] min-w-[15px] items-center justify-center rounded-[4px] px-1",
+        "align-super text-[10px] font-semibold leading-none text-accent-d no-underline",
+        "border border-accent/25 bg-accent-soft transition-colors hover:bg-accent/15",
+      )}
+    >
+      {number}
+    </a>
   );
 }
 
@@ -114,6 +135,25 @@ function inlineNodes(
             />,
           );
           index += end + 2;
+          continue;
+        }
+      }
+    }
+
+    if (ctx.citationSources && ctx.citationSources.length > 0 && rest.startsWith("[")) {
+      const citeMatch = rest.match(/^\[(\d{1,3})\](?!\()/);
+      if (citeMatch) {
+        const number = Number(citeMatch[1]);
+        const source = ctx.citationSources[number - 1];
+        if (source?.url) {
+          nodes.push(
+            <CitationChip
+              key={`${keyPrefix}-cite-${index}`}
+              number={number}
+              source={source}
+            />,
+          );
+          index += citeMatch[0].length;
           continue;
         }
       }
@@ -189,6 +229,9 @@ function inlineNodes(
       rest.indexOf("**"),
       rest.indexOf("*", 1),
       rest.search(/\[[^\]]+\]\([^)]+\)/),
+      ctx.citationSources && ctx.citationSources.length > 0
+        ? rest.search(/\[\d{1,3}\]/)
+        : -1,
     ]
       .filter((position) => position > 0)
       .sort((a, b) => a - b)[0];
@@ -328,15 +371,21 @@ export function MessageMarkdown({
   roomScale = false,
   mentionsJson,
   mentionParticipants,
+  citationSources,
 }: {
   content: string;
   compact?: boolean;
   roomScale?: boolean;
   mentionsJson?: MentionRef[];
   mentionParticipants?: MentionParticipant[];
+  citationSources?: ResolvedWebSource[];
 }) {
   const typo = pickMarkdownTypography(roomScale);
-  const mentionCtx: MentionRenderContext = { mentionsJson, participants: mentionParticipants };
+  const mentionCtx: MentionRenderContext = {
+    mentionsJson,
+    participants: mentionParticipants,
+    citationSources,
+  };
   const renderInline = (text: string, keyPrefix: string) =>
     inlineNodes(text, keyPrefix, mentionCtx, typo.sourceChip);
   const lines = content.replace(/\r\n/g, "\n").split("\n");

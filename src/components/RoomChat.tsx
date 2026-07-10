@@ -64,6 +64,7 @@ import {
   type BrowserResearchProviderConfig,
 } from "@/lib/ai/browser-research/client-api";
 import { useBrowserResearchRealtime } from "@/lib/ai/browser-research/use-browser-research-realtime";
+import { useMessagesRealtime } from "@/lib/realtime/use-messages-realtime";
 import { BrowserResearchMessageCard } from "@/components/browser-research/BrowserResearchMessageCard";
 import { STATUS_META } from "@/lib/icons";
 import { effectiveEmployeeStatus, isMayaEmployee } from "@/lib/maya-employee";
@@ -119,6 +120,120 @@ type QueuedRunClient = {
 
 const MESSAGE_PAGE = 50;
 const GROUP_WINDOW_MS = 5 * 60 * 1000;
+
+/**
+ * Reply token-streaming (Phase 4) — streams conversational quick replies token by
+ * token over SSE. On by default; set localStorage adehq:stream="0" to force the
+ * blocking JSON path. Any streaming failure falls back to blocking automatically.
+ */
+const EMPLOYEE_REPLY_STREAMING =
+  typeof window === "undefined" ||
+  window.localStorage?.getItem("adehq:stream") !== "0";
+
+type ProcessRequestResult = {
+  status: number;
+  ok: boolean;
+  // Mirrors the JSON `done` payload / error body — consumed loosely downstream,
+  // exactly as the previous `await res.json()` value was.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  data: any;
+  streamed: boolean;
+};
+
+/**
+ * Runs the agent-run process request. When streaming is enabled it consumes the
+ * SSE stream, forwarding reply-token deltas to `onReplyText` (called with the full
+ * accumulated reply each time), and resolves with the final `done` payload — shaped
+ * identically to the non-streaming JSON response so downstream handling is shared.
+ */
+async function runAgentProcessRequest(params: {
+  runId: string;
+  workspaceId: string;
+  headers: Record<string, string>;
+  onReplyText?: (fullText: string) => void;
+}): Promise<ProcessRequestResult> {
+  const wantsStream = Boolean(params.onReplyText) && EMPLOYEE_REPLY_STREAMING;
+  const res = await fetch(`/api/agent-runs/${params.runId}/process`, {
+    method: "POST",
+    headers: {
+      ...params.headers,
+      ...(wantsStream ? { Accept: "text/event-stream" } : {}),
+    },
+    body: JSON.stringify({
+      workspaceId: params.workspaceId,
+      mode: "live",
+      ...(wantsStream ? { stream: true } : {}),
+    }),
+  });
+
+  const contentType = res.headers.get("content-type") ?? "";
+  if (!wantsStream || !res.body || !contentType.includes("text/event-stream")) {
+    const data = await res.json().catch(() => ({}));
+    return { status: res.status, ok: res.ok, data, streamed: false };
+  }
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let fullReply = "";
+  let streamed = false;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let donePayload: any = null;
+  let errorPayload: { error?: string; code?: string } | null = null;
+
+  const handleEvent = (name: string, dataRaw: string) => {
+    let parsed: Record<string, unknown> = {};
+    try {
+      parsed = dataRaw ? JSON.parse(dataRaw) : {};
+    } catch {
+      return;
+    }
+    if (name === "delta" && typeof parsed.text === "string") {
+      fullReply += parsed.text;
+      streamed = true;
+      params.onReplyText?.(fullReply);
+    } else if (name === "done") {
+      donePayload = parsed as ProcessRequestResult["data"];
+    } else if (name === "error") {
+      errorPayload = parsed as { error?: string; code?: string };
+    }
+  };
+
+  // Parse the SSE framing: events separated by a blank line.
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    let sep;
+    while ((sep = buffer.indexOf("\n\n")) !== -1) {
+      const rawEvent = buffer.slice(0, sep);
+      buffer = buffer.slice(sep + 2);
+      let eventName = "message";
+      const dataLines: string[] = [];
+      for (const line of rawEvent.split("\n")) {
+        if (line.startsWith("event:")) eventName = line.slice(6).trim();
+        else if (line.startsWith("data:")) dataLines.push(line.slice(5).trim());
+      }
+      if (dataLines.length) handleEvent(eventName, dataLines.join("\n"));
+    }
+  }
+
+  // Cast: TS control-flow does not track the assignment inside handleEvent.
+  const finalError = errorPayload as { error?: string; code?: string } | null;
+  if (finalError) {
+    const code = finalError.code;
+    return {
+      status: code ? 409 : 500,
+      ok: false,
+      data: { ok: false, error: finalError.error, code },
+      streamed,
+    };
+  }
+  if (donePayload) {
+    return { status: 200, ok: true, data: donePayload, streamed };
+  }
+  return { status: 500, ok: false, data: { ok: false, error: "Stream ended early." }, streamed };
+}
 
 function isSameCalendarDay(a: string, b: string): boolean {
   const first = new Date(a);
@@ -535,6 +650,46 @@ export function RoomChat({
     onChatReply: handleResearchChatReply,
   });
 
+  // Primary live-delivery path for ordinary chat messages — not gated behind
+  // any feature flag, unlike useBrowserResearchRealtime above. Without this,
+  // rooms/DMs with no research-capable employee had no realtime delivery at
+  // all and depended on a manual reload or the heavy whole-workspace refetch.
+  const handleMessageInsert = useCallback(
+    (message: RoomMessage) => {
+      if (!topic) return;
+      // A live-typing placeholder for this same run may still be showing locally
+      // (e.g. the sending tab's own SSE reader hasn't finished yet) — this event
+      // can arrive over the realtime channel first. Clear it so the final
+      // persisted message never renders alongside its own in-progress ghost.
+      if (message.agentRunId) {
+        actions.removeLocalMessage(room.id, `stream-${message.agentRunId}`);
+      }
+      actions.addMessage(room.id, { ...message, topicId: topic.id });
+      notifyTopicSummaryUpdated(topic.id);
+    },
+    [actions, room.id, topic],
+  );
+
+  const handleMessageUpdate = useCallback(
+    (message: RoomMessage) => {
+      if (!topic) return;
+      actions.updateLocalMessage(room.id, message.id, {
+        content: message.content,
+        artifacts: message.artifacts,
+        pending: message.pending,
+      });
+    },
+    [actions, room.id, topic],
+  );
+
+  useMessagesRealtime({
+    enabled: backend === "supabase",
+    workspaceId: state.workspace?.id,
+    topicId: topic?.id,
+    onInsert: handleMessageInsert,
+    onUpdate: handleMessageUpdate,
+  });
+
   const activeResearchRunIds = useMemo(
     () => browserResearchRuns.filter(isActiveBrowserResearchRun).map((run) => run.id),
     [browserResearchRuns],
@@ -677,19 +832,49 @@ export function RoomChat({
               workspaceId: state.workspace.id,
             });
 
-            const res = await fetch(`/api/agent-runs/${run.runId}/process`, {
-              method: "POST",
+            const placeholderId = `stream-${run.runId}`;
+            let placeholderCreated = false;
+            const result = await runAgentProcessRequest({
+              runId: run.runId,
+              workspaceId: state.workspace.id,
               headers,
-              body: JSON.stringify({
-                workspaceId: state.workspace.id,
-                mode: "live",
-              }),
+              onReplyText: (fullText) => {
+                if (!fullText.trim()) return;
+                if (!placeholderCreated) {
+                  placeholderCreated = true;
+                  if (triggerId) {
+                    actions.updateMessage(room.id, triggerId, {
+                      pending: false,
+                      deliveryStatus: "delivered",
+                      deliveredAt: new Date().toISOString(),
+                    });
+                  }
+                  actions.addLocalMessage(room.id, {
+                    id: placeholderId,
+                    topicId: topic.id,
+                    senderType: "ai",
+                    senderId: run.employeeId,
+                    senderName: run.employeeName,
+                    content: fullText,
+                    agentRunId: run.runId,
+                    streaming: true,
+                  });
+                } else {
+                  actions.updateLocalMessage(room.id, placeholderId, { content: fullText });
+                }
+              },
             });
-
-            const data = await res.json();
+            // Swap the live placeholder for the persisted message below.
+            if (placeholderCreated) {
+              actions.removeLocalMessage(room.id, placeholderId);
+            }
+            const data = result.data;
+            const responseStatus = result.status;
+            const responseOk = result.ok;
+            const streamed = result.streamed;
             const ms = Date.now() - started;
 
-            if (res.status === 409) {
+            if (responseStatus === 409) {
               trace("agent-run", "info", `${run.employeeName} already claimed or not ready`, {
                 runId: run.runId,
                 code: data.code,
@@ -699,9 +884,9 @@ export function RoomChat({
               return;
             }
 
-            if (!res.ok || !data.ok) {
+            if (!responseOk || !data.ok) {
               trace("agent-run", "error", `${run.employeeName} process failed (${ms}ms)`, {
-                status: res.status,
+                status: responseStatus,
                 runId: run.runId,
                 response: data,
               });
@@ -751,7 +936,9 @@ export function RoomChat({
               });
             }
 
-            const holdMs = minimumReplyHoldMs(undefined, data.aiMode);
+            // When tokens already streamed live, skip the artificial hold — the
+            // live typing itself is the human-paced signal.
+            const holdMs = streamed ? 0 : minimumReplyHoldMs(undefined, data.aiMode as string | undefined);
             const elapsed = Date.now() - started;
             if (holdMs > elapsed) {
               await new Promise((resolve) => setTimeout(resolve, holdMs - elapsed));
@@ -764,6 +951,13 @@ export function RoomChat({
             }
 
             if (data.aiMessage?.content) {
+              // Defensive: guarantee the live-typing placeholder is gone before the
+              // final persisted message renders, even if it was already removed once
+              // above — a second removal of an already-gone id is a harmless no-op,
+              // and this prevents a duplicate bubble if the two ever race.
+              if (placeholderCreated) {
+                actions.removeLocalMessage(room.id, placeholderId);
+              }
               actions.addMessage(room.id, {
                 id: data.aiMessage.id,
                 topicId: topic.id,

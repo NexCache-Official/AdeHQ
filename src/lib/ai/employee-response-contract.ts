@@ -3,13 +3,16 @@ import {
   defaultModelModeForRole,
   type ModelMode,
 } from "@/lib/ai/model-catalog";
+import { createAmbientContext } from "@/lib/ai/ambient-context";
 import {
   inferOutputTokenCap,
   inferTemperature,
   sanitizeReplyForChat,
 } from "@/lib/ai/normalize-model-response";
 import { buildEmployeeSystemPrompt, buildEmployeeUserPrompt } from "@/lib/ai/prompts";
+import type { EmployeePromptTier } from "@/lib/ai/prompts";
 import { getResearchCapabilities } from "@/lib/ai/research/research-planner";
+import { messageLikelyNeedsStructuredEffects } from "@/lib/ai/message-intent";
 import { ModelResponseSchema } from "@/lib/ai/schemas";
 import type { AiCapability, ReasoningProfile } from "@/lib/ai/runtime/types";
 import type { EmployeeResponse, EmployeeRoleKey, SendMessageInput } from "@/lib/types";
@@ -42,6 +45,9 @@ export type EmployeePromptBuildOptions = {
   leadEmployeeName?: string;
   leadReply?: string;
   conversationMode?: string;
+  promptTier?: EmployeePromptTier;
+  /** Emit a plain-prose contract instead of the JSON envelope (for streaming). */
+  plainProse?: boolean;
 };
 
 export type EmployeeRouteGenerationParams = {
@@ -58,6 +64,7 @@ function normalizeHandoff(value: unknown): string[] | undefined {
 
 /** Build prompt context — same fields as legacy model-router. */
 export function buildEmployeePromptContext(input: EmployeeRouteInput) {
+  const userName = input.humanParticipants[0]?.name;
   return {
     employee: input.employee,
     workspace: {
@@ -79,6 +86,10 @@ export function buildEmployeePromptContext(input: EmployeeRouteInput) {
     artifactIntent: input.artifactIntent,
     researchCapabilities: getResearchCapabilities(input.employee),
     importedContextPrompt: input.importedContextPrompt,
+    ambientContext: createAmbientContext({
+      workspaceName: input.workspaceName,
+      userName,
+    }),
   };
 }
 
@@ -96,8 +107,12 @@ export function buildEmployeePrompts(
       leadEmployeeName: options.leadEmployeeName,
       leadReply: options.leadReply,
       conversationMode: options.conversationMode,
+      promptTier: options.promptTier,
+      plainProse: options.plainProse,
     }),
-    prompt: buildEmployeeUserPrompt(promptContext),
+    prompt: buildEmployeeUserPrompt(promptContext, {
+      promptTier: options.promptTier,
+    }),
   };
 }
 
@@ -158,14 +173,27 @@ export function toEmployeeResponseFromReplyAndEffect(
   };
 }
 
+/**
+ * Minimum output budget for a message that needs the model to emit a real
+ * effects.toolCalls entry. A short message ("just add this contact") maps to a
+ * small token cap under the length-based heuristic below, but still needs room
+ * for a natural reply PLUS a valid tool-call JSON block — a tight cap starves
+ * the JSON and the tool call silently never gets populated.
+ */
+const TOOL_WORK_MIN_TOKENS = 900;
+
 /** Token/temperature/timeout params shared by legacy + runtime paths. */
 export function resolveRouteGenerationParams(
   message: string,
   options: { maxOutputTokens?: number; timeoutMs?: number } = {},
 ): EmployeeRouteGenerationParams {
   const baseMaxTokens = options.maxOutputTokens ?? 2000;
+  const lengthBasedCap = inferOutputTokenCap(message, baseMaxTokens);
+  const maxOutputTokens = messageLikelyNeedsStructuredEffects(message)
+    ? Math.max(lengthBasedCap, Math.min(TOOL_WORK_MIN_TOKENS, baseMaxTokens))
+    : lengthBasedCap;
   return {
-    maxOutputTokens: inferOutputTokenCap(message, baseMaxTokens),
+    maxOutputTokens,
     temperature: inferTemperature(message),
     timeoutMs: options.timeoutMs ?? 45_000,
   };

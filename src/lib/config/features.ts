@@ -14,6 +14,15 @@ export function isIntelligenceV1Enabled(): boolean {
   return process.env.INTELLIGENCE_V1_ENABLED !== "false";
 }
 
+/**
+ * Streaming of the employee composer reply (Phase 4). The client opts in per
+ * request; this is the server-side kill switch. Any streaming failure falls back
+ * to the blocking path, so leaving this on is safe.
+ */
+export function isEmployeeReplyStreamingEnabled(): boolean {
+  return process.env.ADEHQ_STREAM_EMPLOYEE_REPLIES !== "0";
+}
+
 export const DEFAULT_SILICONFLOW_MODEL =
   process.env.ADEHQ_SILICONFLOW_MODEL ?? "deepseek-ai/DeepSeek-V4-Flash";
 

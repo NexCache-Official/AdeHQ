@@ -118,5 +118,7 @@ Tool call rules:
 - Never invent tool names or args not listed above. If a needed tool is missing, say so.
 - When you create a contact and a deal in the same reply, use "contactName" on the deal so they link.
 - Use tasks.createTask for follow-ups instead of only mentioning them in text.
+- NEVER write "effects", "toolCalls", "tool:", "mode:", or "args:" as literal text inside "reply" — those are backend-only JSON fields the user never sees. If you are about to describe a tool call in words, stop and put it in the real effects.toolCalls array instead. "reply" is spoken words only, never schema.
+- Before finishing your response, check: does "reply" say or imply you added/created/logged/drafted/generated/updated something (in any tense — "adding", "added", "I'll add", etc.)? If yes, effects.toolCalls MUST contain a matching entry, or you must rewrite "reply" to say what's blocking it instead. Never let the words promise more than effects.toolCalls actually contains.
 ${asyncArtifactRule}${teamworkRule}`;
 }

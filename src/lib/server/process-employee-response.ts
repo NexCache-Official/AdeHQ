@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { createAmbientContext } from "@/lib/ai/ambient-context";
 import { enforceEmployeePermissions } from "@/lib/ai/enforce-permissions";
 import { dispatchEmployeeDirectResponse } from "@/lib/ai/runtime/employee-direct-runtime";
 import { beginAiRun, finalizeAiRun } from "@/lib/ai/cost-guard";
@@ -25,6 +26,8 @@ import {
   recordEmployeeReplyShadowResult,
   resolveEmployeeShadowOldModel,
 } from "@/lib/ai/runtime/hot-path-shadow";
+import { resolveInstantAnswer } from "@/lib/ai/intelligence/instant-answers";
+import { resolveEmployeePromptTier } from "@/lib/ai/employee-prompt-tier";
 
 export type ProcessEmployeeOptions = {
   mode?: "mock" | "live";
@@ -51,6 +54,59 @@ export async function processEmployeeResponse(
   // Seed default integration tool grants for employees hired before the
   // Integration Layer, so the prompt lists the tools they can actually use.
   const employee = await ensureDefaultEmployeeToolGrants(client, ctx.workspaceId, roomEmployee);
+
+  const instant = resolveInstantAnswer({
+    message: content,
+    ambient: createAmbientContext({
+      workspaceName: ctx.workspaceName,
+      userName: ctx.humanParticipants[0]?.name,
+    }),
+    employeeName: employee.name,
+    roomName: ctx.room.name,
+    topicTitle: ctx.topic.title,
+    topicDescription: ctx.topic.description,
+    topicSummary: ctx.topicSummary?.summary,
+    openTasks: ctx.openTasks.map((task) => ({
+      id: task.id,
+      title: task.title,
+      status: task.status,
+      priority: task.priority,
+    })),
+    roomEmployees: ctx.employees.map((member) => ({
+      id: member.id,
+      name: member.name,
+      role: member.role,
+    })),
+    humanParticipants: ctx.humanParticipants,
+  });
+
+  if (instant) {
+    const { aiMessage } = await persistEmployeeEffects(
+      client,
+      ctx.workspaceId,
+      ctx.room.id,
+      ctx.topic.id,
+      employee,
+      instant.reply,
+      { workLog: [], tasks: [], memory: [], approvals: [] },
+      options.triggerMessageId,
+    );
+
+    await client
+      .from("ai_employees")
+      .update({ status: "idle", last_active_at: new Date().toISOString() })
+      .eq("workspace_id", ctx.workspaceId)
+      .eq("id", employeeId);
+
+    return {
+      employeeId: employee.id,
+      employeeName: employee.name,
+      reply: instant.reply,
+      effect: { workLog: [], tasks: [], memory: [], approvals: [] },
+      aiMessageId: aiMessage.id,
+      aiMode: "instant_answer",
+    };
+  }
 
   await client
     .from("ai_employees")
@@ -90,6 +146,13 @@ export async function processEmployeeResponse(
   const isLive = options.mode !== "mock" && employee.provider.toLowerCase() !== "mock";
   const modelMode: ModelMode = employee.modelMode ?? defaultModelModeForRole(employee.roleKey);
   const provider = employee.provider.toLowerCase();
+  const promptTier = resolveEmployeePromptTier({
+    message: content,
+    workMode: undefined,
+    hasFileContext: usedFileContext,
+    hasArtifactIntent: Boolean(artifactIntent),
+    hasImportedContext: Boolean(ctx.importedContextBlock),
+  });
 
   let runId: string | undefined;
   let usageId: string | undefined;
@@ -212,6 +275,7 @@ export async function processEmployeeResponse(
     mode: options.mode,
     provider: employee.provider,
     modelMode,
+    promptTier,
     maxOutputTokens: maxOutputTokens ?? getOutputTokenCap(modelMode),
     timeoutMs: getTimeoutMs(modelMode),
     context: {

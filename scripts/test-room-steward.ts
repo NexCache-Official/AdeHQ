@@ -275,6 +275,30 @@ async function main() {
     assert(decision.selectedEmployeeIds.length === 0, "topic shift should not fan out");
   });
 
+  await run("strong role match selects one specialist without runtime steward", async () => {
+    let runtimeCalls = 0;
+    setRoomStewardTestHooks({
+      onRuntimeCall: () => {
+        runtimeCalls += 1;
+      },
+    });
+    try {
+      const decision = await classifyRoomMessageWithSteward(
+        baseInput({
+          messageId: "msg_role_match_sales",
+          messageContent: "sales pipeline health looks weak this week",
+          topicState: baseTopicState({ pendingQuestions: [], activeEmployeeIds: [] }),
+        }),
+      );
+      assert(decision.shouldRespond, "strong role match should respond");
+      assert(decision.selectedEmployeeIds.length === 1, "should select exactly one specialist");
+      assert(decision.selectedEmployeeIds[0] === ALEX_ID, "sales specialist should be selected");
+      assert(runtimeCalls === 0, "deterministic role match should skip runtime steward");
+    } finally {
+      setRoomStewardTestHooks(null);
+    }
+  });
+
   await run("runtime steward cannot suppress greeting response", async () => {
     setRoomStewardTestHooks({
       stubRuntimeDecision: {

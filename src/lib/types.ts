@@ -416,6 +416,8 @@ export type RoomMessage = {
   artifacts?: MessageArtifact[];
   pending?: boolean;
   failed?: boolean;
+  /** True while the reply is still token-streaming into this bubble. */
+  streaming?: boolean;
   deliveryStatus?: "sending" | "delivered" | "failed";
   deliveredAt?: string;
   seenBy?: MessageSeenBy[];

@@ -31,6 +31,7 @@ import { ToolResultInlineCard } from "@/components/integrations/ToolResultInline
 import { AutonomousLauncher } from "@/components/autonomy/AutonomousLauncher";
 import { AutonomousSessionChip } from "@/components/autonomy/AutonomousSessionChip";
 import { CompactSourcesRow } from "@/components/search/CompactSourcesRow";
+import { resolveWebSources } from "@/lib/message-artifacts/resolve-source-artifacts";
 import { MessageMarkdown } from "./MessageMarkdown";
 import {
   BrainCircuit,
@@ -693,6 +694,8 @@ export function RoomMessageItem({
     ) ?? [];
   const knowledgeSourceArtifacts =
     message.artifacts?.filter((a) => a.type === "knowledge_sources") ?? [];
+  const inlineCitationSources =
+    webSourceArtifacts.length > 0 ? resolveWebSources(webSourceArtifacts[0]) : undefined;
   const crmArtifacts =
     message.artifacts?.filter(
       (a) => a.type === "crm_contact" || a.type === "crm_deal" || a.type === "crm_company",
@@ -827,12 +830,15 @@ export function RoomMessageItem({
             <span className="typing-dot" />
           </div>
         ) : (
-          <MessageMarkdown
-            content={message.content}
-            roomScale
-            mentionsJson={message.mentionsJson}
-            mentionParticipants={mentionParticipants}
-          />
+          <div className={cn(message.streaming && "streaming-caret")}>
+            <MessageMarkdown
+              content={message.content}
+              roomScale
+              mentionsJson={message.mentionsJson}
+              mentionParticipants={mentionParticipants}
+              citationSources={inlineCitationSources}
+            />
+          </div>
         )}
 
         {emailDrafts.map((draft) => (

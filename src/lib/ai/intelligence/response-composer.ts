@@ -8,9 +8,19 @@ import type { IntelligenceContext } from "./intelligence-context";
 export type ComposedReply = {
   content: string;
   artifacts?: MessageArtifact[];
-  answerSource: "knowledge" | "cache" | "search" | "model";
+  answerSource: "instant" | "knowledge" | "cache" | "search" | "model";
   skippedEmployeeModel: boolean;
 };
+
+export function composeInstantAnswerReply(
+  intelligence: IntelligenceContext,
+): ComposedReply {
+  return {
+    content: sanitizeReplyForChat(intelligence.instantAnswer?.reply ?? ""),
+    answerSource: "instant",
+    skippedEmployeeModel: true,
+  };
+}
 
 export function composeKnowledgeReply(
   intelligence: IntelligenceContext,

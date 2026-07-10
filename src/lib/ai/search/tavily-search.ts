@@ -1,7 +1,7 @@
 import { tavilySearch, mapTavilyResultsToSourceCards } from "@/lib/ai/browser-research/tavily-provider";
 import { getTavilySearchCostUsd } from "@/lib/ai/browser-research/provider-config";
 import { generateText } from "ai";
-import { siliconFlowChatModel } from "@/lib/ai/siliconflow-client";
+import { siliconFlowChatModel, siliconFlowProviderOptions } from "@/lib/ai/siliconflow-client";
 import { resolveModel, getOutputTokenCap } from "@/lib/ai/model-catalog";
 import { SILICONFLOW_CHEAP_MODEL } from "@/lib/config/features";
 import type { SearchSource } from "./types";
@@ -71,6 +71,7 @@ export async function runTavilySearchAnswer(
     prompt: buildTavilySynthesisPrompt(options.query, results, options.employeeName),
     maxOutputTokens: Math.min(900, getOutputTokenCap("cheap")),
     temperature: 0.2,
+    providerOptions: siliconFlowProviderOptions(model),
   });
 
   return { text: text.trim(), sources };

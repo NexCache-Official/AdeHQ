@@ -2,6 +2,7 @@ import type {
   FastPathDecision,
   WorkMode,
 } from "./intelligence-context";
+import { looksLikeInstantAnswer } from "./instant-answers";
 
 export type FastPathResult = {
   decision: FastPathDecision;
@@ -30,6 +31,11 @@ const RESEARCH_REPORT =
 
 const VAGUE =
   /^(?:do it|handle it|take care of it|what about that|can you help|help me|thoughts\??)$/i;
+
+// Internal advice/strategy/opinion questions the employee answers from expertise —
+// no web lookup, so they can skip the router LLM entirely and go straight to compose.
+const ADVICE =
+  /\b(?:should i|should we|how (?:do|should|would|can) (?:i|we|you)|what(?:'s| is| are)? (?:our|my|your|the best)|walk me through|talk me through|help me (?:decide|think|figure|understand|prep|prepare)|what do you think|how would you|what would you do|any (?:advice|thoughts|ideas|suggestions)|make the case|pros and cons|weigh in|your take|how do i not|what'?s my)\b/i;
 
 const FACTUAL_QUESTION =
   /\b(?:what was|what is|what's|what are|who is|who's|who are|how much|how many|when did|where is|where was|tell me about|look up|find out)\b/i;
@@ -60,6 +66,14 @@ export function classifyMessageFastPath(
       decision: "greeting",
       confidence: 0.99,
       reason: "Short social greeting or acknowledgement.",
+    };
+  }
+
+  if (looksLikeInstantAnswer(text)) {
+    return {
+      decision: "instant_answer",
+      confidence: 0.98,
+      reason: "Deterministic answer available from ambient or loaded workspace context.",
     };
   }
 
@@ -97,6 +111,16 @@ export function classifyMessageFastPath(
       decision: "direct",
       confidence: 0.93,
       reason: "Clear drafting, planning, or internal work request.",
+    };
+  }
+
+  // Advice/strategy questions get here only after the public-fact/search checks
+  // above have declined — so they need the employee's judgment, not a web lookup.
+  if (ADVICE.test(text)) {
+    return {
+      decision: "direct",
+      confidence: 0.85,
+      reason: "Internal advice/strategy question — answer from expertise, no lookup needed.",
     };
   }
 

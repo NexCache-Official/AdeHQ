@@ -9,7 +9,11 @@ export function assignResearchLevel(
 ): ResearchLevel {
   if (!intelligence) return plan?.action === "browse" ? 3 : plan?.action === "search" ? 1 : 0;
 
-  if (intelligence.composer?.answerSource === "knowledge" || shouldAnswerDirect(intelligence)) {
+  if (
+    intelligence.composer?.answerSource === "instant" ||
+    intelligence.composer?.answerSource === "knowledge" ||
+    shouldAnswerDirect(intelligence)
+  ) {
     return 0;
   }
 
@@ -38,5 +42,5 @@ export function assignResearchLevel(
 
 function shouldAnswerDirect(intelligence: IntelligenceContext): boolean {
   const fp = intelligence.fastPath?.decision;
-  return fp === "greeting" || fp === "direct" || fp === "clarify";
+  return fp === "greeting" || fp === "instant_answer" || fp === "direct" || fp === "clarify";
 }

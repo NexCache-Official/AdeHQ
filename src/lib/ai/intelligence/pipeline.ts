@@ -1,4 +1,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import {
+  createAmbientContext,
+  type AmbientContext,
+} from "@/lib/ai/ambient-context";
 import type { MemoryEntry } from "@/lib/types";
 import type { FileContextBundle } from "@/lib/server/file-context";
 import {
@@ -17,6 +21,10 @@ import { sempackProvider } from "./providers/sempack-provider";
 import { appendIntelligenceStep, withIntelligenceStep } from "./telemetry";
 import { runIntelligenceRouter } from "./intelligence-router";
 import type { RoomMessage } from "@/lib/types";
+import {
+  resolveInstantAnswer,
+  type InstantAnswerInput,
+} from "./instant-answers";
 
 export const MEMORY_ANSWER_THRESHOLD = 0.85;
 export const SEARCH_ANSWER_THRESHOLD = 0.7;
@@ -36,6 +44,15 @@ export type IntelligencePreludeInput = {
   topicSummary?: string | null;
   fileContext?: FileContextBundle;
   knowledgeProviders?: KnowledgeProvider[];
+  ambientContext?: AmbientContext;
+  workspaceName?: string;
+  userName?: string;
+  roomName?: string;
+  topicTitle?: string;
+  topicDescription?: string | null;
+  openTasks?: InstantAnswerInput["openTasks"];
+  roomEmployees?: InstantAnswerInput["roomEmployees"];
+  humanParticipants?: InstantAnswerInput["humanParticipants"];
 };
 
 export type IntelligenceEnrichmentInput = IntelligencePreludeInput & {
@@ -84,6 +101,44 @@ export async function runIntelligencePrelude(
     durationMs: 0,
     metadata: context.thinkingBudget,
   });
+
+  const ambient =
+    input.ambientContext ??
+    createAmbientContext({
+      workspaceName: input.workspaceName,
+      userName: input.userName,
+    });
+  const instant = resolveInstantAnswer({
+    message: input.userMessage,
+    ambient,
+    roomName: input.roomName,
+    topicTitle: input.topicTitle,
+    topicDescription: input.topicDescription,
+    topicSummary: input.topicSummary,
+    openTasks: input.openTasks,
+    roomEmployees: input.roomEmployees,
+    humanParticipants: input.humanParticipants,
+  });
+  if (instant) {
+    context = appendIntelligenceStep(context, {
+      layer: "composer",
+      decision: `instant_${instant.kind}`,
+      confidence: instant.confidence,
+      durationMs: 0,
+      metadata: {
+        fact: instant.fact,
+      },
+    });
+    return {
+      ...context,
+      instantAnswer: instant,
+      researchLevel: 0,
+      composer: {
+        skippedEmployeeModel: true,
+        answerSource: "instant",
+      },
+    };
+  }
 
   const knowledgeStep = await withIntelligenceStep(
     context,
@@ -167,5 +222,15 @@ export function shouldAnswerFromKnowledge(
     knowledge?.found &&
       knowledge.confidence >= MEMORY_ANSWER_THRESHOLD &&
       knowledge.answer,
+  );
+}
+
+export function shouldAnswerInstantly(
+  context: IntelligenceContext | undefined,
+): boolean {
+  return Boolean(
+    context?.instantAnswer?.reply &&
+      context.composer?.answerSource === "instant" &&
+      context.composer.skippedEmployeeModel,
   );
 }

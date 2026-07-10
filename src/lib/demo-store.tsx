@@ -176,6 +176,8 @@ type StoreActions = {
   addLocalMessage: (roomId: string, msg: Omit<RoomMessage, "id" | "roomId" | "createdAt"> & { id?: string; createdAt?: string }) => RoomMessage;
   removeLocalMessage: (roomId: string, messageId: string) => void;
   updateMessage: (roomId: string, messageId: string, patch: Partial<RoomMessage>) => void;
+  /** Local-only update — does not persist. For live streaming placeholders. */
+  updateLocalMessage: (roomId: string, messageId: string, patch: Partial<RoomMessage>) => void;
   refreshTopics: (roomId: string) => Promise<void>;
   refreshWorkLogForTopic: (topicId: string) => Promise<void>;
   mergeWorkLogEvents: (events: import("@/lib/types").WorkLogEvent[]) => void;
@@ -1391,6 +1393,22 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           rooms: s.rooms.map((r) =>
             r.id === roomId
               ? { ...r, messages: r.messages.filter((m) => m.id !== messageId) }
+              : r,
+          ),
+        }));
+      },
+
+      updateLocalMessage: (roomId, messageId, patch) => {
+        set((s) => ({
+          ...s,
+          rooms: s.rooms.map((r) =>
+            r.id === roomId
+              ? {
+                  ...r,
+                  messages: r.messages.map((m) =>
+                    m.id === messageId ? { ...m, ...patch } : m,
+                  ),
+                }
               : r,
           ),
         }));

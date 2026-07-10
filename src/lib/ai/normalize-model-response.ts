@@ -201,6 +201,30 @@ export function parseModelResponseText(
   }
 }
 
+/**
+ * Some models occasionally narrate intended tool calls as literal schema-like
+ * text directly inside the reply field — e.g. "effects.toolCalls: tool:
+ * crm.createContact mode: execute args: ..." — instead of populating the real
+ * structured effects. This is a model failure mode (not a JSON parsing bug):
+ * the "reply" string is technically valid, so it sails through schema
+ * validation carrying the leak, and the real effects.toolCalls stays empty
+ * (which is also why the underlying action fails to execute). Detect and cut
+ * the reply off before any such leak, on every path that produces a reply.
+ */
+const SCHEMA_LEAK_MARKER =
+  /\beffects\s*\.\s*\w+\s*:|\beffects\s*:\s*\{|(?:^|[\s.])tool\s*:\s*[a-zA-Z][\w-]*\.[a-zA-Z][\w-]*\b[\s\S]{0,40}?\bmode\s*:\s*["']?(?:execute|preview)\b/i;
+
+function stripSchemaLeak(text: string): string {
+  const match = SCHEMA_LEAK_MARKER.exec(text);
+  if (!match) return text;
+  return text.slice(0, match.index).trim();
+}
+
+function finalizeReply(text: string): string {
+  const stripped = stripSchemaLeak(text).trim();
+  return stripped || "Got it — I'll follow up on this.";
+}
+
 /** Never show raw JSON in chat — extract reply or return a safe fallback. */
 export function sanitizeReplyForChat(raw: string): string {
   const trimmed = raw.trim();
@@ -212,18 +236,19 @@ export function sanitizeReplyForChat(raw: string): string {
     (trimmed.includes('"reply"') && trimmed.includes('"effects"'));
 
   if (!looksLikeJson) {
-    return trimmed.replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/i, "").trim();
+    const cleaned = trimmed.replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/i, "").trim();
+    return finalizeReply(cleaned);
   }
 
   const parsed = parseModelResponseText(trimmed);
-  if (parsed?.reply) return parsed.reply;
+  if (parsed?.reply) return finalizeReply(parsed.reply);
 
   const replyMatch = trimmed.match(/"reply"\s*:\s*"((?:\\.|[^"\\])*)"/);
   if (replyMatch?.[1]) {
     try {
-      return JSON.parse(`"${replyMatch[1]}"`);
+      return finalizeReply(JSON.parse(`"${replyMatch[1]}"`));
     } catch {
-      return replyMatch[1].replace(/\\n/g, "\n").replace(/\\"/g, '"');
+      return finalizeReply(replyMatch[1].replace(/\\n/g, "\n").replace(/\\"/g, '"'));
     }
   }
 

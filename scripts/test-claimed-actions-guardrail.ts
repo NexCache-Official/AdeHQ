@@ -131,6 +131,23 @@ function main() {
     expectTrue(!replyClaimsCompletedAction(reply));
   });
 
+  test("present-continuous claim ('Adding X') with no real effect is caught (live repro)", () => {
+    // Exact repro: the model said "Adding Marcus Webb... to the CRM" (present
+    // continuous, not past tense) and emitted no effects.toolCalls at all — this
+    // slipped past the guardrail before present-continuous verbs were added.
+    const reply =
+      "Sure, let me try again right now. Adding Marcus Webb, buyer's agent at Webb Realty Group, email marcus@webbrealty.com to the CRM.";
+    expectTrue(replyClaimsCompletedAction(reply), "present-continuous 'Adding X to the CRM' must be caught");
+    const result = reconcileClaimedActions(reply, NOTHING);
+    expectTrue(result.falseClaim, "must be flagged as a false claim");
+    expectTrue(result.reply !== reply, "reply must be corrected to the honest message");
+  });
+
+  test("hedged present-continuous ('I'll be adding') is still intent, not a claim", () => {
+    expectTrue(!replyClaimsCompletedAction("I'll be adding Marcus Webb to the CRM shortly."));
+    expectTrue(!replyClaimsCompletedAction("Let me start adding the contact now."));
+  });
+
   console.log("\nAll claimed-actions guardrail tests passed.");
 }
 

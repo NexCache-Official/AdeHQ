@@ -6,7 +6,7 @@ import { recordAiRuntime } from "@/lib/ai/runtime-log";
 import { resolveModel } from "@/lib/ai/model-catalog";
 import { getRuntimeFlags } from "@/lib/ai/runtime/flags";
 import { generateObject as runtimeGenerateObject, planRoute } from "@/lib/ai/runtime";
-import { siliconFlowChatModel } from "@/lib/ai/siliconflow-client";
+import { siliconFlowChatModel, siliconFlowProviderOptions } from "@/lib/ai/siliconflow-client";
 import {
   completeAiWorkUnit,
   createAiWorkUnit,
@@ -199,7 +199,8 @@ export async function generateTopicSummaryPayloadOld(
     return topicSummaryTestHooks.stubOldPayload;
   }
 
-  const model = siliconFlowChatModel(resolveModel("siliconflow", "balanced"));
+  const modelId = resolveModel("siliconflow", "balanced");
+  const model = siliconFlowChatModel(modelId);
 
   try {
     const { object } = await generateObject({
@@ -209,6 +210,7 @@ export async function generateTopicSummaryPayloadOld(
       prompt: contextBlock,
       maxOutputTokens: TOPIC_SUMMARY_MAX_TOKENS,
       abortSignal: AbortSignal.timeout(TOPIC_SUMMARY_TIMEOUT_MS),
+      providerOptions: siliconFlowProviderOptions(modelId),
     });
 
     return object;

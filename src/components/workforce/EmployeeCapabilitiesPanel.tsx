@@ -8,6 +8,7 @@ import {
   listEmployeeCapabilityToggles,
 } from "@/lib/integrations/employee-capabilities";
 import { cn } from "@/lib/utils";
+import { authHeaders } from "@/lib/api/auth-client";
 import { Sparkles, Wrench } from "lucide-react";
 
 type Props = {
@@ -31,6 +32,7 @@ export function EmployeeCapabilitiesPanel({
   );
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [messageIsError, setMessageIsError] = useState(false);
 
   const dirty = useMemo(() => {
     const current = new Set(toggles.filter((t) => t.enabled).map((t) => t.domain));
@@ -47,22 +49,29 @@ export function EmployeeCapabilitiesPanel({
       return next;
     });
     setMessage(null);
+    setMessageIsError(false);
   };
 
   const applySuggested = () => {
     setDraft(new Set(toggles.filter((t) => t.suggested).map((t) => t.domain)));
     setMessage(null);
+    setMessageIsError(false);
   };
 
   const save = async () => {
     setSaving(true);
     setMessage(null);
+    setMessageIsError(false);
     try {
       const updated = applyEmployeeCapabilityToggles(employee, [...draft]);
       if (backend === "supabase" && workspaceId) {
+        const headers = {
+          "Content-Type": "application/json",
+          ...(await authHeaders()),
+        };
         const res = await fetch(`/api/workforce/${employee.id}/capabilities`, {
           method: "PATCH",
-          headers: { "Content-Type": "application/json" },
+          headers,
           credentials: "include",
           body: JSON.stringify({
             workspaceId,
@@ -79,6 +88,7 @@ export function EmployeeCapabilitiesPanel({
       await onSave(updated);
       setMessage("Capabilities updated.");
     } catch (error) {
+      setMessageIsError(true);
       setMessage(error instanceof Error ? error.message : "Could not save capabilities.");
     } finally {
       setSaving(false);
@@ -153,7 +163,17 @@ export function EmployeeCapabilitiesPanel({
         >
           {saving ? "Saving…" : "Save capabilities"}
         </button>
-        {message && <span className="text-xs text-slate-500">{message}</span>}
+        {message && (
+          <span
+            className={cn(
+              "text-xs font-medium",
+              messageIsError ? "text-red-600" : "text-emerald-600",
+            )}
+          >
+            {messageIsError ? "⚠ " : "✓ "}
+            {message}
+          </span>
+        )}
       </div>
     </div>
   );
