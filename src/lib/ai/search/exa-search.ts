@@ -63,10 +63,16 @@ export async function runExaSearchAnswer(
   const preset = getFastFactSearchPreset();
   const searchStarted = Date.now();
   const exa = getExaClient();
+  const fastFact = options.searchMode === "fast_fact";
+  // Fast facts only need highlights (smaller payload, quicker synthesis).
+  // Deeper research modes also pull capped page text so synthesis has more to
+  // work with. `maxCharacters` keeps the text payload bounded either way.
   const response = await exa.search(options.query, {
     type: getExaSearchType() as "auto",
     numResults: options.maxResults ?? getExaNumResults(),
-    contents: { highlights: true },
+    contents: fastFact
+      ? { highlights: true }
+      : { highlights: true, text: { maxCharacters: preset.maxTokensPerPage * 4 } },
   });
 
   const rawResults = (response.results ?? []) as Array<{

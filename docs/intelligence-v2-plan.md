@@ -1,5 +1,26 @@
 # Intelligence v2 — Lightning-Fast, Genuinely Smart AI Employees
 
+## Implementation status (updated 2026-07-11)
+
+| Phase | Status | Notes |
+|---|---|---|
+| 1 — Ambient context | ✅ Done | `ambient-context.ts` built + emitted at top of system prompt |
+| 2 — Instant answers | ✅ Done | `instant-answers.ts` + `instant_answer` fast-path; 0 LLM tokens for date/time/math/workspace-facts |
+| 3a — Deterministic orchestrator | 🟡 Partial | DMs + @mentions deterministic; **channels still take an LLM steward round-trip**; role match is regex, not embeddings |
+| 3b — Router as tool inside composer | ❌ Not started | `intelligence-router.ts` is still a serial pre-flight LLM call |
+| 3c — Tiered prompts | ✅ Done (cache gap) | Core/Work/Full tiers live; stable-prefix prompt-cache ordering **not** done |
+| 4 — Streaming + effects split | 🟡 Partial | SSE token streaming for conversational replies via `streamSiliconFlowText`; **only the poster sees live tokens (no Realtime `message_chunks`); no fire-and-forget effects post-pass** (work requests still block on `{reply,effects}` JSON) |
+| **5a — Exa-first routing** | ✅ **Done (2026-07-11)** | Steward now routes `company_fact`/`current_fact`/`news`/`market_research`/`source_verification` to **Exa when configured** (`search-steward.ts::preferredFactProvider`), flowing through `pickResearchProvider`. Exa retrieval also pulls capped page `text` for non-fast research modes. **Blocked on `EXA_API_KEY` being set** — dormant (falls back to gateway→tavily) until then. |
+| 5a — Parallelize search w/ context load | ❌ Not started | Search still runs strictly after `retrieveFileContext` + `enrichIntelligenceContext` in `process-queued-run.ts` (enrich depends on file context, so needs a fast-path-first refactor to fire search concurrently) |
+| 5b — Clickable citations | ✅ Done (minor gap) | `CitationChip` + expandable "+N more"; hover card is native `title` only, not a rich card |
+| 5 — Per-workspace search budget | ❌ Not started | Only general daily token/cost caps in `cost-guard.ts`; no search-specific cents budget |
+| 6 — Scale governors | 🟡 Partial | Cache-first blackboard ✅ (`search-cache` checked before every search); fan-out capped to 2; **`thinkingBudget` caps defined but not enforced**; no `consult_teammate` tool; no per-workspace max-concurrent/searches-per-hour |
+| Instrumentation (ttft/wall) | 🟡 Partial | Per-layer `durationMs` captured; **no `ttft_ms`/`wall_ms`** |
+
+**⚠️ To activate Exa as the primary search engine, set `EXA_API_KEY` in `.env.local` (and production env).** Optional: `EXA_SEARCH_TYPE` (default `auto`), `EXA_NUM_RESULTS` (default 10). Once set, all fact/company/news/research queries route to Exa automatically — no code change needed. Until then, search falls back to Vercel AI Gateway (Perplexity) → Tavily, which is what produced the slow ~20-30s Oracle-revenue trace.
+
+**Original plan below.**
+
 **Status:** Approved strategy, ready to engineer.
 **Goal:** First visible token in **< 1.5s**, trivial questions answered in **< 3s** end-to-end, search answers in **< 8s**, with zero loss of the "coworker, not chatbot" feel — and an architecture that behaves identically with 1 AI employee or 100.
 

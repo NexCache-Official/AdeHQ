@@ -1,4 +1,5 @@
 import {
+  getSearchPrimaryProvider,
   getSearchBackupProvider,
   isExaSearchConfigured,
   isGatewaySearchConfigured,
@@ -56,6 +57,43 @@ function resolveBackupProvider(primary: SearchRoute): SearchRoute | undefined {
   return undefined;
 }
 
+/**
+ * Exa-first provider preference for web fact/research needs. Exa gives better
+ * retrieval quality AND — because we control synthesis with an efficient model
+ * — is faster end-to-end than Perplexity/Tavily's own synthesis, so it's the
+ * default primary whenever configured. An explicit AI_SEARCH_PRIMARY_PROVIDER
+ * still wins when set to a gateway route. Falls through Exa → gateway → Tavily.
+ */
+function preferredFactProvider(
+  capabilities: SearchStewardCapabilities,
+): { provider: SearchRoute; reason: string } {
+  const primaryPref = getSearchPrimaryProvider();
+
+  // Honor an explicit non-Exa primary preference when its provider is live.
+  if (
+    primaryPref === "gateway_perplexity" &&
+    capabilities.gatewaySearch &&
+    !capabilities.exa
+  ) {
+    return { provider: "gateway_perplexity", reason: "Fact — configured Perplexity primary." };
+  }
+
+  // Exa-first default: direct Exa retrieval + our own fast synthesis.
+  if (capabilities.exa) {
+    return { provider: "gateway_exa", reason: "Fact — Exa (primary)." };
+  }
+  if (primaryPref === "gateway_exa" && capabilities.gatewaySearch) {
+    return { provider: "gateway_exa", reason: "Fact — gateway Exa (primary)." };
+  }
+  if (capabilities.gatewaySearch) {
+    return { provider: "gateway_perplexity", reason: "Fact — Perplexity (Exa not configured)." };
+  }
+  if (capabilities.tavily) {
+    return { provider: "tavily", reason: "Fact — Tavily fallback." };
+  }
+  return { provider: "none", reason: "Factual question but no search provider configured." };
+}
+
 function providerForNeed(
   need: SearchNeed,
   capabilities: SearchStewardCapabilities,
@@ -79,23 +117,19 @@ function providerForNeed(
     return { provider: "none", reason: "Semantic research requested but no search provider configured." };
   }
   if (need === "source_verification") {
+    // Exa's semantic retrieval is strong for cross-checking a specific claim;
+    // prefer it, then gateway's parallel search, then Tavily.
+    if (capabilities.exa) {
+      return { provider: "gateway_exa", reason: "Source verification — Exa capability." };
+    }
     if (capabilities.gatewaySearch) {
       return { provider: "gateway_parallel", reason: "Source verification — parallel search." };
-    }
-    if (capabilities.exa) {
-      return { provider: "gateway_exa", reason: "Source verification — Exa fallback." };
     }
     if (capabilities.tavily) return { provider: "tavily", reason: "Source verification — Tavily." };
     return { provider: "none", reason: "Verification requested but no search provider configured." };
   }
   if (FACT_NEEDS.includes(need)) {
-    if (capabilities.gatewaySearch) {
-      return { provider: "gateway_perplexity", reason: "Current fact — Perplexity capability." };
-    }
-    if (capabilities.tavily) {
-      return { provider: "tavily", reason: "Current fact — Tavily fallback." };
-    }
-    return { provider: "none", reason: "Factual question but no search provider configured." };
+    return preferredFactProvider(capabilities);
   }
   return { provider: "none", reason: "No search need detected." };
 }
