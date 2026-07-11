@@ -1,5 +1,5 @@
 import { ROLE_TEMPLATES, TOOL_CATALOG, defaultPermissions } from "@/lib/demo";
-import { suggestedCapabilityToolIds } from "@/lib/integrations/registry/prefab-toolsets";
+import { INTERNAL_CAPABILITY_TOOL_IDS } from "@/lib/integrations/registry/capabilities";
 import type { AiEmployeeApplicant, AiEmployeeJobBrief } from "./types";
 import type { AIEmployee, EmployeeRoleKey } from "@/lib/types";
 import { buildIntelligencePolicyForHire } from "@/lib/ai/intelligence-policy";
@@ -74,14 +74,17 @@ export function candidateToEmployee(
     communicationStyle: candidate.communicationStyle ?? brief.communicationStyle,
     successCriteria: brief.successMetrics.join("; "),
     tools: [
-      // Maya-suggested internal capability grants (crm/email/tasks/drive) —
+      // Every new hire gets all internal AdeHQ capability grants (CRM, email,
+      // tasks, drive/artifacts, calendar, investors, teamwork) by default —
       // editable per employee after hire; write access so tools can act.
-      ...suggestedCapabilityToolIds(employeeRoleKey).map((toolId) => {
-        const meta = TOOL_CATALOG.find((t) => t.id === toolId)!;
+      // "Suggested" badges in the capabilities panel still reflect the
+      // role-specific prefab (suggestedCapabilityToolIds) for guidance only.
+      ...INTERNAL_CAPABILITY_TOOL_IDS.map((toolId) => {
+        const meta = TOOL_CATALOG.find((t) => t.id === toolId);
         return {
           toolId,
-          name: meta.name,
-          category: meta.category,
+          name: meta?.name ?? toolId,
+          category: meta?.category ?? "Productivity",
           status: "connected" as const,
           permission: "write" as const,
         };

@@ -8,7 +8,6 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { AIEmployee, ToolAccess, WorkspaceMemberRole } from "@/lib/types";
 import type { IntegrationEmployee, ToolDefinition } from "@/lib/integrations/types";
 import { catalogToolIdForDomain, INTERNAL_CAPABILITY_TOOL_IDS } from "./registry/capabilities";
-import { suggestedCapabilityToolIds } from "./registry/prefab-toolsets";
 import { nowISO } from "@/lib/utils";
 
 export type HumanIntegrationPermissions = {
@@ -76,9 +75,10 @@ export function checkEmployeeToolGrant(
 
 /**
  * Self-heal grants for employees hired before the Integration Layer existed:
- * if the employee has NO internal capability rows at all, seed the prefab
- * defaults for their role. Employees with explicit rows are left untouched,
- * so user toggles always win.
+ * if the employee has NO internal capability rows at all, seed every internal
+ * capability (CRM, email, tasks, drive/artifacts, calendar, investors,
+ * teamwork) — same "all on by default" policy as new hires. Employees with
+ * explicit rows are left untouched, so user toggles always win.
  */
 export async function ensureDefaultEmployeeToolGrants<T extends IntegrationEmployee>(
   client: SupabaseClient,
@@ -90,7 +90,7 @@ export async function ensureDefaultEmployeeToolGrants<T extends IntegrationEmplo
   );
   if (hasInternalGrant) return employee;
 
-  const toolIds = suggestedCapabilityToolIds(employee.roleKey);
+  const toolIds = INTERNAL_CAPABILITY_TOOL_IDS;
   if (!toolIds.length) return employee;
 
   const rows = toolIds.map((toolId) => ({
