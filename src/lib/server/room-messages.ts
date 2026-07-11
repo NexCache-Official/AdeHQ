@@ -44,7 +44,10 @@ import {
 } from "@/lib/artifacts/intelligence";
 import { recordAiMessageInTopicOrchestrationState } from "@/lib/orchestration/room-steward";
 import { executeEmployeeToolCalls } from "@/lib/integrations/manager";
-import { reconcileClaimedActions } from "@/lib/integrations/reconcile-claimed-actions";
+import {
+  reconcileClaimedActions,
+  TOOL_BACKED_WORK_LOG_ACTIONS,
+} from "@/lib/integrations/reconcile-claimed-actions";
 import { handleAutopilotEffect, resolveAutopilotEmployee } from "@/lib/server/autopilot-effect";
 import { filterMemorySuggestions } from "@/lib/memory/curator";
 import type { ToolCallEffectItem } from "@/lib/types";
@@ -978,6 +981,11 @@ export async function persistEmployeeEffects(
   let toolSuccessCount = 0;
   let toolPendingCount = 0;
   let toolFailureCount = 0;
+  // workLogAction values genuinely produced by a successful tool call this
+  // turn (see adapters' `workLogAction:` fields) — anything in
+  // effect.workLog claiming a TOOL_BACKED_WORK_LOG_ACTIONS action that isn't
+  // in this set was narrated by the model, not actually executed.
+  const verifiedToolWorkLogActions = new Set<string>();
   if (effect.toolCalls?.length) {
     try {
       const toolOutcome = await executeEmployeeToolCalls(client, {
@@ -991,8 +999,11 @@ export async function persistEmployeeEffects(
       });
       artifacts.push(...toolOutcome.messageArtifacts);
       for (const result of toolOutcome.results) {
-        if (result.status === "success") toolSuccessCount += 1;
-        else if (result.status === "failed" || result.status === "blocked") toolFailureCount += 1;
+        if (result.status === "success") {
+          toolSuccessCount += 1;
+          const action = result.output?.workLogAction;
+          if (action) verifiedToolWorkLogActions.add(action);
+        } else if (result.status === "failed" || result.status === "blocked") toolFailureCount += 1;
         else toolPendingCount += 1;
       }
     } catch (error) {
@@ -1072,8 +1083,27 @@ export async function persistEmployeeEffects(
     });
   }
 
-  const workLogCount = effect.workLog.length;
-  for (const draft of effect.workLog) {
+  // Drop any workLog entry that claims a tool-backed action (crm_contact_created,
+  // task_created, ...) without a matching successful tool call this turn —
+  // otherwise the model can narrate "created the contact" straight into the
+  // activity timeline as a verbatim "Success" row with no real effect behind it.
+  let fabricatedToolClaimCount = 0;
+  const trustedWorkLog = effect.workLog.filter((draft) => {
+    const action = draft.action ?? draft.toolUsed;
+    if (!action || !TOOL_BACKED_WORK_LOG_ACTIONS.has(action)) return true;
+    if (verifiedToolWorkLogActions.has(action)) return true;
+    fabricatedToolClaimCount += 1;
+    console.warn("[AdeHQ room-messages] dropped fabricated tool-backed workLog claim", {
+      workspaceId,
+      employeeId: employee.id,
+      action,
+      triggerMessageId,
+    });
+    return false;
+  });
+
+  const workLogCount = trustedWorkLog.length;
+  for (const draft of trustedWorkLog) {
     const event: WorkLogEvent = {
       id: uid("wl"),
       roomId,
@@ -1130,6 +1160,7 @@ export async function persistEmployeeEffects(
       artifactCount: createdArtifactIds.length,
       approvalCount: createdApprovalIds.length,
       memoryCount: createdMemoryIds.length,
+      fabricatedToolClaimCount,
     },
     { triggerMessageId },
   );

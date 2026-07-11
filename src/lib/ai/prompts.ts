@@ -298,15 +298,31 @@ function roleWorkflowRules(roleKey: EmployeeRoleKey): string {
 - Without search results, share what you know with a date caveat and offer to verify via search — do not pretend search is in progress.
 - Say what framework/plan you can prepare now; note what needs browser/search or uploaded files for verified data when search did not run.`;
     case "pm":
-      return `PM workflow: break requests into effects.tasks, capture decisions in memory, log planning in workLog.`;
+      return `PM workflow — you create work objects, not just chat:
+- When Integration tools are available (see above), use effects.toolCalls to do the actual work:
+  1. New lead/contact/investor mentioned → crm.createContact (execute) with name, email, company.
+  2. Deal/opportunity discussed → crm.createDeal (execute) when the user asked to create it.
+  3. Follow-up needed → tasks.createTask (execute), not just effects.tasks.
+  4. Spreadsheet/document/deck/report needed → artifact.createSpreadsheet/createDocx/createPresentation/createPdfReport.
+- Break requests into effects.tasks for planning; capture durable decisions in effects.memory; log meaningful planning work in workLog — but never use workLog to narrate a CRM/task/artifact action instead of actually calling the tool.`;
     case "recruiting_manager":
       return `Maya workflow:
 - Recruiting questions → guide toward /hire or help refine roles, briefs, and employee settings in chat.
 - Workspace "how do I…?" questions → explain AdeHQ navigation clearly; point to the relevant page or button.
-- Keep replies conversational; use effects only when capturing a brief snippet or follow-up task.`;
+- Keep replies conversational; use effects only when capturing a brief snippet or follow-up task.
+- Out-of-scope work requests (market research, negotiation, drafting, anything that isn't hiring/workforce-admin): do not just deflect with "what would be most useful right now?" — you hired this team, so act like the manager who remembers who's on it. If you recall from memory or earlier conversation which of your hires owns this kind of work, name them and offer to loop them in or point the user to that person's DM ("That's Sofia's lane as your Product Manager — want me to flag it to her, or would you rather message her directly?"). Only fall back to a generic "who should I route this to?" question if you genuinely don't have that context yet — never invent a name you don't actually know.`;
     default:
-      return `When you do substantive work, always populate effects: memory for facts learned, tasks for follow-ups, workLog for actions taken.`;
+      return `When you do substantive work, always populate effects: memory for facts learned, tasks for follow-ups, workLog for actions taken.
+- When Integration tools are available (see above) and the user asks for a CRM contact/deal, follow-up task, or generated document, use the matching effects.toolCalls (crm.createContact, crm.createDeal, tasks.createTask, artifact.create*) — do not narrate the action in workLog instead of calling the tool.`;
   }
+}
+
+/** Applies to every role: workLog is a narrative log, never a substitute for an actual tool call. */
+function toolClaimHonestyRule(): string {
+  return `Tool-call honesty (applies to every action you take):
+- If your reply or effects.workLog says you created, added, saved, logged, or scheduled something in the CRM, Tasks, Drive, Calendar, or Investor pipeline, that exact action MUST have been executed via a matching effects.toolCalls entry in this same turn — never describe a tool-backed action as done unless you actually called the tool and it succeeded.
+- Do not use effects.workLog to describe a CRM/task/artifact/investor action as if it happened — workLog is for genuine narrative context (what you decided, what you're tracking), not a stand-in for the tool call.
+- If a tool you'd need isn't available to you, say so plainly ("I don't have CRM access — want me to flag this for someone who does?") instead of claiming the action happened.`;
 }
 
 export function buildEmployeeSystemPrompt(
@@ -437,10 +453,24 @@ ${permissionList || "- Default employee permissions"}`
     : `Tool/action mode:
 - This is a lightweight chat reply. Do not create tasks, memory, approvals, artifacts, or tool calls unless the user explicitly asks for work.`;
 
+  // This mode streams raw text token-by-token with no structured effects channel
+  // at all (see employee-queued-runtime.ts) — telling the model to "use
+  // effects.toolCalls" here has nothing to call, so it narrates the tool call
+  // as prose instead, which streams straight to the user as visible text
+  // ("effects.toolCalls: tool: artifact.createDocx ..."). Skip the tool-routing
+  // rules entirely in this mode instead of contradicting the plain-prose
+  // output contract below.
+  const plainProse = Boolean(options?.plainProse);
   const advancedRules = [
-    includeWorkRules ? coordinationAndTrustRules(ctx.employee.tools, ctx.researchCapabilities) : "",
+    includeWorkRules && !plainProse
+      ? coordinationAndTrustRules(ctx.employee.tools, ctx.researchCapabilities)
+      : "",
     includeFullRules ? fileAwareRules(Boolean(ctx.fileContextPrompt), ctx.artifactIntent) : "",
-    includeWorkRules ? roleWorkflowRules(ctx.employee.roleKey) : "",
+    includeWorkRules && !plainProse ? roleWorkflowRules(ctx.employee.roleKey) : "",
+    includeWorkRules && !plainProse ? toolClaimHonestyRule() : "",
+    plainProse
+      ? `Quick-reply mode: you cannot create CRM records, tasks, artifacts, or any other tool-backed action in this reply — there is no tool-call channel here, and nothing you write will execute anything. If the user's request needs one of those actions, say so plainly and ask them to send it again (or confirm) so it runs on a turn that can actually do it — do not claim or imply the action happened or will happen automatically. Never write out a tool name, JSON, or effects syntax in your reply.`
+      : "",
   ]
     .filter(Boolean)
     .join("\n\n");

@@ -35,6 +35,7 @@ const NOTHING: PersistedActionCounts = {
   artifactCount: 0,
   approvalCount: 0,
   memoryCount: 0,
+  fabricatedToolClaimCount: 0,
 };
 
 const REAL_CRM_CLAIM =
@@ -109,6 +110,16 @@ function main() {
       { ...NOTHING, toolPendingCount: 1 },
     );
     expectTrue(!result.falseClaim);
+  });
+
+  test("fabricated tool-backed workLog claim is corrected even alongside other real effects", () => {
+    const result = reconcileClaimedActions(
+      "On it — just created the contact for Marcus Chen.",
+      { ...NOTHING, memoryCount: 1, fabricatedToolClaimCount: 1 },
+    );
+    expectTrue(result.falseClaim, "a fabricated CRM claim must never pass as success");
+    expectTrue(result.reply !== "On it — just created the contact for Marcus Chen.", "reply should be rewritten");
+    expectTrue(result.notice?.meta?.toolStatus === "failed", "expected a failed notice chip");
   });
 
   test("future-tense intent is NOT treated as a completion claim", () => {

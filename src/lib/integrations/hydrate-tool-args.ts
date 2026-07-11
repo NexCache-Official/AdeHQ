@@ -275,6 +275,12 @@ export function hydrateToolCallArgs(
       if (!args.title && state.companyName) args.title = `${state.companyName} export`;
       break;
     }
+    case "team.coordinate": {
+      if (!hasText(args.message) && state.userMessage) {
+        args.message = state.userMessage.trim();
+      }
+      break;
+    }
   }
 
   return coerceToolArgs(tool, args);

@@ -10,6 +10,37 @@
 
 import type { MessageArtifact } from "@/lib/types";
 
+/**
+ * workLogAction values that real tool adapters emit on a genuinely successful
+ * DB write (see `workLogAction:` in src/lib/integrations/adapters/*.ts). A
+ * model can freely put an `action` string matching one of these into
+ * effects.workLog without ever calling the matching tool — that's the
+ * fabricated-success bug this module guards against. Any workLog draft whose
+ * `action` is in this set must be backed by a real tool result this turn.
+ */
+export const TOOL_BACKED_WORK_LOG_ACTIONS = new Set([
+  "content_campaign_reused",
+  "content_campaign_created",
+  "content_post_drafted",
+  "content_post_scheduled",
+  "crm_contact_reused",
+  "crm_contact_created",
+  "crm_company_reused",
+  "crm_company_created",
+  "crm_deal_created",
+  "crm_deal_stage_updated",
+  "investor_firm_reused",
+  "investor_firm_created",
+  "investor_contact_reused",
+  "investor_contact_created",
+  "investor_pipeline_updated",
+  "investor_pipeline_fit_scored",
+  "investor_follow_up_created",
+  "created_email_draft",
+  "coordinated_with_teammate",
+  "task_created",
+]);
+
 /** Count of what actually persisted for a single employee response. */
 export type PersistedActionCounts = {
   /** Tool calls that executed successfully. */
@@ -23,6 +54,14 @@ export type PersistedActionCounts = {
   artifactCount: number;
   approvalCount: number;
   memoryCount: number;
+  /**
+   * effects.workLog entries claiming a tool-backed action (see
+   * TOOL_BACKED_WORK_LOG_ACTIONS) that were NOT backed by a matching
+   * successful tool result this turn — i.e. the model narrated a CRM/task/
+   * artifact action instead of actually calling the tool. These are dropped
+   * before insert (see room-messages.ts), so this count is the only trace.
+   */
+  fabricatedToolClaimCount: number;
 };
 
 export type ReconcileClaimedActionsResult = {
@@ -73,6 +112,29 @@ export function reconcileClaimedActions(
   counts: PersistedActionCounts,
   options?: { triggerMessageId?: string },
 ): ReconcileClaimedActionsResult {
+  // Direct evidence beats the reply-text heuristic below: the model narrated
+  // a specific tool-backed action (e.g. "created contact") in effects.workLog
+  // without the matching tool call ever succeeding. Correct this even if
+  // other genuine effects (memory, an unrelated task) happened in the same
+  // turn — those don't make the fabricated claim any less false.
+  if (counts.fabricatedToolClaimCount > 0) {
+    return {
+      reply: HONEST_REPLY,
+      notice: {
+        type: "tool_result",
+        id: `fabricated-claim-${options?.triggerMessageId ?? Math.random().toString(36).slice(2)}`,
+        label: "Actions not completed",
+        meta: {
+          toolName: "assistant",
+          toolStatus: "failed",
+          error: "The assistant described a CRM/task/artifact action it did not actually run, so nothing was saved.",
+          subtitle: "Nothing was saved. Ask again to retry.",
+        },
+      },
+      falseClaim: true,
+    };
+  }
+
   const producedRealEffect =
     counts.toolSuccessCount > 0 ||
     counts.toolPendingCount > 0 ||

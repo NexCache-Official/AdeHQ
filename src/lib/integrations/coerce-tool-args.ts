@@ -57,6 +57,14 @@ const ARG_ALIASES: Record<string, string> = {
   source_file_id: "sourceFileId",
   target_format: "targetFormat",
   append_rows: "appendRows",
+  note: "message",
+  text: "message",
+  instruction: "message",
+  ask: "message",
+  content: "message",
+  employee_name: "employeeName",
+  employee_id: "employeeId",
+  topic_hint: "topicHint",
 };
 
 export type CoercedToolCall = {
