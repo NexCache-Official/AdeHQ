@@ -1,8 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useStore } from "@/lib/demo-store";
+import { supabase } from "@/lib/supabase/client";
 import { PageContainer, PageHeader } from "@/components/Page";
 import { EmptyState } from "@/components/States";
 import { Button, Modal, ModalHeader } from "@/components/ui";
@@ -95,6 +96,37 @@ export default function CrmPage() {
   }, [backend, workspaceId, query]);
 
   useEffect(() => { void load(); }, [load]);
+
+  // Live-update the board when an AI employee (or another tab) writes a CRM
+  // record via tool call — otherwise this page only ever reflects state as of
+  // the last mount/search, and a user has to hard-navigate to see new records.
+  const loadRef = useRef(load);
+  loadRef.current = load;
+
+  useEffect(() => {
+    if (backend !== "supabase" || !workspaceId) return;
+
+    let refreshTimer: ReturnType<typeof setTimeout> | undefined;
+    const refresh = () => {
+      if (refreshTimer) clearTimeout(refreshTimer);
+      refreshTimer = setTimeout(() => void loadRef.current(), 250);
+    };
+
+    let channel = supabase.channel(`crm:${workspaceId}`);
+    for (const table of ["crm_companies", "crm_contacts", "crm_deals", "crm_pipeline_stages"]) {
+      channel = channel.on(
+        "postgres_changes",
+        { event: "*", schema: "public", table, filter: `workspace_id=eq.${workspaceId}` },
+        refresh,
+      );
+    }
+    void channel.subscribe();
+
+    return () => {
+      if (refreshTimer) clearTimeout(refreshTimer);
+      void supabase.removeChannel(channel);
+    };
+  }, [backend, workspaceId]);
 
   const selectedContact = useMemo(() => data?.contacts.find((c) => c.id === selectedContactId) ?? null, [data, selectedContactId]);
   const selectedDeal = useMemo(() => data?.deals.find((d) => d.id === selectedDealId) ?? null, [data, selectedDealId]);

@@ -142,4 +142,8 @@ export const SUPABASE_WORKSPACE_TABLES = [
   "storage_usage_events",
   "message_attachments",
   "work_graph_edges",
+  "crm_companies",
+  "crm_contacts",
+  "crm_pipeline_stages",
+  "crm_deals",
 ] as const;

@@ -16,7 +16,11 @@ export async function fetchCrmData(params: {
     throw new Error(formatCrmClientError("Not signed in."));
   }
 
-  const res = await fetch(`/api/crm?${search.toString()}`, { headers, credentials: "include" });
+  const res = await fetch(`/api/crm?${search.toString()}`, {
+    headers,
+    credentials: "include",
+    cache: "no-store",
+  });
   if (!res.ok) {
     const body = (await res.json().catch(() => ({}))) as { error?: string };
     throw new Error(formatCrmClientError(body.error ?? "Unable to load CRM."));
