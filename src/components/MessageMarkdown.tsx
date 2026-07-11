@@ -373,7 +373,7 @@ export function MessageMarkdown({
   mentionParticipants,
   citationSources,
 }: {
-  content: string;
+  content: string | null | undefined;
   compact?: boolean;
   roomScale?: boolean;
   mentionsJson?: MentionRef[];
@@ -388,7 +388,10 @@ export function MessageMarkdown({
   };
   const renderInline = (text: string, keyPrefix: string) =>
     inlineNodes(text, keyPrefix, mentionCtx, typo.sourceChip);
-  const lines = content.replace(/\r\n/g, "\n").split("\n");
+  // Streaming/research replies can render a beat before `content` is populated
+  // (message.pending flips false before the first token arrives) — treat that
+  // as empty rather than crashing the whole page.
+  const lines = (content ?? "").replace(/\r\n/g, "\n").split("\n");
   const blocks: React.ReactNode[] = [];
   let index = 0;
 
