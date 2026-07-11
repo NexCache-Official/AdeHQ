@@ -18,6 +18,9 @@ export function formatProviderError(error: unknown, provider: string, model: str
   }
 
   if (error instanceof Error) {
+    if (error.name === "AbortError" || /\baborted\b/i.test(error.message)) {
+      return `${provider} took too long to respond and the request timed out.`;
+    }
     if (error.message.toLowerCase().includes("not found")) {
       return (
         `Model "${model}" was not found on ${provider}. ` +

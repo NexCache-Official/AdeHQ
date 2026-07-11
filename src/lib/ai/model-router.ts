@@ -73,14 +73,17 @@ function errorResponse(
     error,
   });
 
+  const isTimeout = /took too long to respond|timed out/i.test(error ?? "");
+
   return {
     response: {
       employeeId: input.employee.id,
       employeeName: input.employee.name,
-      reply:
-        `I couldn't complete a live model response right now.\n\n` +
-        `**Reason:** ${error ?? reason}\n\n` +
-        `Check **Settings → AI Runtime** to verify provider keys and model configuration.`,
+      reply: isTimeout
+        ? "That took longer than expected and I had to stop — want me to try again?"
+        : `I couldn't complete a live model response right now.\n\n` +
+          `**Reason:** ${error ?? reason}\n\n` +
+          `Check **Settings → AI Runtime** to verify provider keys and model configuration.`,
       effect: {
         workLog: [
           {
