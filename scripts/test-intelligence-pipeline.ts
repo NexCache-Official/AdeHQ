@@ -75,6 +75,42 @@ assert(
   "obvious_search must skip legacy planner",
 );
 
+const internalReviewMessage =
+  "Review this internal brokerage product brief and identify failure modes with acceptance criteria.";
+const directFastPath = classifyMessageFastPath(internalReviewMessage, {
+  workMode: "collaboration",
+  hasRecentContext: true,
+});
+assert(directFastPath.decision === "direct", "internal review work must be direct");
+const directIntelligence = {
+  ...createIntelligenceContext({
+    workspaceId: "ws_test",
+    roomId: "room_test",
+    topicId: "topic_test",
+    messageId: "msg_direct",
+    userMessage: internalReviewMessage,
+    workMode: "collaboration",
+  }),
+  fastPath: {
+    decision: directFastPath.decision,
+    confidence: directFastPath.confidence,
+    reason: directFastPath.reason,
+  },
+};
+assert(
+  researchPlanFromIntelligence({
+    intelligence: directIntelligence,
+    messages: [],
+    userMessage: internalReviewMessage,
+    employee,
+  }) === null,
+  "direct internal review must not request research",
+);
+assert(
+  shouldSkipLegacyResearchPlanner(directIntelligence),
+  "direct internal review must not fall through to the legacy research planner",
+);
+
 const knowledgeContext = {
   ...intelligence,
   knowledge: {

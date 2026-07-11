@@ -118,6 +118,27 @@ function formatResearchError(error: unknown): string {
   return serializeUnknownError(error);
 }
 
+/**
+ * Preserve an intelligence decision to answer directly. Without this explicit
+ * plan, the legacy research planner can reclassify internal planning/review
+ * work as a web lookup after the intelligence layer already declined search.
+ */
+function directReplyResearchPlan(content: string): ResearchPlan {
+  const userQuestion = content.trim();
+  return {
+    action: "reply",
+    reasoning: "Intelligence classified this as direct internal work; no web research is needed.",
+    confidence: 1,
+    userQuestion,
+    resolved: {
+      query: userQuestion,
+      userQuestion,
+      resolvedFrom: "user_message",
+      wasMetaInstruction: false,
+    },
+  };
+}
+
 async function persistRunOrchestrationPhase(
   client: SupabaseClient,
   workspaceId: string,
@@ -985,6 +1006,18 @@ export async function processQueuedAgentRun(
         } else if (dmSteward.route === "employee_model" || dmSteward.route === "ask_clarification") {
           researchPlan = null;
         }
+      }
+
+      // `researchPlanFromIntelligence` deliberately returns null for direct
+      // work. Turn that decision into an explicit reply plan before considering
+      // the legacy classifier, otherwise an internal review can be rerouted to
+      // search simply because the employee has search capability.
+      if (
+        !researchPlan &&
+        isIntelligenceV1Enabled() &&
+        shouldSkipLegacyResearchPlanner(intelligence)
+      ) {
+        researchPlan = directReplyResearchPlan(content);
       }
 
       if (!researchPlan) {
