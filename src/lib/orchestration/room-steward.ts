@@ -10,6 +10,7 @@ import {
   isGroupGreeting,
 } from "@/lib/server/room-governance";
 import { rankEmployeesForMessage } from "./employee-relevance";
+import { rankEmployeesByRoleEmbedding } from "./employee-role-embeddings";
 import type {
   AIEmployeeProfile,
   PendingQuestionAnswerType,
@@ -63,6 +64,8 @@ export type RoomStewardInput = {
 export type RoomStewardClassifyOptions = {
   forceMode?: RuntimeV2Mode;
   forceProviderPref?: RuntimeProviderPref;
+  /** Enables the embedding-based role-match fallback (Phase 3a) before the LLM steward. */
+  client?: SupabaseClient;
 };
 
 export type RoomStewardTestHooks = {
@@ -70,6 +73,7 @@ export type RoomStewardTestHooks = {
   stubRuntimeDecision?: Partial<RoomStewardDecision> | null;
   onRuntimeCall?: (input: RoomStewardInput) => void;
   onFallback?: (info: { reason: string }) => void;
+  onEmbeddingMatch?: (info: { employeeId: string; similarity: number }) => void;
 };
 
 const ROOM_STEWARD_INTENTS = [
@@ -1111,6 +1115,33 @@ function shouldInvokeRuntimeSteward(
   return deterministic.intent === "silent_note";
 }
 
+/**
+ * Genuinely-undecided intents: the deterministic classifier recognized
+ * *something* worth acting on (a task, a question, an opinion request, an
+ * in-progress thread) but its regex role-ranking couldn't confidently name
+ * who should own it (selectedEmployeeIds ended up empty). This is broader
+ * than shouldInvokeRuntimeSteward's "silent_note only" gate on purpose — an
+ * embedding lookup is cheap enough to also try here, whereas the LLM steward
+ * (much slower/costlier) still only fires for the narrower silent_note case.
+ * Deliberately excludes confidently-silent intents (social_ack, topic_shift,
+ * manual_only's own silence) — those are real decisions, not "we don't know".
+ */
+function shouldTryEmbeddingRoleMatch(
+  deterministic: RoomStewardDecision,
+  options: RoomStewardClassifyOptions,
+): boolean {
+  if (options.forceMode) return false;
+  if (deterministic.shouldRespond) return false;
+  if (deterministic.offerOnlyEmployeeIds.length > 0) return false;
+  return (
+    deterministic.intent === "silent_note" ||
+    deterministic.intent === "task_request" ||
+    deterministic.intent === "direct_question" ||
+    deterministic.intent === "ask_for_opinion" ||
+    deterministic.intent === "employee_followup_needed"
+  );
+}
+
 function mergeRuntimeStewardDecision(
   input: RoomStewardInput,
   deterministic: RoomStewardDecision,
@@ -1141,11 +1172,83 @@ function mergeRuntimeStewardDecision(
   });
 }
 
+// Cosine-similarity thresholds for treating an embedding match as confident
+// enough to skip the LLM steward entirely. Deliberately conservative: a false
+// deterministic pick (wrong employee replies) is worse than the ~1-3s cost of
+// falling through to the LLM, so we only trust a clear, well-separated winner.
+const EMBEDDING_MATCH_MIN_SIMILARITY = 0.5;
+const EMBEDDING_MATCH_MIN_MARGIN = 0.08;
+
+/**
+ * Phase 3a — before paying for an LLM classification call, try a cheap
+ * (~50-150ms) embedding cosine-similarity match against the roster's cached
+ * role embeddings. Only fires for messages the regex heuristics in
+ * classifyRoomMessageDeterministic couldn't resolve (shouldInvokeRuntimeSteward
+ * already gates this to the "silent_note, no signal" case). Returns null when
+ * embeddings aren't available/configured or no candidate is confident enough
+ * — the caller falls through to the LLM steward as before.
+ */
+async function tryEmbeddingRoleMatch(
+  input: RoomStewardInput,
+  options: RoomStewardClassifyOptions,
+): Promise<RoomStewardDecision | null> {
+  if (!options.client || options.forceMode) return null;
+
+  try {
+    const ranked = await rankEmployeesByRoleEmbedding(
+      options.client,
+      input.workspaceId,
+      input.messageContent,
+      input.roster,
+    );
+    if (!ranked.length) return null;
+
+    const [top, runnerUp] = ranked;
+    const confidentWinner =
+      top.similarity >= EMBEDDING_MATCH_MIN_SIMILARITY &&
+      (!runnerUp || top.similarity - runnerUp.similarity >= EMBEDDING_MATCH_MIN_MARGIN);
+    if (!confidentWinner) return null;
+
+    roomStewardTestHooks?.onEmbeddingMatch?.({ employeeId: top.employeeId, similarity: top.similarity });
+
+    const participation = normalizeParticipationMode(input.participationMode);
+    if (participation === "manual_only" || participation === "talent_observation") {
+      // These modes have their own strict rules about when to act at all —
+      // let the existing deterministic/LLM path own the decision instead of
+      // an embedding match overriding participation policy.
+      return null;
+    }
+
+    return finalizeDecision(
+      input,
+      baseDecision(
+        input,
+        "direct_question",
+        `Embedding role match (similarity ${top.similarity.toFixed(2)}) — no regex signal, but clearly this specialist's lane.`,
+        {
+          confidence: Math.min(0.88, 0.6 + top.similarity * 0.3),
+          shouldRespond: true,
+          selectedEmployeeIds: [top.employeeId],
+          responseStyle: "answer",
+        },
+      ),
+    );
+  } catch (error) {
+    console.warn("[AdeHQ room steward] embedding role match failed", error);
+    return null;
+  }
+}
+
 export async function classifyRoomMessageWithSteward(
   input: RoomStewardInput,
   options: RoomStewardClassifyOptions = {},
 ): Promise<RoomStewardDecision> {
   const deterministic = classifyRoomMessageDeterministic(input);
+
+  if (shouldTryEmbeddingRoleMatch(deterministic, options)) {
+    const embeddingMatch = await tryEmbeddingRoleMatch(input, options);
+    if (embeddingMatch) return embeddingMatch;
+  }
 
   if (!shouldInvokeRuntimeSteward(deterministic, options)) {
     return deterministic;

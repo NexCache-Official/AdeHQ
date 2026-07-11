@@ -46,9 +46,13 @@ export const SILICONFLOW_LONG_CONTEXT_MODEL =
 export const SILICONFLOW_STRONG_MODEL =
   process.env.ADEHQ_SILICONFLOW_STRONG_MODEL ?? "deepseek-ai/DeepSeek-V4-Pro";
 
+// "BAAI/bge-large-en-v1.5" isn't in SiliconFlow's catalog on this account (404s
+// every call, silently breaking file-search RAG and any other embedding
+// consumer) — confirmed via GET /v1/models. Qwen3-Embedding-0.6B is available,
+// fast, and returns the same 1024 dims EMBEDDING_DIMENSIONS/pgvector expect.
 /** English embedding model — OpenAI-compatible /v1/embeddings on SiliconFlow. */
 export const DEFAULT_EMBEDDING_MODEL =
-  process.env.ADEHQ_EMBEDDING_MODEL ?? "BAAI/bge-large-en-v1.5";
+  process.env.ADEHQ_EMBEDDING_MODEL ?? "Qwen/Qwen3-Embedding-0.6B";
 
 export const EMBEDDING_DIMENSIONS = 1024;
 

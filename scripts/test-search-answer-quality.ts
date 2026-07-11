@@ -202,7 +202,7 @@ async function main() {
     expectTrue(filtered.excluded.length === 1);
   });
 
-  await test("search steward routes current facts to Perplexity not Exa", () => {
+  await test("search steward routes current facts to Exa when configured (Exa-first policy)", () => {
     const caps: ResearchProviderCapabilities = {
       gatewaySearch: true,
       exa: true,
@@ -214,9 +214,24 @@ async function main() {
       {},
       caps,
     );
-    expectTrue(steward.provider === "gateway_perplexity");
-    expectTrue(steward.backupProvider !== "gateway_exa");
+    expectTrue(steward.provider === "gateway_exa", `expected gateway_exa, got ${steward.provider}`);
+    expectTrue(steward.backupProvider !== "gateway_exa", "backup should not equal the primary");
     expectTrue(classifySearchNeed("What is Apple's revenue in 2026?") === "company_fact");
+  });
+
+  await test("search steward falls back to Perplexity when Exa is not configured", () => {
+    const caps: ResearchProviderCapabilities = {
+      gatewaySearch: true,
+      exa: false,
+      tavily: true,
+      browserbase: false,
+    };
+    const steward = decideSearchSteward(
+      "What is Apple's revenue in 2026?",
+      {},
+      caps,
+    );
+    expectTrue(steward.provider === "gateway_perplexity", `expected gateway_perplexity, got ${steward.provider}`);
   });
 
   await test("search steward routes semantic research to Exa", () => {
@@ -265,7 +280,7 @@ async function main() {
     expectTrue(dmProvider !== "gateway_perplexity");
   });
 
-  await test("Exa is not used as Perplexity failure backup", () => {
+  await test("Exa (as primary) never lists itself as its own backup", () => {
     const caps: ResearchProviderCapabilities = {
       gatewaySearch: true,
       exa: true,
@@ -273,8 +288,8 @@ async function main() {
       browserbase: false,
     };
     const steward = decideSearchSteward("What is Apple's revenue in 2026?", {}, caps);
-    expectTrue(steward.provider === "gateway_perplexity");
-    expectTrue(steward.backupProvider !== "gateway_exa");
+    expectTrue(steward.provider === "gateway_exa", `expected gateway_exa, got ${steward.provider}`);
+    expectTrue(steward.backupProvider !== "gateway_exa", "backup must differ from the primary");
   });
 
   await test("Exa results map highlights to source snippets", async () => {

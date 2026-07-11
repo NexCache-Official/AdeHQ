@@ -475,7 +475,7 @@ export async function orchestrateConversation(
           createdAt: message.createdAt,
         })),
       topicState: input.topicState,
-    });
+    }, { client: options.client });
     return stewardDecisionToPlan(stewardDecision, employees);
   }
 

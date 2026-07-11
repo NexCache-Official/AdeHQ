@@ -118,7 +118,14 @@ async function main() {
       });
 
       expectTrue(plan.action === "search", `expected search, got ${plan.action}`);
-      expectTrue(plan.provider === "gateway_perplexity", `expected gateway_perplexity, got ${plan.provider}`);
+      // Provider is whichever real search backend is configured (Exa-first
+      // when EXA_API_KEY is set, else gateway Perplexity) — this test's point
+      // is that browserAccess:"none" doesn't block search entirely, not which
+      // specific provider wins.
+      expectTrue(
+        plan.provider === "gateway_perplexity" || plan.provider === "gateway_exa",
+        `expected a real search provider, got ${plan.provider}`,
+      );
     } finally {
       if (originalGatewayKey == null) delete process.env.AI_GATEWAY_API_KEY;
       else process.env.AI_GATEWAY_API_KEY = originalGatewayKey;
@@ -138,7 +145,15 @@ async function main() {
         query: "What is Anthropic?",
       });
       expectTrue(result.answer.trim().length > 20, "expected non-empty answer");
-      expectTrue(result.providerRoute === "vercel_gateway" || result.providerRoute === "tavily");
+      // Exa-first routing (when EXA_API_KEY is configured) is the intended
+      // behavior for company/fact queries like this one — accept any real
+      // provider that actually answered.
+      expectTrue(
+        result.providerRoute === "vercel_gateway" ||
+          result.providerRoute === "tavily" ||
+          result.providerRoute === "exa",
+        `expected a real provider route, got ${result.providerRoute}`,
+      );
     });
   }
 
