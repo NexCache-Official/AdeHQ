@@ -498,7 +498,13 @@ const createPdfReport: ToolDefinition<CreatePdfReportArgs> = {
   asyncJobType: "artifact_pdf",
   argsSchema: CreatePdfReportArgsSchema,
   promptUsage:
-    'artifact.createPdfReport — args: { "title": "Campaign brief", "template"?: "campaign_brief"|"investor_brief"|"market_research_report"|"sales_outreach_brief", "summary"?: "One-line overview", "sections": [{ "heading": "Highlights", "body": "..." }] }',
+    'artifact.createPdfReport — args: { "title": "...", "template"?: "campaign_brief"|"investor_brief"|"market_research_report"|"sales_outreach_brief", "summary"?: "One-line overview", "sections": [{ "heading": "...", "body": "..." }] }. ' +
+    "If you set `template`, write a real, thoughtful section for EVERY heading that template requires (match the heading text exactly, case-insensitive) — do not leave any of them out, and never submit a placeholder or empty body. If you don't have enough specifics from the user, use reasonable stated assumptions and say so, the way a sharp analyst would draft a first-pass brief rather than leaving blanks. Required headings per template: " +
+    'campaign_brief: ["Executive Summary","Audience","Messaging","Timeline","Call to Action"]; ' +
+    'investor_brief: ["Thesis","Target List Summary","Outreach Plan","Next Steps"]; ' +
+    'market_research_report: ["Methodology","Findings","Comparison","Recommendations"]; ' +
+    'sales_outreach_brief: ["Ideal Customer Profile","Outreach Sequence","Objection Handling","Next Actions"]. ' +
+    "If no template fits (e.g. a property/deal investment brief), omit `template` and choose your own headings that fit the actual document.",
   buildPreview: (args) => ({
     title: `Report — ${args.title}`,
     summary: args.summary ?? `${args.title} with ${args.sections.length} sections${args.template ? ` (${args.template})` : ""}.`,

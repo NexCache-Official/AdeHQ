@@ -434,6 +434,7 @@ export async function runToolCall(
             roomId: ctx.roomId,
             topicId: ctx.topicId,
             employeeId: ctx.employeeId,
+            employeeName: ctx.employeeName,
             triggerMessageId: ctx.triggerMessageId,
           },
         },
