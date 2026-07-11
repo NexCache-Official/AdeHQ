@@ -48,14 +48,28 @@ function substantiveUserLines(userLines: string[]): string[] {
   });
 }
 
+/** Lowercases a role title for mid-sentence use, keeping "AI" capitalized as an acronym. */
+function roleForSentence(role: string): string {
+  if (role.trim().toLowerCase() === "ai employee") return "AI employee";
+  return role.toLowerCase();
+}
+
+/** Picks "a" or "an" based on the leading sound of the word that follows. */
+function articleFor(word: string): "a" | "an" {
+  return /^[aeiou]/i.test(word.trim()) ? "an" : "a";
+}
+
 export function synthesizeMission(input: BriefSynthesisInput): string {
   const role = input.roleTitle.trim() || "AI employee";
   const domain = input.domain.trim() || "the business";
   const focuses = focusPhrases(input);
 
+  const sentenceRole = roleForSentence(role);
+  const article = articleFor(sentenceRole);
+
   if (focuses.length > 0) {
     const primary = focuses.slice(0, 2).join(" and ");
-    return `Help the team succeed as a ${role.toLowerCase()} focused on ${primary.toLowerCase()} — turning priorities into clear work and reliable delivery in ${domain.toLowerCase()}.`;
+    return `Help the team succeed as ${article} ${sentenceRole} focused on ${primary.toLowerCase()} — turning priorities into clear work and reliable delivery in ${domain.toLowerCase()}.`;
   }
 
   if (input.role?.defaultResponsibilities?.length) {
@@ -63,7 +77,7 @@ export function synthesizeMission(input: BriefSynthesisInput): string {
       .replace(/^Own /i, "")
       .replace(/\.$/, "")
       .trim();
-    return `Support ${domain.toLowerCase()} as a ${role.toLowerCase()} — ${anchor.charAt(0).toLowerCase()}${anchor.slice(1)}.`;
+    return `Support ${domain.toLowerCase()} as ${article} ${sentenceRole} — ${anchor.charAt(0).toLowerCase()}${anchor.slice(1)}.`;
   }
 
   if (input.deptSeed?.mission?.trim()) {
@@ -73,10 +87,10 @@ export function synthesizeMission(input: BriefSynthesisInput): string {
   const userContext = substantiveUserLines(input.userLines);
   if (userContext.length > 0) {
     const latest = userContext.slice(-2).join("; ").replace(/\.$/, "");
-    return `Help as a ${role.toLowerCase()} in ${domain.toLowerCase()} — aligned with: ${latest}.`;
+    return `Help as ${article} ${sentenceRole} in ${domain.toLowerCase()} — aligned with: ${latest}.`;
   }
 
-  return `Help the team succeed as a ${role.toLowerCase()} in ${domain.toLowerCase()}.`;
+  return `Help the team succeed as ${article} ${sentenceRole} in ${domain.toLowerCase()}.`;
 }
 
 export function synthesizeCoreResponsibilities(input: BriefSynthesisInput): string[] {

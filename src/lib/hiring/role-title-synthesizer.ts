@@ -45,6 +45,60 @@ function includesAny(text: string, words: string[]) {
   return words.some((word) => text.includes(word));
 }
 
+const TITLE_SUFFIX_WORDS = [
+  "manager",
+  "engineer",
+  "analyst",
+  "designer",
+  "specialist",
+  "representative",
+  "agent",
+  "coordinator",
+  "officer",
+  "assistant",
+  "associate",
+];
+
+const TITLE_SUFFIX_REGEX = new RegExp(`\\b(?:${TITLE_SUFFIX_WORDS.join("|")})\\b`, "i");
+
+const ROLE_PHRASE_STOPWORDS = new Set([
+  "a",
+  "an",
+  "the",
+  "someone",
+  "who",
+  "can",
+  "is",
+  "are",
+  "for",
+  "to",
+  "need",
+  "needs",
+  "want",
+  "wants",
+  "hire",
+  "find",
+  "get",
+  "our",
+  "my",
+]);
+
+/** Pulls a short "<modifier> <title>" noun phrase out of a longer free-text role request. */
+function extractRoleTitlePhrase(raw: string): string | null {
+  const suffixPattern = TITLE_SUFFIX_WORDS.join("|");
+  const match = raw.match(new RegExp(`\\b((?:[a-zA-Z]+[\\s-]+){0,3})(${suffixPattern})\\b`, "i"));
+  if (!match) return null;
+
+  const modifiers = match[1]
+    .trim()
+    .split(/[\s-]+/)
+    .filter(Boolean)
+    .filter((word) => !ROLE_PHRASE_STOPWORDS.has(word.toLowerCase()))
+    .slice(-2);
+
+  return [...modifiers, match[2]].join(" ");
+}
+
 export function synthesizeRoleTitle(input: {
   roleInput: string;
   department?: string | null;
@@ -104,8 +158,13 @@ export function synthesizeRoleTitle(input: {
     return DEPARTMENT_FALLBACKS[input.department];
   }
 
-  if (raw && raw.split(/\s+/).length <= 4 && /manager|engineer|analyst|designer|specialist|representative/i.test(raw)) {
+  if (raw && raw.split(/\s+/).length <= 4 && TITLE_SUFFIX_REGEX.test(raw)) {
     return titleCase(raw);
+  }
+
+  if (raw && TITLE_SUFFIX_REGEX.test(raw)) {
+    const phrase = extractRoleTitlePhrase(raw);
+    if (phrase) return titleCase(phrase);
   }
 
   return "AI Employee";
