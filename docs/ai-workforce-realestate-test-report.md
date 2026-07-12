@@ -207,6 +207,8 @@ All 3 hired employees in this workspace (Elena Rossi, David Kim, Sofia York) are
 
 *(Positive control: plain conversational advice/strategy questions — the majority of what a CEO would ask day to day — consistently worked fast and well throughout this round, including with realtime delivery. The break is specifically in the tool-calling/structured-effects path.)*
 
+**FIXED 2026-07-11 — see `AUDIT_REPORT.md` "Fixed: Bug H" entry for the full writeup.** The reasoning-token hypothesis above was wrong (or at least incomplete) — re-verified that `enable_thinking: false` correctly suppresses reasoning even for `generateObject`/strict-schema calls, as long as the schema doesn't contain a `z.record()` field. The actual root cause: `ToolCallEffectSchema.args` (and `ArtifactEffectSchema.contentJson`) are open `z.record()` fields, and the AI SDK's strict-JSON-schema conversion forces `additionalProperties: false` onto them, making it structurally impossible for the model to populate `args` with real data without violating the schema it was just given — which is exactly what stalls/aborts on every real tool call. Fixed by routing tool-calling `generateObject` calls through a new loose-JSON-plus-zod-validation path (`generateObjectViaJsonMode`) instead of strict schema mode.
+
 ---
 
 ## Features and abilities to build — a CEO's-eye view
