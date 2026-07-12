@@ -931,12 +931,17 @@ function classifyRoomMessageDeterministic(input: RoomStewardInput): RoomStewardD
         responseStyle: "offer_help",
       });
     }
-    return baseDecision(input, isTaskRequest(text) ? "task_request" : "direct_question", "The message asks for help or a direct answer.", {
-      confidence: 0.8,
-      shouldRespond: selected.length > 0,
-      selectedEmployeeIds: selected,
-      responseStyle: selected.length > 1 ? "panel" : "answer",
-    });
+    return baseDecision(
+      input,
+      selected.length > 1 ? "multi_employee_collaboration" : isTaskRequest(text) ? "task_request" : "direct_question",
+      "The message asks for help or a direct answer.",
+      {
+        confidence: 0.8,
+        shouldRespond: selected.length > 0,
+        selectedEmployeeIds: selected,
+        responseStyle: selected.length > 1 ? "panel" : "answer",
+      },
+    );
   }
 
   const rankedRoleMatches = rankEmployeesForMessage(text, toEmployeeProfiles(input));

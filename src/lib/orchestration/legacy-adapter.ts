@@ -142,20 +142,17 @@ export function orchestrationPlanToLegacyResult(
     staggerMs: plan.intent === "panel_response" ? 1500 : undefined,
   };
 
-  const leadOnlyModes: OrchestrationPlan["intent"][] = [
-    "lead_collaborator",
-    "handoff",
-    "ambient_smart_assist",
-    "panel_response",
-    "answer_to_pending_question",
-    "employee_followup_needed",
-    "handoff_response",
-    "correction_or_clarification",
-    "multi_employee_collaboration",
-  ];
+  // Intents where multiple employees answering in the same turn is the intended
+  // behavior (simultaneous group greetings/acks) — every other intent with more
+  // than one responder must be serialized below, or the collaborator(s) fire
+  // with no visibility into the lead's answer and produce a full duplicate reply
+  // instead of building on it (observed: two employees independently giving the
+  // same research answer because "offer_help" was missing from the old
+  // allowlist-based gate here — see AUDIT_REPORT.md).
+  const simultaneousIntents: OrchestrationPlan["intent"][] = ["social_broadcast", "social_ack"];
 
   if (
-    leadOnlyModes.includes(plan.intent) &&
+    !simultaneousIntents.includes(plan.intent) &&
     pendingCollaboratorIds.length > 0
   ) {
     return {
