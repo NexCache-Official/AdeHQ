@@ -13,6 +13,7 @@ import { reconcileTopicSummarySuggestionLifecycle } from "./reconcile-suggestion
 import { reconcileTopicSummaryNextActions } from "./reconcile-next-actions";
 import {
   TOPIC_SUMMARY_AUTO_COOLDOWN_MS,
+  TOPIC_SUMMARY_FAILURE_COOLDOWN_MS,
   type TopicSummary,
   type TopicSummaryRefreshTrigger,
 } from "./types";
@@ -22,6 +23,19 @@ export type RefreshTopicSummaryResult = {
   refreshed: boolean;
   skippedReason?: string;
 };
+
+/**
+ * Best-effort, per-process backoff for topics whose auto-refresh just failed.
+ * Not persisted (a schema change would need explicit user sign-off), so it only
+ * guards within a single server instance — still enough to stop a chatty topic
+ * from re-attempting (and re-burning tokens on) the same failing generation on
+ * every subsequent AI reply.
+ */
+const recentGenerationFailures = new Map<string, number>();
+
+function failureKey(workspaceId: string, topicId: string): string {
+  return `${workspaceId}:${topicId}`;
+}
 
 function summariesMeaningfullyChanged(
   previous: TopicSummary | null,
@@ -83,6 +97,13 @@ export async function refreshTopicSummary(
     return { summary: null, refreshed: false, skippedReason: "trigger_not_eligible" };
   }
 
+  if (!manual) {
+    const failedAt = recentGenerationFailures.get(failureKey(params.workspaceId, params.topicId));
+    if (failedAt && Date.now() - failedAt < TOPIC_SUMMARY_FAILURE_COOLDOWN_MS) {
+      return { summary: null, refreshed: false, skippedReason: "recent_generation_failure" };
+    }
+  }
+
   const existing = await fetchTopicSummary(client, params.workspaceId, params.topicId);
 
   if (
@@ -133,6 +154,13 @@ export async function refreshTopicSummary(
     client,
   });
 
+  if (generated.generationFailed) {
+    if (!manual) {
+      recentGenerationFailures.set(failureKey(params.workspaceId, params.topicId), Date.now());
+    }
+    return { summary: existingForContext, refreshed: false, skippedReason: "generation_failed" };
+  }
+
   if (generated.isCasualConversation && !manual) {
     return { summary: existingForContext, refreshed: false, skippedReason: "casual_conversation" };
   }
@@ -140,6 +168,8 @@ export async function refreshTopicSummary(
   if (generated.isCasualConversation && manual && !force && !generated.summary.trim()) {
     return { summary: existingForContext, refreshed: false, skippedReason: "casual_conversation" };
   }
+
+  recentGenerationFailures.delete(failureKey(params.workspaceId, params.topicId));
 
   const nextSummary: TopicSummary = {
     workspaceId: params.workspaceId,

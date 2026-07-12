@@ -15,25 +15,32 @@ import {
 } from "@/lib/supabase/ai-work-units";
 import type { TopicSummary } from "./types";
 
+/**
+ * Length caps are a safety net against degenerate model output (observed: a
+ * citation tag repeated ~80+ times inside a single title field until the
+ * response hit its token cap and left the JSON truncated/unparseable). A
+ * runaway field now fails schema validation fast instead of silently
+ * consuming the whole output budget on garbage.
+ */
 const summarySchema = z.object({
-  summary: z.string(),
-  whatHappened: z.string(),
-  currentDecision: z.string().nullable(),
+  summary: z.string().max(1200),
+  whatHappened: z.string().max(1200),
+  currentDecision: z.string().max(400).nullable(),
   openQuestions: z.array(
     z.object({
-      text: z.string(),
+      text: z.string().max(240),
       sourceMessageId: z.string().optional(),
     }),
   ),
   keyFacts: z.array(
     z.object({
-      text: z.string(),
+      text: z.string().max(240),
       sourceMessageId: z.string().optional(),
     }),
   ),
   nextActions: z.array(
     z.object({
-      title: z.string(),
+      title: z.string().max(240),
       ownerEmployeeId: z.string().optional(),
       sourceMessageId: z.string().optional(),
       status: z
@@ -43,13 +50,13 @@ const summarySchema = z.object({
   ),
   suggestedMemory: z.array(
     z.object({
-      title: z.string().optional(),
-      content: z.string().optional(),
-      text: z.string(),
+      title: z.string().max(120).optional(),
+      content: z.string().max(600).optional(),
+      text: z.string().max(600),
       category: z.string().optional(),
       tags: z.array(z.string()).optional(),
       scope: z.enum(["workspace", "room", "topic", "employee"]),
-      reason: z.string(),
+      reason: z.string().max(240),
       sourceMessageId: z.string().optional(),
       suggestedByEmployeeId: z.string().optional(),
     }),
@@ -57,7 +64,10 @@ const summarySchema = z.object({
   isCasualConversation: z.boolean().optional(),
 });
 
-export type GeneratedTopicSummaryPayload = z.infer<typeof summarySchema>;
+export type GeneratedTopicSummaryPayload = z.infer<typeof summarySchema> & {
+  /** Set when generation failed and this is a degraded placeholder — distinct from a genuinely casual conversation. See refreshTopicSummary's failure backoff. */
+  generationFailed?: boolean;
+};
 
 export const topicSummarySchema = summarySchema;
 
@@ -177,8 +187,14 @@ const TOPIC_SUMMARY_TIMEOUT_MS = 20_000;
 /**
  * Safe degraded payload used when summary generation fails. Marked as a casual
  * conversation so callers skip updating the stored summary instead of erroring.
+ * `generationFailed` additionally distinguishes "the model errored/timed out" from
+ * "the conversation really was just small talk" — refreshTopicSummary uses it to
+ * back off from retrying a topic that just failed, instead of re-attempting (and
+ * re-burning tokens on) the same failure on every subsequent message.
  */
-export function emptyCasualSummaryPayload(): GeneratedTopicSummaryPayload {
+export function emptyCasualSummaryPayload(options?: {
+  generationFailed?: boolean;
+}): GeneratedTopicSummaryPayload {
   return {
     summary: "",
     whatHappened: "",
@@ -188,8 +204,18 @@ export function emptyCasualSummaryPayload(): GeneratedTopicSummaryPayload {
     nextActions: [],
     suggestedMemory: [],
     isCasualConversation: true,
+    generationFailed: options?.generationFailed,
   };
 }
+
+/**
+ * Modest frequency/presence penalties — mitigates the degenerate repetition
+ * failure mode above (a token or short tag repeating dozens of times until the
+ * output budget is exhausted) at the sampling level, not just via the length
+ * caps above.
+ */
+const TOPIC_SUMMARY_FREQUENCY_PENALTY = 0.4;
+const TOPIC_SUMMARY_PRESENCE_PENALTY = 0.2;
 
 /** Direct SiliconFlow path — resilient: never hangs and never throws. */
 export async function generateTopicSummaryPayloadOld(
@@ -209,6 +235,8 @@ export async function generateTopicSummaryPayloadOld(
       system: TOPIC_SUMMARY_SYSTEM,
       prompt: contextBlock,
       maxOutputTokens: TOPIC_SUMMARY_MAX_TOKENS,
+      frequencyPenalty: TOPIC_SUMMARY_FREQUENCY_PENALTY,
+      presencePenalty: TOPIC_SUMMARY_PRESENCE_PENALTY,
       abortSignal: AbortSignal.timeout(TOPIC_SUMMARY_TIMEOUT_MS),
       providerOptions: siliconFlowProviderOptions(modelId),
     });
@@ -217,7 +245,7 @@ export async function generateTopicSummaryPayloadOld(
   } catch (error) {
     // Summaries are advisory — degrade gracefully rather than failing the caller's run.
     console.warn("[AdeHQ topic summary old path]", error);
-    return emptyCasualSummaryPayload();
+    return emptyCasualSummaryPayload({ generationFailed: true });
   }
 }
 
@@ -324,6 +352,8 @@ export async function generateTopicSummaryPayloadRuntime(
       system: TOPIC_SUMMARY_SYSTEM,
       prompt: contextBlock,
       maxTokens: TOPIC_SUMMARY_MAX_TOKENS,
+      frequencyPenalty: TOPIC_SUMMARY_FREQUENCY_PENALTY,
+      presencePenalty: TOPIC_SUMMARY_PRESENCE_PENALTY,
       preferJsonMode: true,
       metadata: {
         topicId: options.topicId,

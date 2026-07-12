@@ -57,3 +57,12 @@ export type TopicSummaryRefreshTrigger =
   | "approval_requested";
 
 export const TOPIC_SUMMARY_AUTO_COOLDOWN_MS = 3 * 60 * 1000;
+
+/**
+ * Cooldown applied after a FAILED auto-refresh attempt specifically. The normal
+ * cooldown above only kicks in once `lastRefreshedAt` is set, which never happens
+ * on failure — without this, a topic whose summary generation keeps failing would
+ * retry (and re-burn tokens) on every subsequent "meaningful_ai_reply" trigger,
+ * i.e. potentially every single message.
+ */
+export const TOPIC_SUMMARY_FAILURE_COOLDOWN_MS = 3 * 60 * 1000;
