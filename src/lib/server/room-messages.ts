@@ -1016,6 +1016,8 @@ export async function persistEmployeeEffects(
         label: "Could not complete requested actions",
         meta: {
           toolStatus: "failed",
+          retryKind: "employee_reply",
+          triggerMessageId,
           error: message,
           subtitle: message,
         },
@@ -1174,6 +1176,26 @@ export async function persistEmployeeEffects(
     });
     reply = reconciled.reply;
     if (reconciled.notice) artifacts.push(reconciled.notice);
+  }
+
+  // Whole-turn model failure (see model-router.ts's errorResponse): the reply
+  // is just an apologetic text message with no effects at all today — give the
+  // user an in-place way to regenerate instead of having to retype the request.
+  const modelErrorLogged = effect.workLog.some(
+    (entry) => entry.action === "Model error" && entry.status === "failed",
+  );
+  if (modelErrorLogged && triggerMessageId) {
+    artifacts.push({
+      type: "tool_result",
+      id: `model-error-${triggerMessageId}`,
+      label: "Reply failed",
+      meta: {
+        toolStatus: "failed",
+        retryKind: "employee_reply",
+        triggerMessageId,
+        subtitle: "The model call failed. Retry to try again.",
+      },
+    });
   }
 
   const aiMessage: RoomMessage = {

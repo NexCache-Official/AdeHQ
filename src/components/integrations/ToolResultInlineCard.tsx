@@ -48,12 +48,22 @@ export function ToolResultInlineCard({
 
   const status = display.meta?.toolStatus ?? "failed";
   const href = display.meta?.href;
-  const canRetry =
+  const isReplyRetry = display.meta?.retryKind === "employee_reply";
+  const canRetryTool =
     status === "failed" &&
+    !isReplyRetry &&
     display.meta?.toolName &&
     context?.workspaceId &&
     context?.employeeId &&
     display.meta?.retryArgs;
+  const canRetryReply =
+    status === "failed" &&
+    isReplyRetry &&
+    context?.workspaceId &&
+    context?.employeeId &&
+    context?.roomId &&
+    (display.meta?.triggerMessageId ?? context?.messageId);
+  const canRetry = Boolean(canRetryTool || canRetryReply);
 
   const persistResolvedArtifact = (resolved: MessageArtifact, jobId: string) => {
     if (persistedRef.current || !context?.roomId || !context?.messageId) return;
@@ -160,49 +170,124 @@ export function ToolResultInlineCard({
     };
   }, [artifact, context?.messageId, context?.roomId, context?.workspaceId, actions]);
 
+  const retryToolCall = async () => {
+    const headers = await authHeaders();
+    const res = await fetch("/api/integrations/tools/run", {
+      method: "POST",
+      headers: { ...headers, "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({
+        workspaceId: context!.workspaceId,
+        employeeId: context!.employeeId,
+        tool: display.meta!.toolName,
+        mode: "execute",
+        args: display.meta!.retryArgs ?? {},
+        roomId: context!.roomId,
+        topicId: context!.topicId,
+        triggerMessageId: display.meta!.triggerMessageId,
+        idempotencyKey: display.meta!.idempotencyKey,
+      }),
+    });
+    const body = (await res.json().catch(() => ({}))) as {
+      error?: string;
+      result?: { status?: string; error?: string; output?: { summary?: string; objectId?: string } };
+    };
+    if (!res.ok) throw new Error(body.error ?? "Retry failed.");
+    if (body.result?.status !== "success") {
+      throw new Error(body.result?.error ?? `Retry ${body.result?.status ?? "failed"}.`);
+    }
+    const objectId = body.result.output?.objectId;
+    setDisplay({
+      ...display,
+      label: body.result.output?.summary ?? "Action succeeded.",
+      meta: {
+        ...display.meta,
+        toolStatus: "success",
+        href: objectId ? `/drive?artifact=${objectId}` : "/drive",
+        subtitle: "Open in Drive",
+        error: undefined,
+      },
+    });
+    setRetryMessage(body.result.output?.summary ?? "Action succeeded.");
+  };
+
+  /**
+   * Regenerates the whole employee turn instead of one tool call — used when
+   * nothing narrower can be retried (the model call itself failed, or it never
+   * emitted a real tool call in the first place). Queues a fresh agent run via
+   * the same machinery a normal incoming message uses, processes it, and drops
+   * the resulting reply into the room as a new message.
+   */
+  const retryEmployeeReply = async () => {
+    const triggerMessageId = display.meta?.triggerMessageId ?? context?.messageId;
+    if (!triggerMessageId) throw new Error("Nothing to retry.");
+    const headers = await authHeaders();
+    const queueRes = await fetch(`/api/messages/${encodeURIComponent(triggerMessageId)}/retry-response`, {
+      method: "POST",
+      headers: { ...headers, "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ employeeId: context!.employeeId }),
+    });
+    const queueBody = (await queueRes.json().catch(() => ({}))) as {
+      error?: string;
+      queued?: { runId: string }[];
+    };
+    if (!queueRes.ok || !queueBody.queued?.length) {
+      throw new Error(queueBody.error ?? "Could not queue a retry.");
+    }
+
+    const runId = queueBody.queued[0].runId;
+    const processRes = await fetch(`/api/agent-runs/${encodeURIComponent(runId)}/process`, {
+      method: "POST",
+      headers: { ...headers, "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ workspaceId: context!.workspaceId }),
+    });
+    const processBody = (await processRes.json().catch(() => ({}))) as {
+      error?: string;
+      code?: string;
+      reply?: string;
+      aiMessageId?: string;
+      employeeId?: string;
+      employeeName?: string;
+      artifacts?: MessageArtifact[];
+    };
+
+    // The room's own background poller can win the race and claim this run
+    // before this explicit call does — that's not a failure, the reply is
+    // already on its way in via the normal live-message flow.
+    if (processRes.status === 409 && processBody.code === "already_claimed_or_not_ready") {
+      setRetryMessage("Retrying — the new reply will appear in the room shortly.");
+      return;
+    }
+
+    if (!processRes.ok || !processBody.aiMessageId) {
+      throw new Error(processBody.error ?? "Retry failed.");
+    }
+
+    actions.addMessage(context!.roomId!, {
+      id: processBody.aiMessageId,
+      topicId: context?.topicId,
+      senderType: "ai",
+      senderId: processBody.employeeId ?? context!.employeeId!,
+      senderName: processBody.employeeName ?? "",
+      content: processBody.reply ?? "",
+      artifacts: processBody.artifacts,
+      agentRunId: runId,
+      triggerMessageId,
+    });
+    setRetryMessage("Retried — see the new reply below.");
+  };
+
   const retry = async () => {
-    if (!canRetry || !display.meta?.toolName) return;
+    if (!canRetry) return;
     setRetrying(true);
     setRetryMessage(null);
     try {
-      const headers = await authHeaders();
-      const res = await fetch("/api/integrations/tools/run", {
-        method: "POST",
-        headers: { ...headers, "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({
-          workspaceId: context!.workspaceId,
-          employeeId: context!.employeeId,
-          tool: display.meta.toolName,
-          mode: "execute",
-          args: display.meta.retryArgs ?? {},
-          roomId: context!.roomId,
-          topicId: context!.topicId,
-          triggerMessageId: display.meta.triggerMessageId,
-          idempotencyKey: display.meta.idempotencyKey,
-        }),
-      });
-      const body = (await res.json().catch(() => ({}))) as {
-        error?: string;
-        result?: { status?: string; error?: string; output?: { summary?: string; objectId?: string } };
-      };
-      if (!res.ok) throw new Error(body.error ?? "Retry failed.");
-      if (body.result?.status === "success") {
-        const objectId = body.result.output?.objectId;
-        setDisplay({
-          ...display,
-          label: body.result.output?.summary ?? "Action succeeded.",
-          meta: {
-            ...display.meta,
-            toolStatus: "success",
-            href: objectId ? `/drive?artifact=${objectId}` : "/drive",
-            subtitle: "Open in Drive",
-            error: undefined,
-          },
-        });
-        setRetryMessage(body.result.output?.summary ?? "Action succeeded.");
+      if (isReplyRetry) {
+        await retryEmployeeReply();
       } else {
-        throw new Error(body.result?.error ?? `Retry ${body.result?.status ?? "failed"}.`);
+        await retryToolCall();
       }
     } catch (error) {
       setRetryMessage(error instanceof Error ? error.message : "Retry failed.");

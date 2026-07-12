@@ -100,7 +100,10 @@ export function replyClaimsCompletedAction(reply: string): boolean {
 }
 
 const HONEST_REPLY =
-  "I wasn't able to actually complete those actions just now — nothing was saved to your CRM, tasks, or Drive. This was a tool execution issue on my side, not a problem with your request. Want me to try again?";
+  "I wasn't able to actually complete those actions just now — nothing was saved to your CRM, tasks, or Drive. This was a tool execution issue on my side, not a problem with your request.";
+
+const HONEST_REPLY_PARTIAL =
+  "One of the actions I described didn't actually run, so part of this wasn't saved — check the cards below for what did and didn't go through.";
 
 /**
  * Compare a reply's completion claims against what actually persisted.
@@ -112,29 +115,6 @@ export function reconcileClaimedActions(
   counts: PersistedActionCounts,
   options?: { triggerMessageId?: string },
 ): ReconcileClaimedActionsResult {
-  // Direct evidence beats the reply-text heuristic below: the model narrated
-  // a specific tool-backed action (e.g. "created contact") in effects.workLog
-  // without the matching tool call ever succeeding. Correct this even if
-  // other genuine effects (memory, an unrelated task) happened in the same
-  // turn — those don't make the fabricated claim any less false.
-  if (counts.fabricatedToolClaimCount > 0) {
-    return {
-      reply: HONEST_REPLY,
-      notice: {
-        type: "tool_result",
-        id: `fabricated-claim-${options?.triggerMessageId ?? Math.random().toString(36).slice(2)}`,
-        label: "Actions not completed",
-        meta: {
-          toolName: "assistant",
-          toolStatus: "failed",
-          error: "The assistant described a CRM/task/artifact action it did not actually run, so nothing was saved.",
-          subtitle: "Nothing was saved. Ask again to retry.",
-        },
-      },
-      falseClaim: true,
-    };
-  }
-
   const producedRealEffect =
     counts.toolSuccessCount > 0 ||
     counts.toolPendingCount > 0 ||
@@ -143,6 +123,33 @@ export function reconcileClaimedActions(
     counts.artifactCount > 0 ||
     counts.approvalCount > 0 ||
     counts.memoryCount > 0;
+
+  // Direct evidence beats the reply-text heuristic below: the model narrated
+  // a specific tool-backed action (e.g. "created contact") in effects.workLog
+  // without the matching tool call ever succeeding. Correct this even when
+  // other genuine effects (memory, an unrelated task) happened in the same
+  // turn — those don't make the fabricated claim any less false — but say so
+  // honestly instead of claiming "nothing was saved" next to a success card.
+  if (counts.fabricatedToolClaimCount > 0) {
+    return {
+      reply: producedRealEffect ? HONEST_REPLY_PARTIAL : HONEST_REPLY,
+      notice: {
+        type: "tool_result",
+        id: `fabricated-claim-${options?.triggerMessageId ?? Math.random().toString(36).slice(2)}`,
+        label: "Actions not completed",
+        meta: {
+          toolStatus: "failed",
+          retryKind: "employee_reply",
+          triggerMessageId: options?.triggerMessageId,
+          error: "The assistant described a CRM/task/artifact action it did not actually run, so nothing was saved.",
+          subtitle: producedRealEffect
+            ? "One action wasn't saved — see the other cards for what succeeded."
+            : "Nothing was saved.",
+        },
+      },
+      falseClaim: true,
+    };
+  }
 
   if (producedRealEffect) {
     if (
@@ -173,11 +180,12 @@ export function reconcileClaimedActions(
           id: `no-op-${options?.triggerMessageId ?? Math.random().toString(36).slice(2)}`,
           label: "Actions not completed",
           meta: {
-            toolName: "assistant",
             toolStatus: "failed",
+            retryKind: "employee_reply",
+            triggerMessageId: options?.triggerMessageId,
             error:
               "The assistant described actions it did not actually run, so nothing was saved.",
-            subtitle: "Nothing was saved to CRM, Tasks, or Drive. Ask again to retry.",
+            subtitle: "Nothing was saved to CRM, Tasks, or Drive.",
           },
         };
 

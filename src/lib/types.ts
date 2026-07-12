@@ -274,6 +274,12 @@ export type MessageArtifact = {
     triggerMessageId?: string;
     idempotencyKey?: string;
     retryArgs?: Record<string, unknown>;
+    /**
+     * "tool_call" (default when retryArgs is set): re-run one specific tool call.
+     * "employee_reply": the whole turn failed or produced nothing real — retry
+     * regenerates the employee's entire response to triggerMessageId instead.
+     */
+    retryKind?: "tool_call" | "employee_reply";
     workMode?: import("@/lib/ai/intelligence/intelligence-context").WorkMode;
     /** Autopilot offer chip. */
     objective?: string;
@@ -313,7 +319,8 @@ export type ResponseReason =
   | "ambient_help_request"
   | "ambient_role_match"
   | "ambient_collaboration_lead"
-  | "ambient_collaboration_collaborator";
+  | "ambient_collaboration_collaborator"
+  | "manual_retry";
 
 export type ConversationMode =
   | "direct_reply"
