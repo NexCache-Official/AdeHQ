@@ -105,6 +105,16 @@ function mergeProviderOptions(
   };
 }
 
+/**
+ * Tier 1 (strict `generateObject` / JSON-schema mode) is skipped whenever
+ * `preferJsonMode` is set. Strict mode forces `additionalProperties: false` onto
+ * every object node in the converted schema — including `ToolCallEffectSchema.args`
+ * and `ArtifactEffectSchema.contentJson`, both open-ended `z.record()` fields — so
+ * the model is asked to satisfy a schema that forbids the very key/value pairs a
+ * real tool call needs. Providers enforcing that schema server-side then hang or
+ * exhaust the token budget trying to reconcile the contradiction. Tier 2's loose
+ * `json_object` mode plus client-side zod validation has no such restriction.
+ */
 export async function callStructuredLlm(
   options: StructuredLlmOptions,
 ): Promise<StructuredLlmResult> {
@@ -118,10 +128,8 @@ export async function callStructuredLlm(
     providerOptions,
     preferJsonMode = false,
   } = options;
-  const abortController = new AbortController();
-  const timer = setTimeout(() => abortController.abort(), timeoutMs);
 
-  try {
+  if (!preferJsonMode) {
     try {
       const result = await generateObject({
         model,
@@ -130,7 +138,7 @@ export async function callStructuredLlm(
         prompt,
         temperature,
         maxOutputTokens: maxTokens,
-        abortSignal: abortController.signal,
+        abortSignal: AbortSignal.timeout(timeoutMs),
         providerOptions,
       });
 
@@ -143,85 +151,80 @@ export async function callStructuredLlm(
         fallbackTier: 1,
       };
     } catch {
-      try {
-        const jsonModeOptions = preferJsonMode
-          ? mergeProviderOptions(providerOptions, {
-              openai: { responseFormat: { type: "json_object" } },
-            })
-          : providerOptions;
-
-        const textResult = await generateText({
-          model,
-          system: `${system}\n\nReturn ONLY valid JSON matching this shape:\n{"reply":"string","effects":{"workLog":[],"tasks":[],"memory":[],"memorySuggestions":[],"citations":[],"artifacts":[],"approvals":[],"emailDrafts":[],"toolCalls":[],"autopilot":{"mode":"offer","objective":"..."},"handoffTo":[]}}`,
-          prompt,
-          temperature,
-          maxOutputTokens: maxTokens,
-          abortSignal: abortController.signal,
-          providerOptions: jsonModeOptions,
-        });
-
-        const parsed = parseModelResponseText(textResult.text);
-        if (parsed) {
-          return {
-            response: {
-              reply: sanitizeReplyForChat(parsed.reply),
-              effect: parsed.effect,
-            },
-            inputTokens: textResult.usage?.inputTokens,
-            outputTokens: textResult.usage?.outputTokens,
-            cachedTokens: (textResult.usage as { cachedInputTokens?: number } | undefined)?.cachedInputTokens,
-            structuredOutputUsed: true,
-            fallbackTier: 2,
-          };
-        }
-
-        const strict = ModelResponseSchema.safeParse(extractJson(textResult.text));
-        if (strict.success) {
-          return {
-            response: toEffect(strict.data),
-            inputTokens: textResult.usage?.inputTokens,
-            outputTokens: textResult.usage?.outputTokens,
-            cachedTokens: (textResult.usage as { cachedInputTokens?: number } | undefined)?.cachedInputTokens,
-            structuredOutputUsed: true,
-            fallbackTier: 2,
-          };
-        }
-
-        return {
-          response: tier3Fallback(textResult.text),
-          inputTokens: textResult.usage?.inputTokens,
-          outputTokens: textResult.usage?.outputTokens,
-          cachedTokens: (textResult.usage as { cachedInputTokens?: number } | undefined)?.cachedInputTokens,
-          structuredOutputUsed: false,
-          fallbackTier: 3,
-        };
-      } catch {
-        try {
-          const textResult = await generateText({
-            model,
-            system,
-            prompt,
-            temperature,
-            maxOutputTokens: maxTokens,
-            abortSignal: abortController.signal,
-            providerOptions,
-          });
-
-          return {
-            response: tier3Fallback(textResult.text),
-            inputTokens: textResult.usage?.inputTokens,
-            outputTokens: textResult.usage?.outputTokens,
-            cachedTokens: (textResult.usage as { cachedInputTokens?: number } | undefined)
-              ?.cachedInputTokens,
-            structuredOutputUsed: false,
-            fallbackTier: 3,
-          };
-        } catch (tier3Error) {
-          throw tier3Error;
-        }
-      }
+      // Fall through to tier 2.
     }
-  } finally {
-    clearTimeout(timer);
+  }
+
+  try {
+    const jsonModeOptions = preferJsonMode
+      ? mergeProviderOptions(providerOptions, {
+          openai: { responseFormat: { type: "json_object" } },
+        })
+      : providerOptions;
+
+    const textResult = await generateText({
+      model,
+      system: `${system}\n\nReturn ONLY valid JSON matching this shape:\n{"reply":"string","effects":{"workLog":[],"tasks":[],"memory":[],"memorySuggestions":[],"citations":[],"artifacts":[],"approvals":[],"emailDrafts":[],"toolCalls":[],"autopilot":{"mode":"offer","objective":"..."},"handoffTo":[]}}`,
+      prompt,
+      temperature,
+      maxOutputTokens: maxTokens,
+      abortSignal: AbortSignal.timeout(timeoutMs),
+      providerOptions: jsonModeOptions,
+    });
+
+    const parsed = parseModelResponseText(textResult.text);
+    if (parsed) {
+      return {
+        response: {
+          reply: sanitizeReplyForChat(parsed.reply),
+          effect: parsed.effect,
+        },
+        inputTokens: textResult.usage?.inputTokens,
+        outputTokens: textResult.usage?.outputTokens,
+        cachedTokens: (textResult.usage as { cachedInputTokens?: number } | undefined)?.cachedInputTokens,
+        structuredOutputUsed: true,
+        fallbackTier: 2,
+      };
+    }
+
+    const strict = ModelResponseSchema.safeParse(extractJson(textResult.text));
+    if (strict.success) {
+      return {
+        response: toEffect(strict.data),
+        inputTokens: textResult.usage?.inputTokens,
+        outputTokens: textResult.usage?.outputTokens,
+        cachedTokens: (textResult.usage as { cachedInputTokens?: number } | undefined)?.cachedInputTokens,
+        structuredOutputUsed: true,
+        fallbackTier: 2,
+      };
+    }
+
+    return {
+      response: tier3Fallback(textResult.text),
+      inputTokens: textResult.usage?.inputTokens,
+      outputTokens: textResult.usage?.outputTokens,
+      cachedTokens: (textResult.usage as { cachedInputTokens?: number } | undefined)?.cachedInputTokens,
+      structuredOutputUsed: false,
+      fallbackTier: 3,
+    };
+  } catch {
+    const textResult = await generateText({
+      model,
+      system,
+      prompt,
+      temperature,
+      maxOutputTokens: maxTokens,
+      abortSignal: AbortSignal.timeout(timeoutMs),
+      providerOptions,
+    });
+
+    return {
+      response: tier3Fallback(textResult.text),
+      inputTokens: textResult.usage?.inputTokens,
+      outputTokens: textResult.usage?.outputTokens,
+      cachedTokens: (textResult.usage as { cachedInputTokens?: number } | undefined)?.cachedInputTokens,
+      structuredOutputUsed: false,
+      fallbackTier: 3,
+    };
   }
 }

@@ -1,5 +1,6 @@
 import { embedMany, generateObject, generateText } from "ai";
 import { gateway } from "@ai-sdk/gateway";
+import { generateObjectViaJsonMode } from "./json-mode-object";
 import {
   estimateCost,
   getOutputTokenCap,
@@ -222,30 +223,58 @@ export function createVercelGatewayAdapter(
       }
 
       try {
-        const providerOptions = buildGatewayProviderOptions(params.gatewayProviderSlug);
-        const result = await withGatewayApiKey(() => generateObject({
-          model: gateway(modelId),
-          schema: params.schema,
-          system,
-          prompt,
-          temperature,
-          maxOutputTokens: maxTokens,
-          abortSignal: AbortSignal.timeout(timeoutMs),
-          ...(providerOptions ? { providerOptions } : {}),
-        }));
-
-        const inputTokens = result.usage?.inputTokens ?? 0;
-        const outputTokens = result.usage?.outputTokens ?? 0;
-        const cached =
-          (result.usage as { cachedInputTokens?: number } | undefined)?.cachedInputTokens ?? 0;
+        const gatewayProviderOptions = buildGatewayProviderOptions(params.gatewayProviderSlug);
+        const outcome = params.preferJsonMode
+          ? await withGatewayApiKey(() =>
+              generateObjectViaJsonMode({
+                model: gateway(modelId),
+                schema: params.schema,
+                system,
+                prompt,
+                maxTokens,
+                timeoutMs,
+                temperature,
+                frequencyPenalty: params.frequencyPenalty,
+                presencePenalty: params.presencePenalty,
+                providerOptions: gatewayProviderOptions,
+              }),
+            )
+          : await withGatewayApiKey(() =>
+              generateObject({
+                model: gateway(modelId),
+                schema: params.schema,
+                system,
+                prompt,
+                temperature,
+                maxOutputTokens: maxTokens,
+                frequencyPenalty: params.frequencyPenalty,
+                presencePenalty: params.presencePenalty,
+                abortSignal: AbortSignal.timeout(timeoutMs),
+                ...(gatewayProviderOptions ? { providerOptions: gatewayProviderOptions } : {}),
+              }),
+            ).then((result) => ({
+              object: result.object,
+              inputTokens: result.usage?.inputTokens ?? 0,
+              outputTokens: result.usage?.outputTokens ?? 0,
+              cachedTokens:
+                (result.usage as { cachedInputTokens?: number } | undefined)?.cachedInputTokens ?? 0,
+              finishReason: result.finishReason,
+            }));
 
         return buildResult({
           ctx: CTX,
           modelId,
-          object: result.object,
+          object: outcome.object,
           latencyMs: Date.now() - started,
-          usage: usageFromTokens(modelId, inputTokens, outputTokens, cached, Date.now() - started, credential),
-          finishReason: result.finishReason,
+          usage: usageFromTokens(
+            modelId,
+            outcome.inputTokens,
+            outcome.outputTokens,
+            outcome.cachedTokens,
+            Date.now() - started,
+            credential,
+          ),
+          finishReason: outcome.finishReason,
         });
       } catch (error) {
         throw new Error(formatProviderError(error, "vercel", modelId));

@@ -93,6 +93,9 @@ export type RuntimeGenerateObjectParams<T> = RuntimeBaseParams & {
   timeoutMs?: number;
   modelId?: string;
   preferJsonMode?: boolean;
+  /** Mitigates degenerate token-repetition loops (a phrase/tag repeating until the output cap is hit). */
+  frequencyPenalty?: number;
+  presencePenalty?: number;
 };
 
 export type RuntimeEmbedParams = RuntimeBaseParams & {

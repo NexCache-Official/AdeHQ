@@ -1,4 +1,5 @@
 import { generateObject, generateText } from "ai";
+import { generateObjectViaJsonMode } from "./json-mode-object";
 import {
   estimateCost,
   getOutputTokenCap,
@@ -207,29 +208,55 @@ export function createSiliconFlowAdapter(credential?: ResolvedCredential): AiAda
 
       for (const modelId of modelsToTry(preferred, modelMode)) {
         try {
-          const result = await generateObject({
-            model: siliconFlowChatModel(modelId, { apiKey, baseURL }),
-            schema: params.schema,
-            system,
-            prompt,
-            temperature,
-            maxOutputTokens: maxTokens,
-            abortSignal: AbortSignal.timeout(timeoutMs),
-            providerOptions: siliconFlowProviderOptions(modelId),
-          });
-
-          const inputTokens = result.usage?.inputTokens ?? 0;
-          const outputTokens = result.usage?.outputTokens ?? 0;
-          const cached =
-            (result.usage as { cachedInputTokens?: number } | undefined)?.cachedInputTokens ?? 0;
+          const model = siliconFlowChatModel(modelId, { apiKey, baseURL });
+          const outcome = params.preferJsonMode
+            ? await generateObjectViaJsonMode({
+                model,
+                schema: params.schema,
+                system,
+                prompt,
+                maxTokens,
+                timeoutMs,
+                temperature,
+                frequencyPenalty: params.frequencyPenalty,
+                presencePenalty: params.presencePenalty,
+                providerOptions: siliconFlowProviderOptions(modelId),
+                useOpenAiJsonObjectFormat: true,
+              })
+            : await generateObject({
+                model,
+                schema: params.schema,
+                system,
+                prompt,
+                temperature,
+                maxOutputTokens: maxTokens,
+                frequencyPenalty: params.frequencyPenalty,
+                presencePenalty: params.presencePenalty,
+                abortSignal: AbortSignal.timeout(timeoutMs),
+                providerOptions: siliconFlowProviderOptions(modelId),
+              }).then((result) => ({
+                object: result.object,
+                inputTokens: result.usage?.inputTokens ?? 0,
+                outputTokens: result.usage?.outputTokens ?? 0,
+                cachedTokens:
+                  (result.usage as { cachedInputTokens?: number } | undefined)?.cachedInputTokens ?? 0,
+                finishReason: result.finishReason,
+              }));
 
           return buildResult({
             ctx: CTX,
             modelId,
-            object: result.object,
+            object: outcome.object,
             latencyMs: Date.now() - started,
-            usage: usageFromTokens(modelId, inputTokens, outputTokens, cached, Date.now() - started, credential),
-            finishReason: result.finishReason,
+            usage: usageFromTokens(
+              modelId,
+              outcome.inputTokens,
+              outcome.outputTokens,
+              outcome.cachedTokens,
+              Date.now() - started,
+              credential,
+            ),
+            finishReason: outcome.finishReason,
           });
         } catch (error) {
           lastError = new Error(formatProviderError(error, "siliconflow", modelId));

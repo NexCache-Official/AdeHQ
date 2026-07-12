@@ -33,6 +33,11 @@ export function createRuntimeBrain(options: RuntimeBrainOptions): AutonomyBrain 
         temperature: 0.3,
         maxTokens: 1200,
         timeoutMs: options.timeoutMs ?? 45_000,
+        // AutonomyToolCallSchema.args is an open z.record() field — strict
+        // generateObject's JSON-schema mode forces additionalProperties:false onto
+        // it, making it impossible for the model to emit real tool-call args. See
+        // generateObjectViaJsonMode in runtime/adapters for the full explanation.
+        preferJsonMode: true,
         metadata: { source: "autonomous_session" },
       },
       options.forceMode ? { forceMode: options.forceMode } : undefined,
