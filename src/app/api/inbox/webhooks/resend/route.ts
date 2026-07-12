@@ -2,8 +2,9 @@
  * Production Resend webhook for workspace inbox.
  * POST /api/inbox/webhooks/resend
  *
- * verify → idempotent store → enqueue process → 200 immediately
- * Never runs AI or heavy work inline.
+ * verify → idempotent store → process → 200
+ * Never runs AI. Processing is awaited so Vercel does not freeze the
+ * function after the response (fire-and-forget was dropping queued events).
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -14,6 +15,7 @@ import { processInboundEvent } from "@/lib/inbox/inbound/process";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 
 export async function POST(req: NextRequest) {
   const rawBody = await req.text();
@@ -30,27 +32,31 @@ export async function POST(req: NextRequest) {
   }
 
   const meta = provider.parseInboundWebhook(verified.payload);
-  // Prefer Svix header id over payload field
   const svixId = headers.id;
 
   const client = createSupabaseSecretClient();
   const stored = await storeInboundWebhookEvent(client, { meta, svixId });
 
-  if (!stored.duplicate && stored.processingState === "queued") {
-    void processInboundEvent(client, stored.eventId).catch((err) =>
-      console.warn("[inbox] inbound process failed", err),
-    );
-  } else if (!stored.duplicate) {
-    // delivery events stored as ready — still process to update outbox
-    void processInboundEvent(client, stored.eventId).catch((err) =>
-      console.warn("[inbox] delivery process failed", err),
-    );
+  let processed: { ok: boolean; reason?: string } | null = null;
+  if (!stored.duplicate) {
+    try {
+      processed = await processInboundEvent(client, stored.eventId);
+    } catch (err) {
+      console.warn("[inbox] process failed after store", err);
+      processed = {
+        ok: false,
+        reason: err instanceof Error ? err.message : String(err),
+      };
+    }
   }
 
+  // Always 200 after verify+store so Resend does not hammer retries.
+  // Failed process leaves the event for /api/inbox/jobs/process to drain.
   return NextResponse.json({
     ok: true,
     duplicate: stored.duplicate,
     eventId: stored.eventId,
     eventType: meta.eventType,
+    processed,
   });
 }
