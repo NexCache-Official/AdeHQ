@@ -1,0 +1,1090 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="_ds/adehq-design-system-e7369172-d959-4682-9ed3-9320bc3582a7/tokens/colors.css">
+<link rel="stylesheet" href="_ds/adehq-design-system-e7369172-d959-4682-9ed3-9320bc3582a7/tokens/typography.css">
+<link rel="stylesheet" href="_ds/adehq-design-system-e7369172-d959-4682-9ed3-9320bc3582a7/tokens/spacing.css">
+<script src="_ds/adehq-design-system-e7369172-d959-4682-9ed3-9320bc3582a7/_ds_bundle.js"></script>
+<style>
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;height:100%;background:#E9E6DF;}
+  body{font-family:'Schibsted Grotesk',system-ui,sans-serif;-webkit-font-smoothing:antialiased;}
+  ::selection{background:rgba(232,93,44,.18);}
+  a{color:#CE4E22;text-decoration:none;} a:hover{color:#E85D2C;}
+  *::-webkit-scrollbar{width:9px;height:9px;} *::-webkit-scrollbar-thumb{background:rgba(120,114,102,.28);border-radius:20px;border:2px solid transparent;background-clip:content-box;} *::-webkit-scrollbar-thumb:hover{background:rgba(120,114,102,.45);background-clip:content-box;}
+  @keyframes ah-pulse{0%,100%{opacity:.5;}50%{opacity:1;}}
+  @keyframes ah-bounce{0%,80%,100%{transform:translateY(0);opacity:.4;}40%{transform:translateY(-4px);opacity:1;}}
+  @keyframes ah-shim{0%{background-position:-200% 0;}100%{background-position:200% 0;}}
+  @keyframes ah-up{from{transform:translateY(8px);opacity:0;}to{transform:translateY(0);opacity:1;}}
+  @keyframes ah-spin{to{transform:rotate(360deg);}}
+  @keyframes ah-ring{0%{box-shadow:0 0 0 0 rgba(232,93,44,.45);}70%{box-shadow:0 0 0 6px rgba(232,93,44,0);}100%{box-shadow:0 0 0 0 rgba(232,93,44,0);}}
+  .ah-up{animation:ah-up .3s cubic-bezier(.2,.7,.3,1);}
+  .ah-dot{display:inline-block;width:4px;height:4px;border-radius:50%;background:currentColor;margin:0 1px;animation:ah-bounce 1.3s infinite ease-in-out;}
+  .ah-dot:nth-child(2){animation-delay:.16s;} .ah-dot:nth-child(3){animation-delay:.32s;}
+  .ah-navbtn:hover{background:rgba(255,255,255,.07)!important;color:#fff!important;}
+  .ah-navbtn.on{background:rgba(255,255,255,.1)!important;color:#fff!important;}
+  .ah-row:hover{background:var(--ws-canvas)!important;}
+  .ah-tab.on{color:var(--ws-ink)!important;border-bottom-color:var(--ws-accent)!important;}
+  .ah-lift{transition:transform .16s cubic-bezier(.2,.7,.3,1),box-shadow .16s,border-color .16s;}
+  .ah-lift:hover{transform:translateY(-1px);box-shadow:0 12px 30px -14px rgba(40,34,24,.22);}
+  .ah-shim{background:linear-gradient(90deg,#EFEBE3 25%,#F6F3EE 50%,#EFEBE3 75%);background-size:200% 100%;animation:ah-shim 1.4s infinite linear;}
+  .ah-chip:hover{border-color:var(--ws-ink-3)!important;color:var(--ws-ink)!important;}
+  .ah-scroll{overflow-y:auto;}
+</style>
+</helmet>
+
+<div style="height:100vh;width:100%;display:flex;overflow:hidden;background:var(--ws-canvas);color:var(--ws-ink);font-size:14px;">
+
+  <!-- ===================== RAIL ===================== -->
+  <aside style="width:238px;flex:none;background:var(--ws-rail);display:flex;flex-direction:column;padding:14px 12px;gap:2px;overflow-y:auto;">
+    <div style="display:flex;align-items:center;gap:10px;padding:8px 9px;border-radius:13px;border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.04);margin-bottom:10px;">
+      <div style="width:32px;height:32px;border-radius:9px;background:linear-gradient(140deg,#E85D2C,#F2974E);display:flex;align-items:center;justify-content:center;flex:none;font-weight:800;color:#fff;font-size:15px;box-shadow:0 2px 8px -2px rgba(232,93,44,.6);">O</div>
+      <div style="flex:1;min-width:0;">
+        <div style="color:#fff;font-weight:600;font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Oakwood Estates</div>
+        <div style="color:rgba(255,255,255,.42);font-size:10.5px;font-family:var(--font-mono);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ mailbox }}</div>
+      </div>
+    </div>
+
+    <button onClick="{{ openSearch }}" style="width:100%;text-align:left;padding:8px 11px 8px 33px;border-radius:11px;border:1px solid rgba(255,255,255,.09);background:rgba(255,255,255,.03);color:rgba(255,255,255,.5);font-size:12.5px;font-family:inherit;cursor:pointer;display:flex;align-items:center;justify-content:space-between;position:relative;margin-bottom:4px;">
+      <svg style="position:absolute;left:11px;top:50%;transform:translateY(-50%);" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.4)" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+      <span>Search &amp; ask</span>
+      <span style="font-family:var(--font-mono);font-size:10px;color:rgba(255,255,255,.35);border:1px solid rgba(255,255,255,.14);border-radius:5px;padding:1px 5px;">⌘K</span>
+    </button>
+
+    <button onClick="{{ openComposer }}" class="ah-lift" style="display:flex;align-items:center;justify-content:center;gap:7px;padding:9px;border-radius:11px;border:none;background:var(--ws-accent);color:#fff;font-family:inherit;font-weight:600;font-size:13px;cursor:pointer;margin:5px 0 10px;box-shadow:0 6px 16px -8px rgba(232,93,44,.7);">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>New email
+    </button>
+
+    <div style="font-size:10px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:rgba(255,255,255,.3);padding:6px 10px 4px;">Inbox</div>
+    <button onClick="{{ goBrief }}" class="ah-navbtn {{ navBrief }}" style="display:flex;align-items:center;gap:10px;padding:8px 11px;border-radius:11px;font-family:inherit;font-size:13px;font-weight:500;border:none;width:100%;text-align:left;cursor:pointer;color:rgba(255,255,255,.6);background:transparent;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 13a9 9 0 0 1 18 0"/><path d="m3 13 3-3 3 3 3-4 3 4 3-3 3 3"/></svg><span>Inbox Brief</span></button>
+    <button onClick="{{ goInbox }}" class="ah-navbtn {{ navInbox }}" style="display:flex;align-items:center;gap:10px;padding:8px 11px;border-radius:11px;font-family:inherit;font-size:13px;font-weight:500;border:none;width:100%;text-align:left;cursor:pointer;color:rgba(255,255,255,.6);background:transparent;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 4h16v16H4z"/><path d="M4 13h5l2 3h2l2-3h5"/></svg><span>Inbox</span><span style="margin-left:auto;font-family:var(--font-mono);font-size:10.5px;background:rgba(255,255,255,.1);color:rgba(255,255,255,.7);border-radius:6px;padding:1px 6px;">{{ cInbox }}</span></button>
+    <button onClick="{{ goAssigned }}" class="ah-navbtn {{ navAssigned }}" style="display:flex;align-items:center;gap:10px;padding:8px 11px;border-radius:11px;font-family:inherit;font-size:13px;font-weight:500;border:none;width:100%;text-align:left;cursor:pointer;color:rgba(255,255,255,.6);background:transparent;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="8" r="3.5"/><path d="M5 20a7 7 0 0 1 14 0"/></svg><span>Assigned to me</span><span style="margin-left:auto;font-family:var(--font-mono);font-size:10.5px;background:rgba(255,255,255,.1);color:rgba(255,255,255,.7);border-radius:6px;padding:1px 6px;">{{ cAssigned }}</span></button>
+    <button onClick="{{ goAI }}" class="ah-navbtn {{ navAI }}" style="display:flex;align-items:center;gap:10px;padding:8px 11px;border-radius:11px;font-family:inherit;font-size:13px;font-weight:500;border:none;width:100%;text-align:left;cursor:pointer;color:rgba(255,255,255,.6);background:transparent;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/><rect x="7" y="7" width="10" height="10" rx="3"/></svg><span>AI working</span><span style="margin-left:auto;display:flex;align-items:center;gap:5px;"><span style="width:6px;height:6px;border-radius:50%;background:var(--ws-accent);animation:ah-pulse 1.6s infinite;"></span><span style="font-family:var(--font-mono);font-size:10.5px;background:rgba(255,255,255,.1);color:rgba(255,255,255,.7);border-radius:6px;padding:1px 6px;">{{ cAI }}</span></span></button>
+    <button onClick="{{ goApproval }}" class="ah-navbtn {{ navApproval }}" style="display:flex;align-items:center;gap:10px;padding:8px 11px;border-radius:11px;font-family:inherit;font-size:13px;font-weight:500;border:none;width:100%;text-align:left;cursor:pointer;color:rgba(255,255,255,.6);background:transparent;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 12l2 2 4-4"/><path d="M12 3 4 6v6c0 5 3.5 7.5 8 9 4.5-1.5 8-4 8-9V6Z"/></svg><span>Needs approval</span><span style="margin-left:auto;font-family:var(--font-mono);font-size:10.5px;background:var(--ws-accent);color:#fff;border-radius:6px;padding:1px 6px;">{{ cApproval }}</span></button>
+    <button onClick="{{ goDrafts }}" class="ah-navbtn {{ navDrafts }}" style="display:flex;align-items:center;gap:10px;padding:8px 11px;border-radius:11px;font-family:inherit;font-size:13px;font-weight:500;border:none;width:100%;text-align:left;cursor:pointer;color:rgba(255,255,255,.6);background:transparent;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg><span>Drafts</span><span style="margin-left:auto;font-family:var(--font-mono);font-size:10.5px;background:rgba(255,255,255,.1);color:rgba(255,255,255,.7);border-radius:6px;padding:1px 6px;">{{ cDrafts }}</span></button>
+    <button onClick="{{ goAwaiting }}" class="ah-navbtn {{ navAwaiting }}" style="display:flex;align-items:center;gap:10px;padding:8px 11px;border-radius:11px;font-family:inherit;font-size:13px;font-weight:500;border:none;width:100%;text-align:left;cursor:pointer;color:rgba(255,255,255,.6);background:transparent;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span>Awaiting reply</span><span style="margin-left:auto;font-family:var(--font-mono);font-size:10.5px;background:rgba(255,255,255,.1);color:rgba(255,255,255,.7);border-radius:6px;padding:1px 6px;">{{ cAwaiting }}</span></button>
+    <button onClick="{{ goScheduled }}" class="ah-navbtn {{ navScheduled }}" style="display:flex;align-items:center;gap:10px;padding:8px 11px;border-radius:11px;font-family:inherit;font-size:13px;font-weight:500;border:none;width:100%;text-align:left;cursor:pointer;color:rgba(255,255,255,.6);background:transparent;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3.5" y="4.5" width="17" height="16" rx="3"/><path d="M3.5 9h17M8 3v3M16 3v3"/></svg><span>Scheduled</span></button>
+    <button onClick="{{ goSent }}" class="ah-navbtn {{ navSent }}" style="display:flex;align-items:center;gap:10px;padding:8px 11px;border-radius:11px;font-family:inherit;font-size:13px;font-weight:500;border:none;width:100%;text-align:left;cursor:pointer;color:rgba(255,255,255,.6);background:transparent;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M22 2 11 13M22 2l-7 20-4-9-9-4Z"/></svg><span>Sent</span></button>
+    <button onClick="{{ goArchived }}" class="ah-navbtn {{ navArchived }}" style="display:flex;align-items:center;gap:10px;padding:8px 11px;border-radius:11px;font-family:inherit;font-size:13px;font-weight:500;border:none;width:100%;text-align:left;cursor:pointer;color:rgba(255,255,255,.6);background:transparent;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="4" rx="1"/><path d="M5 8v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8M10 12h4"/></svg><span>Archived</span></button>
+    <button onClick="{{ goSpam }}" class="ah-navbtn {{ navSpam }}" style="display:flex;align-items:center;gap:10px;padding:8px 11px;border-radius:11px;font-family:inherit;font-size:13px;font-weight:500;border:none;width:100%;text-align:left;cursor:pointer;color:rgba(255,255,255,.6);background:transparent;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2 2 20h20L12 2Z"/><path d="M12 9v4M12 16v.5"/></svg><span>Spam</span></button>
+
+    <div style="font-size:10px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:rgba(255,255,255,.3);padding:14px 10px 6px;">Labels</div>
+    <div style="display:flex;flex-wrap:wrap;gap:5px;padding:0 8px 4px;">
+      <span style="display:inline-flex;align-items:center;gap:5px;font-size:11px;color:rgba(255,255,255,.6);background:rgba(255,255,255,.05);border-radius:999px;padding:3px 9px;"><span style="width:6px;height:6px;border-radius:50%;background:#E85D2C;"></span>Sales</span>
+      <span style="display:inline-flex;align-items:center;gap:5px;font-size:11px;color:rgba(255,255,255,.6);background:rgba(255,255,255,.05);border-radius:999px;padding:3px 9px;"><span style="width:6px;height:6px;border-radius:50%;background:#7A8BD8;"></span>Investors</span>
+      <span style="display:inline-flex;align-items:center;gap:5px;font-size:11px;color:rgba(255,255,255,.6);background:rgba(255,255,255,.05);border-radius:999px;padding:3px 9px;"><span style="width:6px;height:6px;border-radius:50%;background:#54C79A;"></span>Viewings</span>
+      <span style="display:inline-flex;align-items:center;gap:5px;font-size:11px;color:rgba(255,255,255,.6);background:rgba(255,255,255,.05);border-radius:999px;padding:3px 9px;"><span style="width:6px;height:6px;border-radius:50%;background:#CB8A1B;"></span>Support</span>
+    </div>
+
+    <div style="font-size:10px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:rgba(255,255,255,.3);padding:12px 10px 6px;">Shared mailboxes</div>
+    <div style="padding:0 10px;display:flex;flex-direction:column;gap:4px;">
+      <div style="font-size:11.5px;color:rgba(255,255,255,.5);font-family:var(--font-mono);">sales@oakwood</div>
+      <div style="font-size:11.5px;color:rgba(255,255,255,.5);font-family:var(--font-mono);">lettings@oakwood</div>
+    </div>
+
+    <!-- workforce / health footer -->
+    <div style="margin-top:16px;padding:11px;border-radius:13px;border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.03);">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:9px;">
+        <span style="font-size:10px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:rgba(255,255,255,.4);">Workforce</span>
+        <span style="display:inline-flex;align-items:center;gap:5px;font-size:10.5px;color:#54C79A;"><span style="width:6px;height:6px;border-radius:50%;background:#1BA672;box-shadow:0 0 0 3px rgba(27,166,114,.2);"></span>Healthy</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:-6px;margin-bottom:9px;">
+        <div style="width:24px;height:24px;border-radius:7px;background:linear-gradient(140deg,#E85D2C,#F2974E);display:flex;align-items:center;justify-content:center;color:#fff;font-size:9.5px;font-weight:700;border:1.5px solid #1A1714;">AR</div>
+        <div style="width:24px;height:24px;border-radius:7px;background:linear-gradient(140deg,#4759A8,#7A8BD8);display:flex;align-items:center;justify-content:center;color:#fff;font-size:9.5px;font-weight:700;border:1.5px solid #1A1714;margin-left:-6px;">PN</div>
+        <div style="width:24px;height:24px;border-radius:7px;background:linear-gradient(140deg,#9A6BCB,#C29BE6);display:flex;align-items:center;justify-content:center;color:#fff;font-size:9.5px;font-weight:700;border:1.5px solid #1A1714;margin-left:-6px;">MY</div>
+        <div style="width:24px;height:24px;border-radius:7px;background:linear-gradient(140deg,#1BA672,#54C79A);display:flex;align-items:center;justify-content:center;color:#fff;font-size:9.5px;font-weight:700;border:1.5px solid #1A1714;margin-left:-6px;">GB</div>
+        <span style="font-size:10.5px;color:rgba(255,255,255,.45);margin-left:8px;">3 AI · 2 human</span>
+      </div>
+      <div style="display:flex;align-items:center;justify-content:space-between;font-size:11px;color:rgba(255,255,255,.5);">
+        <span>AI Work Hours</span><span style="font-family:var(--font-mono);color:rgba(255,255,255,.75);">31.5 / 60h</span>
+      </div>
+      <div style="height:4px;border-radius:3px;background:rgba(255,255,255,.1);margin-top:5px;overflow:hidden;"><div style="height:100%;width:52%;background:linear-gradient(90deg,#E85D2C,#F2974E);border-radius:3px;"></div></div>
+    </div>
+
+    <div style="display:flex;align-items:center;gap:9px;padding:9px 4px 2px;margin-top:10px;">
+      <div style="width:28px;height:28px;border-radius:8px;background:linear-gradient(140deg,#3B4C6B,#5A6E94);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:11px;flex:none;">JH</div>
+      <div style="flex:1;min-width:0;"><div style="color:#fff;font-size:12px;font-weight:600;">Jordan Hale</div><div style="color:rgba(255,255,255,.4);font-size:10.5px;">Owner</div></div>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.45)" stroke-width="1.8" style="cursor:pointer;"><circle cx="12" cy="12" r="3"/><path d="M19.4 13.5a1.7 1.7 0 0 0 .3 1.9 2 2 0 1 1-2.7 2.7 1.7 1.7 0 0 0-2.9 1.2 2 2 0 1 1-4 0 1.7 1.7 0 0 0-2.9-1.2 2 2 0 1 1-2.7-2.7 1.7 1.7 0 0 0-1.2-2.9 2 2 0 1 1 0-4 1.7 1.7 0 0 0 1.2-2.9 2 2 0 1 1 2.7-2.7 1.7 1.7 0 0 0 2.9-1.2 2 2 0 1 1 4 0 1.7 1.7 0 0 0 2.9 1.2 2 2 0 1 1 2.7 2.7 1.7 1.7 0 0 0-1.2 2.9Z"/></svg>
+    </div>
+  </aside>
+
+  <!-- ===================== MAIN ===================== -->
+  <sc-if value="{{ showBrief }}" hint-placeholder-val="{{ true }}">
+    <main class="ah-scroll" style="flex:1;min-width:0;background:var(--ws-canvas);">
+      <div style="max-width:1120px;margin:0 auto;padding:34px 44px 60px;">
+        <!-- greeting -->
+        <div class="ah-up" style="margin-bottom:26px;">
+          <div style="font-size:12px;font-family:var(--font-mono);color:var(--ws-ink-3);letter-spacing:.02em;margin-bottom:6px;">SATURDAY 12 JULY · 8:52</div>
+          <div style="font-size:30px;font-weight:800;letter-spacing:-.025em;color:var(--ws-ink);">Good morning, Jordan.</div>
+          <div style="font-size:15px;color:var(--ws-ink-2);margin-top:6px;line-height:1.5;max-width:640px;">Your workforce has been busy overnight. Here’s what arrived, what needs you, and where the money is.</div>
+        </div>
+
+        <!-- stat strip -->
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:26px;">
+          <div style="background:var(--ws-surface);border:1px solid var(--ws-border);border-radius:15px;padding:16px 18px;box-shadow:var(--shadow-card);">
+            <div style="font-size:28px;font-weight:800;font-family:var(--font-mono);color:var(--ws-ink);letter-spacing:-.02em;">8</div>
+            <div style="font-size:12px;color:var(--ws-ink-2);margin-top:2px;">new conversations today</div>
+          </div>
+          <div onClick="{{ goApproval }}" class="ah-lift" style="background:#FBEFD6;border:1px solid #F0DBA8;border-radius:15px;padding:16px 18px;cursor:pointer;">
+            <div style="font-size:28px;font-weight:800;font-family:var(--font-mono);color:#CB8A1B;letter-spacing:-.02em;">2</div>
+            <div style="font-size:12px;color:#8a6412;margin-top:2px;">need your approval</div>
+          </div>
+          <div style="background:var(--ws-surface);border:1px solid var(--ws-border);border-radius:15px;padding:16px 18px;box-shadow:var(--shadow-card);">
+            <div style="font-size:28px;font-weight:800;font-family:var(--font-mono);color:#1BA672;letter-spacing:-.02em;">2</div>
+            <div style="font-size:12px;color:var(--ws-ink-2);margin-top:2px;">high-value leads</div>
+          </div>
+          <div style="background:#FBE3E0;border:1px solid #F3C7C1;border-radius:15px;padding:16px 18px;">
+            <div style="font-size:28px;font-weight:800;font-family:var(--font-mono);color:#D9483B;letter-spacing:-.02em;">1</div>
+            <div style="font-size:12px;color:#a83529;margin-top:2px;">customer escalation</div>
+          </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1.35fr 1fr;gap:20px;">
+          <!-- left column -->
+          <div style="display:flex;flex-direction:column;gap:20px;">
+            <!-- approvals -->
+            <div style="background:var(--ws-surface);border:1px solid var(--ws-border);border-radius:18px;box-shadow:var(--shadow-card);overflow:hidden;">
+              <div style="padding:15px 18px;border-bottom:1px solid var(--ws-border-2);display:flex;align-items:center;gap:9px;">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--ws-accent)" stroke-width="1.9"><path d="M9 12l2 2 4-4"/><path d="M12 3 4 6v6c0 5 3.5 7.5 8 9 4.5-1.5 8-4 8-9V6Z"/></svg>
+                <span style="font-size:14px;font-weight:700;">Waiting for your approval</span>
+                <button onClick="{{ goApproval }}" style="margin-left:auto;font-size:12px;font-weight:600;color:var(--ws-accent-d);background:none;border:none;cursor:pointer;font-family:inherit;">Review all →</button>
+              </div>
+              <sc-for list="{{ briefApprovals }}" as="ba" hint-placeholder-count="2">
+                <div onClick="{{ ba.onClick }}" class="ah-row" style="display:flex;align-items:center;gap:12px;padding:13px 18px;border-bottom:1px solid var(--ws-border-2);cursor:pointer;">
+                  <div style="width:34px;height:34px;border-radius:10px;background:{{ ba.grad }};display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:11px;flex:none;">{{ ba.initials }}</div>
+                  <div style="flex:1;min-width:0;">
+                    <div style="font-size:13.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ ba.subject }}</div>
+                    <div style="font-size:12px;color:var(--ws-ink-2);">{{ ba.who }} drafted a reply · {{ ba.to }}</div>
+                  </div>
+                  <span style="font-size:11px;font-weight:700;font-family:var(--font-mono);color:#1BA672;background:#E3F4EB;padding:3px 9px;border-radius:999px;flex:none;">{{ ba.value }}</span>
+                </div>
+              </sc-for>
+            </div>
+
+            <!-- opportunities -->
+            <div style="background:var(--ws-surface);border:1px solid var(--ws-border);border-radius:18px;box-shadow:var(--shadow-card);overflow:hidden;">
+              <div style="padding:15px 18px;border-bottom:1px solid var(--ws-border-2);display:flex;align-items:center;gap:9px;">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#1BA672" stroke-width="1.9"><path d="M3 17l6-6 4 4 8-8"/><path d="M14 7h7v7"/></svg>
+                <span style="font-size:14px;font-weight:700;">High-value opportunities</span>
+                <span style="margin-left:auto;font-size:13px;font-weight:700;font-family:var(--font-mono);color:var(--ws-ink);">£1.27m live</span>
+              </div>
+              <sc-for list="{{ briefOpps }}" as="bo" hint-placeholder-count="3">
+                <div onClick="{{ bo.onClick }}" class="ah-row" style="display:flex;align-items:center;gap:12px;padding:12px 18px;border-bottom:1px solid var(--ws-border-2);cursor:pointer;">
+                  <div style="flex:1;min-width:0;"><div style="font-size:13px;font-weight:600;">{{ bo.deal }}</div><div style="font-size:11.5px;color:var(--ws-ink-2);">{{ bo.stage }}</div></div>
+                  <span style="font-size:14px;font-weight:700;font-family:var(--font-mono);">{{ bo.value }}</span>
+                </div>
+              </sc-for>
+            </div>
+
+            <!-- escalation -->
+            <div onClick="{{ openEscalation }}" class="ah-lift" style="background:var(--ws-surface);border:1px solid #F3C7C1;border-radius:18px;padding:16px 18px;cursor:pointer;box-shadow:var(--shadow-card);">
+              <div style="display:flex;align-items:center;gap:9px;margin-bottom:9px;">
+                <span style="width:8px;height:8px;border-radius:50%;background:#D9483B;box-shadow:0 0 0 4px rgba(217,72,59,.15);"></span>
+                <span style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#D9483B;">Customer at risk</span>
+              </div>
+              <div style="font-size:14px;font-weight:700;color:var(--ws-ink);">Ms. Adeyemi is chasing a completion date — third time</div>
+              <div style="font-size:12.5px;color:var(--ws-ink-2);margin-top:4px;line-height:1.5;">Maya held back the AI reply and escalated to you — the tone is strongly negative and she’s threatening the ombudsman. The confirmed date (22 July) is ready.</div>
+            </div>
+          </div>
+
+          <!-- right column -->
+          <div style="display:flex;flex-direction:column;gap:20px;">
+            <!-- AI in progress -->
+            <div style="background:var(--ws-rail);border-radius:18px;padding:18px;color:#fff;">
+              <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;"><span style="width:6px;height:6px;border-radius:50%;background:var(--ws-accent);animation:ah-pulse 1.6s infinite;"></span><span style="font-size:13px;font-weight:700;">AI work in progress</span></div>
+              <sc-for list="{{ briefAI }}" as="bi" hint-placeholder-count="3">
+                <div style="display:flex;gap:11px;align-items:flex-start;margin-bottom:13px;">
+                  <div style="width:30px;height:30px;border-radius:9px;background:{{ bi.grad }};display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:10.5px;flex:none;">{{ bi.initials }}</div>
+                  <div style="flex:1;min-width:0;"><div style="font-size:12.5px;font-weight:600;color:#fff;">{{ bi.who }}</div><div style="font-size:12px;color:rgba(255,255,255,.6);line-height:1.4;margin-top:1px;">{{ bi.text }}</div></div>
+                </div>
+              </sc-for>
+              <div style="border-top:1px solid rgba(255,255,255,.1);padding-top:12px;margin-top:4px;font-size:12px;color:rgba(255,255,255,.55);">Overnight: Alex drafted 4 replies · Priya researched 3 companies · 6.2 AI work-hours used</div>
+            </div>
+
+            <!-- follow-ups -->
+            <div style="background:var(--ws-surface);border:1px solid var(--ws-border);border-radius:18px;box-shadow:var(--shadow-card);overflow:hidden;">
+              <div style="padding:14px 18px;border-bottom:1px solid var(--ws-border-2);font-size:14px;font-weight:700;">Upcoming follow-ups</div>
+              <sc-for list="{{ briefFollowups }}" as="bf" hint-placeholder-count="2">
+                <div onClick="{{ bf.onClick }}" class="ah-row" style="display:flex;align-items:center;gap:11px;padding:12px 18px;border-bottom:1px solid var(--ws-border-2);cursor:pointer;">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--ws-ink-3)" stroke-width="1.8" style="flex:none;"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+                  <div style="flex:1;min-width:0;"><div style="font-size:12.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ bf.subject }}</div><div style="font-size:11.5px;color:var(--ws-ink-2);">{{ bf.who }}</div></div>
+                  <span style="font-size:11px;font-weight:600;color:var(--ws-accent-d);flex:none;">{{ bf.when }}</span>
+                </div>
+              </sc-for>
+            </div>
+
+            <!-- workload -->
+            <div style="background:var(--ws-surface);border:1px solid var(--ws-border);border-radius:18px;box-shadow:var(--shadow-card);padding:16px 18px;">
+              <div style="font-size:14px;font-weight:700;margin-bottom:13px;">Workload by employee</div>
+              <sc-for list="{{ briefWorkload }}" as="bw" hint-placeholder-count="4">
+                <div style="display:flex;align-items:center;gap:10px;margin-bottom:11px;">
+                  <div style="width:26px;height:26px;border-radius:8px;background:{{ bw.grad }};display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:9.5px;flex:none;">{{ bw.initials }}</div>
+                  <span style="font-size:12.5px;color:var(--ws-ink);flex:none;width:78px;">{{ bw.name }}</span>
+                  <div style="flex:1;height:6px;border-radius:4px;background:var(--ws-muted);overflow:hidden;"><div style="height:100%;width:{{ bw.pct }};background:{{ bw.bar }};border-radius:4px;"></div></div>
+                  <span style="font-size:11px;font-family:var(--font-mono);color:var(--ws-ink-2);flex:none;width:56px;text-align:right;">{{ bw.load }}</span>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </sc-if>
+
+  <sc-if value="{{ showList }}">
+    <div style="flex:1;min-width:0;display:flex;overflow:hidden;">
+      <!-- THREAD LIST -->
+      <section style="width:404px;flex:none;border-right:1px solid var(--ws-border);display:flex;flex-direction:column;background:var(--ws-surface);">
+        <header style="padding:15px 16px 12px;border-bottom:1px solid var(--ws-border);display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;background:var(--ws-surface);z-index:2;">
+          <div>
+            <div style="font-size:16px;font-weight:700;letter-spacing:-.01em;">{{ viewTitle }}</div>
+            <div style="font-size:11.5px;color:var(--ws-ink-3);margin-top:1px;">{{ listCount }} conversations</div>
+          </div>
+          <div style="display:flex;gap:6px;">
+            <button style="width:30px;height:30px;border-radius:9px;border:1px solid var(--ws-border);background:var(--ws-surface);color:var(--ws-ink-2);display:flex;align-items:center;justify-content:center;cursor:pointer;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 6h16M6 12h12M9 18h6"/></svg></button>
+          </div>
+        </header>
+        <div class="ah-scroll" style="flex:1;">
+          <sc-if value="{{ hasRows }}" hint-placeholder-val="{{ true }}">
+            <div>
+              <sc-for list="{{ rows }}" as="r" hint-placeholder-count="5">
+                <div class="ah-row" onClick="{{ r.onClick }}" style="{{ r.rowStyle }}">
+                  <div style="position:absolute;left:0;top:0;bottom:0;width:3px;background:{{ r.urgencyBar }};"></div>
+                  <div style="width:38px;height:38px;border-radius:11px;background:{{ r.grad }};display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:13px;flex:none;">{{ r.initials }}</div>
+                  <div style="flex:1;min-width:0;">
+                    <div style="display:flex;align-items:center;gap:6px;">
+                      <span style="font-size:13px;font-weight:{{ r.titleWeight }};color:var(--ws-ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;min-width:0;">{{ r.fromName }}</span>
+                      <sc-if value="{{ r.hasAttach }}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#9B968B" stroke-width="1.8" style="flex:none;"><path d="M21 11.5 12 20a5 5 0 0 1-7-7l8.5-8.5a3.3 3.3 0 0 1 4.7 4.7L9 16.5"/></svg></sc-if>
+                      <span style="font-size:11px;color:var(--ws-ink-3);flex:none;font-family:var(--font-mono);">{{ r.time }}</span>
+                    </div>
+                    <div style="font-size:12px;color:var(--ws-ink-2);margin:1px 0 3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ r.company }}</div>
+                    <div style="font-size:13px;font-weight:{{ r.titleWeight }};color:var(--ws-ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:3px;">{{ r.subject }}</div>
+                    <div style="font-size:12px;color:var(--ws-ink-2);line-height:1.4;display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden;">{{ r.summary }}</div>
+                    <div style="display:flex;align-items:center;gap:6px;margin-top:8px;flex-wrap:wrap;">
+                      <span style="font-size:10px;font-weight:600;padding:2px 7px;border-radius:999px;color:{{ r.statusColor }};background:{{ r.statusBg }};">{{ r.statusText }}</span>
+                      <sc-if value="{{ r.hasOpp }}"><span style="font-size:10px;font-weight:600;padding:2px 7px;border-radius:999px;color:#1BA672;background:#E3F4EB;font-family:var(--font-mono);">{{ r.oppText }}</span></sc-if>
+                      <sc-if value="{{ r.hasAssignee }}">
+                        <span style="margin-left:auto;display:inline-flex;align-items:center;gap:5px;">
+                          <span style="width:18px;height:18px;border-radius:6px;background:{{ r.asGrad }};display:flex;align-items:center;justify-content:center;color:#fff;font-size:8px;font-weight:700;">{{ r.asInitials }}</span>
+                        </span>
+                      </sc-if>
+                    </div>
+                    <sc-if value="{{ r.hasAI }}">
+                      <div style="display:flex;align-items:center;gap:6px;margin-top:7px;padding:5px 8px;border-radius:8px;background:var(--ws-accent-soft);">
+                        <sc-if value="{{ r.aiLive }}"><span style="color:var(--ws-accent-d);font-size:8px;"><span class="ah-dot"></span><span class="ah-dot"></span><span class="ah-dot"></span></span></sc-if>
+                        <sc-if value="{{ r.aiLive }}"><span style="font-size:11px;color:var(--ws-accent-d);font-weight:500;line-height:1.3;">{{ r.aiActivity }}</span></sc-if>
+                      </div>
+                    </sc-if>
+                    <sc-if value="{{ r.hasAI }}">
+                      <sc-if value="{{ r.selected }}"></sc-if>
+                    </sc-if>
+                  </div>
+                </div>
+              </sc-for>
+            </div>
+          </sc-if>
+          <sc-if value="{{ noRows }}">
+            <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:60px 30px;gap:12px;">
+              <div style="width:52px;height:52px;border-radius:15px;background:var(--ws-muted);display:flex;align-items:center;justify-content:center;"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--ws-ink-3)" stroke-width="1.6"><path d="M20 6 9 17l-5-5"/></svg></div>
+              <div style="font-size:15px;font-weight:700;color:var(--ws-ink);">{{ emptyTitle }}</div>
+              <div style="font-size:12.5px;color:var(--ws-ink-2);max-width:220px;line-height:1.5;">{{ emptySub }}</div>
+            </div>
+          </sc-if>
+        </div>
+      </section>
+
+      <!-- CONVERSATION -->
+      <section style="flex:1;min-width:0;display:flex;flex-direction:column;background:var(--ws-canvas);">
+        <sc-if value="{{ hasActive }}" hint-placeholder-val="{{ true }}">
+          <div style="display:flex;flex-direction:column;height:100%;min-height:0;">
+            <!-- conv header -->
+            <header style="padding:16px 24px 0;background:var(--ws-surface);border-bottom:1px solid var(--ws-border);">
+              <div style="display:flex;align-items:flex-start;gap:14px;">
+                <div style="width:44px;height:44px;border-radius:12px;background:{{ a_grad }};display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:15px;flex:none;">{{ a_initials }}</div>
+                <div style="flex:1;min-width:0;">
+                  <div style="font-size:18px;font-weight:700;letter-spacing:-.015em;line-height:1.25;">{{ a_subject }}</div>
+                  <div style="display:flex;align-items:center;gap:8px;margin-top:4px;font-size:12.5px;color:var(--ws-ink-2);flex-wrap:wrap;">
+                    <span style="font-weight:600;color:var(--ws-ink);">{{ a_fromName }}</span>
+                    <span style="color:var(--ws-ink-3);">· {{ a_company }}</span>
+                    <span style="color:var(--ws-ink-3);font-family:var(--font-mono);font-size:11px;">{{ a_email }}</span>
+                  </div>
+                </div>
+                <div style="display:flex;align-items:center;gap:8px;flex:none;">
+                  <span style="font-size:11px;font-weight:600;padding:4px 10px;border-radius:999px;color:{{ a_statusColor }};background:{{ a_statusBg }};">{{ a_statusText }}</span>
+                  <div style="display:flex;align-items:center;gap:6px;padding:3px 9px 3px 4px;border-radius:999px;border:1px solid var(--ws-border);background:var(--ws-surface);">
+                    <span style="width:22px;height:22px;border-radius:7px;background:{{ a_asGrad }};display:flex;align-items:center;justify-content:center;color:#fff;font-size:9px;font-weight:700;position:relative;">{{ a_asInitials }}</span>
+                    <span style="font-size:11.5px;color:var(--ws-ink-2);">{{ a_asName }}</span>
+                    <sc-if value="{{ a_asAI }}"><span style="font-size:8px;font-weight:700;color:var(--ws-accent);background:var(--ws-accent-soft);padding:1px 4px;border-radius:4px;">AI</span></sc-if>
+                  </div>
+                </div>
+              </div>
+              <!-- tabs -->
+              <div style="display:flex;gap:2px;margin-top:14px;">
+                <button onClick="{{ setConv }}" class="ah-tab {{ tabConv }}" style="padding:9px 14px;border:none;background:none;font-family:inherit;font-size:13px;font-weight:600;color:var(--ws-ink-3);cursor:pointer;border-bottom:2px solid transparent;">Conversation</button>
+                <button onClick="{{ setInternal }}" class="ah-tab {{ tabInternal }}" style="padding:9px 14px;border:none;background:none;font-family:inherit;font-size:13px;font-weight:600;color:var(--ws-ink-3);cursor:pointer;border-bottom:2px solid transparent;display:flex;align-items:center;gap:6px;">Internal <span style="font-family:var(--font-mono);font-size:10px;background:var(--ws-muted);color:var(--ws-ink-2);padding:0 5px;border-radius:5px;">{{ a_internalCount }}</span></button>
+                <button onClick="{{ setContext }}" class="ah-tab {{ tabContext }}" style="padding:9px 14px;border:none;background:none;font-family:inherit;font-size:13px;font-weight:600;color:var(--ws-ink-3);cursor:pointer;border-bottom:2px solid transparent;">Context &amp; CRM</button>
+              </div>
+            </header>
+
+            <!-- CONVERSATION tab -->
+            <sc-if value="{{ showConv }}" hint-placeholder-val="{{ true }}">
+              <div style="flex:1;min-height:0;display:flex;flex-direction:column;">
+                <div class="ah-scroll" style="flex:1;padding:20px 24px 8px;">
+                  <!-- AI brief -->
+                  <div class="ah-up" style="border:1px solid var(--ws-border);border-radius:16px;background:var(--ws-surface);padding:16px 18px;margin-bottom:18px;box-shadow:var(--shadow-card);position:relative;overflow:hidden;">
+                    <div style="position:absolute;top:0;left:0;width:3px;height:100%;background:linear-gradient(180deg,#E85D2C,#F2974E);"></div>
+                    <div style="display:flex;align-items:center;gap:8px;margin-bottom:11px;">
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--ws-accent)" stroke-width="2"><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/><rect x="7" y="7" width="10" height="10" rx="3"/></svg>
+                      <span style="font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--ws-accent-d);">What matters</span>
+                      <span style="margin-left:auto;font-size:11px;color:var(--ws-ink-3);">by Alex · Balanced Intelligence</span>
+                    </div>
+                    <div style="display:flex;flex-direction:column;gap:8px;">
+                      <sc-for list="{{ a_brief }}" as="b" hint-placeholder-count="4">
+                        <div style="display:flex;gap:9px;align-items:flex-start;">
+                          <span style="width:5px;height:5px;border-radius:50%;background:var(--ws-accent);margin-top:7px;flex:none;"></span>
+                          <span style="font-size:13.5px;color:var(--ws-ink);line-height:1.45;">{{ b.text }}</span>
+                        </div>
+                      </sc-for>
+                    </div>
+                    <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap;">
+                      <sc-if value="{{ a_hasSentiment }}"><span style="font-size:11px;font-weight:600;padding:3px 10px;border-radius:999px;color:{{ a_sentColor }};background:{{ a_sentBg }};">Sentiment · {{ a_sentiment }}</span></sc-if>
+                    </div>
+                  </div>
+
+                  <!-- email messages -->
+                  <sc-for list="{{ a_messages }}" as="m" hint-placeholder-count="1">
+                    <div style="border:1px solid var(--ws-border);border-radius:16px;background:var(--ws-surface);margin-bottom:14px;overflow:hidden;">
+                      <div style="display:flex;align-items:center;gap:11px;padding:13px 16px;border-bottom:1px solid var(--ws-border-2);">
+                        <div style="width:34px;height:34px;border-radius:10px;background:{{ m.grad }};display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:12px;flex:none;">{{ m.initials }}</div>
+                        <div style="flex:1;min-width:0;">
+                          <div style="display:flex;align-items:center;gap:6px;"><span style="font-size:13px;font-weight:600;">{{ m.name }}</span><sc-if value="{{ m.ai }}"><span style="font-size:8px;font-weight:700;color:var(--ws-accent);background:var(--ws-accent-soft);padding:1px 4px;border-radius:4px;">AI</span></sc-if></div>
+                          <div style="font-size:11px;color:var(--ws-ink-3);">to Oakwood Estates</div>
+                        </div>
+                        <span style="font-size:11px;color:var(--ws-ink-3);font-family:var(--font-mono);">{{ m.time }}</span>
+                      </div>
+                      <div style="padding:16px;font-size:13.5px;line-height:1.6;color:var(--ws-ink);white-space:pre-wrap;">{{ m.body }}</div>
+                    </div>
+                  </sc-for>
+                </div>
+
+                <!-- AI ACTION BAR -->
+                <div style="border-top:1px solid var(--ws-border);background:var(--ws-surface);padding:14px 24px;">
+                  <div style="display:flex;align-items:center;gap:8px;margin-bottom:11px;">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--ws-accent)" stroke-width="2"><path d="m12 3 2 5 5 2-5 2-2 5-2-5-5-2 5-2Z"/></svg>
+                    <span style="font-size:12px;color:var(--ws-ink-2);">Suggested next step</span>
+                  </div>
+                  <div style="display:flex;align-items:center;gap:10px;">
+                    <button onClick="{{ recClick }}" class="ah-lift" style="flex:1;display:flex;align-items:center;gap:11px;padding:12px 16px;border-radius:13px;border:1px solid var(--ws-accent);background:var(--ws-accent-soft);cursor:pointer;text-align:left;">
+                      <div style="width:30px;height:30px;border-radius:9px;background:linear-gradient(140deg,#E85D2C,#F2974E);display:flex;align-items:center;justify-content:center;color:#fff;flex:none;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
+                      <span style="flex:1;font-size:13.5px;font-weight:600;color:var(--ws-ink);">{{ a_recommend }}</span>
+                      <span style="font-size:11px;color:var(--ws-accent-d);font-weight:600;">Run</span>
+                    </button>
+                    <button onClick="{{ openComposer }}" style="padding:12px 16px;border-radius:13px;border:1px solid var(--ws-border);background:var(--ws-surface);color:var(--ws-ink);font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;">Draft reply</button>
+                  </div>
+                  <div style="display:flex;gap:7px;margin-top:11px;flex-wrap:wrap;">
+                    <sc-for list="{{ actionMenu }}" as="act" hint-placeholder-count="6">
+                      <button onClick="{{ act.onClick }}" class="ah-chip" style="font-size:11.5px;color:var(--ws-ink-2);background:var(--ws-surface);border:1px solid var(--ws-border);border-radius:999px;padding:5px 11px;cursor:pointer;font-family:inherit;">{{ act.label }}</button>
+                    </sc-for>
+                  </div>
+                </div>
+              </div>
+            </sc-if>
+
+            <!-- INTERNAL tab -->
+            <sc-if value="{{ showInternal }}">
+              <div style="flex:1;min-height:0;display:flex;flex-direction:column;">
+                <div style="padding:11px 24px;background:#EDE7FB;border-bottom:1px solid var(--ws-border);display:flex;align-items:center;gap:8px;">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#7C5CD6" stroke-width="2"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>
+                  <span style="font-size:12px;color:#6845C0;font-weight:600;">Internal team discussion · never sent to the customer</span>
+                </div>
+                <div class="ah-scroll" style="flex:1;padding:18px 24px;">
+                  <sc-if value="{{ a_hasInternal }}" hint-placeholder-val="{{ true }}">
+                    <div style="display:flex;flex-direction:column;gap:14px;">
+                      <sc-for list="{{ a_internal }}" as="n" hint-placeholder-count="2">
+                        <div style="display:flex;gap:11px;">
+                          <div style="width:32px;height:32px;border-radius:9px;background:{{ n.grad }};display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:11px;flex:none;">{{ n.initials }}</div>
+                          <div style="flex:1;min-width:0;">
+                            <div style="display:flex;align-items:center;gap:7px;margin-bottom:5px;">
+                              <span style="font-size:13px;font-weight:600;">{{ n.name }}</span>
+                              <sc-if value="{{ n.ai }}"><span style="font-size:8px;font-weight:700;color:var(--ws-accent);background:var(--ws-accent-soft);padding:1px 4px;border-radius:4px;">AI</span></sc-if>
+                              <span style="font-size:10px;font-weight:600;padding:1px 7px;border-radius:999px;color:{{ n.kindColor }};background:{{ n.kindBg }};">{{ n.kindLabel }}</span>
+                              <span style="font-size:11px;color:var(--ws-ink-3);font-family:var(--font-mono);margin-left:auto;">{{ n.time }}</span>
+                            </div>
+                            <div style="font-size:13px;line-height:1.55;color:var(--ws-ink);background:var(--ws-surface);border:1px solid var(--ws-border);border-radius:12px;padding:11px 13px;">{{ n.text }}</div>
+                          </div>
+                        </div>
+                      </sc-for>
+                    </div>
+                  </sc-if>
+                  <sc-if value="{{ a_hasInternal }}" hint-placeholder-val="{{ true }}"></sc-if>
+                </div>
+                <div style="border-top:1px solid var(--ws-border);padding:12px 24px;background:var(--ws-surface);">
+                  <div style="display:flex;gap:10px;align-items:flex-end;">
+                    <textarea value="{{ internalDraft }}" onChange="{{ onInternal }}" placeholder="Add an internal note or @mention a teammate…" style="flex:1;resize:none;height:42px;border:1px solid var(--ws-border);border-radius:11px;padding:11px 13px;font-family:inherit;font-size:13px;color:var(--ws-ink);background:var(--ws-canvas);"></textarea>
+                    <button onClick="{{ sendInternal }}" style="padding:11px 15px;border-radius:11px;border:none;background:#7C5CD6;color:#fff;font-family:inherit;font-weight:600;font-size:13px;cursor:pointer;white-space:nowrap;">Post note</button>
+                  </div>
+                  <div style="font-size:10.5px;color:var(--ws-ink-3);margin-top:6px;display:flex;align-items:center;gap:5px;"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="10" width="16" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>Internal only — this cannot be sent to the customer.</div>
+                </div>
+              </div>
+            </sc-if>
+
+            <!-- CONTEXT tab -->
+            <sc-if value="{{ showContext }}">
+              <div class="ah-scroll" style="flex:1;padding:18px 24px;">
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
+                  <!-- CRM -->
+                  <div style="border:1px solid var(--ws-border);border-radius:14px;background:var(--ws-surface);padding:15px;">
+                    <div style="font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--ws-ink-3);margin-bottom:10px;">CRM contact</div>
+                    <div style="font-size:14px;font-weight:700;">{{ a_coName }}</div>
+                    <div style="font-size:12px;color:var(--ws-ink-2);margin-bottom:10px;">{{ a_coRole }} · {{ a_coCompany }}</div>
+                    <div style="display:flex;flex-direction:column;gap:5px;font-size:12px;color:var(--ws-ink-2);font-family:var(--font-mono);">
+                      <span>{{ a_coEmail }}</span><span>{{ a_coPhone }}</span>
+                    </div>
+                  </div>
+                  <!-- Deal -->
+                  <div style="border:1px solid var(--ws-border);border-radius:14px;background:var(--ws-surface);padding:15px;">
+                    <div style="font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--ws-ink-3);margin-bottom:10px;">Linked opportunity</div>
+                    <div style="font-size:14px;font-weight:700;">{{ a_dealTitle }}</div>
+                    <div style="display:flex;align-items:center;gap:8px;margin-top:8px;">
+                      <span style="font-size:16px;font-weight:700;font-family:var(--font-mono);color:var(--ws-ink);">{{ a_dealValue }}</span>
+                      <span style="font-size:10px;font-weight:600;padding:2px 8px;border-radius:999px;color:#6845C0;background:#EDE7FB;">{{ a_dealStage }}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- key facts -->
+                <div style="border:1px solid var(--ws-border);border-radius:14px;background:var(--ws-surface);padding:15px;margin-top:14px;">
+                  <div style="font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--ws-ink-3);margin-bottom:11px;">Key facts</div>
+                  <div style="display:flex;flex-direction:column;gap:9px;">
+                    <sc-for list="{{ a_facts }}" as="f" hint-placeholder-count="3">
+                      <div style="display:flex;gap:9px;align-items:flex-start;"><span style="color:#1BA672;font-size:13px;flex:none;">✓</span><span style="font-size:13px;color:var(--ws-ink);line-height:1.45;">{{ f.text }}</span></div>
+                    </sc-for>
+                  </div>
+                </div>
+
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:14px;">
+                  <!-- next actions -->
+                  <div style="border:1px solid var(--ws-border);border-radius:14px;background:var(--ws-surface);padding:15px;">
+                    <div style="font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--ws-ink-3);margin-bottom:11px;">Next actions</div>
+                    <div style="display:flex;flex-direction:column;gap:9px;">
+                      <sc-for list="{{ a_nextActions }}" as="na" hint-placeholder-count="2">
+                        <div style="display:flex;gap:9px;align-items:flex-start;"><span style="color:var(--ws-accent);flex:none;font-weight:700;">→</span><div style="flex:1;"><div style="font-size:13px;color:var(--ws-ink);line-height:1.4;">{{ na.text }}</div><div style="font-size:11px;color:var(--ws-ink-3);margin-top:1px;">{{ na.who }}</div></div></div>
+                      </sc-for>
+                    </div>
+                  </div>
+                  <!-- tasks + files -->
+                  <div style="display:flex;flex-direction:column;gap:14px;">
+                    <div style="border:1px solid var(--ws-border);border-radius:14px;background:var(--ws-surface);padding:15px;">
+                      <div style="font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--ws-ink-3);margin-bottom:11px;">Linked tasks</div>
+                      <sc-if value="{{ a_hasTasks }}" hint-placeholder-val="{{ true }}">
+                        <div style="display:flex;flex-direction:column;gap:8px;">
+                          <sc-for list="{{ a_tasks }}" as="tk" hint-placeholder-count="1">
+                            <div style="display:flex;gap:8px;align-items:center;"><span style="width:15px;height:15px;border-radius:5px;border:1.5px solid var(--ws-border);flex:none;"></span><span style="font-size:12.5px;color:var(--ws-ink);flex:1;">{{ tk.title }}</span><span style="font-size:10px;color:var(--ws-ink-3);">{{ tk.who }}</span></div>
+                          </sc-for>
+                        </div>
+                      </sc-if>
+                      <sc-if value="{{ a_hasTasks }}" hint-placeholder-val="{{ true }}"></sc-if>
+                    </div>
+                    <div style="border:1px solid var(--ws-border);border-radius:14px;background:var(--ws-surface);padding:15px;">
+                      <div style="font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--ws-ink-3);margin-bottom:11px;">Files</div>
+                      <sc-if value="{{ a_hasFiles }}" hint-placeholder-val="{{ true }}">
+                        <div style="display:flex;flex-direction:column;gap:8px;">
+                          <sc-for list="{{ a_files }}" as="fl" hint-placeholder-count="1">
+                            <div style="display:flex;gap:9px;align-items:center;"><span style="width:26px;height:26px;border-radius:7px;background:var(--ws-muted);display:flex;align-items:center;justify-content:center;flex:none;"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--ws-ink-2)" stroke-width="1.8"><path d="M14 3v5h5"/><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/></svg></span><div style="flex:1;min-width:0;"><div style="font-size:12px;color:var(--ws-ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ fl.name }}</div><div style="font-size:10px;color:var(--ws-ink-3);">{{ fl.meta }}</div></div></div>
+                          </sc-for>
+                        </div>
+                      </sc-if>
+                      <sc-if value="{{ a_hasFiles }}" hint-placeholder-val="{{ true }}"></sc-if>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- activity -->
+                <div style="border:1px solid var(--ws-border);border-radius:14px;background:var(--ws-surface);padding:15px;margin-top:14px;margin-bottom:20px;">
+                  <div style="font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--ws-ink-3);margin-bottom:11px;">Activity</div>
+                  <div style="display:flex;flex-direction:column;gap:0;">
+                    <sc-for list="{{ a_activity }}" as="av" hint-placeholder-count="3">
+                      <div style="display:flex;gap:11px;align-items:flex-start;padding:5px 0;">
+                        <span style="width:7px;height:7px;border-radius:50%;background:var(--ws-ink-3);margin-top:5px;flex:none;"></span>
+                        <span style="font-size:12.5px;color:var(--ws-ink-2);flex:1;">{{ av.text }}</span>
+                        <span style="font-size:11px;color:var(--ws-ink-3);font-family:var(--font-mono);">{{ av.time }}</span>
+                      </div>
+                    </sc-for>
+                  </div>
+                </div>
+              </div>
+            </sc-if>
+          </div>
+        </sc-if>
+
+        <!-- empty conversation state -->
+        <sc-if value="{{ noActive }}">
+          <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:14px;padding:40px;">
+            <div style="display:flex;gap:-8px;">
+              <div style="width:40px;height:40px;border-radius:12px;background:linear-gradient(140deg,#E85D2C,#F2974E);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:13px;border:2px solid var(--ws-canvas);">AR</div>
+              <div style="width:40px;height:40px;border-radius:12px;background:linear-gradient(140deg,#4759A8,#7A8BD8);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:13px;border:2px solid var(--ws-canvas);margin-left:-10px;">PN</div>
+              <div style="width:40px;height:40px;border-radius:12px;background:linear-gradient(140deg,#9A6BCB,#C29BE6);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:13px;border:2px solid var(--ws-canvas);margin-left:-10px;">MY</div>
+            </div>
+            <div style="font-size:16px;font-weight:700;color:var(--ws-ink);">Your AI employees are monitoring the inbox</div>
+            <div style="font-size:13px;color:var(--ws-ink-2);max-width:280px;line-height:1.55;">Nothing selected. New conversations are classified, researched, and routed the moment they arrive.</div>
+            <button onClick="{{ openComposer }}" style="margin-top:4px;padding:10px 18px;border-radius:12px;border:none;background:var(--ws-accent);color:#fff;font-family:inherit;font-weight:600;font-size:13px;cursor:pointer;">Compose an email</button>
+          </div>
+        </sc-if>
+      </section>
+    </div>
+  </sc-if>
+
+  <!-- ===================== COMPOSER ===================== -->
+  <sc-if value="{{ composerOpen }}">
+    <div style="position:fixed;inset:0;background:rgba(26,18,8,.4);backdrop-filter:blur(3px);z-index:60;display:flex;justify-content:flex-end;">
+      <div class="ah-up" style="width:620px;max-width:94vw;height:100%;background:var(--ws-surface);box-shadow:var(--shadow-modal);display:flex;flex-direction:column;">
+        <header style="padding:16px 20px;border-bottom:1px solid var(--ws-border);display:flex;align-items:center;gap:11px;">
+          <div style="width:32px;height:32px;border-radius:9px;background:{{ cAuthorGrad }};display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:12px;flex:none;">{{ cAuthorInitials }}</div>
+          <div style="flex:1;min-width:0;">
+            <div style="display:flex;align-items:center;gap:6px;"><span style="font-size:14px;font-weight:700;">Draft by {{ cAuthorName }}</span><span style="font-size:8px;font-weight:700;color:var(--ws-accent);background:var(--ws-accent-soft);padding:1px 4px;border-radius:4px;">AI</span></div>
+            <div style="font-size:11.5px;color:var(--ws-ink-3);">Requires your approval before sending</div>
+          </div>
+          <button onClick="{{ closeComposer }}" style="width:30px;height:30px;border-radius:9px;border:1px solid var(--ws-border);background:var(--ws-surface);color:var(--ws-ink-2);cursor:pointer;font-size:15px;">✕</button>
+        </header>
+
+        <div class="ah-scroll" style="flex:1;padding:18px 20px;">
+          <!-- provenance -->
+          <div style="border:1px solid var(--ws-border);border-radius:13px;background:var(--ws-accent-soft);padding:13px 15px;margin-bottom:16px;">
+            <div style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--ws-accent-d);margin-bottom:7px;">Why Alex drafted this</div>
+            <div style="font-size:13px;color:var(--ws-ink);line-height:1.5;margin-bottom:10px;">{{ cWhy }}</div>
+            <div style="font-size:10px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--ws-ink-3);margin-bottom:6px;">Sources used</div>
+            <div style="display:flex;flex-direction:column;gap:5px;margin-bottom:10px;">
+              <sc-for list="{{ cSources }}" as="s" hint-placeholder-count="3">
+                <div style="display:flex;gap:7px;align-items:flex-start;"><span style="color:var(--ws-accent-d);font-size:11px;flex:none;margin-top:1px;">•</span><span style="font-size:12px;color:var(--ws-ink-2);line-height:1.4;">{{ s.text }}</span></div>
+              </sc-for>
+            </div>
+            <div style="display:flex;gap:8px;align-items:center;">
+              <span style="font-size:11px;font-weight:600;color:#1BA672;background:#E3F4EB;padding:2px 9px;border-radius:999px;">Confidence · High</span>
+              <span style="font-size:11px;color:var(--ws-ink-3);font-family:var(--font-mono);">est. 0.4 AI work-hours · £0.004</span>
+            </div>
+          </div>
+
+          <!-- fields -->
+          <div style="display:flex;flex-direction:column;gap:1px;border:1px solid var(--ws-border);border-radius:13px;overflow:hidden;margin-bottom:14px;">
+            <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--ws-canvas);"><span style="font-size:11px;color:var(--ws-ink-3);width:52px;">From</span><span style="font-size:13px;color:var(--ws-ink);font-family:var(--font-mono);">{{ mailbox }}</span></div>
+            <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--ws-surface);border-top:1px solid var(--ws-border-2);"><span style="font-size:11px;color:var(--ws-ink-3);width:52px;">To</span><span style="font-size:13px;color:var(--ws-ink);">{{ cTo }}</span></div>
+            <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--ws-surface);border-top:1px solid var(--ws-border-2);"><span style="font-size:11px;color:var(--ws-ink-3);width:52px;">Subject</span><span style="font-size:13px;color:var(--ws-ink);font-weight:600;">{{ cSubject }}</span></div>
+          </div>
+
+          <!-- rewrite controls -->
+          <div style="display:flex;gap:7px;flex-wrap:wrap;margin-bottom:12px;align-items:center;">
+            <span style="font-size:11px;color:var(--ws-ink-3);margin-right:2px;">Rewrite:</span>
+            <button onClick="{{ setOrig }}" class="ah-tab {{ vOrig }}" style="font-size:11.5px;padding:5px 11px;border-radius:999px;border:1px solid var(--ws-border);background:var(--ws-surface);color:var(--ws-ink-2);cursor:pointer;font-family:inherit;">Original</button>
+            <button onClick="{{ setWarm }}" class="ah-chip {{ vWarm }}" style="font-size:11.5px;padding:5px 11px;border-radius:999px;border:1px solid var(--ws-border);background:var(--ws-surface);color:var(--ws-ink-2);cursor:pointer;font-family:inherit;">Make warmer</button>
+            <button onClick="{{ setShort }}" class="ah-chip {{ vShort }}" style="font-size:11.5px;padding:5px 11px;border-radius:999px;border:1px solid var(--ws-border);background:var(--ws-surface);color:var(--ws-ink-2);cursor:pointer;font-family:inherit;">Shorten</button>
+            <button onClick="{{ noop }}" class="ah-chip" style="font-size:11.5px;padding:5px 11px;border-radius:999px;border:1px solid var(--ws-border);background:var(--ws-surface);color:var(--ws-ink-2);cursor:pointer;font-family:inherit;">Personalise (CRM)</button>
+            <button onClick="{{ noop }}" class="ah-chip" style="font-size:11.5px;padding:5px 11px;border-radius:999px;border:1px solid var(--ws-border);background:var(--ws-surface);color:var(--ws-ink-2);cursor:pointer;font-family:inherit;">Check for risk</button>
+          </div>
+
+          <!-- body -->
+          <sc-if value="{{ drafting }}">
+            <div style="display:flex;flex-direction:column;gap:9px;padding:6px 0;">
+              <div style="display:flex;align-items:center;gap:8px;color:var(--ws-accent-d);font-size:12.5px;font-weight:600;"><span style="font-size:8px;"><span class="ah-dot"></span><span class="ah-dot"></span><span class="ah-dot"></span></span>Alex is drafting the reply…</div>
+              <div class="ah-shim" style="height:13px;border-radius:6px;width:96%;"></div>
+              <div class="ah-shim" style="height:13px;border-radius:6px;width:88%;"></div>
+              <div class="ah-shim" style="height:13px;border-radius:6px;width:92%;"></div>
+              <div class="ah-shim" style="height:13px;border-radius:6px;width:70%;"></div>
+            </div>
+          </sc-if>
+          <sc-if value="{{ notDrafting }}">
+            <textarea value="{{ cBody }}" onChange="{{ onBody }}" style="width:100%;min-height:230px;resize:vertical;border:1px solid var(--ws-border);border-radius:13px;padding:15px;font-family:inherit;font-size:13.5px;line-height:1.6;color:var(--ws-ink);background:var(--ws-surface);"></textarea>
+          </sc-if>
+          <div style="font-size:11px;color:var(--ws-ink-3);margin-top:8px;display:flex;align-items:center;gap:5px;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 9v4M12 17v.01"/><circle cx="12" cy="12" r="9"/></svg>Edits you make here are tracked — the original AI draft is never overwritten silently.</div>
+        </div>
+
+        <!-- footer controls -->
+        <footer style="border-top:1px solid var(--ws-border);padding:14px 20px;display:flex;align-items:center;gap:9px;">
+          <button onClick="{{ approveActive }}" class="ah-lift" style="display:flex;align-items:center;gap:8px;padding:11px 18px;border-radius:12px;border:none;background:var(--ws-accent);color:#fff;font-family:inherit;font-weight:600;font-size:13.5px;cursor:pointer;box-shadow:0 6px 16px -8px rgba(232,93,44,.7);"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M20 6 9 17l-5-5"/></svg>Approve &amp; send</button>
+          <button onClick="{{ reqChangesActive }}" style="padding:11px 15px;border-radius:12px;border:1px solid var(--ws-border);background:var(--ws-surface);color:var(--ws-ink);font-family:inherit;font-weight:600;font-size:13px;cursor:pointer;">Request changes</button>
+          <button onClick="{{ saveDraft }}" style="padding:11px 15px;border-radius:12px;border:1px solid var(--ws-border);background:var(--ws-surface);color:var(--ws-ink-2);font-family:inherit;font-weight:600;font-size:13px;cursor:pointer;">Save draft</button>
+          <button onClick="{{ discard }}" style="margin-left:auto;padding:11px 15px;border-radius:12px;border:none;background:none;color:var(--ws-ink-3);font-family:inherit;font-weight:600;font-size:13px;cursor:pointer;">Discard</button>
+        </footer>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- ===================== SEARCH ===================== -->
+  <sc-if value="{{ searchOpen }}">
+    <div onClick="{{ closeSearch }}" style="position:fixed;inset:0;background:rgba(26,18,8,.4);backdrop-filter:blur(3px);z-index:70;display:flex;justify-content:center;align-items:flex-start;padding-top:88px;">
+      <div class="ah-up" onClick="{{ noop }}" style="width:640px;max-width:92vw;background:var(--ws-surface);border-radius:18px;box-shadow:var(--shadow-modal);overflow:hidden;">
+        <div style="display:flex;align-items:center;gap:11px;padding:16px 18px;border-bottom:1px solid var(--ws-border);">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--ws-ink-3)" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+          <input value="{{ searchQuery }}" onChange="{{ onSearch }}" placeholder="Ask anything — e.g. buyers over £500k I haven’t replied to" style="flex:1;border:none;outline:none;font-family:inherit;font-size:15px;color:var(--ws-ink);background:none;" autofocus="true" />
+          <span style="font-family:var(--font-mono);font-size:10px;color:var(--ws-ink-3);border:1px solid var(--ws-border);border-radius:5px;padding:1px 6px;">ESC</span>
+        </div>
+        <div class="ah-scroll" style="max-height:380px;padding:14px 16px;">
+          <sc-if value="{{ hasQuery }}">
+            <sc-if value="{{ hasSearchResults }}" hint-placeholder-val="{{ true }}">
+              <div style="display:flex;flex-direction:column;gap:6px;">
+                <sc-for list="{{ searchResults }}" as="sr" hint-placeholder-count="2">
+                  <button onClick="{{ sr.onClick }}" class="ah-chip" style="text-align:left;display:flex;flex-direction:column;gap:3px;padding:11px 13px;border-radius:11px;border:1px solid var(--ws-border);background:var(--ws-surface);cursor:pointer;font-family:inherit;">
+                    <span style="font-size:13px;font-weight:600;color:var(--ws-ink);">{{ sr.subject }}</span>
+                    <span style="font-size:12px;color:var(--ws-ink-2);">{{ sr.fromName }} · {{ sr.snippet }}</span>
+                    <span style="font-size:11px;color:var(--ws-accent-d);">{{ sr.why }}</span>
+                  </button>
+                </sc-for>
+              </div>
+            </sc-if>
+            <sc-if value="{{ noSearchResults }}">
+              <div style="padding:16px 4px 6px;font-size:13px;color:var(--ws-ink-2);">No conversations match that yet — try one of the suggestions below.</div>
+            </sc-if>
+          </sc-if>
+          <div style="margin-top:4px;">
+            <div style="font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--ws-ink-3);margin-bottom:9px;">Try asking</div>
+            <div style="display:flex;flex-direction:column;gap:6px;">
+              <sc-for list="{{ searchExamples }}" as="ex" hint-placeholder-count="5">
+                <button onClick="{{ ex.onClick }}" class="ah-row" style="display:flex;align-items:center;gap:10px;padding:9px 11px;border-radius:10px;border:none;background:none;cursor:pointer;text-align:left;font-family:inherit;width:100%;">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--ws-accent)" stroke-width="2" style="flex:none;"><path d="m12 3 2 5 5 2-5 2-2 5-2-5-5-2 5-2Z"/></svg>
+                  <span style="font-size:13px;color:var(--ws-ink);">{{ ex.text }}</span>
+                </button>
+              </sc-for>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- ===================== TOAST ===================== -->
+  <sc-if value="{{ hasToast }}">
+    <div class="ah-up" style="position:fixed;bottom:24px;left:50%;transform:translateX(-50%);z-index:90;background:var(--ws-rail);color:#fff;padding:12px 18px;border-radius:12px;box-shadow:var(--shadow-modal);display:flex;align-items:center;gap:9px;font-size:13px;font-weight:500;">
+      <span style="width:18px;height:18px;border-radius:50%;background:var(--ws-accent);display:flex;align-items:center;justify-content:center;font-size:11px;">✓</span>
+      {{ toast }}
+    </div>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  constructor(props){
+    super(props);
+    const EMP = {
+      you:  {name:'Jordan Hale',  initials:'JH', grad:'slate',  ai:false, role:'Managing Director'},
+      grace:{name:'Grace Bello',  initials:'GB', grad:'green',  ai:false, role:'Lettings Manager'},
+      alex: {name:'Alex Rivera',  initials:'AR', grad:'coral',  ai:true,  role:'Sales Development Rep'},
+      priya:{name:'Priya Nair',   initials:'PN', grad:'indigo', ai:true,  role:'Market Research Analyst'},
+      maya: {name:'Maya',         initials:'MY', grad:'violet', ai:true,  role:'AI Workforce Manager'},
+    };
+    this.EMP = EMP;
+    this.STAT = {
+      new:      {t:'New',                 c:'#2F6FED', bg:'#E5EDFD'},
+      assigned: {t:'Assigned',            c:'#6C685F', bg:'#F0EDE6'},
+      reviewing:{t:'AI reviewing',        c:'#9A6BCB', bg:'#EDE7FB'},
+      draft:    {t:'Draft ready',         c:'#CE4E22', bg:'#FBE9DE'},
+      approval: {t:'Needs approval',      c:'#CB8A1B', bg:'#FBEFD6'},
+      waiting:  {t:'Waiting on customer', c:'#6C685F', bg:'#F0EDE6'},
+      scheduled:{t:'Follow-up scheduled', c:'#2F6FED', bg:'#E5EDFD'},
+      resolved: {t:'Resolved',            c:'#1BA672', bg:'#E3F4EB'},
+      escalated:{t:'Escalated',           c:'#D9483B', bg:'#FBE3E0'},
+    };
+    this.threads = [
+      {
+        id:'t1', folder:'inbox', unread:true, urgency:'high',
+        from:{name:'Marcus Chen', company:'Riverside Developments', initials:'MC', grad:'#3B4C6B', email:'m.chen@riverside-dev.co.uk'},
+        subject:'Interest in two units at Kingsgate Wharf',
+        summary:'Wants 2 riverside units, ~£700k, completion before September — viewing next week',
+        preview:'Hi, following our call I’d like to move forward on the two south-facing units…',
+        time:'9:12',
+        assignee:'alex', statusKey:'approval',
+        labels:['Sales','High value'], attach:'Kingsgate-floorplans.pdf',
+        opp:'£700k opportunity', aiActivity:'Alex drafted a reply · awaiting your approval', aiLive:false,
+        sentiment:'Interested', sentimentTone:'green',
+        messages:[
+          {who:'Marcus Chen', initials:'MC', grad:'#3B4C6B', ai:false, time:'Today, 9:12', body:'Hi Jordan,\n\nFollowing our call last week, I’d like to move forward on the two south-facing units at Kingsgate Wharf. Our budget is around £700k for the pair and we’d ideally want completion before September so the fit-out lines up with our other Riverside sites.\n\nCould we arrange a viewing next week — Tuesday or Wednesday works best? And could you send the latest floorplans and the service charge breakdown?\n\nBest,\nMarcus'},
+        ],
+        brief:[
+          'Buyer wants two south-facing units, not one.',
+          'Budget is approximately £700k for the pair.',
+          'Needs completion before September — hard deadline.',
+          'Requested a viewing Tuesday or Wednesday next week.',
+          'Asked for floorplans and service charge breakdown.',
+        ],
+        recommendText:'Ask Alex to send the pricing & viewing response',
+        facts:[
+          'Riverside Developments has bought from Oakwood twice before (2023, 2024).',
+          'Marcus is the decision-maker — no board sign-off needed under £1m.',
+          'Kingsgate Wharf units 4 & 5 are both available and south-facing.',
+        ],
+        commitments:[
+          'Oakwood to send floorplans + service charge breakdown.',
+          'Confirm a viewing slot for Tue/Wed next week.',
+        ],
+        nextActions:[
+          {text:'Send pricing response + floorplans', who:'Alex'},
+          {text:'Offer Tue 2pm / Wed 11am viewing slots', who:'Alex'},
+          {text:'Prepare a two-unit proposal', who:'Alex'},
+        ],
+        tasks:[{title:'Prepare Kingsgate two-unit proposal', who:'Alex', done:false},{title:'Book viewing with Marcus', who:'Grace', done:false}],
+        files:[{name:'Kingsgate-floorplans.pdf', meta:'PDF · 2.4 MB'},{name:'Service-charge-2026.xlsx', meta:'Sheet · 88 KB'}],
+        contact:{name:'Marcus Chen', role:'Head of Acquisitions', company:'Riverside Developments', phone:'+44 20 7946 0102', email:'m.chen@riverside-dev.co.uk', dealTitle:'Kingsgate Wharf — Units 4 & 5', dealValue:'£700,000', stage:'Proposal'},
+        internal:[
+          {who:'Alex Rivera', initials:'AR', grad:'coral', ai:true, time:'9:15', kind:'handoff', text:'I’ve read the thread and drafted a reply with two viewing slots and the floorplans attached. Recommend we send today — Riverside move fast. @Jordan can you approve?'},
+          {who:'Priya Nair', initials:'PN', grad:'indigo', ai:true, time:'9:18', kind:'note', text:'Context: Riverside just closed a £12m raise (Companies House filing, 2 weeks ago). They can comfortably clear £700k — worth holding firm on price.'},
+        ],
+        activity:[
+          {who:'System', time:'9:12', text:'Email received from Marcus Chen'},
+          {who:'Alex', time:'9:13', text:'Classified as Sales · High value · tagged opportunity'},
+          {who:'Priya', time:'9:14', text:'Researched sender & company funding'},
+          {who:'Alex', time:'9:15', text:'Drafted reply · requested approval'},
+        ],
+        draftBody:{
+          original:'Hi Marcus,\n\nGreat to hear you’d like to move forward on both south-facing units at Kingsgate Wharf. Units 4 and 5 are available and I’ve attached the latest floorplans plus the 2026 service charge breakdown.\n\nOn price — the pair is guided at £735k, but given your track record with us I can put a two-unit package to the vendor at £710k and expect that to land.\n\nFor a viewing, I can offer Tuesday 2pm or Wednesday 11am next week. Completion before September is achievable on our current timeline.\n\nShall I hold Tuesday 2pm?\n\nBest,\nAlex, on behalf of Oakwood Estates',
+          warmer:'Hi Marcus,\n\nReally pleased you’d like to take both south-facing units — they’re two of the best in the building and I think Riverside will do something special with them. Units 4 and 5 are ready to go; floorplans and the 2026 service charge breakdown are attached.\n\nOn price, the pair is guided at £735k. Given how well our last two deals went, I’d be glad to put a package to the vendor at £710k — I’m confident we can land it.\n\nWould Tuesday 2pm or Wednesday 11am suit for a viewing? And yes — completion before September is very achievable.\n\nLooking forward to it,\nAlex, on behalf of Oakwood Estates',
+          shorter:'Hi Marcus,\n\nBoth units (4 & 5) are available — floorplans and service charge breakdown attached. Guided at £735k for the pair; I can put £710k to the vendor and expect it to land.\n\nViewing: Tuesday 2pm or Wednesday 11am? Completion before September is fine.\n\nBest,\nAlex',
+        },
+      },
+      {
+        id:'t2', folder:'inbox', unread:true, urgency:'med',
+        from:{name:'Elena Fisher', company:'Harborne Capital', initials:'EF', grad:'#4759A8', email:'e.fisher@harbornecap.com'},
+        subject:'Investment enquiry — Oak House commercial block',
+        summary:'Investor asking about yield and tenancy schedule on Oak House',
+        preview:'We’re building a regional commercial portfolio and Oak House looks like a strong fit…',
+        time:'8:47',
+        assignee:'priya', statusKey:'reviewing',
+        labels:['Investors'], attach:null,
+        opp:'£45k fee potential', aiActivity:'Priya is researching the sender’s company and recent funding', aiLive:true,
+        sentiment:null,
+        messages:[
+          {who:'Elena Fisher', initials:'EF', grad:'#4759A8', ai:false, time:'Today, 8:47', body:'Hello,\n\nWe’re assembling a regional commercial portfolio and Oak House looks like a strong fit. Could you share the current tenancy schedule, net yield, and whether the freehold is available?\n\nRegards,\nElena Fisher\nHarborne Capital'},
+        ],
+        brief:['Investor building a regional commercial portfolio.','Wants tenancy schedule, net yield, and freehold availability.','Priya is verifying Harborne Capital before we reply.'],
+        recommendText:'Wait for Priya’s research, then draft with Alex',
+        facts:['Oak House is 92% let, WAULT 4.2 years.','Freehold is available at guide £1.35m.'],
+        commitments:[],
+        nextActions:[{text:'Verify Harborne Capital is a genuine buyer', who:'Priya'},{text:'Assemble yield + tenancy pack', who:'Alex'}],
+        tasks:[{title:'Verify Harborne Capital', who:'Priya', done:false}],
+        files:[],
+        contact:{name:'Elena Fisher', role:'Investment Director', company:'Harborne Capital', phone:'—', email:'e.fisher@harbornecap.com', dealTitle:'Oak House — commercial freehold', dealValue:'£1.35m', stage:'Qualifying'},
+        internal:[{who:'Priya Nair', initials:'PN', grad:'indigo', ai:true, time:'8:50', kind:'note', text:'Checking Harborne Capital — AUM, recent deals, and whether they’ve completed at this size before. Back to you in ~10 min.'}],
+        activity:[{who:'System', time:'8:47', text:'Email received from Elena Fisher'},{who:'Alex', time:'8:48', text:'Classified as Investors'},{who:'Priya', time:'8:49', text:'Started research on Harborne Capital'}],
+        draftBody:null,
+      },
+      {
+        id:'t3', folder:'inbox', unread:false, urgency:'high',
+        from:{name:'Ms. Adeyemi', company:'Buyer — 12 Larch Grove', initials:'A', grad:'#8a3b2c', email:'t.adeyemi@gmail.com'},
+        subject:'Still no update on my completion date',
+        summary:'Frustrated buyer chasing completion date for the third time',
+        preview:'This is the third time I’ve emailed. I still have no completion date and I’m losing patience…',
+        time:'Yesterday',
+        assignee:'you', statusKey:'escalated',
+        labels:['Support','At risk'], attach:null,
+        opp:null, aiActivity:'Maya escalated this to you', aiLive:false,
+        sentiment:'Frustrated', sentimentTone:'danger',
+        messages:[
+          {who:'Ms. Adeyemi', initials:'A', grad:'#8a3b2c', ai:false, time:'Yesterday, 17:40', body:'This is the third time I’ve emailed about my completion date for 12 Larch Grove. I still have no answer and I’m losing patience. If I don’t hear back tomorrow I’ll be raising this with the ombudsman.'},
+        ],
+        brief:['Third chase with no reply — relationship at risk.','Buyer is threatening to contact the ombudsman.','No completion date has been communicated since 3 May.','Maya escalated to you rather than let AI reply automatically.'],
+        recommendText:'Reply personally — this needs a human',
+        facts:['Solicitor confirmed completion is on track for 22 July.','Delay was caused by the seller’s management pack, now received.'],
+        commitments:['Owner to reply personally today with the 22 July date.'],
+        nextActions:[{text:'Reply personally with confirmed date', who:'You'},{text:'Log a service-recovery note', who:'Maya'}],
+        tasks:[{title:'Call Ms. Adeyemi to apologise', who:'You', done:false}],
+        files:[],
+        contact:{name:'Ms. T. Adeyemi', role:'Buyer', company:'12 Larch Grove', phone:'+44 7700 900431', email:'t.adeyemi@gmail.com', dealTitle:'12 Larch Grove — purchase', dealValue:'£395,000', stage:'Under offer'},
+        internal:[
+          {who:'Maya', initials:'MY', grad:'violet', ai:true, time:'Yesterday, 17:42', kind:'approval', text:'I’ve held back an automatic reply — the sentiment is strongly negative and the buyer is threatening escalation. @Jordan this should come from you personally. I’ve pulled the confirmed 22 July completion date from the solicitor thread.'},
+        ],
+        activity:[{who:'System', time:'Yesterday', text:'Email received from Ms. Adeyemi'},{who:'Maya', time:'Yesterday', text:'Detected frustrated sentiment · escalated to owner'}],
+        draftBody:null,
+      },
+      {
+        id:'t4', folder:'inbox', unread:false, urgency:'med',
+        from:{name:'Tom & Priya Sharma', company:'Buyers', initials:'TS', grad:'#1BA672', email:'sharma.family@outlook.com'},
+        subject:'Can we view 14 Elms Road on Saturday?',
+        summary:'Family requesting a weekend viewing of 14 Elms Road',
+        preview:'We loved the photos of 14 Elms Road — would Saturday morning be possible for a viewing?',
+        time:'Yesterday',
+        assignee:'grace', statusKey:'assigned',
+        labels:['Viewings'], attach:null,
+        opp:null, aiActivity:'Alex proposed 3 viewing slots', aiLive:false,
+        sentiment:'Positive', sentimentTone:'green',
+        messages:[{who:'Tom Sharma', initials:'TS', grad:'#1BA672', ai:false, time:'Yesterday, 14:20', body:'Hi, we loved the photos of 14 Elms Road. Would Saturday morning be possible for a viewing? We’re flexible on time.'}],
+        brief:['First-time enquiry, positive tone.','Wants a Saturday morning viewing of 14 Elms Road.','Grace owns this — lettings viewing.'],
+        recommendText:'Confirm a Saturday slot with Grace',
+        facts:['14 Elms Road is available for viewings this weekend.'],
+        commitments:['Offer a Saturday AM slot.'],
+        nextActions:[{text:'Confirm Saturday 10:30 slot', who:'Grace'}],
+        tasks:[],
+        files:[],
+        contact:{name:'Tom & Priya Sharma', role:'Prospective tenants', company:'—', phone:'—', email:'sharma.family@outlook.com', dealTitle:'14 Elms Road — let', dealValue:'£1,850 pcm', stage:'Viewing'},
+        internal:[],
+        activity:[{who:'System', time:'Yesterday', text:'Email received'},{who:'Alex', time:'Yesterday', text:'Assigned to Grace · proposed slots'}],
+        draftBody:null,
+      },
+      {
+        id:'t5', folder:'inbox', unread:true, urgency:'high',
+        from:{name:'David Okonkwo', company:'Buyer — 8 Maple Court', initials:'DO', grad:'#9A6BCB', email:'d.okonkwo@gmail.com'},
+        subject:'Re: Offer on 8 Maple Court',
+        summary:'Buyer accepted £520k — Alex drafted a formal acceptance',
+        preview:'Yes, we’re happy to proceed at £520,000. Please send the next steps…',
+        time:'7:30',
+        assignee:'alex', statusKey:'approval',
+        labels:['Sales'], attach:'Memorandum-of-sale.pdf',
+        opp:'£520k · offer accepted', aiActivity:'Alex drafted a memorandum of sale', aiLive:false,
+        sentiment:'Positive', sentimentTone:'green',
+        messages:[{who:'David Okonkwo', initials:'DO', grad:'#9A6BCB', ai:false, time:'Today, 7:30', body:'Yes, we’re happy to proceed at £520,000. Please send the next steps and the memorandum of sale.'}],
+        brief:['Offer of £520k accepted by the buyer.','Alex prepared a memorandum of sale for sign-off.','Sending it commits both parties — needs your approval.'],
+        recommendText:'Approve & send the memorandum of sale',
+        facts:['Sale agreed at £520,000, no chain.','Buyer is a cash purchaser.'],
+        commitments:['Send memorandum of sale to buyer & both solicitors.'],
+        nextActions:[{text:'Approve & send memorandum of sale', who:'Alex'},{text:'Notify solicitors', who:'Alex'}],
+        tasks:[{title:'Issue memorandum of sale', who:'Alex', done:false}],
+        files:[{name:'Memorandum-of-sale.pdf', meta:'PDF · 210 KB'}],
+        contact:{name:'David Okonkwo', role:'Buyer', company:'8 Maple Court', phone:'+44 7700 900882', email:'d.okonkwo@gmail.com', dealTitle:'8 Maple Court — sale', dealValue:'£520,000', stage:'Offer accepted'},
+        internal:[{who:'Alex Rivera', initials:'AR', grad:'coral', ai:true, time:'7:34', kind:'approval', text:'Offer accepted at £520k. I’ve drafted the memorandum of sale and cc’d both solicitors. This is an external, binding document — requesting your approval before it goes out.'}],
+        activity:[{who:'System', time:'7:30', text:'Email received from David Okonkwo'},{who:'Alex', time:'7:33', text:'Drafted memorandum of sale · requested approval'}],
+        draftBody:{
+          original:'Dear David,\n\nThank you — I’m delighted to confirm your offer of £520,000 for 8 Maple Court has been accepted.\n\nPlease find attached the memorandum of sale. Both solicitors are copied so conveyancing can begin immediately. As a cash purchase with no chain, we’d expect a smooth timeline.\n\nNext steps: your solicitor will raise enquiries and we’ll coordinate searches. I’ll be your point of contact throughout.\n\nBest,\nAlex, on behalf of Oakwood Estates',
+          warmer:'Dear David,\n\nWonderful news — congratulations! I’m thrilled to confirm your £520,000 offer for 8 Maple Court has been accepted.\n\nThe memorandum of sale is attached, and I’ve copied both solicitors so things can move quickly. With a cash purchase and no chain, this should be one of the smoother ones.\n\nI’ll be with you every step of the way — do reach out any time.\n\nWarm regards,\nAlex, on behalf of Oakwood Estates',
+          shorter:'Dear David,\n\nConfirming your £520,000 offer for 8 Maple Court is accepted. Memorandum of sale attached; both solicitors copied to start conveyancing. Cash, no chain — should move quickly.\n\nBest,\nAlex',
+        },
+      },
+      {
+        id:'t6', folder:'inbox', unread:false, urgency:'low',
+        from:{name:'Sofia Marchetti', company:'Tenant', initials:'SM', grad:'#4759A8', email:'sofia.m@proton.me'},
+        subject:'Question about my tenancy deposit',
+        summary:'Routine tenant query about deposit protection scheme',
+        preview:'Hi, could you confirm which deposit protection scheme my deposit is held in?',
+        time:'Mon',
+        assignee:null, statusKey:'new',
+        labels:['Support'], attach:null,
+        opp:null, aiActivity:'Unassigned · Maya suggests Grace', aiLive:false,
+        sentiment:null,
+        messages:[{who:'Sofia Marchetti', initials:'SM', grad:'#4759A8', ai:false, time:'Mon, 11:02', body:'Hi, could you confirm which deposit protection scheme my deposit is held in, and the reference number? Thanks, Sofia.'}],
+        brief:['Routine tenant query about deposit protection.','Answerable from CRM — low urgency.','Unassigned; Maya recommends routing to Grace.'],
+        recommendText:'Assign to Grace and let Alex draft',
+        facts:['Deposit held with DPS, ref DPS-4471-A.'],
+        commitments:[],
+        nextActions:[{text:'Assign to Grace', who:'Maya'}],
+        tasks:[],
+        files:[],
+        contact:{name:'Sofia Marchetti', role:'Tenant', company:'22b Cedar Lane', phone:'—', email:'sofia.m@proton.me', dealTitle:'22b Cedar Lane — tenancy', dealValue:'£1,400 pcm', stage:'Active tenancy'},
+        internal:[],
+        activity:[{who:'System', time:'Mon', text:'Email received from Sofia Marchetti'}],
+        draftBody:null,
+      },
+      {
+        id:'t7', folder:'inbox', unread:false, urgency:'med',
+        from:{name:'Grosvenor Lettings', company:'Landlord', initials:'GL', grad:'#3B4C6B', email:'ops@grosvenor-lettings.co.uk'},
+        subject:'Oak House commercial lease — proposal',
+        summary:'Proposal sent 3 days ago — no reply, follow-up due tomorrow',
+        preview:'Please find our proposal for the Oak House ground-floor unit attached…',
+        time:'Tue',
+        assignee:'alex', statusKey:'waiting',
+        labels:['Sales'], attach:null,
+        opp:null, aiActivity:'Follow-up due tomorrow · Alex will chase', aiLive:false,
+        sentiment:null,
+        messages:[{who:'Oakwood (Alex)', initials:'AR', grad:'coral', ai:true, time:'Tue, 10:00', body:'Please find our proposal for the Oak House ground-floor unit attached. Happy to walk you through it — let me know a good time.'}],
+        brief:['Proposal sent Tuesday, no reply after 3 days.','Alex has a follow-up scheduled for tomorrow.','No action needed from you unless you want to intervene.'],
+        recommendText:'Let Alex send the scheduled follow-up',
+        facts:['Proposal value £28k/yr lease.'],
+        commitments:['Follow up if no reply by Thursday.'],
+        nextActions:[{text:'Send follow-up tomorrow 9am', who:'Alex'}],
+        tasks:[],
+        files:[],
+        contact:{name:'Grosvenor Lettings', role:'Landlord ops', company:'Grosvenor Lettings', phone:'—', email:'ops@grosvenor-lettings.co.uk', dealTitle:'Oak House GF — lease', dealValue:'£28k/yr', stage:'Proposal sent'},
+        internal:[],
+        activity:[{who:'Alex', time:'Tue', text:'Sent proposal'},{who:'Alex', time:'Tue', text:'Scheduled follow-up for Thu 9am'}],
+        draftBody:null,
+      },
+    ];
+    this.actionMenu = ['Ask an employee','Research sender','Summarise thread','Extract action items','Create task','Update CRM','Prepare proposal','Improve tone','Translate','Schedule follow-up','Escalate','Save important facts'];
+    this.searchExamplesData = [
+      'Emails from investors I haven’t replied to',
+      'Buyers interested in properties over £500k',
+      'Threads where we promised to follow up this week',
+      'Drafts Alex made that I have not approved',
+      'Customers showing frustration',
+    ];
+    this.state = {
+      view:'brief', selected:'t1', rightTab:'conv',
+      composerOpen:false, drafting:false, cBody:'', cVariant:'original',
+      searchOpen:false, searchQuery:'',
+      approvals:{}, // id -> 'approved'|'rejected'|'changes'
+      internalDraft:'', toast:'', tick:0, loading:true,
+    };
+  }
+  componentDidMount(){
+    this._t = setInterval(()=>this.setState(s=>({tick:s.tick+1})), 900);
+    setTimeout(()=>this.setState({loading:false}), 850);
+    this._key = (e)=>{ if((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==='k'){e.preventDefault();this.setState(s=>({searchOpen:!s.searchOpen}));} if(e.key==='Escape'){this.setState({searchOpen:false,composerOpen:false});} };
+    window.addEventListener('keydown', this._key);
+  }
+  componentWillUnmount(){ clearInterval(this._t); window.removeEventListener('keydown', this._key); }
+  toastMsg(m){ this.setState({toast:m}); clearTimeout(this._tt); this._tt=setTimeout(()=>this.setState({toast:''}),2600); }
+  go(view){ this.setState({view, searchOpen:false}); if(view!=='brief'){ const list=this.threadsFor(view); if(list.length) this.setState({selected:list[0].id}); } }
+  threadsFor(view){
+    const T=this.threads;
+    switch(view){
+      case 'inbox': return T.filter(t=>t.folder==='inbox');
+      case 'assigned': return T.filter(t=>t.assignee==='you');
+      case 'aiworking': return T.filter(t=>t.aiLive || t.statusKey==='reviewing' || t.statusKey==='draft');
+      case 'approval': return T.filter(t=>t.statusKey==='approval' && !this.state.approvals[t.id]);
+      case 'drafts': return T.filter(t=>t.statusKey==='draft'||t.statusKey==='approval');
+      case 'awaiting': return T.filter(t=>t.statusKey==='waiting');
+      case 'scheduled': return T.filter(t=>t.statusKey==='scheduled');
+      case 'sent': return T.filter(t=>t.id==='__none');
+      case 'archived': return T.filter(t=>t.folder==='archived');
+      case 'spam': return T.filter(t=>t.folder==='spam');
+      default: return T.filter(t=>t.folder==='inbox');
+    }
+  }
+  select(id){ this.setState({selected:id, rightTab:'conv'}); }
+  openT(id){ this.setState({selected:id, view:'inbox', rightTab:'conv'}); }
+  openComposer(){ const A=this.active(); const body=(A&&A.draftBody)?A.draftBody.original:''; this.setState({composerOpen:true, drafting:!!body, cBody:body, cVariant:'original'}); if(body) setTimeout(()=>this.setState({drafting:false}),1500); }
+  setVariant(v){ const A=this.active(); if(A&&A.draftBody&&A.draftBody[v]){ this.setState({cVariant:v, cBody:A.draftBody[v]}); this.toastMsg('Alex rewrote the draft · '+({original:'original',warmer:'warmer tone',shorter:'shorter'}[v])); } }
+  approve(id){ const a={...this.state.approvals, [id]:'approved'}; this.setState({approvals:a, composerOpen:false}); const t=this.threads.find(x=>x.id===id); if(t) t.statusKey='resolved'; this.toastMsg('Approved & sent · logged to Work Log'); }
+  reject(id){ this.setState({approvals:{...this.state.approvals,[id]:'rejected'}, composerOpen:false}); this.toastMsg('Rejected · Alex notified'); }
+  requestChanges(id){ this.setState({approvals:{...this.state.approvals,[id]:'changes'}, composerOpen:false}); this.toastMsg('Change request sent to Alex'); }
+  active(){ return this.threads.find(t=>t.id===this.state.selected); }
+  emp(k){ return this.EMP[k]; }
+  gradOf(g){ const M={coral:'linear-gradient(140deg,#E85D2C,#F2974E)',indigo:'linear-gradient(140deg,#4759A8,#7A8BD8)',green:'linear-gradient(140deg,#1BA672,#54C79A)',violet:'linear-gradient(140deg,#9A6BCB,#C29BE6)',slate:'linear-gradient(140deg,#3B4C6B,#5A6E94)'}; return M[g]||('linear-gradient(140deg,'+g+',#5A6E94)'); }
+  row(t){
+    const st=this.STAT[t.statusKey]; const as=t.assignee?this.EMP[t.assignee]:null;
+    const sel=t.id===this.state.selected;
+    return {
+      id:t.id, onClick:()=>this.select(t.id),
+      fromName:t.from.name, company:t.from.company, initials:t.from.initials, grad:this.gradOf(t.from.grad),
+      subject:t.subject, summary:t.summary, time:t.time,
+      unread:!!t.unread, hasAttach:!!t.attach, hasOpp:!!t.opp, oppText:t.opp||'',
+      aiActivity:t.aiActivity||'', hasAI:!!t.aiActivity, aiLive:!!t.aiLive,
+      statusText:st.t, statusColor:st.c, statusBg:st.bg,
+      asInitials:as?as.initials:'', asGrad:as?this.gradOf(as.grad):'', asName:as?as.name:'Unassigned', hasAssignee:!!as, asAI:!!(as&&as.ai),
+      urgency:t.urgency, urgencyBar:t.urgency==='high'?'#D9483B':(t.urgency==='med'?'#CB8A1B':'transparent'),
+      rowStyle:'display:flex;gap:12px;padding:13px 16px 13px 14px;border-bottom:1px solid var(--ws-border-2);cursor:pointer;position:relative;border-left:3px solid '+(sel?'var(--ws-accent)':'transparent')+';background:'+(sel?'var(--ws-surface)':'transparent')+';',
+      titleWeight:t.unread?'700':'500',
+      selected:sel,
+    };
+  }
+  renderVals(){
+    const S=this.state; const A=this.active(); const st=A?this.STAT[A.statusKey]:null; const as=A&&A.assignee?this.EMP[A.assignee]:null;
+    const counts={
+      inbox:this.threadsFor('inbox').length,
+      assigned:this.threadsFor('assigned').length,
+      aiworking:this.threadsFor('aiworking').length,
+      approval:this.threadsFor('approval').length,
+      drafts:this.threadsFor('drafts').length,
+      awaiting:this.threadsFor('awaiting').length,
+      scheduled:this.threadsFor('scheduled').length,
+    };
+    const rows=this.threadsFor(S.view).map(t=>this.row(t));
+    const nav=(v)=>S.view===v?'on':'';
+    const titleMap={brief:'Inbox Brief',inbox:'Inbox',assigned:'Assigned to me',aiworking:'AI working',approval:'Needs approval',drafts:'Drafts',awaiting:'Awaiting reply',sent:'Sent',scheduled:'Scheduled',archived:'Archived',spam:'Spam'};
+    // active view models
+    const A_vm = A ? {
+      a_id:A.id, a_subject:A.subject, a_fromName:A.from.name, a_company:A.from.company, a_initials:A.from.initials, a_grad:this.gradOf(A.from.grad), a_email:A.from.email,
+      a_statusText:st.t, a_statusColor:st.c, a_statusBg:st.bg,
+      a_asName:as?as.name:'Unassigned', a_asRole:as?as.role:'', a_asInitials:as?as.initials:'?', a_asGrad:as?this.gradOf(as.grad):'#9B968B', a_asAI:!!(as&&as.ai), a_hasAssignee:!!as,
+      a_sentiment:A.sentiment||'', a_hasSentiment:!!A.sentiment, a_sentColor:A.sentimentTone==='danger'?'#D9483B':(A.sentimentTone==='green'?'#1BA672':'#6C685F'), a_sentBg:A.sentimentTone==='danger'?'#FBE3E0':(A.sentimentTone==='green'?'#E3F4EB':'#F0EDE6'),
+      a_recommend:A.recommendText,
+      a_hasDraft:!!A.draftBody,
+      a_brief:A.brief.map(x=>({text:x})),
+      a_facts:A.facts.map(x=>({text:x})),
+      a_commitments:A.commitments.map(x=>({text:x})),
+      a_nextActions:A.nextActions.map(x=>({text:x.text, who:x.who})),
+      a_hasCommit:A.commitments.length>0,
+      a_messages:A.messages.map(m=>({name:m.who, initials:m.initials, grad:this.gradOf(m.grad), ai:!!m.ai, time:m.time, body:m.body})),
+      a_internal:A.internal.map(m=>{const k={handoff:{l:'Handoff',c:'#9A6BCB',b:'#EDE7FB'},approval:{l:'Approval request',c:'#CB8A1B',b:'#FBEFD6'},decision:{l:'Decision',c:'#1BA672',b:'#E3F4EB'},note:{l:'Note',c:'#6C685F',b:'#F0EDE6'}}[m.kind]||{l:'Note',c:'#6C685F',b:'#F0EDE6'}; return {name:m.who, initials:m.initials, grad:this.gradOf(m.grad), ai:!!m.ai, time:m.time, text:m.text, kindLabel:k.l, kindColor:k.c, kindBg:k.b};}),
+      a_hasInternal:A.internal.length>0, a_internalCount:A.internal.length,
+      a_tasks:A.tasks.map(x=>({title:x.title, who:x.who})), a_hasTasks:A.tasks.length>0,
+      a_files:A.files.map(x=>({name:x.name, meta:x.meta})), a_hasFiles:A.files.length>0,
+      a_activity:A.activity.map(x=>({text:x.text, time:x.time, who:x.who})),
+      a_coName:A.contact.name, a_coRole:A.contact.role, a_coCompany:A.contact.company, a_coPhone:A.contact.phone, a_coEmail:A.contact.email,
+      a_dealTitle:A.contact.dealTitle, a_dealValue:A.contact.dealValue, a_dealStage:A.contact.stage,
+    } : {};
+    const approvalRows=this.threads.filter(t=>t.statusKey==='approval'&&!S.approvals[t.id]).map(t=>{const as2=this.EMP[t.assignee]; return {id:t.id, onClick:()=>this.select(t.id), subject:t.subject, to:t.from.name+' · '+t.from.email, empName:as2.name, empInitials:as2.initials, empGrad:this.gradOf(as2.grad), preview:(t.draftBody?t.draftBody.original:t.summary), reason:t.brief[t.brief.length-1], attach:t.attach||'', hasAttach:!!t.attach, risk:(t.statusKey==='approval'&&t.id==='t5')?'Binding document — commits both parties':'External email — leaves the workspace', onApprove:()=>this.approve(t.id), onReject:()=>this.reject(t.id), onChanges:()=>this.requestChanges(t.id)};});
+    // search
+    const q=S.searchQuery.trim().toLowerCase();
+    const searchResults = q? this.threads.filter(t=>(t.subject+' '+t.from.name+' '+t.from.company+' '+t.summary+' '+t.messages.map(m=>m.body).join(' ')).toLowerCase().includes(q)).map(t=>({id:t.id, onClick:()=>{this.select(t.id);this.setState({view:'inbox',searchOpen:false});}, subject:t.subject, fromName:t.from.name, snippet:t.summary, why:'Matched “'+S.searchQuery.trim()+'” in subject & summary'})) : [];
+    return {
+      noop:()=>{}, tick:S.tick, loading:S.loading,
+      mailbox:'oakwood-estates@inbox.adehq.com',
+      // nav
+      goBrief:()=>this.go('brief'), goInbox:()=>this.go('inbox'), goAssigned:()=>this.go('assigned'), goAI:()=>this.go('aiworking'), goApproval:()=>this.go('approval'), goDrafts:()=>this.go('drafts'), goAwaiting:()=>this.go('awaiting'), goSent:()=>this.go('sent'), goScheduled:()=>this.go('scheduled'), goArchived:()=>this.go('archived'), goSpam:()=>this.go('spam'),
+      navBrief:nav('brief'), navInbox:nav('inbox'), navAssigned:nav('assigned'), navAI:nav('aiworking'), navApproval:nav('approval'), navDrafts:nav('drafts'), navAwaiting:nav('awaiting'), navSent:nav('sent'), navScheduled:nav('scheduled'), navArchived:nav('archived'), navSpam:nav('spam'),
+      cInbox:counts.inbox, cAssigned:counts.assigned, cAI:counts.aiworking, cApproval:counts.approval, cDrafts:counts.drafts, cAwaiting:counts.awaiting, cScheduled:counts.scheduled,
+      // views
+      showBrief:S.view==='brief', showList:S.view!=='brief',
+      viewTitle:titleMap[S.view], listCount:rows.length, rows, hasRows:rows.length>0, noRows:rows.length===0,
+      emptyTitle:{inbox:'You’re all caught up',assigned:'Nothing assigned to you',aiworking:'No AI work in progress',approval:'No approvals waiting',drafts:'No drafts',awaiting:'Nothing awaiting a reply',sent:'No sent messages yet',scheduled:'No follow-ups scheduled',archived:'Nothing archived',spam:'No spam'}[S.view]||'Nothing here',
+      emptySub:{inbox:'New conversations will appear here in real time.',assigned:'Your teammates and AI employees have the rest covered.',aiworking:'Your AI employees are monitoring the inbox for new work.',approval:'Nothing needs your sign-off right now.',drafts:'AI-written drafts awaiting approval land here.',awaiting:'Threads where we’re waiting on the customer show here.',sent:'Approved and sent emails will be listed here.',scheduled:'Scheduled follow-ups will appear here.',archived:'Resolved conversations are tucked away here.',spam:'Your workforce filters spam out automatically.'}[S.view]||'',
+      hasActive:!!A && S.view!=='brief', noActive:!(!!A) && S.view!=='brief',
+      notDrafting:!S.drafting,
+      noSearchResults:q.length>0 && searchResults.length===0,
+      // right tabs
+      tabConv:S.rightTab==='conv'?'on':'', tabInternal:S.rightTab==='internal'?'on':'', tabContext:S.rightTab==='context'?'on':'',
+      showConv:S.rightTab==='conv', showInternal:S.rightTab==='internal', showContext:S.rightTab==='context',
+      setConv:()=>this.setState({rightTab:'conv'}), setInternal:()=>this.setState({rightTab:'internal'}), setContext:()=>this.setState({rightTab:'context'}),
+      // action bar
+      openComposer:()=>this.openComposer(), actionMenu:this.actionMenu.map(l=>({label:l, onClick:()=>this.toastMsg(l+' — requested from your workforce')})),
+      recClick:()=> (A&&A.draftBody)?this.openComposer():this.toastMsg((A?A.recommendText:'Action')+' — requested'),
+      // internal composer
+      internalDraft:S.internalDraft, onInternal:(e)=>this.setState({internalDraft:e.target.value}), sendInternal:()=>{ if(!S.internalDraft.trim())return; this.toastMsg('Internal note posted — not sent externally'); this.setState({internalDraft:''}); },
+      // composer
+      composerOpen:S.composerOpen, closeComposer:()=>this.setState({composerOpen:false}),
+      drafting:S.drafting, cBody:S.cBody, onBody:(e)=>this.setState({cBody:e.target.value}),
+      cVariant:S.cVariant,
+      vOrig:S.cVariant==='original'?'on':'', vWarm:S.cVariant==='warmer'?'on':'', vShort:S.cVariant==='shorter'?'on':'',
+      setOrig:()=>this.setVariant('original'), setWarm:()=>this.setVariant('warmer'), setShort:()=>this.setVariant('shorter'),
+      cAuthorName:as?as.name:'Alex Rivera', cAuthorInitials:as?as.initials:'AR', cAuthorGrad:as?this.gradOf(as.grad):this.gradOf('coral'),
+      cTo:A?(A.from.name+' <'+A.from.email+'>'):'', cSubject:A?('Re: '+A.subject):'',
+      cWhy:A?A.recommendText:'', cSources:A?A.brief.slice(0,3).map(x=>({text:x})):[],
+      approveActive:()=>{ if(A) this.approve(A.id); }, saveDraft:()=>{this.setState({composerOpen:false});this.toastMsg('Draft saved');}, discard:()=>{this.setState({composerOpen:false});this.toastMsg('Draft discarded');}, reqChangesActive:()=>{ if(A) this.requestChanges(A.id); },
+      // approvals view
+      approvalRows, hasApprovals:approvalRows.length>0,
+      // search
+      searchOpen:S.searchOpen, openSearch:()=>this.setState({searchOpen:true}), closeSearch:()=>this.setState({searchOpen:false}),
+      searchQuery:S.searchQuery, onSearch:(e)=>this.setState({searchQuery:e.target.value}),
+      searchResults, hasSearchResults:searchResults.length>0, hasQuery:q.length>0,
+      searchExamples:this.searchExamplesData.map(x=>({text:x, onClick:()=>this.setState({searchQuery:x})})),
+      // brief
+      openThread:(id)=>{this.setState({selected:id,view:'inbox',rightTab:'conv'});},
+      openEscalation:()=>this.setState({selected:'t3',view:'inbox',rightTab:'conv'}),
+      briefApprovals:[
+        {grad:this.gradOf('coral'), initials:'AR', subject:'Interest in two units at Kingsgate Wharf', who:'Alex', to:'Marcus Chen', value:'£700k', onClick:()=>this.openT('t1')},
+        {grad:this.gradOf('coral'), initials:'AR', subject:'Re: Offer on 8 Maple Court', who:'Alex', to:'David Okonkwo', value:'£520k', onClick:()=>this.openT('t5')},
+      ],
+      briefOpps:[
+        {deal:'Kingsgate Wharf — Units 4 & 5', stage:'Proposal · Riverside Developments', value:'£700k', onClick:()=>this.openT('t1')},
+        {deal:'8 Maple Court — sale', stage:'Offer accepted · David Okonkwo', value:'£520k', onClick:()=>this.openT('t5')},
+        {deal:'Oak House — commercial freehold', stage:'Qualifying · Harborne Capital', value:'£1.35m', onClick:()=>this.openT('t2')},
+      ],
+      briefAI:[
+        {grad:this.gradOf('indigo'), initials:'PN', who:'Priya Nair', text:'Researching Harborne Capital — AUM & recent funding, before we reply.'},
+        {grad:this.gradOf('coral'), initials:'AR', who:'Alex Rivera', text:'Follow-up on the Oak House lease scheduled for tomorrow 9am.'},
+        {grad:this.gradOf('violet'), initials:'MY', who:'Maya', text:'Monitoring the Adeyemi thread — flagged as at-risk, awaiting your reply.'},
+      ],
+      briefFollowups:[
+        {subject:'Oak House commercial lease — proposal', who:'Alex will chase Grosvenor Lettings', when:'Tomorrow', onClick:()=>this.openT('t7')},
+        {subject:'Viewing — 14 Elms Road', who:'Grace to confirm Saturday slot', when:'Today', onClick:()=>this.openT('t4')},
+      ],
+      briefWorkload:[
+        {name:'Alex', initials:'AR', grad:this.gradOf('coral'), pct:'82%', bar:'linear-gradient(90deg,#E85D2C,#F2974E)', load:'11 threads'},
+        {name:'Priya', initials:'PN', grad:this.gradOf('indigo'), pct:'48%', bar:'linear-gradient(90deg,#4759A8,#7A8BD8)', load:'5 threads'},
+        {name:'Grace', initials:'GB', grad:this.gradOf('green'), pct:'40%', bar:'linear-gradient(90deg,#1BA672,#54C79A)', load:'4 threads'},
+        {name:'You', initials:'JH', grad:this.gradOf('slate'), pct:'22%', bar:'linear-gradient(90deg,#3B4C6B,#5A6E94)', load:'2 threads'},
+      ],
+      // toast
+      toast:S.toast, hasToast:!!S.toast,
+      ...A_vm,
+    };
+  }
+}
+</script>
+</body>
+</html>

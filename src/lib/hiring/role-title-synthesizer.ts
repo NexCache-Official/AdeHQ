@@ -121,6 +121,14 @@ export function synthesizeRoleTitle(input: {
     return titleCase(normalized.replace("full stack", "full-stack"));
   }
 
+  // A person may describe a specialised role while also mentioning broadly
+  // recognised work (for example, outreach). Preserve the explicit title in
+  // that request instead of collapsing it to a generic library role.
+  if (raw && TITLE_SUFFIX_REGEX.test(raw)) {
+    const phrase = extractRoleTitlePhrase(raw);
+    if (phrase) return titleCase(phrase);
+  }
+
   if (includesAny(combined, ["latency", "bandwidth", "performance", "inference", "throughput"])) {
     return "AI Performance Engineer";
   }
@@ -156,15 +164,6 @@ export function synthesizeRoleTitle(input: {
 
   if (input.department && DEPARTMENT_FALLBACKS[input.department]) {
     return DEPARTMENT_FALLBACKS[input.department];
-  }
-
-  if (raw && raw.split(/\s+/).length <= 4 && TITLE_SUFFIX_REGEX.test(raw)) {
-    return titleCase(raw);
-  }
-
-  if (raw && TITLE_SUFFIX_REGEX.test(raw)) {
-    const phrase = extractRoleTitlePhrase(raw);
-    if (phrase) return titleCase(phrase);
   }
 
   return "AI Employee";

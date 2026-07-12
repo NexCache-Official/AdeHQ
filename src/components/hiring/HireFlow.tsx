@@ -672,11 +672,43 @@ export function HireFlow({ onboarding = false, entrySource = "hire_route" }: Hir
         dispatch({ type: "SET_BRIEF_READY", briefReady: true });
       }
     } catch (e) {
+      // Recruiter drafting must never strand a first-time customer. The brief
+      // synthesizer is deterministic and carries forward every answer, so it
+      // provides a safe, reviewable recovery when the live recruiter times out.
+      const recoveredBrief = synthesizeBriefForHiringContext({
+        roleSeed,
+        messages: nextMessages,
+        departmentId: effectiveDepartmentId,
+        roleKey: session.roleKey,
+        existing: existingBrief,
+      });
+      prevBriefRef.current = { ...recoveredBrief };
+      dispatch({ type: "SET_BRIEF_PARTIAL", briefPartial: recoveredBrief });
+      dispatch({ type: "SET_BRIEF", brief: recoveredBrief });
+      dispatch({
+        type: "SET_READINESS",
+        readiness: finalizeReadinessScore(
+          assessRecruiterReadiness(nextMessages, recoveredBrief, session.roleKey),
+          recoveredBrief,
+          true,
+        ),
+      });
+      dispatch({ type: "SET_BRIEF_READY", briefReady: true });
+      dispatch({
+        type: "SET_MESSAGES",
+        messages: [
+          ...nextMessages,
+          {
+            role: "ade",
+            text: "I saved a draft using the details you gave me. Review it now, or try refining it again when I’m back online.",
+          },
+        ],
+      });
       setMayaState("error");
       setBriefUpdateState({ status: "error", sectionsUpdating: [] });
       dispatch({
         type: "SET_ERROR",
-        error: e instanceof Error ? e.message : "Message failed.",
+        error: e instanceof Error ? e.message : "Maya could not update the live draft, so a saved draft is ready to review.",
       });
     } finally {
       dispatch({ type: "SET_BUSY", busy: false });

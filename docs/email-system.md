@@ -144,6 +144,16 @@ Add all vars above under **Project → Settings → Environment Variables** (Pro
 Preview). Set `EMAIL_TEST_MODE=true` + `EMAIL_TEST_INBOX` on Preview so preview
 deployments never email real users. Redeploy after changes.
 
+## Workspace inbox (Slice 0 + Slice A)
+
+Conversational shared-inbox transport was proven in Slice 0
+([`docs/inbox-transport-proof.md`](inbox-transport-proof.md)). Slice A adds the
+secure foundation (schema, provider, webhook, outbox, provisioning) —
+[`docs/workspace-inbox-foundation.md`](workspace-inbox-foundation.md).
+
+Do not reuse `noreply@adehq.com` / `sendEmail()` for workspace mailbox traffic.
+Use `RESEND_INBOX_API_KEY` and `POST /api/inbox/webhooks/resend`.
+
 ## Database
 
 Migration `supabase/migrations/20260708150000_email_system.sql` adds:

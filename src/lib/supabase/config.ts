@@ -146,4 +146,9 @@ export const SUPABASE_WORKSPACE_TABLES = [
   "crm_contacts",
   "crm_pipeline_stages",
   "crm_deals",
+  "workspace_mailboxes",
+  "email_threads",
+  "email_messages",
+  "email_drafts",
+  "email_outbox",
 ] as const;

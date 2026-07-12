@@ -19,6 +19,8 @@ const AMBIGUOUS_PATTERNS = [
   /i want to/i,
 ];
 
+const DOMAIN_SPECIFIC_ROLE_RE = /\b(real estate|estate agenc(?:y|ies)|lettings?|landlord|property|viewings?)\b/i;
+
 const OUTCOME_ROLE_BOOSTS: Array<{ pattern: RegExp; roleKeys: string[]; boost: number }> = [
   { pattern: /test|bug|qa|quality assurance/i, roleKeys: ["qa_test_engineer"], boost: 15 },
   { pattern: /write code|build and ship|ship features|develop/i, roleKeys: ["software_engineer", "full_stack_developer"], boost: 14 },
@@ -85,6 +87,19 @@ export function inferRoleFromText(text: string): RoleInferenceResult {
   const trimmed = text.trim();
   if (!trimmed || isHiringSmallTalk(trimmed)) {
     return { confidence: "low", matches: [], matchType: "custom", customSuggestion: "AI Employee" };
+  }
+
+  // Do not collapse a detailed domain-specific brief into the first generic
+  // keyword match (for example, “outreach” becoming SDR). Let Maya preserve
+  // the owner’s wording and shape a bespoke role instead.
+  if (trimmed.length >= 80 && DOMAIN_SPECIFIC_ROLE_RE.test(trimmed)) {
+    return {
+      confidence: "low",
+      matches: [],
+      matchType: "custom",
+      customSuggestion: synthesizeRoleTitle({ roleInput: trimmed }),
+      nearMatchAlternatives: ["sales_development_rep", "market_research_analyst", "operations_assistant"],
+    };
   }
 
   const matches = scoreText(trimmed);

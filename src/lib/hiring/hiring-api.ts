@@ -12,6 +12,23 @@ export type HiringApiContext = {
   mayaRoomId?: string | null;
 };
 
+const HIRING_REQUEST_TIMEOUT_MS = 15_000;
+
+async function fetchHiringApi(path: string, init: RequestInit): Promise<Response> {
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), HIRING_REQUEST_TIMEOUT_MS);
+  try {
+    return await fetch(path, { ...init, signal: controller.signal });
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") {
+      throw new Error("Maya took too long to respond. Your draft has been saved; you can continue or try again.");
+    }
+    throw error;
+  } finally {
+    window.clearTimeout(timeout);
+  }
+}
+
 function hiringContextPayload(context?: HiringApiContext): Record<string, unknown> {
   if (!context) return {};
   return {
@@ -27,7 +44,7 @@ export async function callRecruiter(
   context?: HiringApiContext,
 ): Promise<RecruiterApiResponse> {
   const headers = await authHeaders();
-  const res = await fetch("/api/hiring/recruiter", {
+  const res = await fetchHiringApi("/api/hiring/recruiter", {
     method: "POST",
     headers,
     body: JSON.stringify({ ...payload, ...hiringContextPayload(context) }),
@@ -46,7 +63,7 @@ export async function callCandidates(
   context?: HiringApiContext,
 ): Promise<CandidatesApiResponse> {
   const headers = await authHeaders();
-  const res = await fetch("/api/hiring/candidates", {
+  const res = await fetchHiringApi("/api/hiring/candidates", {
     method: "POST",
     headers,
     body: JSON.stringify({
@@ -75,7 +92,7 @@ export async function callCandidateInterview(
   context?: HiringApiContext,
 ): Promise<CandidateInterviewResponse> {
   const headers = await authHeaders();
-  const res = await fetch("/api/hiring/interview", {
+  const res = await fetchHiringApi("/api/hiring/interview", {
     method: "POST",
     headers,
     body: JSON.stringify({ ...payload, ...hiringContextPayload(context) }),
