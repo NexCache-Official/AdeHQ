@@ -1,5 +1,5 @@
 /**
- * GET /api/inbox/threads/[threadId] — thread + its messages (bounded).
+ * GET /api/inbox/threads/[threadId] — thread + messages + Slice C triage fields.
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -9,8 +9,11 @@ import { AuthError } from "@/lib/supabase/auth-server";
 import type {
   AttachmentDTO,
   DirectionState,
+  DraftJobStatus,
+  EmailPriority,
   ThreadDetailDTO,
   ThreadStatus,
+  TriageStatus,
 } from "@/lib/inbox/types";
 
 export const runtime = "nodejs";
@@ -29,12 +32,20 @@ export async function GET(
 
     const { data: thread, error: threadError } = await ctx.secret
       .from("email_threads")
-      .select("id, subject, status, is_spam, direction_state, has_unread, mailbox_id")
+      .select(
+        "id, subject, status, is_spam, direction_state, has_unread, mailbox_id, triage_status, draft_status, category, priority, reply_required, triage_confidence, assignment_confidence, assignment_source, assigned_employee_id, assigned_human_id, suggested_employee_id, steward_meta, latest_draft_id",
+      )
       .eq("id", threadId)
       .eq("mailbox_id", ctx.mailbox.id)
       .maybeSingle();
     if (threadError) throw threadError;
     if (!thread) throw new AuthError("Thread not found.", 404);
+
+    const { data: mailbox } = await ctx.secret
+      .from("workspace_mailboxes")
+      .select("assistance_mode")
+      .eq("id", ctx.mailbox.id)
+      .maybeSingle();
 
     const { data: messages, error: msgError } = await ctx.secret
       .from("email_messages")
@@ -67,6 +78,32 @@ export async function GET(
       }
     }
 
+    const meta = (thread.steward_meta as Record<string, unknown>) ?? {};
+    const latestInboundId = [...(messages ?? [])]
+      .reverse()
+      .find((m) => m.direction === "inbound")?.id;
+    const dismissFp = meta.dismissedSuggestionFingerprint
+      ? String(meta.dismissedSuggestionFingerprint)
+      : null;
+    const suggestionDismissed = Boolean(
+      dismissFp && latestInboundId && dismissFp === String(latestInboundId),
+    );
+
+    const employeeIds = [
+      thread.assigned_employee_id,
+      thread.suggested_employee_id,
+    ].filter(Boolean) as string[];
+    const nameById = new Map<string, string>();
+    if (employeeIds.length > 0) {
+      const { data: employees } = await ctx.secret
+        .from("ai_employees")
+        .select("id, name")
+        .in("id", employeeIds);
+      for (const e of employees ?? []) {
+        nameById.set(String(e.id), String(e.name ?? "Employee"));
+      }
+    }
+
     const body: ThreadDetailDTO = {
       id: String(thread.id),
       subject: String(thread.subject ?? "") || "(no subject)",
@@ -77,6 +114,36 @@ export async function GET(
       messages: (messages ?? []).map((m) =>
         mapMessageRow(m, attByMessage.get(String(m.id)) ?? []),
       ),
+      triageStatus: (thread.triage_status as TriageStatus) ?? "not_started",
+      draftStatus: (thread.draft_status as DraftJobStatus) ?? "idle",
+      category: (thread.category as string) ?? null,
+      priority: (thread.priority as EmailPriority) ?? "normal",
+      replyRequired: Boolean(thread.reply_required),
+      triageConfidence: Number(thread.triage_confidence ?? 0),
+      assignmentConfidence: Number(thread.assignment_confidence ?? 0),
+      assignmentSource: (thread.assignment_source as string) ?? null,
+      assigneeId:
+        (thread.assigned_employee_id as string) ??
+        (thread.assigned_human_id as string) ??
+        null,
+      suggestedEmployeeId: (thread.suggested_employee_id as string) ?? null,
+      assigneeName: thread.assigned_employee_id
+        ? nameById.get(String(thread.assigned_employee_id)) ?? null
+        : null,
+      suggestedEmployeeName: thread.suggested_employee_id
+        ? nameById.get(String(thread.suggested_employee_id)) ?? null
+        : null,
+      keyPoints: Array.isArray(meta.keyPoints)
+        ? (meta.keyPoints as string[])
+        : [],
+      summary: typeof meta.summary === "string" ? meta.summary : null,
+      suggestedNextAction:
+        typeof meta.suggestedNextAction === "string" ? meta.suggestedNextAction : null,
+      matchReason: typeof meta.matchReason === "string" ? meta.matchReason : null,
+      suggestionDismissed,
+      latestDraftId: (thread.latest_draft_id as string) ?? null,
+      assistanceModeSuggestsActions:
+        String(mailbox?.assistance_mode) === "ai_triage_suggested_replies",
     };
     return NextResponse.json(body);
   } catch (error) {

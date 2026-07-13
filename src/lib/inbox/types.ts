@@ -55,7 +55,26 @@ export type InboxFolder =
   | "sent"
   | "drafts"
   | "archived"
-  | "spam";
+  | "spam"
+  | "ai_working"
+  | "needs_approval";
+
+export type TriageStatus =
+  | "not_started"
+  | "queued"
+  | "running"
+  | "ready"
+  | "failed";
+
+export type DraftJobStatus =
+  | "idle"
+  | "queued"
+  | "running"
+  | "ready"
+  | "failed"
+  | "cancelled";
+
+export type EmailPriority = "low" | "normal" | "high" | "urgent";
 
 export type MailboxDTO = {
   id: string;
@@ -70,6 +89,7 @@ export type MailboxAccessFlags = {
   canSend: boolean;
   canOrganize: boolean;
   canManage: boolean;
+  canApprove: boolean;
   isAdmin: boolean;
   role: string;
 };
@@ -103,8 +123,14 @@ export type ThreadSummaryDTO = {
   isSpam: boolean;
   /** Latest preview message delivery status (outbound failures show here). */
   deliveryStatus: DeliveryStatus | null;
-  /** Slice C placeholder — unused in B UI. */
   assigneeId: string | null;
+  suggestedEmployeeId: string | null;
+  priority: EmailPriority;
+  replyRequired: boolean;
+  triageStatus: TriageStatus;
+  draftStatus: DraftJobStatus;
+  category: string | null;
+  aiActivity: string | null;
 };
 
 export type ThreadPageDTO = {
@@ -138,6 +164,25 @@ export type ThreadDetailDTO = {
   hasUnread: boolean;
   directionState: DirectionState;
   messages: MessageDTO[];
+  triageStatus: TriageStatus;
+  draftStatus: DraftJobStatus;
+  category: string | null;
+  priority: EmailPriority;
+  replyRequired: boolean;
+  triageConfidence: number;
+  assignmentConfidence: number;
+  assignmentSource: string | null;
+  assigneeId: string | null;
+  suggestedEmployeeId: string | null;
+  assigneeName: string | null;
+  suggestedEmployeeName: string | null;
+  keyPoints: string[];
+  summary: string | null;
+  suggestedNextAction: string | null;
+  matchReason: string | null;
+  suggestionDismissed: boolean;
+  latestDraftId: string | null;
+  assistanceModeSuggestsActions: boolean;
 };
 
 export type DraftDTO = {
@@ -151,6 +196,17 @@ export type DraftDTO = {
   textBody: string | null;
   htmlBody: string | null;
   updatedAt: string;
+  originType: "ai_employee" | "human";
+  requiresApproval: boolean;
+  isStale: boolean;
+  staleReason: string | null;
+  employeeId: string | null;
+  versionId: string | null;
+  rewriteCount: number;
+  basedOnMessageId: string | null;
+  approvalStatus: "none" | "pending" | "approved" | "rejected" | "expired";
+  approvalId: string | null;
+  approvalExpiresAt: string | null;
 };
 
 export type SendResultDTO = {

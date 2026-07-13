@@ -1,6 +1,7 @@
 /**
- * Async inbound processor (Slice A).
- * Fetch → sanitise → resolve mailbox → thread → store. No AI steward yet.
+ * Async inbound processor (Slice A + C).
+ * Fetch → sanitise → resolve mailbox → thread → store → steward triage enqueue.
+ * Bounce DSN updates outbound delivery and never becomes a customer thread.
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -192,6 +193,30 @@ export async function processInboundEvent(
       email.messageId || headerGet(headers, "message-id") || `<provider.${email.id}@resend>`;
     const inReplyTo = headerGet(headers, "in-reply-to");
     const references = headerGet(headers, "references");
+
+    // Bounce / DSN → update outbound delivery; do not open a customer thread.
+    const { handleInboundBounceAsDelivery } = await import("@/lib/inbox/steward/bounce");
+    const bounceHandled = await handleInboundBounceAsDelivery(client, {
+      workspaceId: resolved.workspaceId,
+      mailboxId: resolved.mailboxId,
+      fromAddress: from.address,
+      subject: email.subject || "",
+      textBody: email.text,
+      headers,
+      eventId,
+    });
+    if (bounceHandled) {
+      await client
+        .from("email_inbound_events")
+        .update({
+          processing_state: "ready",
+          processed_at: new Date().toISOString(),
+          error: null,
+        })
+        .eq("id", eventId);
+      return { ok: true, reason: "bounce_delivery_updated" };
+    }
+
     const sanitised = sanitizeInboundHtml(email.html);
     const securityFlags = [
       ...sanitised.flags,
@@ -371,6 +396,28 @@ export async function processInboundEvent(
         from: from.address,
       },
     });
+
+    // Slice C: stale AI drafts + enqueue triage (never blocks visibility).
+    try {
+      const { markDraftsStaleOnInbound, enqueueTriageAfterInbound } = await import(
+        "@/lib/inbox/steward/run"
+      );
+      await markDraftsStaleOnInbound(client, { threadId, newMessageId: messageId });
+      const { jobId } = await enqueueTriageAfterInbound(client, {
+        workspaceId: resolved.workspaceId,
+        mailboxId: resolved.mailboxId,
+        threadId,
+        messageId,
+      });
+      if (jobId) {
+        // Best-effort drain — must not delay marking inbound ready.
+        void import("@/lib/inbox/steward/process")
+          .then(({ processEmailJobs }) => processEmailJobs(client, 3))
+          .catch((err) => console.warn("[inbox] triage drain nudge failed", err));
+      }
+    } catch (stewardErr) {
+      console.warn("[inbox] steward enqueue failed", stewardErr);
+    }
 
     await client
       .from("email_inbound_events")

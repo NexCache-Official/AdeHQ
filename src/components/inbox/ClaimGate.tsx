@@ -154,6 +154,14 @@ export function ClaimGate({
           className="mt-1.5 w-full rounded-lg border border-border bg-canvas px-3 py-2 text-sm text-ink outline-none focus:border-accent"
         />
 
+        <div className="mt-4 rounded-lg border border-border bg-muted/40 px-3 py-2.5 text-xs leading-relaxed text-ink-2">
+          <p className="font-medium text-ink">Organise inbox (default)</p>
+          <p className="mt-1 text-ink-3">
+            AdeHQ will classify and prioritise incoming email. It will not generate or send replies
+            unless you request it. You can turn assistance Off later in AI settings.
+          </p>
+        </div>
+
         {error && (
           <p className="mt-3 flex items-center gap-1.5 text-xs text-rose-600">
             <AlertCircle className="h-3.5 w-3.5" /> {error}

@@ -1,94 +1,84 @@
-# Workspace Inbox — Slice A + Slice B foundation
+# Workspace Inbox — Slice A + B + C foundation
 
 Secure foundation for AdeHQ’s **shared workspace inbox** (not per-AI-employee mailboxes). Transport is Resend (`inbox.adehq.com`); system of record is Supabase.
 
 - **Slice A** — schema, provider, webhook, outbox, sanitisation
 - **Slice B** — claim-first mailbox, query folders, permissions, drafts, send UI
+- **Slice C** — cost-aware Email Steward (organise + on-demand AI drafts + version-locked approval)
 
-Slice 0 transport proof remains under `src/lib/inbox-transport-proof/` — do not delete yet. **AI Steward is Slice C** (not here).
+Slice 0 transport proof remains under `src/lib/inbox-transport-proof/` — do not delete yet.
 
 ## Address model
 
 - Format: `{canonical_local_part}@inbox.adehq.com`
 - **Claim-first**: owner/admin chooses the local-part; no silent auto-provision on workspace create
+- Default assistance mode on claim: **Organise inbox** (`ai_triage`) with consent copy (no auto-draft/send)
+- Consent audit: `mailbox.assistance_consent`
 - `canonical_local_part` is **immutable** after claim
-- Retired mailboxes / `mailbox_address_reservations` prevent address recycling
 - One **primary** mailbox at launch; every thread/message has `mailbox_id`
 
 ## Permissions
 
-Inbox is **not** plain workspace membership.
+Inbox is **not** plain workspace membership. Approve = manage grant or manager-with-read (plus owners/admins).
 
-| Action | Owner | Admin | Manager | Member | Guest |
-|--------|-------|-------|---------|--------|-------|
-| Claim mailbox | Yes | Yes | No | No | No |
-| Read / send | Yes | Yes | Via `email_mailbox_access` | Via grant | No |
-| Archive / spam | Yes | Yes | If can read (manager) or grant | Via grant | No |
-
-API gate: `requireInboxAccess` in `src/lib/inbox/access.ts`.
-
-## Folders (queries, not a mutable column)
+## Folders (queries)
 
 | UI folder | Query |
 |-----------|-------|
-| Inbox | `status in (open,waiting)`, not spam (stays until archive — Gmail-like) |
-| Awaiting reply | `status in (open,waiting)`, not spam, `latest_direction=outbound` |
-| Sent | `direction_state in (outbound,mixed)`, not spam, not archived |
-| Drafts | `email_drafts.status=draft` |
-| Archived | `status=archived` |
-| Spam | `is_spam=true` |
+| Inbox | `status in (open,waiting)`, not spam |
+| AI working | `triage_status` or `draft_status` in queued/running (active jobs only) |
+| Needs approval | AI/origin drafts with pending approval or awaiting request; excludes stale |
+| Awaiting reply | latest outbound |
+| Sent | direction outbound/mixed |
+| Drafts / Archived / Spam | as before |
 
-Thread fields: `status`, `direction_state`, `latest_direction`, `has_unread`, `is_spam`.
+## Slice C steward (cheap)
 
-## Send / undo
+```
+Inbound store → email_jobs triage (idempotent)
+→ best-effort drain + Vercel Cron recovery (*/2)
+→ rules/heuristics; cheap classifier only when ambiguous
+→ suggest vs auto-assign (≥0.90 deterministic / continuity)
+→ user Draft with AI → draft job → approval envelope → send gate
+```
 
-- `POST /api/inbox/send` enqueues with `status=queued` and returns `undoUntil` (~8s).
-- `POST /api/inbox/outbox/[id]/cancel` cancels while still queued.
-- `POST /api/inbox/outbox/[id]/flush` performs the provider send after the undo window (client-driven; cron drain also matures queued rows).
+- `triage_status` and `draft_status` are **independent**
+- Assignment never starts a model
+- `summary` optional; rules only produce `keyPoints`
+- AI-origin drafts always require server-recomputed envelope approval (with expiry)
+- Bounce DSN updates outbound delivery; never opens a customer thread
+- Job leases reclaim after 5 minutes; failed jobs retry with backoff (max 3)
+- Rate limits: triage/min, draft jobs/user/min, concurrent jobs; delayed enqueue under pressure
+- Ledger: `email_triage`, `email_draft`, `email_draft_rewrite`
 
-## Key routes
+## Approval / send gate
+
+- Hash covers mailbox, from, reply-to, to/cc/bcc, subject, plain, HTML, attachments, thread, draft version
+- UI emphasises From / To / Cc / Bcc / Attachments before Approve
+- Send blocked client-side and server-side until approved hash matches and has not expired
+- Edits invalidate approval; AI origin remains `requires_approval`
+
+## Key routes (added in C)
 
 | Method | Path |
 |--------|------|
-| GET | `/api/inbox/mailbox` |
-| GET | `/api/inbox/mailboxes/availability` |
-| POST | `/api/inbox/mailboxes/claim` |
-| GET | `/api/inbox/threads?folder=&cursor=&limit=` |
-| GET | `/api/inbox/threads/[id]` |
-| POST | `/api/inbox/threads/[id]/{archive,unarchive,read,unread,spam}` |
-| GET/POST | `/api/inbox/drafts` |
-| PATCH/DELETE | `/api/inbox/drafts/[id]` |
-| POST | `/api/inbox/send` (`clientSendId` required) |
-| POST | `/api/inbox/outbox/[id]/cancel` |
-| POST | `/api/inbox/outbox/[id]/flush` |
-| POST | `/api/inbox/webhooks/resend` |
-| POST | `/api/inbox/jobs/process` |
-
-UI: `/inbox` (ClaimGate → split-pane folders | list | reader | composer).
-
-## Env
-
-| Var | Purpose |
-|-----|---------|
-| `RESEND_INBOX_API_KEY` | Conversational inbox Resend account |
-| `RESEND_INBOX_WEBHOOK_SECRET` | Svix secret |
-| `INBOX_DOMAIN` | Default `inbox.adehq.com` |
-| `INTERNAL_CRON_SECRET` | Auth for jobs drain |
-
-Do not mix with transactional `RESEND_API_KEY` / `sendEmail()`.
+| GET/PATCH | `/api/inbox/mailbox/settings` |
+| POST | `/api/inbox/threads/[id]/assign` |
+| POST | `/api/inbox/threads/[id]/draft` |
+| POST | `/api/inbox/threads/[id]/draft/cancel` |
+| POST | `/api/inbox/threads/[id]/suggestion/dismiss` |
+| GET | `/api/inbox/drafts/[id]/versions` |
+| POST | `/api/inbox/drafts/[id]/approvals` |
+| POST | `/api/inbox/approvals/[id]/decide` |
+| GET/POST | `/api/inbox/jobs/process` (cron every 2m via `vercel.json`) |
 
 ## Migrations
 
-1. `20260712180000_workspace_inbox_foundation.sql` — Slice A tables/RLS/storage
-2. `20260712222716_inbox_slice_b.sql` — Slice B fields, permissions, tombstones, `client_send_id`
+1. `20260712180000_workspace_inbox_foundation.sql` — Slice A
+2. `20260712222716_inbox_slice_b.sql` — Slice B
+3. `20260713210328_inbox_slice_c.sql` — empty stub (CLI hung)
+4. `20260713210407_inbox_slice_c.sql` — Slice C schema (`email_jobs`, triage/draft columns, approval hash/expiry, limits)
 
-```bash
-npx supabase db push --linked
-```
+## Out of scope (D+)
 
-## Out of scope (Slice C+)
-
-- Inbox Brief AI dashboard
-- AI draft / approval steward
-- NL search
-- Multi-alias UI
+- Inbox Brief dashboard, NL search, Work Graph/memory, CRM Context, multi-alias, autonomous send (G)

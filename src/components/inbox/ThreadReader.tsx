@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import {
   Archive,
   ArchiveRestore,
@@ -11,6 +11,9 @@ import {
   Loader2,
   Paperclip,
   AlertTriangle,
+  Sparkles,
+  X,
+  UserPlus,
 } from "lucide-react";
 import type { MailboxAccessFlags, MessageDTO, ThreadDetailDTO } from "@/lib/inbox/types";
 import { cn } from "@/lib/utils";
@@ -104,25 +107,29 @@ function MessageBubble({ message }: { message: MessageDTO }) {
         </div>
       )}
 
-      <div className="mt-3 max-w-none overflow-x-auto text-sm leading-relaxed text-ink-2">
-        {message.htmlSanitised ? (
-          <div
-            className="email-html [&_a]:text-accent-d [&_a]:underline"
-            dangerouslySetInnerHTML={{ __html: message.htmlSanitised }}
-          />
-        ) : (
-          <pre className="whitespace-pre-wrap font-sans">{message.textBody || "(no content)"}</pre>
-        )}
-      </div>
+      {message.htmlSanitised ? (
+        <div
+          className="prose prose-sm mt-3 max-w-none text-ink"
+          dangerouslySetInnerHTML={{ __html: message.htmlSanitised }}
+        />
+      ) : (
+        <pre className="mt-3 whitespace-pre-wrap font-sans text-sm text-ink">
+          {message.textBody || ""}
+        </pre>
+      )}
 
       {message.attachments.length > 0 && (
         <div className="mt-3 flex flex-wrap gap-2">
           {message.attachments.map((a) => (
             <span
               key={a.id}
-              className="flex items-center gap-1.5 rounded-md border border-border bg-muted px-2 py-1 text-xs text-ink-2"
+              className="inline-flex items-center gap-1.5 rounded border border-border bg-muted px-2 py-1 text-xs text-ink-2"
             >
-              <Paperclip className="h-3 w-3" /> {a.filename || "attachment"}
+              <Paperclip className="h-3 w-3" />
+              {a.filename || "Attachment"}
+              {a.quarantineState !== "clean" && (
+                <span className="text-amber-700">({a.quarantineState})</span>
+              )}
             </span>
           ))}
         </div>
@@ -140,6 +147,14 @@ export function ThreadReader({
   onUnarchive,
   onMarkUnread,
   onToggleSpam,
+  onDraftWithAi,
+  onDismissSuggestion,
+  onAssignSuggested,
+  onClearAssignee,
+  onCancelDraft,
+  onRetryDraft,
+  onOpenLatestDraft,
+  drafting,
 }: {
   thread: ThreadDetailDTO | null;
   loading: boolean;
@@ -149,9 +164,40 @@ export function ThreadReader({
   onUnarchive: () => void;
   onMarkUnread: () => void;
   onToggleSpam: () => void;
+  onDraftWithAi?: () => void;
+  onDismissSuggestion?: () => void;
+  onAssignSuggested?: () => void;
+  onClearAssignee?: () => void;
+  onCancelDraft?: () => void;
+  onRetryDraft?: () => void;
+  onOpenLatestDraft?: () => void;
+  drafting?: boolean;
 }) {
   const archived = thread?.status === "archived";
   const isSpam = thread?.isSpam ?? false;
+  const [assignBusy, setAssignBusy] = useState(false);
+
+  const showNextStep =
+    thread &&
+    !thread.suggestionDismissed &&
+    thread.assistanceModeSuggestsActions &&
+    thread.replyRequired &&
+    thread.draftStatus !== "queued" &&
+    thread.draftStatus !== "running";
+
+  const showSuggestOwner =
+    thread &&
+    thread.suggestedEmployeeId &&
+    thread.suggestedEmployeeId !== thread.assigneeId &&
+    thread.assignmentSource !== "human";
+
+  const showWhatMatters =
+    thread &&
+    (thread.keyPoints.length > 0 ||
+      thread.summary ||
+      thread.triageStatus === "queued" ||
+      thread.triageStatus === "running" ||
+      thread.triageStatus === "failed");
 
   const toolbar = useMemo(
     () => (
@@ -234,10 +280,168 @@ export function ThreadReader({
       {toolbar}
       <div className="border-b border-border px-5 py-3">
         <h2 className="truncate text-base font-semibold text-ink">{thread.subject}</h2>
-        {thread.hasUnread && (
-          <p className="mt-0.5 text-xs text-accent-d">Unread — opening marks this as read</p>
-        )}
+        <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-ink-3">
+          {thread.category && (
+            <span className="rounded bg-muted px-1.5 py-0.5 capitalize">{thread.category}</span>
+          )}
+          {thread.priority !== "normal" && (
+            <span className="rounded bg-amber-50 px-1.5 py-0.5 capitalize text-amber-800">
+              {thread.priority}
+            </span>
+          )}
+          {thread.assigneeName && (
+            <span className="rounded bg-muted px-1.5 py-0.5">
+              Assigned to {thread.assigneeName}
+            </span>
+          )}
+          {thread.hasUnread && <span className="text-accent-d">Unread</span>}
+          {(thread.triageStatus === "queued" || thread.triageStatus === "running") && (
+            <span className="flex items-center gap-1 text-accent-d">
+              <Loader2 className="h-3 w-3 animate-spin" /> Organising…
+            </span>
+          )}
+          {(thread.draftStatus === "queued" || thread.draftStatus === "running") && (
+            <span className="flex items-center gap-1 text-accent-d">
+              <Loader2 className="h-3 w-3 animate-spin" /> Drafting…
+              {onCancelDraft && (
+                <button
+                  type="button"
+                  onClick={onCancelDraft}
+                  className="ml-1 underline hover:text-ink"
+                >
+                  Cancel
+                </button>
+              )}
+            </span>
+          )}
+          {thread.draftStatus === "failed" && onRetryDraft && (
+            <button
+              type="button"
+              onClick={onRetryDraft}
+              className="text-rose-700 underline hover:text-rose-800"
+            >
+              Draft failed — retry
+            </button>
+          )}
+          {thread.latestDraftId && thread.draftStatus === "ready" && onOpenLatestDraft && (
+            <button
+              type="button"
+              onClick={onOpenLatestDraft}
+              className="text-accent-d underline hover:text-ink"
+            >
+              Open AI draft
+            </button>
+          )}
+        </div>
       </div>
+
+      {showWhatMatters && (
+        <div className="border-b border-border bg-muted/40 px-5 py-3">
+          <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-ink-3">
+            What matters
+          </p>
+          {thread.triageStatus === "queued" || thread.triageStatus === "running" ? (
+            <p className="text-sm text-ink-2">Organising this email…</p>
+          ) : thread.triageStatus === "failed" ? (
+            <p className="text-sm text-rose-700">
+              Triage failed — the email is still available in your inbox.
+            </p>
+          ) : (
+            <>
+              <ul className="space-y-1 text-sm text-ink-2">
+                {thread.keyPoints.map((point) => (
+                  <li key={point} className="flex gap-2">
+                    <span className="text-ink-3">·</span>
+                    <span>{point}</span>
+                  </li>
+                ))}
+              </ul>
+              {thread.summary && (
+                <p className="mt-2 text-sm text-ink-2">{thread.summary}</p>
+              )}
+            </>
+          )}
+        </div>
+      )}
+
+      {showSuggestOwner && (
+        <div className="flex flex-wrap items-center gap-2 border-b border-border px-5 py-3">
+          <UserPlus className="h-4 w-4 text-ink-3" />
+          <span className="min-w-0 flex-1 text-sm text-ink">
+            Suggested owner:{" "}
+            <span className="font-medium">
+              {thread.suggestedEmployeeName || "AI employee"}
+            </span>
+            {thread.matchReason ? (
+              <span className="text-ink-3"> — {thread.matchReason}</span>
+            ) : null}
+          </span>
+          {access.canOrganize && onAssignSuggested && (
+            <button
+              type="button"
+              disabled={assignBusy}
+              onClick={() => {
+                setAssignBusy(true);
+                Promise.resolve(onAssignSuggested()).finally(() => setAssignBusy(false));
+              }}
+              className="rounded-md bg-accent px-3 py-1.5 text-xs font-medium text-white hover:opacity-90 disabled:opacity-50"
+            >
+              Assign
+            </button>
+          )}
+          {onDismissSuggestion && (
+            <button
+              type="button"
+              onClick={onDismissSuggestion}
+              className="rounded-md p-1.5 text-ink-3 hover:bg-muted hover:text-ink"
+              aria-label="Dismiss suggestion"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          )}
+        </div>
+      )}
+
+      {thread.assigneeId && access.canOrganize && onClearAssignee && (
+        <div className="flex items-center gap-2 border-b border-border px-5 py-2 text-xs text-ink-3">
+          <span>
+            Assigned to {thread.assigneeName || "employee"} (assignment does not start drafting)
+          </span>
+          <button type="button" onClick={onClearAssignee} className="underline hover:text-ink">
+            Clear
+          </button>
+        </div>
+      )}
+
+      {showNextStep && (
+        <div className="flex flex-wrap items-center gap-2 border-b border-border bg-accent-soft/50 px-5 py-3">
+          <Sparkles className="h-4 w-4 text-accent-d" />
+          <span className="min-w-0 flex-1 text-sm text-ink">
+            {thread.suggestedNextAction || "Draft a reply when ready"}
+          </span>
+          {access.canSend && onDraftWithAi && (
+            <button
+              type="button"
+              disabled={drafting}
+              onClick={onDraftWithAi}
+              className="rounded-md bg-accent px-3 py-1.5 text-xs font-medium text-white hover:opacity-90 disabled:opacity-50"
+            >
+              Draft with AI
+            </button>
+          )}
+          {onDismissSuggestion && (
+            <button
+              type="button"
+              onClick={onDismissSuggestion}
+              className="rounded-md p-1.5 text-ink-3 hover:bg-muted hover:text-ink"
+              aria-label="Dismiss suggestion"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          )}
+        </div>
+      )}
+
       <div className="min-h-0 flex-1 overflow-y-auto">
         {thread.messages.map((m) => (
           <MessageBubble key={m.id} message={m} />

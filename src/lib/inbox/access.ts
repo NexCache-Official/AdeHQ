@@ -14,7 +14,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { AuthError } from "@/lib/supabase/auth-server";
 
-export type InboxAction = "read" | "send" | "organize" | "manage";
+export type InboxAction = "read" | "send" | "organize" | "manage" | "approve";
 
 export type InboxAccess = {
   role: string;
@@ -23,6 +23,7 @@ export type InboxAccess = {
   canSend: boolean;
   canOrganize: boolean;
   canManage: boolean;
+  canApprove: boolean;
 };
 
 const NO_ACCESS: Omit<InboxAccess, "role"> = {
@@ -31,6 +32,7 @@ const NO_ACCESS: Omit<InboxAccess, "role"> = {
   canSend: false,
   canOrganize: false,
   canManage: false,
+  canApprove: false,
 };
 
 /**
@@ -63,6 +65,7 @@ export async function getInboxAccess(
       canSend: true,
       canOrganize: true,
       canManage: true,
+      canApprove: true,
     };
   }
 
@@ -80,8 +83,10 @@ export async function getInboxAccess(
     const canManage = Boolean(grant?.can_manage);
     // Managers may organize (archive / spam) any mailbox they can read.
     const canOrganize = canManage || (role === "manager" && canRead);
+    // Approvers: manage grant or managers who can read.
+    const canApprove = canManage || (role === "manager" && canRead);
 
-    return { role, isAdmin: false, canRead, canSend, canOrganize, canManage };
+    return { role, isAdmin: false, canRead, canSend, canOrganize, canManage, canApprove };
   }
 
   // guest and anything else
@@ -98,6 +103,8 @@ function actionAllowed(access: InboxAccess, action: InboxAction): boolean {
       return access.canOrganize;
     case "manage":
       return access.canManage;
+    case "approve":
+      return access.canApprove;
     default:
       return false;
   }

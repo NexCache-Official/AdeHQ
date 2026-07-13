@@ -49,6 +49,9 @@ export async function createDraft(
       status: "draft",
       created_by_type: "human",
       created_by_id: params.userId,
+      origin_type: "human",
+      current_author_type: "human",
+      requires_approval: false,
     })
     .select("*")
     .single();
@@ -123,12 +126,32 @@ export async function updateDraft(
   }
 
   // Bump updated_at so autosave is observable via realtime.
-  await secret
-    .from("email_drafts")
-    .update({ updated_at: new Date().toISOString() })
-    .eq("id", draft.id);
+  // AI-origin drafts stay approval-required even after human edits.
+  const draftPatch: Record<string, unknown> = {
+    updated_at: new Date().toISOString(),
+    current_author_type: "human",
+  };
+  if (draft.origin_type === "ai_employee" || draft.requires_approval) {
+    draftPatch.requires_approval = true;
+    draftPatch.status = "draft";
+  }
+  await secret.from("email_drafts").update(draftPatch).eq("id", draft.id);
 
-  return mapDraftRow(draft, version);
+  if (draft.origin_type === "ai_employee" || draft.requires_approval) {
+    await secret
+      .from("email_approvals")
+      .update({ status: "invalidated" })
+      .eq("draft_id", draft.id)
+      .in("status", ["pending", "approved"]);
+    if (draft.thread_id) {
+      await secret
+        .from("email_threads")
+        .update({ latest_valid_approval_id: null })
+        .eq("id", draft.thread_id);
+    }
+  }
+
+  return mapDraftRow({ ...draft, ...draftPatch }, version);
 }
 
 async function insertVersion(

@@ -87,8 +87,37 @@ export function mapThreadRow(row: Record<string, unknown>): ThreadSummaryDTO {
     status: (row.status as ThreadStatus) ?? "open",
     isSpam: Boolean(row.is_spam),
     deliveryStatus: (preview.delivery_status as DeliveryStatus) ?? null,
-    assigneeId: (row.assigned_human_id as string) ?? null,
+    assigneeId:
+      (row.assigned_employee_id as string) ??
+      (row.assigned_human_id as string) ??
+      null,
+    suggestedEmployeeId: (row.suggested_employee_id as string) ?? null,
+    priority: (row.priority as ThreadSummaryDTO["priority"]) ?? "normal",
+    replyRequired: Boolean(row.reply_required),
+    triageStatus: (row.triage_status as ThreadSummaryDTO["triageStatus"]) ?? "not_started",
+    draftStatus: (row.draft_status as ThreadSummaryDTO["draftStatus"]) ?? "idle",
+    category: (row.category as string) ?? null,
+    aiActivity: buildAiActivity(row),
   };
+}
+
+function buildAiActivity(row: Record<string, unknown>): string | null {
+  const draftStatus = String(row.draft_status ?? "idle");
+  const triageStatus = String(row.triage_status ?? "not_started");
+  const meta = (row.steward_meta as Record<string, unknown>) ?? {};
+  if (draftStatus === "queued" || draftStatus === "running") {
+    return "Drafting reply…";
+  }
+  if (triageStatus === "queued" || triageStatus === "running") {
+    return "Organising…";
+  }
+  if (meta.matchReason && row.suggested_employee_id && !row.assigned_employee_id) {
+    return String(meta.matchReason);
+  }
+  if (row.reply_required && meta.suggestedNextAction) {
+    return String(meta.suggestedNextAction);
+  }
+  return null;
 }
 
 export function mapMessageRow(
@@ -124,7 +153,27 @@ export function mapMessageRow(
 export function mapDraftRow(
   draft: Record<string, unknown>,
   version: Record<string, unknown> | null,
+  approval?: {
+    status: string | null;
+    id: string | null;
+    expiresAt: string | null;
+  } | null,
 ): DraftDTO {
+  let approvalStatus: DraftDTO["approvalStatus"] = "none";
+  if (approval?.status === "pending") {
+    const expired =
+      approval.expiresAt && new Date(approval.expiresAt).getTime() < Date.now();
+    approvalStatus = expired ? "expired" : "pending";
+  } else if (approval?.status === "approved") {
+    approvalStatus = "approved";
+  } else if (approval?.status === "rejected") {
+    approvalStatus = "rejected";
+  } else if (draft.status === "pending_approval") {
+    approvalStatus = "pending";
+  } else if (draft.status === "approved") {
+    approvalStatus = "approved";
+  }
+
   return {
     id: String(draft.id),
     threadId: (draft.thread_id as string) ?? null,
@@ -136,5 +185,16 @@ export function mapDraftRow(
     textBody: (version?.text_body as string) ?? null,
     htmlBody: (version?.html_body as string) ?? null,
     updatedAt: String(draft.updated_at ?? draft.created_at),
+    originType: (draft.origin_type as "ai_employee" | "human") ?? "human",
+    requiresApproval: Boolean(draft.requires_approval),
+    isStale: Boolean(draft.is_stale),
+    staleReason: (draft.stale_reason as string) ?? null,
+    employeeId: (draft.employee_id as string) ?? null,
+    versionId: (draft.current_version_id as string) ?? (version?.id as string) ?? null,
+    rewriteCount: Number(draft.rewrite_count ?? 0),
+    basedOnMessageId: (draft.based_on_message_id as string) ?? null,
+    approvalStatus,
+    approvalId: approval?.id ?? null,
+    approvalExpiresAt: approval?.expiresAt ?? null,
   };
 }

@@ -43,6 +43,7 @@ export async function GET(request: NextRequest) {
         canSend: access.canSend,
         canOrganize: access.canOrganize,
         canManage: access.canManage,
+        canApprove: access.canApprove,
       },
     };
     return NextResponse.json(body);

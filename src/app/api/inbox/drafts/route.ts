@@ -21,9 +21,11 @@ export async function GET(request: NextRequest) {
 
     const { data: drafts, error } = await ctx.secret
       .from("email_drafts")
-      .select("id, thread_id, status, current_version_id, updated_at, created_at")
+      .select(
+        "id, thread_id, status, current_version_id, updated_at, created_at, origin_type, requires_approval, is_stale, stale_reason, employee_id, rewrite_count, based_on_message_id",
+      )
       .eq("mailbox_id", ctx.mailbox.id)
-      .eq("status", "draft")
+      .in("status", ["draft", "pending_approval", "approved"])
       .order("updated_at", { ascending: false })
       .limit(100);
     if (error) throw error;
@@ -40,8 +42,35 @@ export async function GET(request: NextRequest) {
       for (const v of versions ?? []) versionById.set(String(v.id), v);
     }
 
+    const draftIds = (drafts ?? []).map((d) => String(d.id));
+    const approvalByDraft = new Map<
+      string,
+      { status: string | null; id: string | null; expiresAt: string | null }
+    >();
+    if (draftIds.length > 0) {
+      const { data: approvals } = await ctx.secret
+        .from("email_approvals")
+        .select("id, draft_id, status, expires_at, draft_version_id")
+        .in("draft_id", draftIds)
+        .in("status", ["pending", "approved", "rejected"])
+        .order("created_at", { ascending: false });
+      for (const a of approvals ?? []) {
+        const did = String(a.draft_id);
+        if (approvalByDraft.has(did)) continue;
+        approvalByDraft.set(did, {
+          status: String(a.status),
+          id: String(a.id),
+          expiresAt: a.expires_at ? String(a.expires_at) : null,
+        });
+      }
+    }
+
     const result: DraftDTO[] = (drafts ?? []).map((d) =>
-      mapDraftRow(d, d.current_version_id ? versionById.get(String(d.current_version_id)) ?? null : null),
+      mapDraftRow(
+        d,
+        d.current_version_id ? versionById.get(String(d.current_version_id)) ?? null : null,
+        approvalByDraft.get(String(d.id)) ?? null,
+      ),
     );
     return NextResponse.json({ drafts: result });
   } catch (error) {

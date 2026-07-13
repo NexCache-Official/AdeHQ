@@ -229,3 +229,157 @@ export async function threadAction(params: {
   );
   await parseJson(res);
 }
+
+export async function assignThreadReq(params: {
+  workspaceId: string;
+  threadId: string;
+  employeeId?: string | null;
+  clear?: boolean;
+}): Promise<void> {
+  const headers = await authHeaders();
+  const res = await fetch(
+    `/api/inbox/threads/${encodeURIComponent(params.threadId)}/assign`,
+    {
+      method: "POST",
+      headers,
+      body: JSON.stringify(params),
+    },
+  );
+  await parseJson(res);
+}
+
+export async function requestAiDraftReq(params: {
+  workspaceId: string;
+  threadId: string;
+  employeeId?: string;
+  draftId?: string | null;
+  rewriteType?: "shorter" | "warmer" | "persuasive" | null;
+}): Promise<{ jobId: string }> {
+  const headers = await authHeaders();
+  const res = await fetch(
+    `/api/inbox/threads/${encodeURIComponent(params.threadId)}/draft`,
+    {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ ...params, requestId: crypto.randomUUID() }),
+    },
+  );
+  return parseJson(res);
+}
+
+export async function dismissSuggestionReq(params: {
+  workspaceId: string;
+  threadId: string;
+}): Promise<void> {
+  const headers = await authHeaders();
+  const res = await fetch(
+    `/api/inbox/threads/${encodeURIComponent(params.threadId)}/suggestion/dismiss`,
+    {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ workspaceId: params.workspaceId }),
+    },
+  );
+  await parseJson(res);
+}
+
+export async function requestApprovalReq(params: {
+  workspaceId: string;
+  draftId: string;
+}): Promise<{
+  approvalId: string;
+  expiresAt: string;
+  envelope: { from: string; to: string[]; cc: string[]; bcc: string[]; subject: string };
+}> {
+  const headers = await authHeaders();
+  const res = await fetch(
+    `/api/inbox/drafts/${encodeURIComponent(params.draftId)}/approvals`,
+    {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ workspaceId: params.workspaceId }),
+    },
+  );
+  return parseJson(res);
+}
+
+export async function decideApprovalReq(params: {
+  workspaceId: string;
+  approvalId: string;
+  decision: "approve" | "reject";
+  reason?: string;
+}): Promise<void> {
+  const headers = await authHeaders();
+  const res = await fetch(
+    `/api/inbox/approvals/${encodeURIComponent(params.approvalId)}/decide`,
+    {
+      method: "POST",
+      headers,
+      body: JSON.stringify(params),
+    },
+  );
+  await parseJson(res);
+}
+
+export async function cancelAiDraftReq(params: {
+  workspaceId: string;
+  threadId: string;
+  jobId?: string;
+}): Promise<void> {
+  const headers = await authHeaders();
+  const res = await fetch(
+    `/api/inbox/threads/${encodeURIComponent(params.threadId)}/draft/cancel`,
+    {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        workspaceId: params.workspaceId,
+        jobId: params.jobId,
+      }),
+    },
+  );
+  await parseJson(res);
+}
+
+export async function fetchDraftVersions(params: {
+  workspaceId: string;
+  draftId: string;
+}): Promise<{ versions: Array<{ id: string; versionNumber: number; createdAt: string }> }> {
+  const headers = await authHeaders();
+  const search = new URLSearchParams({ workspaceId: params.workspaceId });
+  const res = await fetch(
+    `/api/inbox/drafts/${encodeURIComponent(params.draftId)}/versions?${search}`,
+    { headers, cache: "no-store" },
+  );
+  return parseJson(res);
+}
+
+export async function fetchMailboxSettings(workspaceId: string): Promise<{
+  assistanceMode: string;
+  labels: Record<string, { label: string; helper: string }>;
+  consent: string;
+  assignThreshold: number;
+  approvalTtlHours: number;
+}> {
+  const headers = await authHeaders();
+  const res = await fetch(
+    `/api/inbox/mailbox/settings?workspaceId=${encodeURIComponent(workspaceId)}`,
+    { headers, cache: "no-store" },
+  );
+  return parseJson(res);
+}
+
+export async function updateMailboxSettings(params: {
+  workspaceId: string;
+  assistanceMode?: string;
+  assignThreshold?: number;
+  approvalTtlHours?: number;
+}): Promise<void> {
+  const headers = await authHeaders();
+  const res = await fetch("/api/inbox/mailbox/settings", {
+    method: "PATCH",
+    headers,
+    body: JSON.stringify(params),
+  });
+  await parseJson(res);
+}

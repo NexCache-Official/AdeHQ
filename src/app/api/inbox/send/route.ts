@@ -50,6 +50,90 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "At least one recipient is required." }, { status: 400 });
     }
 
+    // AI-origin drafts: server-side approval gate (never trust client).
+    if (body.draftId) {
+      const { data: draft } = await ctx.secret
+        .from("email_drafts")
+        .select(
+          "id, origin_type, requires_approval, current_version_id, is_stale, status, thread_id",
+        )
+        .eq("id", body.draftId)
+        .eq("mailbox_id", ctx.mailbox.id)
+        .maybeSingle();
+      if (draft && (draft.origin_type === "ai_employee" || draft.requires_approval)) {
+        if (draft.is_stale) {
+          return NextResponse.json(
+            { error: "Draft is outdated. Regenerate before sending." },
+            { status: 409 },
+          );
+        }
+        const { data: approval } = await ctx.secret
+          .from("email_approvals")
+          .select("*")
+          .eq("draft_id", draft.id)
+          .eq("draft_version_id", draft.current_version_id)
+          .eq("status", "approved")
+          .order("approved_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (!approval) {
+          return NextResponse.json(
+            { error: "AI drafts require version-locked approval before send." },
+            { status: 403 },
+          );
+        }
+        if (approval.expires_at && new Date(String(approval.expires_at)).getTime() < Date.now()) {
+          return NextResponse.json({ error: "Approval has expired." }, { status: 403 });
+        }
+        const { computeApprovalHash } = await import("@/lib/inbox/steward/envelope");
+        const { data: version } = await ctx.secret
+          .from("email_draft_versions")
+          .select("*")
+          .eq("id", draft.current_version_id)
+          .maybeSingle();
+        if (!version) {
+          return NextResponse.json({ error: "Draft version missing." }, { status: 409 });
+        }
+        const hash = computeApprovalHash({
+          mailboxId: ctx.mailbox.id,
+          fromAddress: String(approval.from_address ?? ctx.mailbox.address),
+          replyTo: (approval.reply_to as string) ?? null,
+          to: asAddressList(body.to),
+          cc: asAddressList(body.cc),
+          bcc: asAddressList(body.bcc),
+          subject: body.subject ?? "",
+          textBody: (body.body ?? "").trim(),
+          htmlBody: (body.htmlBody ?? "").trim(),
+          attachmentIds: [],
+          attachmentContentHashes: [],
+          threadId: String(draft.thread_id ?? body.threadId ?? ""),
+          draftVersionId: String(version.id),
+        });
+        if (hash !== approval.approval_hash) {
+          return NextResponse.json(
+            { error: "Send envelope does not match the approved version." },
+            { status: 403 },
+          );
+        }
+      }
+    }
+
+    // Suppressions check
+    for (const addr of to) {
+      const { data: suppressed } = await ctx.secret
+        .from("email_suppressions")
+        .select("address")
+        .eq("workspace_id", ctx.workspaceId)
+        .eq("address", addr)
+        .maybeSingle();
+      if (suppressed) {
+        return NextResponse.json(
+          { error: `Recipient ${addr} is suppressed (bounce/complaint).` },
+          { status: 400 },
+        );
+      }
+    }
+
     const textBody = (body.body ?? "").trim();
     const htmlBody =
       body.htmlBody?.trim() ||

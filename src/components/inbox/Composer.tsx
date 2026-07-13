@@ -13,8 +13,18 @@ import {
   Paperclip,
   Palette,
   RemoveFormatting,
+  AlertTriangle,
+  CheckCircle2,
+  Shield,
 } from "lucide-react";
-import { createDraftReq, discardDraftReq, updateDraftReq } from "@/lib/inbox/client";
+import {
+  createDraftReq,
+  discardDraftReq,
+  updateDraftReq,
+  requestApprovalReq,
+  decideApprovalReq,
+  requestAiDraftReq,
+} from "@/lib/inbox/client";
 import { cn } from "@/lib/utils";
 import type { DraftDTO } from "@/lib/inbox/types";
 
@@ -27,6 +37,16 @@ export type ComposerInitial = {
   subject?: string;
   body?: string;
   htmlBody?: string;
+  originType?: "ai_employee" | "human";
+  requiresApproval?: boolean;
+  isStale?: boolean;
+  staleReason?: string | null;
+  approvalStatus?: DraftDTO["approvalStatus"];
+  approvalId?: string | null;
+  approvalExpiresAt?: string | null;
+  employeeId?: string | null;
+  mailboxAddress?: string;
+  canApprove?: boolean;
 };
 
 export type ComposerAttachment = {
@@ -118,6 +138,27 @@ export function Composer({
   const [attachments, setAttachments] = useState<ComposerAttachment[]>([]);
   const [colorOpen, setColorOpen] = useState(false);
   const [attachError, setAttachError] = useState<string | null>(null);
+  const [originType] = useState(initial.originType ?? "human");
+  const [requiresApproval, setRequiresApproval] = useState(
+    Boolean(initial.requiresApproval || initial.originType === "ai_employee"),
+  );
+  const [isStale] = useState(Boolean(initial.isStale));
+  const [staleReason] = useState(initial.staleReason ?? null);
+  const [approvalStatus, setApprovalStatus] = useState(initial.approvalStatus ?? "none");
+  const [approvalId, setApprovalId] = useState<string | null>(initial.approvalId ?? null);
+  const [approvalExpiresAt, setApprovalExpiresAt] = useState<string | null>(
+    initial.approvalExpiresAt ?? null,
+  );
+  const [approvalEnvelope, setApprovalEnvelope] = useState<{
+    from: string;
+    to: string[];
+    cc: string[];
+    bcc: string[];
+    subject: string;
+  } | null>(null);
+  const [approvalBusy, setApprovalBusy] = useState(false);
+  const [rewriteBusy, setRewriteBusy] = useState(false);
+  const [gateError, setGateError] = useState<string | null>(null);
 
   const editorRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -261,6 +302,15 @@ export function Composer({
   const handleSend = () => {
     const data = snapshot();
     if (data.to.length === 0) return;
+    setGateError(null);
+    if (isStale) {
+      setGateError("Draft is outdated. Regenerate before sending.");
+      return;
+    }
+    if (requiresApproval && approvalStatus !== "approved") {
+      setGateError("AI drafts require approval before send. Review recipients below first.");
+      return;
+    }
     onSend({
       clientSendId: crypto.randomUUID(),
       draftId: draftIdRef.current,
@@ -280,6 +330,69 @@ export function Composer({
     onClose();
   };
 
+  const handleRequestApproval = async () => {
+    if (!draftIdRef.current) {
+      await persist();
+    }
+    if (!draftIdRef.current) {
+      setGateError("Save the draft before requesting approval.");
+      return;
+    }
+    setApprovalBusy(true);
+    setGateError(null);
+    try {
+      const res = await requestApprovalReq({
+        workspaceId,
+        draftId: draftIdRef.current,
+      });
+      setApprovalId(res.approvalId);
+      setApprovalExpiresAt(res.expiresAt);
+      setApprovalEnvelope(res.envelope);
+      setApprovalStatus("pending");
+      setRequiresApproval(true);
+    } catch (err) {
+      setGateError(err instanceof Error ? err.message : "Could not request approval.");
+    } finally {
+      setApprovalBusy(false);
+    }
+  };
+
+  const handleDecideApproval = async (decision: "approve" | "reject") => {
+    if (!approvalId) return;
+    setApprovalBusy(true);
+    setGateError(null);
+    try {
+      await decideApprovalReq({ workspaceId, approvalId, decision });
+      setApprovalStatus(decision === "approve" ? "approved" : "rejected");
+    } catch (err) {
+      setGateError(err instanceof Error ? err.message : "Could not update approval.");
+    } finally {
+      setApprovalBusy(false);
+    }
+  };
+
+  const handleRewrite = async (rewriteType: "shorter" | "warmer" | "persuasive") => {
+    if (!threadId) return;
+    setRewriteBusy(true);
+    setGateError(null);
+    try {
+      await requestAiDraftReq({
+        workspaceId,
+        threadId,
+        draftId: draftIdRef.current,
+        employeeId: initial.employeeId ?? undefined,
+        rewriteType,
+      });
+      setApprovalStatus("none");
+      setApprovalId(null);
+      setGateError("Rewrite queued — reopen the draft when ready.");
+    } catch (err) {
+      setGateError(err instanceof Error ? err.message : "Rewrite failed.");
+    } finally {
+      setRewriteBusy(false);
+    }
+  };
+
   const handleDiscard = async () => {
     if (draftIdRef.current) {
       await discardDraftReq({ draftId: draftIdRef.current, workspaceId }).catch(() => {});
@@ -288,11 +401,27 @@ export function Composer({
     onClose();
   };
 
+  const mailboxDomain = (initial.mailboxAddress ?? "").split("@")[1]?.toLowerCase() ?? "";
+  const externalRecipients = parseAddresses(to)
+    .concat(parseAddresses(cc), parseAddresses(bcc))
+    .filter((addr) => {
+      const domain = addr.split("@")[1]?.toLowerCase();
+      return domain && mailboxDomain && domain !== mailboxDomain;
+    });
+
+  const sendBlocked =
+    parseAddresses(to).length === 0 ||
+    isStale ||
+    (requiresApproval && approvalStatus !== "approved");
+
   return (
     <div className="flex min-h-0 flex-col border-t border-border bg-surface">
       <div className="flex items-center justify-between border-b border-border-2 px-4 py-2">
         <span className="text-sm font-medium text-ink">
           {threadId ? "Reply" : "New message"}
+          {originType === "ai_employee" && (
+            <span className="ml-2 text-xs font-normal text-ink-3">AI draft · needs approval</span>
+          )}
         </span>
         <div className="flex items-center gap-3">
           <span className="text-xs text-ink-3">
@@ -304,11 +433,143 @@ export function Composer({
         </div>
       </div>
 
+      {isStale && (
+        <div className="flex items-start gap-2 border-b border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-900">
+          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          <div className="min-w-0 flex-1">
+            <p>{staleReason || "This draft is outdated."}</p>
+            {threadId && (
+              <button
+                type="button"
+                disabled={rewriteBusy}
+                onClick={() => {
+                  void (async () => {
+                    setRewriteBusy(true);
+                    try {
+                      await requestAiDraftReq({
+                        workspaceId,
+                        threadId,
+                        draftId: draftIdRef.current,
+                        employeeId: initial.employeeId ?? undefined,
+                      });
+                      setGateError("Regenerate queued — reopen the draft when ready.");
+                    } catch (err) {
+                      setGateError(err instanceof Error ? err.message : "Regenerate failed.");
+                    } finally {
+                      setRewriteBusy(false);
+                    }
+                  })();
+                }}
+                className="mt-1 font-medium underline"
+              >
+                Regenerate
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {(requiresApproval || originType === "ai_employee") && (
+        <div className="space-y-2 border-b border-border bg-muted/50 px-4 py-3">
+          <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-ink-3">
+            <Shield className="h-3.5 w-3.5" /> Approval envelope
+          </div>
+          <div className="grid gap-1.5 text-sm">
+            <div className="rounded-md border border-border bg-canvas px-3 py-2">
+              <span className="text-[11px] font-medium uppercase text-ink-3">From</span>
+              <p className="font-medium text-ink">
+                {(approvalEnvelope?.from || initial.mailboxAddress) ?? "Workspace mailbox"}
+              </p>
+            </div>
+            <div className="rounded-md border border-border bg-canvas px-3 py-2">
+              <span className="text-[11px] font-medium uppercase text-ink-3">To</span>
+              <p className="text-ink">{(approvalEnvelope?.to ?? parseAddresses(to)).join(", ") || "—"}</p>
+            </div>
+            {(showCc || (approvalEnvelope?.cc?.length ?? 0) > 0 || parseAddresses(cc).length > 0) && (
+              <div className="rounded-md border border-border bg-canvas px-3 py-2">
+                <span className="text-[11px] font-medium uppercase text-ink-3">Cc</span>
+                <p className="text-ink">
+                  {(approvalEnvelope?.cc ?? parseAddresses(cc)).join(", ") || "—"}
+                </p>
+              </div>
+            )}
+            {((approvalEnvelope?.bcc?.length ?? 0) > 0 || parseAddresses(bcc).length > 0) && (
+              <div className="rounded-md border border-border bg-canvas px-3 py-2">
+                <span className="text-[11px] font-medium uppercase text-ink-3">Bcc</span>
+                <p className="text-ink">
+                  {(approvalEnvelope?.bcc ?? parseAddresses(bcc)).join(", ") || "—"}
+                </p>
+              </div>
+            )}
+            <div className="rounded-md border border-border bg-canvas px-3 py-2">
+              <span className="text-[11px] font-medium uppercase text-ink-3">Subject</span>
+              <p className="text-ink">{approvalEnvelope?.subject || subject || "—"}</p>
+            </div>
+            {attachments.length > 0 && (
+              <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-amber-900">
+                <span className="text-[11px] font-medium uppercase">Attachments</span>
+                <p>{attachments.map((a) => a.filename).join(", ")}</p>
+              </div>
+            )}
+            {externalRecipients.length > 0 && (
+              <p className="text-xs text-amber-800">
+                External recipients: {externalRecipients.join(", ")}
+              </p>
+            )}
+            {approvalExpiresAt && approvalStatus === "pending" && (
+              <p className="text-xs text-ink-3">
+                Expires {new Date(approvalExpiresAt).toLocaleString()}
+              </p>
+            )}
+          </div>
+          <div className="flex flex-wrap gap-2 pt-1">
+            {approvalStatus !== "approved" && approvalStatus !== "pending" && (
+              <button
+                type="button"
+                disabled={approvalBusy || isStale}
+                onClick={() => void handleRequestApproval()}
+                className="rounded-md bg-ink px-3 py-1.5 text-xs font-medium text-white disabled:opacity-40"
+              >
+                Request approval
+              </button>
+            )}
+            {approvalStatus === "pending" && initial.canApprove && (
+              <>
+                <button
+                  type="button"
+                  disabled={approvalBusy}
+                  onClick={() => void handleDecideApproval("approve")}
+                  className="inline-flex items-center gap-1 rounded-md bg-emerald-700 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-40"
+                >
+                  <CheckCircle2 className="h-3.5 w-3.5" /> Approve
+                </button>
+                <button
+                  type="button"
+                  disabled={approvalBusy}
+                  onClick={() => void handleDecideApproval("reject")}
+                  className="rounded-md border border-border px-3 py-1.5 text-xs disabled:opacity-40"
+                >
+                  Reject
+                </button>
+              </>
+            )}
+            {approvalStatus === "approved" && (
+              <span className="inline-flex items-center gap-1 text-xs text-emerald-700">
+                <CheckCircle2 className="h-3.5 w-3.5" /> Approved — ready to send
+              </span>
+            )}
+          </div>
+        </div>
+      )}
+
       <div className="flex flex-col gap-px overflow-y-auto">
         <Field label="To">
           <input
             value={to}
-            onChange={(e) => setTo(e.target.value)}
+            onChange={(e) => {
+              setTo(e.target.value);
+              if (requiresApproval && approvalStatus === "approved") setApprovalStatus("none");
+            }}
             onBlur={() => void persist()}
             placeholder="name@example.com"
             className="w-full bg-transparent text-sm text-ink outline-none"
@@ -328,7 +589,10 @@ export function Composer({
             <Field label="Cc">
               <input
                 value={cc}
-                onChange={(e) => setCc(e.target.value)}
+                onChange={(e) => {
+                  setCc(e.target.value);
+                  if (requiresApproval && approvalStatus === "approved") setApprovalStatus("none");
+                }}
                 onBlur={() => void persist()}
                 className="w-full bg-transparent text-sm text-ink outline-none"
               />
@@ -336,7 +600,10 @@ export function Composer({
             <Field label="Bcc">
               <input
                 value={bcc}
-                onChange={(e) => setBcc(e.target.value)}
+                onChange={(e) => {
+                  setBcc(e.target.value);
+                  if (requiresApproval && approvalStatus === "approved") setApprovalStatus("none");
+                }}
                 onBlur={() => void persist()}
                 className="w-full bg-transparent text-sm text-ink outline-none"
               />
@@ -346,7 +613,10 @@ export function Composer({
         <Field label="Subject">
           <input
             value={subject}
-            onChange={(e) => setSubject(e.target.value)}
+            onChange={(e) => {
+              setSubject(e.target.value);
+              if (requiresApproval && approvalStatus === "approved") setApprovalStatus("none");
+            }}
             onBlur={() => void persist()}
             className="w-full bg-transparent text-sm text-ink outline-none"
           />
@@ -414,6 +684,22 @@ export function Composer({
             e.target.value = "";
           }}
         />
+        {originType === "ai_employee" && threadId && (
+          <>
+            <span className="mx-1 h-4 w-px bg-border" />
+            {(["shorter", "warmer", "persuasive"] as const).map((chip) => (
+              <button
+                key={chip}
+                type="button"
+                disabled={rewriteBusy}
+                onClick={() => void handleRewrite(chip)}
+                className="rounded-md px-2 py-1 text-[11px] capitalize text-ink-3 hover:bg-muted hover:text-ink disabled:opacity-40"
+              >
+                {chip}
+              </button>
+            ))}
+          </>
+        )}
       </div>
 
       <div
@@ -423,7 +709,10 @@ export function Composer({
         aria-multiline
         aria-label="Message body"
         data-placeholder="Write your message…"
-        onInput={schedulePersist}
+        onInput={() => {
+          schedulePersist();
+          if (requiresApproval && approvalStatus === "approved") setApprovalStatus("none");
+        }}
         onBlur={() => void persist()}
         onPaste={(e) => {
           if (e.clipboardData.files.length > 0) {
@@ -460,12 +749,13 @@ export function Composer({
         </div>
       )}
       {attachError && <p className="px-4 pb-1 text-xs text-rose-600">{attachError}</p>}
+      {gateError && <p className="px-4 pb-1 text-xs text-rose-600">{gateError}</p>}
 
       <div className="flex items-center justify-between border-t border-border-2 px-4 py-2.5">
         <button
           type="button"
           onClick={handleSend}
-          disabled={parseAddresses(to).length === 0}
+          disabled={sendBlocked}
           className="flex items-center gap-2 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white transition hover:opacity-90 disabled:opacity-40"
         >
           <Send className="h-4 w-4" /> Send

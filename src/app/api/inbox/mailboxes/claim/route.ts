@@ -71,7 +71,7 @@ export async function POST(request: NextRequest) {
         is_primary: true,
         status: "active",
         mailbox_type: "adehq_managed",
-        assistance_mode: "manual",
+        assistance_mode: "ai_triage",
       })
       .select("id, canonical_local_part, domain")
       .single();
@@ -127,6 +127,19 @@ export async function POST(request: NextRequest) {
       actor_id: user.id,
       event_type: "mailbox.claimed",
       payload: { address },
+    });
+
+    await secret.from("email_events").insert({
+      workspace_id: body.workspaceId,
+      mailbox_id: mailboxId,
+      actor_type: "human",
+      actor_id: user.id,
+      event_type: "mailbox.assistance_consent",
+      payload: {
+        assistanceMode: "ai_triage",
+        consent:
+          "AdeHQ will classify and prioritise incoming email. It will not generate or send replies unless you request it.",
+      },
     });
 
     return NextResponse.json({ ok: true, mailboxId, address });

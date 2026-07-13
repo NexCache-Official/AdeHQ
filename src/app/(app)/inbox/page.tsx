@@ -12,6 +12,9 @@ import {
   PenSquare,
   ChevronLeft,
   Paperclip,
+  Sparkles,
+  CheckCircle2,
+  Settings2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useStore } from "@/lib/demo-store";
@@ -24,6 +27,12 @@ import {
   cancelSendReq,
   flushOutboxReq,
   threadAction,
+  requestAiDraftReq,
+  dismissSuggestionReq,
+  fetchMailboxSettings,
+  updateMailboxSettings,
+  assignThreadReq,
+  cancelAiDraftReq,
 } from "@/lib/inbox/client";
 import { useInboxRealtime } from "@/lib/inbox/use-inbox-realtime";
 import { ClaimGate } from "@/components/inbox/ClaimGate";
@@ -41,6 +50,8 @@ import type {
 
 const FOLDERS: { key: InboxFolder; label: string; icon: typeof InboxIcon }[] = [
   { key: "inbox", label: "Inbox", icon: InboxIcon },
+  { key: "ai_working", label: "AI working", icon: Sparkles },
+  { key: "needs_approval", label: "Needs approval", icon: CheckCircle2 },
   { key: "awaiting", label: "Awaiting reply", icon: Clock },
   { key: "sent", label: "Sent", icon: SendIcon },
   { key: "drafts", label: "Drafts", icon: FileText },
@@ -93,6 +104,9 @@ export default function InboxPage() {
   } | null>(null);
   const [undoSecondsLeft, setUndoSecondsLeft] = useState(0);
   const undoTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [drafting, setDrafting] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [assistanceMode, setAssistanceMode] = useState<string>("ai_triage");
 
   const access: MailboxAccessFlags | null =
     mailbox && mailbox.claimed ? mailbox.access : null;
@@ -490,6 +504,135 @@ export default function InboxPage() {
     setComposer({ open: true, initial: { threadId: threadDetail.id, to, subject } });
   }, [threadDetail]);
 
+  const handleDraftWithAi = useCallback(async () => {
+    if (!workspaceId || !selectedThreadId) return;
+    setDrafting(true);
+    try {
+      await requestAiDraftReq({
+        workspaceId,
+        threadId: selectedThreadId,
+        employeeId: threadDetail?.assigneeId || threadDetail?.suggestedEmployeeId || undefined,
+      });
+      for (let i = 0; i < 20; i++) {
+        await new Promise((r) => setTimeout(r, 800));
+        const detail = await fetchThread({ workspaceId, threadId: selectedThreadId });
+        setThreadDetail(detail);
+        if (detail.draftStatus === "ready" && detail.latestDraftId) {
+          const list = await fetchDrafts(workspaceId);
+          setDrafts(list);
+          const draft = list.find((d) => d.id === detail.latestDraftId);
+          if (draft) {
+            setComposer({
+              open: true,
+              initial: {
+                draftId: draft.id,
+                threadId: draft.threadId,
+                to: draft.to,
+                cc: draft.cc,
+                bcc: draft.bcc,
+                subject: draft.subject,
+                body: draft.textBody ?? "",
+                htmlBody: draft.htmlBody ?? undefined,
+                originType: draft.originType,
+                requiresApproval: draft.requiresApproval,
+                isStale: draft.isStale,
+                staleReason: draft.staleReason,
+                approvalStatus: draft.approvalStatus,
+                approvalId: draft.approvalId,
+                approvalExpiresAt: draft.approvalExpiresAt,
+                employeeId: draft.employeeId,
+                mailboxAddress: mailbox?.claimed ? mailbox.mailbox.address : undefined,
+                canApprove: mailbox?.claimed ? mailbox.access.canApprove : false,
+              },
+            });
+          }
+          break;
+        }
+        if (detail.draftStatus === "failed" || detail.draftStatus === "cancelled") break;
+      }
+    } catch {
+      /* surfaced via draft_status */
+    } finally {
+      setDrafting(false);
+      folderCacheRef.current = {};
+      void loadFolder(folderRef.current, { silent: true });
+    }
+  }, [workspaceId, selectedThreadId, threadDetail, loadFolder, mailbox]);
+
+  const handleAssignSuggested = useCallback(async () => {
+    if (!workspaceId || !selectedThreadId || !threadDetail?.suggestedEmployeeId) return;
+    await assignThreadReq({
+      workspaceId,
+      threadId: selectedThreadId,
+      employeeId: threadDetail.suggestedEmployeeId,
+    }).catch(() => {});
+    const detail = await fetchThread({ workspaceId, threadId: selectedThreadId }).catch(() => null);
+    if (detail) setThreadDetail(detail);
+  }, [workspaceId, selectedThreadId, threadDetail]);
+
+  const handleClearAssignee = useCallback(async () => {
+    if (!workspaceId || !selectedThreadId) return;
+    await assignThreadReq({
+      workspaceId,
+      threadId: selectedThreadId,
+      clear: true,
+    }).catch(() => {});
+    const detail = await fetchThread({ workspaceId, threadId: selectedThreadId }).catch(() => null);
+    if (detail) setThreadDetail(detail);
+  }, [workspaceId, selectedThreadId]);
+
+  const handleCancelDraft = useCallback(async () => {
+    if (!workspaceId || !selectedThreadId) return;
+    await cancelAiDraftReq({ workspaceId, threadId: selectedThreadId }).catch(() => {});
+    const detail = await fetchThread({ workspaceId, threadId: selectedThreadId }).catch(() => null);
+    if (detail) setThreadDetail(detail);
+  }, [workspaceId, selectedThreadId]);
+
+  const handleOpenLatestDraft = useCallback(async () => {
+    if (!workspaceId || !threadDetail?.latestDraftId || !mailbox?.claimed) return;
+    const list = await fetchDrafts(workspaceId).catch(() => [] as DraftDTO[]);
+    setDrafts(list);
+    const draft = list.find((d) => d.id === threadDetail.latestDraftId);
+    if (!draft) return;
+    setComposer({
+      open: true,
+      initial: {
+        draftId: draft.id,
+        threadId: draft.threadId,
+        to: draft.to,
+        cc: draft.cc,
+        bcc: draft.bcc,
+        subject: draft.subject,
+        body: draft.textBody ?? "",
+        htmlBody: draft.htmlBody ?? undefined,
+        originType: draft.originType,
+        requiresApproval: draft.requiresApproval,
+        isStale: draft.isStale,
+        staleReason: draft.staleReason,
+        approvalStatus: draft.approvalStatus,
+        approvalId: draft.approvalId,
+        approvalExpiresAt: draft.approvalExpiresAt,
+        employeeId: draft.employeeId,
+        mailboxAddress: mailbox.mailbox.address,
+        canApprove: mailbox.access.canApprove,
+      },
+    });
+  }, [workspaceId, threadDetail, mailbox]);
+
+  const handleDismissSuggestion = useCallback(async () => {
+    if (!workspaceId || !selectedThreadId) return;
+    await dismissSuggestionReq({ workspaceId, threadId: selectedThreadId }).catch(() => {});
+    const detail = await fetchThread({ workspaceId, threadId: selectedThreadId }).catch(() => null);
+    if (detail) setThreadDetail(detail);
+  }, [workspaceId, selectedThreadId]);
+
+  useEffect(() => {
+    if (!workspaceId || !mailbox || !mailbox.claimed) return;
+    void fetchMailboxSettings(workspaceId)
+      .then((s) => setAssistanceMode(s.assistanceMode))
+      .catch(() => {});
+  }, [workspaceId, mailbox]);
+
   const runThreadAction = useCallback(
     async (action: "archive" | "unarchive" | "unread" | "spam", spam?: boolean) => {
       if (!workspaceId || !selectedThreadId) return;
@@ -570,6 +713,45 @@ export default function InboxPage() {
             {f.label}
           </button>
         ))}
+        {mailbox.access.canManage && (
+          <button
+            type="button"
+            onClick={() => setSettingsOpen((v) => !v)}
+            className="mt-auto flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-ink-3 hover:bg-muted hover:text-ink"
+          >
+            <Settings2 className="h-4 w-4" /> AI settings
+          </button>
+        )}
+        {settingsOpen && mailbox.access.canManage && (
+          <div className="mx-2 mt-1 space-y-1 rounded-lg border border-border bg-canvas p-2 text-xs">
+            {(
+              [
+                ["manual", "Off"],
+                ["ai_triage", "Organise inbox"],
+                ["ai_triage_suggested_replies", "Organise and suggest actions"],
+              ] as const
+            ).map(([mode, label]) => (
+              <button
+                key={mode}
+                type="button"
+                onClick={() => {
+                  setAssistanceMode(mode);
+                  void updateMailboxSettings({ workspaceId, assistanceMode: mode });
+                }}
+                className={cn(
+                  "block w-full rounded-md px-2 py-1.5 text-left",
+                  assistanceMode === mode ? "bg-accent-soft text-accent-d" : "hover:bg-muted",
+                )}
+              >
+                {label}
+              </button>
+            ))}
+            <p className="px-2 pb-1 pt-1 text-[10px] leading-snug text-ink-3">
+              AdeHQ will classify and prioritise incoming email. It will not generate or send
+              replies unless you request it.
+            </p>
+          </div>
+        )}
       </nav>
 
       {/* Thread list */}
@@ -611,6 +793,16 @@ export default function InboxPage() {
                         subject: d.subject,
                         body: d.textBody ?? "",
                         htmlBody: d.htmlBody ?? undefined,
+                        originType: d.originType,
+                        requiresApproval: d.requiresApproval,
+                        isStale: d.isStale,
+                        staleReason: d.staleReason,
+                        approvalStatus: d.approvalStatus,
+                        approvalId: d.approvalId,
+                        approvalExpiresAt: d.approvalExpiresAt,
+                        employeeId: d.employeeId,
+                        mailboxAddress: mailbox.mailbox.address,
+                        canApprove: mailbox.access.canApprove,
                       },
                     })
                   }
@@ -659,12 +851,24 @@ export default function InboxPage() {
             onUnarchive={() => runThreadAction("unarchive")}
             onMarkUnread={() => runThreadAction("unread")}
             onToggleSpam={() => runThreadAction("spam", !threadDetail?.isSpam)}
+            onDraftWithAi={() => void handleDraftWithAi()}
+            onDismissSuggestion={() => void handleDismissSuggestion()}
+            onAssignSuggested={() => void handleAssignSuggested()}
+            onClearAssignee={() => void handleClearAssignee()}
+            onCancelDraft={() => void handleCancelDraft()}
+            onRetryDraft={() => void handleDraftWithAi()}
+            onOpenLatestDraft={() => void handleOpenLatestDraft()}
+            drafting={drafting}
           />
         </div>
         {composer.open && (
           <Composer
             workspaceId={workspaceId}
-            initial={composer.initial}
+            initial={{
+              ...composer.initial,
+              mailboxAddress: mailbox.mailbox.address,
+              canApprove: mailbox.access.canApprove,
+            }}
             onSend={handleSend}
             onClose={() => {
               setComposer({ open: false, initial: {} });
@@ -772,7 +976,14 @@ function ThreadRow({
             Sending
           </span>
         )}
-        <span className="truncate text-xs text-ink-3">{thread.snippet}</span>
+        {(thread.draftStatus === "queued" || thread.draftStatus === "running") && (
+          <span className="shrink-0 text-[10px] font-medium uppercase tracking-wide text-accent-d">
+            Drafting
+          </span>
+        )}
+        <span className="truncate text-xs text-ink-3">
+          {thread.aiActivity || thread.snippet}
+        </span>
       </div>
     </button>
   );

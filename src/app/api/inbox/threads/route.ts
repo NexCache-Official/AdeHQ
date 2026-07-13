@@ -19,6 +19,8 @@ const VALID_FOLDERS: InboxFolder[] = [
   "sent",
   "archived",
   "spam",
+  "ai_working",
+  "needs_approval",
 ];
 
 function decodeCursor(raw: string | null): { ts: string; id: string } | null {
@@ -51,7 +53,7 @@ export async function GET(request: NextRequest) {
     let query = ctx.secret
       .from("email_threads")
       .select(
-        "id, subject, status, is_spam, direction_state, latest_direction, has_unread, last_message_at, assigned_human_id",
+        "id, subject, status, is_spam, direction_state, latest_direction, has_unread, last_message_at, assigned_human_id, assigned_employee_id, suggested_employee_id, priority, reply_required, triage_status, draft_status, category, steward_meta, latest_draft_id",
       )
       .eq("mailbox_id", ctx.mailbox.id)
       .order("last_message_at", { ascending: false, nullsFirst: false })
@@ -70,8 +72,55 @@ export async function GET(request: NextRequest) {
     if (error) throw error;
 
     const rows = data ?? [];
-    const hasMore = rows.length > limit;
-    const pageRows = hasMore ? rows.slice(0, limit) : rows;
+    let pageSource = rows;
+
+    // Refine needs_approval: AI drafts with pending/requested approval, not stale.
+    if (folder === "needs_approval" && rows.length > 0) {
+      const draftIds = rows
+        .map((r) => r.latest_draft_id)
+        .filter(Boolean)
+        .map(String);
+      const eligible = new Set<string>();
+      if (draftIds.length > 0) {
+        const { data: draftRows } = await ctx.secret
+          .from("email_drafts")
+          .select("id, is_stale, status, current_version_id, requires_approval, origin_type")
+          .in("id", draftIds);
+        const draftById = new Map((draftRows ?? []).map((d) => [String(d.id), d]));
+
+        const { data: approvals } = await ctx.secret
+          .from("email_approvals")
+          .select("draft_id, draft_version_id, status, expires_at")
+          .in("draft_id", draftIds)
+          .eq("status", "pending");
+
+        for (const a of approvals ?? []) {
+          const draft = draftById.get(String(a.draft_id));
+          if (!draft || draft.is_stale) continue;
+          if (String(draft.current_version_id) !== String(a.draft_version_id)) continue;
+          if (a.expires_at && new Date(String(a.expires_at)).getTime() < Date.now()) continue;
+          eligible.add(String(a.draft_id));
+        }
+
+        for (const d of draftRows ?? []) {
+          if (d.is_stale) continue;
+          if (!(d.requires_approval || d.origin_type === "ai_employee")) continue;
+          if (
+            d.status === "pending_approval" ||
+            d.status === "draft" ||
+            eligible.has(String(d.id))
+          ) {
+            eligible.add(String(d.id));
+          }
+        }
+      }
+      pageSource = rows.filter((r) =>
+        r.latest_draft_id ? eligible.has(String(r.latest_draft_id)) : false,
+      );
+    }
+
+    const hasMore = pageSource.length > limit;
+    const pageRows = hasMore ? pageSource.slice(0, limit) : pageSource;
 
     const threadIds = pageRows.map((r) => String(r.id));
     const previewByThread = new Map<string, Record<string, unknown>>();
