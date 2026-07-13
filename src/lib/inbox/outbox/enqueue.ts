@@ -1,10 +1,12 @@
 /**
  * Outbound outbox — DB-first enqueue with idempotency key + clientSendId.
+ * Actual provider send is delayed by UNDO_SEND_MS so the UI can cancel/undo.
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getInboxDomain } from "@/lib/inbox/config";
 import { buildOutboundMessageId } from "@/lib/inbox/threading";
+import { undoUntilIso } from "@/lib/inbox/outbox/undo";
 
 export type EnqueueOutboundParams = {
   workspaceId: string;
@@ -34,6 +36,8 @@ export type EnqueueOutboundResult = {
   outboxId: string;
   idempotencyKey: string;
   deduped: boolean;
+  /** ISO timestamp — cancel is allowed until this moment while status=queued. */
+  undoUntil: string;
 };
 
 export async function enqueueOutbound(
@@ -51,10 +55,17 @@ export async function enqueueOutbound(
       .maybeSingle();
     if (existing.error) throw existing.error;
     if (existing.data) {
+      const { data: row } = await client
+        .from("email_outbox")
+        .select("created_at")
+        .eq("id", existing.data.id)
+        .maybeSingle();
+      const created = row?.created_at ? new Date(String(row.created_at)).getTime() : Date.now();
       return {
         outboxId: String(existing.data.id),
         idempotencyKey: String(existing.data.idempotency_key),
         deduped: true,
+        undoUntil: undoUntilIso(created),
       };
     }
   }
@@ -111,15 +122,18 @@ export async function enqueueOutbound(
           outboxId: String(again.data.id),
           idempotencyKey: String(again.data.idempotency_key),
           deduped: true,
+          undoUntil: undoUntilIso(),
         };
       }
     }
     throw error;
   }
 
-  void import("./process")
-    .then(({ processOutboxItem }) => processOutboxItem(client, String(data.id)))
-    .catch((err) => console.warn("[inbox] outbox nudge failed", err));
-
-  return { outboxId: String(data.id), idempotencyKey, deduped: false };
+  const outboxId = String(data.id);
+  return {
+    outboxId,
+    idempotencyKey,
+    deduped: false,
+    undoUntil: undoUntilIso(),
+  };
 }

@@ -1,16 +1,35 @@
 /**
  * Outbound outbox claim + send worker.
+ * Respects the undo window: queued rows younger than UNDO_SEND_MS are left alone.
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { recordEmailEvent } from "@/lib/inbox/audit";
 import { getWorkspaceEmailProvider } from "@/lib/inbox/provider/resend";
+import { undoEligibleBeforeIso } from "@/lib/inbox/outbox/undo";
 
 export async function processOutboxItem(
   client: SupabaseClient,
   outboxId: string,
+  opts?: { ignoreUndoWindow?: boolean },
 ): Promise<{ ok: boolean; reason?: string }> {
   const workerId = `outbox-${process.pid}-${Date.now()}`;
+
+  if (!opts?.ignoreUndoWindow) {
+    const { data: peek } = await client
+      .from("email_outbox")
+      .select("id, status, created_at")
+      .eq("id", outboxId)
+      .maybeSingle();
+    if (!peek) return { ok: true, reason: "missing" };
+    if (peek.status === "cancelled") return { ok: true, reason: "cancelled" };
+    if (
+      (peek.status === "queued" || peek.status === "approved") &&
+      String(peek.created_at) > undoEligibleBeforeIso()
+    ) {
+      return { ok: true, reason: "undo_window" };
+    }
+  }
 
   const { data: claimed, error: claimErr } = await client
     .from("email_outbox")
@@ -131,6 +150,14 @@ export async function processOutboxItem(
       })
       .eq("id", claimed.id);
 
+    if (claimed.draft_id) {
+      await client
+        .from("email_drafts")
+        .update({ status: "sent" })
+        .eq("id", claimed.draft_id)
+        .eq("mailbox_id", claimed.mailbox_id);
+    }
+
     const { data: existingThread } = await client
       .from("email_threads")
       .select("direction_state")
@@ -165,6 +192,88 @@ export async function processOutboxItem(
     return { ok: true };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
+
+    // Persist a failed outbound message so the thread shows undelivered state.
+    let threadId = claimed.thread_id ? String(claimed.thread_id) : null;
+    try {
+      if (!threadId) {
+        const { data: thread } = await client
+          .from("email_threads")
+          .insert({
+            workspace_id: claimed.workspace_id,
+            mailbox_id: claimed.mailbox_id,
+            subject: claimed.subject,
+            normalised_subject: String(claimed.subject).toLowerCase(),
+            status: "waiting",
+            folder: "sent",
+            direction_state: "outbound",
+            latest_direction: "outbound",
+            has_unread: false,
+            is_spam: false,
+            last_message_at: new Date().toISOString(),
+          })
+          .select("id")
+          .single();
+        threadId = thread ? String(thread.id) : null;
+      }
+
+      if (threadId) {
+        const baseHeaders = (claimed.headers as Record<string, string>) ?? {};
+        const headers: Record<string, string> = {
+          ...baseHeaders,
+          "X-AdeHQ-Delivery-Error": message.slice(0, 500),
+        };
+        const { data: failedMsg } = await client
+          .from("email_messages")
+          .insert({
+            workspace_id: claimed.workspace_id,
+            mailbox_id: claimed.mailbox_id,
+            thread_id: threadId,
+            direction: "outbound",
+            from_address: claimed.from_address,
+            from_name: claimed.from_name,
+            to_addresses: claimed.to_addresses,
+            cc_addresses: claimed.cc_addresses,
+            bcc_addresses: claimed.bcc_addresses,
+            subject: claimed.subject,
+            text_body: claimed.text_body,
+            html_body_sanitised: claimed.html_body,
+            headers,
+            message_id_header: headers["Message-ID"] ?? null,
+            mailbox_type: "adehq_managed",
+            sent_by_type: claimed.sent_by_type,
+            sent_by_id: claimed.sent_by_id,
+            delivery_status: "failed",
+            outbox_id: claimed.id,
+          })
+          .select("id")
+          .single();
+
+        await client
+          .from("email_threads")
+          .update({
+            last_message_at: new Date().toISOString(),
+            latest_direction: "outbound",
+            status: "waiting",
+          })
+          .eq("id", threadId);
+
+        await client
+          .from("email_outbox")
+          .update({
+            status: "failed",
+            error: message,
+            thread_id: threadId,
+            message_id: failedMsg?.id ?? null,
+            attempt_count: Number(claimed.attempt_count ?? 0) + 1,
+          })
+          .eq("id", claimed.id);
+        return { ok: false, reason: message };
+      }
+    } catch (persistErr) {
+      console.warn("[inbox] failed to persist undelivered message", persistErr);
+    }
+
     await client
       .from("email_outbox")
       .update({
@@ -185,6 +294,7 @@ export async function processQueuedOutbox(
     .from("email_outbox")
     .select("id")
     .in("status", ["queued", "approved"])
+    .lte("created_at", undoEligibleBeforeIso())
     .order("created_at", { ascending: true })
     .limit(limit);
   if (error) throw error;
@@ -194,4 +304,38 @@ export async function processQueuedOutbox(
     n += 1;
   }
   return n;
+}
+
+/** Cancel a queued send while still inside the undo window. */
+export async function cancelOutboxItem(
+  client: SupabaseClient,
+  params: { outboxId: string; mailboxId: string },
+): Promise<{ ok: true } | { ok: false; reason: string }> {
+  const { data, error } = await client
+    .from("email_outbox")
+    .update({
+      status: "cancelled",
+      error: "Cancelled by user",
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", params.outboxId)
+    .eq("mailbox_id", params.mailboxId)
+    .eq("status", "queued")
+    .select("id, draft_id")
+    .maybeSingle();
+
+  if (error) throw error;
+  if (!data) return { ok: false, reason: "not_cancellable" };
+
+  // Re-open the draft so the composer can continue editing after undo.
+  if (data.draft_id) {
+    await client
+      .from("email_drafts")
+      .update({ status: "draft" })
+      .eq("id", data.draft_id)
+      .eq("mailbox_id", params.mailboxId)
+      .eq("status", "sent");
+  }
+
+  return { ok: true };
 }

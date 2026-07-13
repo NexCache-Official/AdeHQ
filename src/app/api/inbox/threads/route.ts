@@ -81,7 +81,7 @@ export async function GET(request: NextRequest) {
       let msgQuery = ctx.secret
         .from("email_messages")
         .select(
-          "id, thread_id, direction, from_address, from_name, to_addresses, text_body, html_body_sanitised, created_at",
+          "id, thread_id, direction, from_address, from_name, to_addresses, text_body, html_body_sanitised, delivery_status, created_at",
         )
         .in("thread_id", threadIds)
         .order("created_at", { ascending: false });
@@ -103,7 +103,7 @@ export async function GET(request: NextRequest) {
           const { data: fallback } = await ctx.secret
             .from("email_messages")
             .select(
-              "id, thread_id, direction, from_address, from_name, to_addresses, text_body, html_body_sanitised, created_at",
+              "id, thread_id, direction, from_address, from_name, to_addresses, text_body, html_body_sanitised, delivery_status, created_at",
             )
             .in("thread_id", missing)
             .order("created_at", { ascending: false });

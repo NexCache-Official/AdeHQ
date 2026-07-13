@@ -86,6 +86,7 @@ export function mapThreadRow(row: Record<string, unknown>): ThreadSummaryDTO {
     directionState: (row.direction_state as DirectionState) ?? "inbound",
     status: (row.status as ThreadStatus) ?? "open",
     isSpam: Boolean(row.is_spam),
+    deliveryStatus: (preview.delivery_status as DeliveryStatus) ?? null,
     assigneeId: (row.assigned_human_id as string) ?? null,
   };
 }
@@ -94,6 +95,13 @@ export function mapMessageRow(
   row: Record<string, unknown>,
   attachments: AttachmentDTO[],
 ): MessageDTO {
+  const headers = (row.headers as Record<string, unknown> | null) ?? {};
+  const deliveryError =
+    (typeof headers["X-AdeHQ-Delivery-Error"] === "string"
+      ? headers["X-AdeHQ-Delivery-Error"]
+      : null) ??
+    (typeof row.delivery_error === "string" ? row.delivery_error : null);
+
   return {
     id: String(row.id),
     direction: (row.direction as MessageDirection) ?? "inbound",
@@ -106,6 +114,8 @@ export function mapMessageRow(
     textBody: (row.text_body as string) ?? null,
     htmlSanitised: (row.html_body_sanitised as string) ?? null,
     deliveryStatus: (row.delivery_status as DeliveryStatus) ?? "received",
+    deliveryError,
+    outboxId: (row.outbox_id as string) ?? null,
     createdAt: String(row.created_at),
     attachments,
   };

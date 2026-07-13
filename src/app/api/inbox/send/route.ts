@@ -1,6 +1,7 @@
 /**
- * POST /api/inbox/send — idempotent send (clientSendId). Preserves the draft on
- * failure so the composer can retry with a new clientSendId.
+ * POST /api/inbox/send — idempotent send (clientSendId).
+ * Provider delivery is delayed by the undo window; the client (or cron drain)
+ * flushes the outbox after undoUntil. Draft closes only after a successful send.
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -65,7 +66,6 @@ export async function POST(request: NextRequest) {
           }))
       : undefined;
 
-    // Thread-aware headers for replies.
     let inReplyTo: string | null = null;
     let references: string | null = null;
     if (body.threadId) {
@@ -105,16 +105,6 @@ export async function POST(request: NextRequest) {
       attachments,
     });
 
-    // Link + close the draft (idempotent — safe on dedupe).
-    if (body.draftId) {
-      await ctx.secret
-        .from("email_drafts")
-        .update({ status: "sent" })
-        .eq("id", body.draftId)
-        .eq("mailbox_id", ctx.mailbox.id);
-    }
-
-    // Re-read the outbox row: the async nudge may already have advanced it.
     const { data: outbox } = await ctx.secret
       .from("email_outbox")
       .select("status, message_id, thread_id")
@@ -127,6 +117,7 @@ export async function POST(request: NextRequest) {
       deduped: result.deduped,
       threadId: (outbox?.thread_id as string) ?? body.threadId ?? null,
       messageId: (outbox?.message_id as string) ?? null,
+      undoUntil: result.undoUntil,
     };
     return NextResponse.json(payload);
   } catch (error) {

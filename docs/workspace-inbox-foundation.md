@@ -40,7 +40,11 @@ API gate: `requireInboxAccess` in `src/lib/inbox/access.ts`.
 
 Thread fields: `status`, `direction_state`, `latest_direction`, `has_unread`, `is_spam`.
 
-## Key routes
+## Send / undo
+
+- `POST /api/inbox/send` enqueues with `status=queued` and returns `undoUntil` (~8s).
+- `POST /api/inbox/outbox/[id]/cancel` cancels while still queued.
+- `POST /api/inbox/outbox/[id]/flush` performs the provider send after the undo window (client-driven; cron drain also matures queued rows).
 
 | Method | Path |
 |--------|------|

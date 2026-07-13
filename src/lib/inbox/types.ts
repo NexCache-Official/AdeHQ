@@ -101,6 +101,8 @@ export type ThreadSummaryDTO = {
   directionState: DirectionState;
   status: ThreadStatus;
   isSpam: boolean;
+  /** Latest preview message delivery status (outbound failures show here). */
+  deliveryStatus: DeliveryStatus | null;
   /** Slice C placeholder — unused in B UI. */
   assigneeId: string | null;
 };
@@ -122,6 +124,8 @@ export type MessageDTO = {
   textBody: string | null;
   htmlSanitised: string | null;
   deliveryStatus: DeliveryStatus;
+  deliveryError: string | null;
+  outboxId: string | null;
   createdAt: string;
   attachments: AttachmentDTO[];
 };
@@ -155,6 +159,8 @@ export type SendResultDTO = {
   deduped: boolean;
   threadId: string | null;
   messageId: string | null;
+  /** ISO time until which cancel/undo is allowed (status still queued). */
+  undoUntil?: string | null;
 };
 
 /** Attachment staged in the composer before send. */

@@ -48,10 +48,30 @@ export async function applyDeliveryEvent(
       .eq("id", outbox.id);
 
     if (outbox.message_id) {
-      await client
-        .from("email_messages")
-        .update({ delivery_status: status })
-        .eq("id", outbox.message_id);
+      const patch: Record<string, unknown> = { delivery_status: status };
+      if (status === "bounced" || status === "failed" || status === "complained") {
+        const data = params.payload.data as
+          | { bounce?: { message?: string }; error?: { message?: string } }
+          | undefined;
+        const reason =
+          data?.bounce?.message ||
+          data?.error?.message ||
+          (status === "bounced"
+            ? "Delivery bounced — the address may be invalid or unreachable."
+            : status === "complained"
+              ? "Recipient marked this as spam."
+              : "Delivery failed.");
+        const { data: existing } = await client
+          .from("email_messages")
+          .select("headers")
+          .eq("id", outbox.message_id)
+          .maybeSingle();
+        patch.headers = {
+          ...((existing?.headers as Record<string, string>) ?? {}),
+          "X-AdeHQ-Delivery-Error": reason.slice(0, 500),
+        };
+      }
+      await client.from("email_messages").update(patch).eq("id", outbox.message_id);
     }
 
     await recordEmailEvent(client, {

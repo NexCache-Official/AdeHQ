@@ -174,6 +174,42 @@ export async function sendEmailReq(params: {
   return parseJson(res);
 }
 
+export async function cancelSendReq(params: {
+  workspaceId: string;
+  outboxId: string;
+}): Promise<void> {
+  const headers = await authHeaders();
+  const res = await fetch(
+    `/api/inbox/outbox/${encodeURIComponent(params.outboxId)}/cancel`,
+    {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ workspaceId: params.workspaceId }),
+    },
+  );
+  await parseJson(res);
+}
+
+export async function flushOutboxReq(params: {
+  workspaceId: string;
+  outboxId: string;
+  force?: boolean;
+}): Promise<void> {
+  const headers = await authHeaders();
+  const res = await fetch(
+    `/api/inbox/outbox/${encodeURIComponent(params.outboxId)}/flush`,
+    {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        workspaceId: params.workspaceId,
+        force: params.force ?? true,
+      }),
+    },
+  );
+  await parseJson(res);
+}
+
 type ThreadAction = "archive" | "unarchive" | "read" | "unread" | "spam";
 
 export async function threadAction(params: {

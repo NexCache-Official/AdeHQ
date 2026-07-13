@@ -21,6 +21,8 @@ import {
   fetchThread,
   fetchDrafts,
   sendEmailReq,
+  cancelSendReq,
+  flushOutboxReq,
   threadAction,
 } from "@/lib/inbox/client";
 import { useInboxRealtime } from "@/lib/inbox/use-inbox-realtime";
@@ -82,6 +84,15 @@ export default function InboxPage() {
     initial: {},
   });
   const [mobileView, setMobileView] = useState<"list" | "thread">("list");
+  const [undoBanner, setUndoBanner] = useState<{
+    outboxId: string;
+    undoUntil: string;
+    subject: string;
+    threadId: string | null;
+    optimisticId: string;
+  } | null>(null);
+  const [undoSecondsLeft, setUndoSecondsLeft] = useState(0);
+  const undoTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const access: MailboxAccessFlags | null =
     mailbox && mailbox.claimed ? mailbox.access : null;
@@ -236,7 +247,7 @@ export default function InboxPage() {
       setLoadingThread(true);
       try {
         const detail = await fetchThread({ workspaceId, threadId });
-        setThreadDetail(detail);
+        setThreadDetail({ ...detail, hasUnread: false });
         // Optimistically clear unread in the list + cache.
         setThreads((prev) => {
           const next = prev.map((t) => (t.id === threadId ? { ...t, hasUnread: false } : t));
@@ -284,15 +295,95 @@ export default function InboxPage() {
     },
   });
 
-  // --- Sending (optimistic) -------------------------------------------------
+  // --- Sending (optimistic + undo window) -----------------------------------
+  const clearUndoBanner = useCallback(() => {
+    if (undoTimerRef.current) {
+      clearInterval(undoTimerRef.current);
+      undoTimerRef.current = null;
+    }
+    setUndoBanner(null);
+    setUndoSecondsLeft(0);
+  }, []);
+
+  useEffect(() => {
+    if (!undoBanner) return;
+    const tick = () => {
+      const left = Math.max(
+        0,
+        Math.ceil((new Date(undoBanner.undoUntil).getTime() - Date.now()) / 1000),
+      );
+      setUndoSecondsLeft(left);
+      if (left <= 0) {
+        if (undoTimerRef.current) {
+          clearInterval(undoTimerRef.current);
+          undoTimerRef.current = null;
+        }
+        const banner = undoBanner;
+        setUndoBanner(null);
+        setUndoSecondsLeft(0);
+        void (async () => {
+          try {
+            await flushOutboxReq({
+              workspaceId: workspaceId!,
+              outboxId: banner.outboxId,
+              force: true,
+            });
+          } catch {
+            /* cron / another tab may have flushed */
+          }
+          if (workspaceId && banner.threadId) {
+            void fetchThread({ workspaceId, threadId: banner.threadId })
+              .then(setThreadDetail)
+              .catch(() => {});
+          }
+          folderCacheRef.current = {};
+          void loadFolder(folderRef.current, { silent: true });
+        })();
+      }
+    };
+    tick();
+    undoTimerRef.current = setInterval(tick, 250);
+    return () => {
+      if (undoTimerRef.current) clearInterval(undoTimerRef.current);
+    };
+  }, [undoBanner, clearUndoBanner, workspaceId, loadFolder]);
+
+  const handleUndoSend = useCallback(async () => {
+    if (!workspaceId || !undoBanner) return;
+    const banner = undoBanner;
+    clearUndoBanner();
+    try {
+      await cancelSendReq({ workspaceId, outboxId: banner.outboxId });
+      setThreadDetail((prev) =>
+        prev
+          ? {
+              ...prev,
+              messages: prev.messages.filter((m) => m.id !== banner.optimisticId),
+            }
+          : prev,
+      );
+      folderCacheRef.current = {};
+      void loadFolder(folderRef.current, { silent: true });
+    } catch {
+      // Already sent — refresh so the user sees the real status.
+      if (banner.threadId) {
+        void fetchThread({ workspaceId, threadId: banner.threadId })
+          .then(setThreadDetail)
+          .catch(() => {});
+      }
+      folderCacheRef.current = {};
+      void loadFolder(folderRef.current, { silent: true });
+    }
+  }, [workspaceId, undoBanner, clearUndoBanner, loadFolder]);
+
   const handleSend = useCallback(
     async (payload: SendPayload) => {
       if (!workspaceId) return;
       const targetThreadId = payload.threadId;
+      const optimisticId = `optimistic-${payload.clientSendId}`;
 
-      // Optimistic bubble in the open thread.
       const optimistic: MessageDTO = {
-        id: `optimistic-${payload.clientSendId}`,
+        id: optimisticId,
         direction: "outbound",
         fromAddress: mailbox && mailbox.claimed ? mailbox.mailbox.address : null,
         fromName: null,
@@ -303,6 +394,8 @@ export default function InboxPage() {
         textBody: payload.body,
         htmlSanitised: payload.htmlBody || null,
         deliveryStatus: "sending",
+        deliveryError: null,
+        outboxId: null,
         createdAt: new Date().toISOString(),
         attachments: [],
       };
@@ -326,23 +419,53 @@ export default function InboxPage() {
           htmlBody: payload.htmlBody,
           attachments: payload.attachments,
         });
-        // Reconcile: reload the affected thread (or open the new one).
+
         const finalThreadId = result.threadId ?? targetThreadId;
-        if (finalThreadId) {
+        setThreadDetail((prev) =>
+          prev
+            ? {
+                ...prev,
+                messages: prev.messages.map((m) =>
+                  m.id === optimisticId
+                    ? {
+                        ...m,
+                        outboxId: result.outboxId,
+                        deliveryStatus:
+                          result.status === "queued" || result.status === "sending"
+                            ? "sending"
+                            : ((result.status as MessageDTO["deliveryStatus"]) ?? "sending"),
+                      }
+                    : m,
+                ),
+              }
+            : prev,
+        );
+
+        if (result.undoUntil && result.status === "queued") {
+          setUndoBanner({
+            outboxId: result.outboxId,
+            undoUntil: result.undoUntil,
+            subject: payload.subject || "(no subject)",
+            threadId: finalThreadId,
+            optimisticId,
+          });
+        } else if (finalThreadId) {
           const detail = await fetchThread({ workspaceId, threadId: finalThreadId });
           if (selectedThreadId === finalThreadId || !selectedThreadId) {
             setSelectedThreadId(finalThreadId);
             setThreadDetail(detail);
           }
         }
-      } catch {
-        // Mark the optimistic bubble as failed so the user can retry.
+      } catch (err) {
+        const reason = err instanceof Error ? err.message : "Send failed.";
         setThreadDetail((prev) =>
           prev
             ? {
                 ...prev,
                 messages: prev.messages.map((m) =>
-                  m.id === optimistic.id ? { ...m, deliveryStatus: "failed" } : m,
+                  m.id === optimisticId
+                    ? { ...m, deliveryStatus: "failed", deliveryError: reason }
+                    : m,
                 ),
               }
             : prev,
@@ -370,7 +493,13 @@ export default function InboxPage() {
   const runThreadAction = useCallback(
     async (action: "archive" | "unarchive" | "unread" | "spam", spam?: boolean) => {
       if (!workspaceId || !selectedThreadId) return;
-      await threadAction({ workspaceId, threadId: selectedThreadId, action, spam }).catch(() => {});
+      const threadId = selectedThreadId;
+      if (action === "unread") {
+        setThreads((prev) =>
+          prev.map((t) => (t.id === threadId ? { ...t, hasUnread: true } : t)),
+        );
+      }
+      await threadAction({ workspaceId, threadId, action, spam }).catch(() => {});
       folderCacheRef.current = {};
       await loadFolder(folderRef.current, { silent: true });
       if (action === "unread" || action === "archive" || action === "spam") {
@@ -411,7 +540,7 @@ export default function InboxPage() {
   const listItems = folder === "drafts" ? drafts : threads;
 
   return (
-    <div className="flex h-full min-h-0 bg-canvas">
+    <div className="relative flex h-full min-h-0 bg-canvas">
       {/* Folders */}
       <nav className="hidden w-52 shrink-0 flex-col border-r border-border bg-surface px-2 py-3 md:flex">
         <div className="px-2 pb-3">
@@ -547,6 +676,23 @@ export default function InboxPage() {
           />
         )}
       </div>
+
+      {undoBanner && (
+        <div className="pointer-events-none absolute inset-x-0 bottom-4 z-20 flex justify-center px-4">
+          <div className="pointer-events-auto flex max-w-lg items-center gap-3 rounded-lg bg-ink px-4 py-3 text-sm text-white shadow-lg">
+            <span className="min-w-0 flex-1 truncate">
+              Sending “{undoBanner.subject}”… {undoSecondsLeft}s
+            </span>
+            <button
+              type="button"
+              onClick={() => void handleUndoSend()}
+              className="shrink-0 rounded-md bg-white/15 px-3 py-1 text-sm font-medium hover:bg-white/25"
+            >
+              Undo
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -569,40 +715,63 @@ function ThreadRow({
         : "To: (no recipient)"
       : thread.peerName || thread.peer || "Unknown";
 
+  const deliveryBad =
+    thread.deliveryStatus === "bounced" ||
+    thread.deliveryStatus === "failed" ||
+    thread.deliveryStatus === "complained";
+  const deliveryPending =
+    thread.deliveryStatus === "sending" || thread.deliveryStatus === "queued";
+
   return (
     <button
+      type="button"
       onClick={onClick}
       className={cn(
         "flex w-full flex-col gap-0.5 border-b border-border-2 px-4 py-3 text-left transition hover:bg-muted",
         active && "bg-accent-soft hover:bg-accent-soft",
+        thread.hasUnread && "bg-accent-soft/40",
       )}
     >
       <div className="flex items-center justify-between gap-2">
-        <span
-          className={cn(
-            "truncate text-sm text-ink-2",
-            thread.hasUnread && folder === "inbox" && "font-semibold text-ink",
+        <div className="flex min-w-0 items-center gap-2">
+          {thread.hasUnread ? (
+            <span className="h-2 w-2 shrink-0 rounded-full bg-accent" title="Unread" />
+          ) : (
+            <span className="h-2 w-2 shrink-0" />
           )}
-        >
-          {peerLabel}
-        </span>
+          <span
+            className={cn(
+              "truncate text-sm text-ink-2",
+              thread.hasUnread && "font-semibold text-ink",
+            )}
+          >
+            {peerLabel}
+          </span>
+        </div>
         <span className="shrink-0 text-xs text-ink-3">{relativeTime(thread.timestamp)}</span>
       </div>
-      <div className="flex items-center gap-1.5">
-        {thread.hasUnread && folder === "inbox" && (
-          <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-accent" />
-        )}
+      <div className="flex items-center gap-1.5 pl-4">
         <span
           className={cn(
             "truncate text-sm text-ink-2",
-            thread.hasUnread && folder === "inbox" && "font-medium text-ink",
+            thread.hasUnread && "font-medium text-ink",
           )}
         >
           {thread.subject}
         </span>
       </div>
-      <div className="flex items-center gap-1.5">
+      <div className="flex items-center gap-1.5 pl-4">
         {thread.hasAttachments && <Paperclip className="h-3 w-3 shrink-0 text-ink-3" />}
+        {deliveryBad && (
+          <span className="shrink-0 text-[10px] font-medium uppercase tracking-wide text-rose-600">
+            {thread.deliveryStatus === "bounced" ? "Bounced" : "Not delivered"}
+          </span>
+        )}
+        {deliveryPending && (
+          <span className="shrink-0 text-[10px] font-medium uppercase tracking-wide text-amber-700">
+            Sending
+          </span>
+        )}
         <span className="truncate text-xs text-ink-3">{thread.snippet}</span>
       </div>
     </button>

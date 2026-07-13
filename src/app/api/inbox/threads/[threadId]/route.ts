@@ -39,7 +39,7 @@ export async function GET(
     const { data: messages, error: msgError } = await ctx.secret
       .from("email_messages")
       .select(
-        "id, direction, from_address, from_name, to_addresses, cc_addresses, bcc_addresses, subject, text_body, html_body_sanitised, delivery_status, created_at",
+        "id, direction, from_address, from_name, to_addresses, cc_addresses, bcc_addresses, subject, text_body, html_body_sanitised, delivery_status, headers, outbox_id, created_at",
       )
       .eq("thread_id", threadId)
       .order("created_at", { ascending: true })
