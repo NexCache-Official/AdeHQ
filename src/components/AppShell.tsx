@@ -121,7 +121,9 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
     [router],
   );
 
-  const isImmersive = pathname.startsWith("/rooms/") && pathname !== "/rooms";
+  const isImmersive =
+    (pathname.startsWith("/rooms/") && pathname !== "/rooms") ||
+    pathname.startsWith("/inbox");
 
   if (!hydrated) return <LoadingState full />;
   if (!state.user || !state.onboardingComplete) return <LoadingState full label="Redirecting…" />;
