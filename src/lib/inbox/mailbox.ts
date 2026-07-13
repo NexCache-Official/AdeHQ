@@ -41,18 +41,46 @@ function snippetFrom(text: string | null, html: string | null): string {
   return base.slice(0, 140);
 }
 
+function formatRecipients(to: unknown): string {
+  if (!Array.isArray(to) || to.length === 0) return "(no recipient)";
+  return to.map((a) => String(a)).join(", ");
+}
+
+/**
+ * Map a thread row for the list. Pass `__preview_message` as the message that
+ * should drive peer/snippet for the active folder (inbound for Inbox, outbound
+ * for Sent), and `__peer_kind` as "from" | "to".
+ */
 export function mapThreadRow(row: Record<string, unknown>): ThreadSummaryDTO {
-  const last = (row.__last_message ?? {}) as Record<string, unknown>;
+  const preview = (row.__preview_message ?? row.__last_message ?? {}) as Record<
+    string,
+    unknown
+  >;
+  const peerKind = (row.__peer_kind as "from" | "to") ?? "from";
+  const direction = String(preview.direction ?? "");
+
+  let peer = "";
+  let peerName: string | null = null;
+  if (peerKind === "to" || direction === "outbound") {
+    peer = formatRecipients(preview.to_addresses);
+    peerName = null;
+  } else {
+    peer = (preview.from_address as string) ?? "";
+    peerName = (preview.from_name as string) ?? null;
+  }
+
   return {
     id: String(row.id),
     subject: String(row.subject ?? "") || "(no subject)",
     snippet: snippetFrom(
-      (last.text_body as string) ?? null,
-      (last.html_body_sanitised as string) ?? null,
+      (preview.text_body as string) ?? null,
+      (preview.html_body_sanitised as string) ?? null,
     ),
-    sender: (last.from_address as string) ?? "",
-    senderName: (last.from_name as string) ?? null,
-    timestamp: (row.last_message_at as string) ?? null,
+    peer,
+    peerName,
+    peerKind: peerKind === "to" || direction === "outbound" ? "to" : "from",
+    timestamp:
+      (preview.created_at as string) ?? (row.last_message_at as string) ?? null,
     hasUnread: Boolean(row.has_unread),
     hasAttachments: Boolean(row.__has_attachments),
     directionState: (row.direction_state as DirectionState) ?? "inbound",

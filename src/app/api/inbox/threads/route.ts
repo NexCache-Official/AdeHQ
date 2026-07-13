@@ -1,12 +1,13 @@
 /**
  * GET /api/inbox/threads?workspaceId=&folder=&cursor=&limit=
  *
- * Query-based folders + keyset (cursor) pagination on (last_message_at, id).
+ * Query-based folders + keyset pagination. List-row preview is folder-aware:
+ * Inbox → last inbound; Sent / Awaiting → last outbound.
  */
 
 import { NextRequest, NextResponse } from "next/server";
 import { resolveInboxRoute, inboxErrorResponse } from "@/lib/inbox/route-helpers";
-import { applyFolderFilter } from "@/lib/inbox/folders";
+import { applyFolderFilter, listPreviewDirection } from "@/lib/inbox/folders";
 import { mapThreadRow } from "@/lib/inbox/mailbox";
 import type { InboxFolder, ThreadPageDTO, ThreadSummaryDTO } from "@/lib/inbox/types";
 
@@ -45,6 +46,7 @@ export async function GET(request: NextRequest) {
     const folder = VALID_FOLDERS.includes(folderParam) ? folderParam : "inbox";
     const limit = Math.min(Math.max(Number(params.get("limit")) || 30, 1), 50);
     const cursor = decodeCursor(params.get("cursor"));
+    const previewDir = listPreviewDirection(folder);
 
     let query = ctx.secret
       .from("email_threads")
@@ -59,7 +61,6 @@ export async function GET(request: NextRequest) {
     query = applyFolderFilter(query as never, folder) as never;
 
     if (cursor && cursor.ts) {
-      // Keyset: rows strictly "after" the cursor in (last_message_at desc, id desc).
       query = query.or(
         `last_message_at.lt."${cursor.ts}",and(last_message_at.eq."${cursor.ts}",id.lt.${cursor.id})`,
       );
@@ -72,30 +73,55 @@ export async function GET(request: NextRequest) {
     const hasMore = rows.length > limit;
     const pageRows = hasMore ? rows.slice(0, limit) : rows;
 
-    // Batch: latest message + attachment presence for the page's threads.
     const threadIds = pageRows.map((r) => String(r.id));
-    const lastByThread = new Map<string, Record<string, unknown>>();
+    const previewByThread = new Map<string, Record<string, unknown>>();
     const attachThreads = new Set<string>();
 
     if (threadIds.length > 0) {
-      const { data: msgs } = await ctx.secret
+      let msgQuery = ctx.secret
         .from("email_messages")
-        .select("id, thread_id, from_address, from_name, text_body, html_body_sanitised, created_at")
+        .select(
+          "id, thread_id, direction, from_address, from_name, to_addresses, text_body, html_body_sanitised, created_at",
+        )
         .in("thread_id", threadIds)
         .order("created_at", { ascending: false });
-      for (const m of msgs ?? []) {
-        const tid = String(m.thread_id);
-        if (!lastByThread.has(tid)) lastByThread.set(tid, m);
+
+      if (previewDir === "inbound" || previewDir === "outbound") {
+        msgQuery = msgQuery.eq("direction", previewDir);
       }
 
-      const messageIds = (msgs ?? []).map((m) => String(m.id));
+      const { data: msgs } = await msgQuery;
+      for (const m of msgs ?? []) {
+        const tid = String(m.thread_id);
+        if (!previewByThread.has(tid)) previewByThread.set(tid, m);
+      }
+
+      // Fallback: if a Sent thread somehow lacks outbound rows, show any message.
+      if (previewDir !== "any") {
+        const missing = threadIds.filter((id) => !previewByThread.has(id));
+        if (missing.length > 0) {
+          const { data: fallback } = await ctx.secret
+            .from("email_messages")
+            .select(
+              "id, thread_id, direction, from_address, from_name, to_addresses, text_body, html_body_sanitised, created_at",
+            )
+            .in("thread_id", missing)
+            .order("created_at", { ascending: false });
+          for (const m of fallback ?? []) {
+            const tid = String(m.thread_id);
+            if (!previewByThread.has(tid)) previewByThread.set(tid, m);
+          }
+        }
+      }
+
+      const messageIds = [...previewByThread.values()].map((m) => String(m.id));
       if (messageIds.length > 0) {
         const { data: atts } = await ctx.secret
           .from("email_attachments")
           .select("message_id")
           .in("message_id", messageIds);
         const msgToThread = new Map(
-          (msgs ?? []).map((m) => [String(m.id), String(m.thread_id)]),
+          [...previewByThread.entries()].map(([tid, m]) => [String(m.id), tid]),
         );
         for (const a of atts ?? []) {
           const tid = msgToThread.get(String(a.message_id));
@@ -104,10 +130,12 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    const peerKind = previewDir === "outbound" ? "to" : "from";
     const threads: ThreadSummaryDTO[] = pageRows.map((r) =>
       mapThreadRow({
         ...r,
-        __last_message: lastByThread.get(String(r.id)) ?? {},
+        __preview_message: previewByThread.get(String(r.id)) ?? {},
+        __peer_kind: peerKind,
         __has_attachments: attachThreads.has(String(r.id)),
       }),
     );

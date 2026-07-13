@@ -104,6 +104,7 @@ export async function createDraftReq(params: {
   bcc?: string[];
   subject?: string;
   textBody?: string | null;
+  htmlBody?: string | null;
 }): Promise<DraftDTO> {
   const headers = await authHeaders();
   const res = await fetch("/api/inbox/drafts", {
@@ -123,6 +124,7 @@ export async function updateDraftReq(params: {
   bcc?: string[];
   subject?: string;
   textBody?: string | null;
+  htmlBody?: string | null;
 }): Promise<DraftDTO> {
   const headers = await authHeaders();
   const res = await fetch(`/api/inbox/drafts/${encodeURIComponent(params.draftId)}`, {
@@ -157,6 +159,8 @@ export async function sendEmailReq(params: {
   bcc?: string[];
   subject: string;
   body: string;
+  htmlBody?: string;
+  attachments?: Array<{ filename: string; contentBase64: string; contentType?: string }>;
 }): Promise<SendResultDTO> {
   const headers = await authHeaders();
   const res = await fetch("/api/inbox/send", {

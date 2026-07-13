@@ -208,7 +208,7 @@ export default function InboxPage() {
         bcc: payload.bcc,
         subject: payload.subject,
         textBody: payload.body,
-        htmlSanitised: null,
+        htmlSanitised: payload.htmlBody || null,
         deliveryStatus: "sending",
         createdAt: new Date().toISOString(),
         attachments: [],
@@ -230,6 +230,8 @@ export default function InboxPage() {
           bcc: payload.bcc,
           subject: payload.subject,
           body: payload.body,
+          htmlBody: payload.htmlBody,
+          attachments: payload.attachments,
         });
         // Reconcile: reload the affected thread (or open the new one).
         const finalThreadId = result.threadId ?? targetThreadId;
@@ -379,6 +381,7 @@ export default function InboxPage() {
                         bcc: d.bcc,
                         subject: d.subject,
                         body: d.textBody ?? "",
+                        htmlBody: d.htmlBody ?? undefined,
                       },
                     })
                   }
@@ -388,6 +391,7 @@ export default function InboxPage() {
                 <ThreadRow
                   key={t.id}
                   thread={t}
+                  folder={folder}
                   active={t.id === selectedThreadId}
                   onClick={() => openThread(t.id)}
                 />
@@ -449,13 +453,22 @@ export default function InboxPage() {
 
 function ThreadRow({
   thread,
+  folder,
   active,
   onClick,
 }: {
   thread: ThreadSummaryDTO;
+  folder: InboxFolder;
   active: boolean;
   onClick: () => void;
 }) {
+  const peerLabel =
+    thread.peerKind === "to" || folder === "sent" || folder === "awaiting"
+      ? thread.peer
+        ? `To: ${thread.peer}`
+        : "To: (no recipient)"
+      : thread.peerName || thread.peer || "Unknown";
+
   return (
     <button
       onClick={onClick}
@@ -468,17 +481,22 @@ function ThreadRow({
         <span
           className={cn(
             "truncate text-sm text-ink-2",
-            thread.hasUnread && "font-semibold text-ink",
+            thread.hasUnread && folder === "inbox" && "font-semibold text-ink",
           )}
         >
-          {thread.senderName || thread.sender || "Unknown"}
+          {peerLabel}
         </span>
         <span className="shrink-0 text-xs text-ink-3">{relativeTime(thread.timestamp)}</span>
       </div>
       <div className="flex items-center gap-1.5">
-        {thread.hasUnread && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-accent" />}
+        {thread.hasUnread && folder === "inbox" && (
+          <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-accent" />
+        )}
         <span
-          className={cn("truncate text-sm text-ink-2", thread.hasUnread && "font-medium text-ink")}
+          className={cn(
+            "truncate text-sm text-ink-2",
+            thread.hasUnread && folder === "inbox" && "font-medium text-ink",
+          )}
         >
           {thread.subject}
         </span>

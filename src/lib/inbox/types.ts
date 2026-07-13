@@ -90,8 +90,11 @@ export type ThreadSummaryDTO = {
   id: string;
   subject: string;
   snippet: string;
-  sender: string;
-  senderName: string | null;
+  /** Primary line in the list — From (inbox) or To (sent). */
+  peer: string;
+  peerName: string | null;
+  /** How the list should label the peer. */
+  peerKind: "from" | "to";
   timestamp: string | null;
   hasUnread: boolean;
   hasAttachments: boolean;
@@ -152,6 +155,14 @@ export type SendResultDTO = {
   deduped: boolean;
   threadId: string | null;
   messageId: string | null;
+};
+
+/** Attachment staged in the composer before send. */
+export type ComposerAttachment = {
+  filename: string;
+  contentBase64: string;
+  contentType: string;
+  sizeBytes: number;
 };
 
 export const INBOX_DOMAIN_DEFAULT = "inbox.adehq.com";

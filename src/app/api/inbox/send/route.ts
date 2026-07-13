@@ -36,6 +36,7 @@ export async function POST(request: NextRequest) {
       subject?: string;
       body?: string;
       htmlBody?: string;
+      attachments?: Array<{ filename: string; contentBase64: string; contentType?: string }>;
     };
 
     const ctx = await resolveInboxRoute(request, body.workspaceId, "send");
@@ -49,7 +50,20 @@ export async function POST(request: NextRequest) {
     }
 
     const textBody = (body.body ?? "").trim();
-    const htmlBody = body.htmlBody ?? textToHtml(textBody);
+    const htmlBody =
+      body.htmlBody?.trim() ||
+      (textBody ? textToHtml(textBody) : undefined);
+
+    const attachments = Array.isArray(body.attachments)
+      ? body.attachments
+          .filter((a) => a?.filename && a?.contentBase64)
+          .slice(0, 10)
+          .map((a) => ({
+            filename: String(a.filename).slice(0, 200),
+            contentBase64: String(a.contentBase64),
+            contentType: a.contentType ? String(a.contentType).slice(0, 120) : undefined,
+          }))
+      : undefined;
 
     // Thread-aware headers for replies.
     let inReplyTo: string | null = null;
@@ -88,6 +102,7 @@ export async function POST(request: NextRequest) {
       sentByType: "human",
       sentById: ctx.user.id,
       clientSendId: body.clientSendId.trim(),
+      attachments,
     });
 
     // Link + close the draft (idempotent — safe on dedupe).
