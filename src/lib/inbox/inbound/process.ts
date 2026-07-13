@@ -215,6 +215,10 @@ export async function processInboundEvent(
           normalised_subject: normaliseSubject(email.subject || ""),
           status: "open",
           folder: "inbox",
+          direction_state: "inbound",
+          latest_direction: "inbound",
+          has_unread: true,
+          is_spam: false,
           processing_state: "ready",
           last_message_at: new Date().toISOString(),
           mailbox_type: "adehq_managed",
@@ -329,12 +333,28 @@ export async function processInboundEvent(
       console.warn("[inbox] attachment processing failed", attErr);
     }
 
+    const { data: existingThread } = await client
+      .from("email_threads")
+      .select("direction_state, status")
+      .eq("id", threadId)
+      .maybeSingle();
+    const prevDirection = String(existingThread?.direction_state ?? "inbound");
+    const nextDirectionState =
+      prevDirection === "outbound" || prevDirection === "mixed" ? "mixed" : "inbound";
+
     await client
       .from("email_threads")
       .update({
         last_message_at: new Date().toISOString(),
         processing_state: "ready",
         folder: "inbox",
+        latest_direction: "inbound",
+        direction_state: nextDirectionState,
+        has_unread: true,
+        status:
+          existingThread?.status === "archived" || existingThread?.status === "resolved"
+            ? "open"
+            : existingThread?.status ?? "open",
       })
       .eq("id", threadId);
 

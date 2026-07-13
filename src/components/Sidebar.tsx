@@ -38,6 +38,7 @@ import {
   Home,
   Hash,
   HardDrive,
+  Mail,
   MessageSquare,
   Plus,
   Search,
@@ -129,6 +130,11 @@ export function Sidebar() {
         <Link href="/" className={cn("nav-link", isActive("/", true) && "nav-link-active")}>
           <Home className="h-[17px] w-[17px]" strokeWidth={1.8} />
           <span className="flex-1">Home</span>
+        </Link>
+
+        <Link href="/inbox" className={cn("nav-link", isActive("/inbox") && "nav-link-active")}>
+          <Mail className="h-[17px] w-[17px]" strokeWidth={1.8} />
+          <span className="flex-1">Inbox</span>
         </Link>
 
         <Link href="/drive" className={cn("nav-link", isActive("/drive") && "nav-link-active")}>

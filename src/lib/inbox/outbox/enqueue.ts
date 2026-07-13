@@ -1,5 +1,5 @@
 /**
- * Outbound outbox — DB-first enqueue with idempotency key.
+ * Outbound outbox — DB-first enqueue with idempotency key + clientSendId.
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -25,13 +25,40 @@ export type EnqueueOutboundParams = {
   references?: string | null;
   sentByType: "human" | "ai_employee" | "system";
   sentById: string;
+  /** Client-supplied idempotency key — unique per mailbox. */
+  clientSendId?: string | null;
   attachments?: Array<{ filename: string; contentBase64: string; contentType?: string }>;
+};
+
+export type EnqueueOutboundResult = {
+  outboxId: string;
+  idempotencyKey: string;
+  deduped: boolean;
 };
 
 export async function enqueueOutbound(
   client: SupabaseClient,
   params: EnqueueOutboundParams,
-): Promise<{ outboxId: string; idempotencyKey: string }> {
+): Promise<EnqueueOutboundResult> {
+  const clientSendId = params.clientSendId?.trim() || null;
+
+  if (clientSendId) {
+    const existing = await client
+      .from("email_outbox")
+      .select("id, idempotency_key")
+      .eq("mailbox_id", params.mailboxId)
+      .eq("client_send_id", clientSendId)
+      .maybeSingle();
+    if (existing.error) throw existing.error;
+    if (existing.data) {
+      return {
+        outboxId: String(existing.data.id),
+        idempotencyKey: String(existing.data.idempotency_key),
+        deduped: true,
+      };
+    }
+  }
+
   const idempotencyKey = crypto.randomUUID();
   const domain = getInboxDomain();
   const messageIdHeader = buildOutboundMessageId(domain);
@@ -53,6 +80,7 @@ export async function enqueueOutbound(
       approval_id: params.approvalId ?? null,
       status: "queued",
       idempotency_key: idempotencyKey,
+      client_send_id: clientSendId,
       from_address: params.fromAddress,
       from_name: params.fromName ?? null,
       to_addresses: params.to,
@@ -69,11 +97,29 @@ export async function enqueueOutbound(
     .select("id")
     .single();
 
-  if (error) throw error;
+  if (error) {
+    // Race on (mailbox_id, client_send_id) — return the winner.
+    if (error.code === "23505" && clientSendId) {
+      const again = await client
+        .from("email_outbox")
+        .select("id, idempotency_key")
+        .eq("mailbox_id", params.mailboxId)
+        .eq("client_send_id", clientSendId)
+        .maybeSingle();
+      if (again.data) {
+        return {
+          outboxId: String(again.data.id),
+          idempotencyKey: String(again.data.idempotency_key),
+          deduped: true,
+        };
+      }
+    }
+    throw error;
+  }
 
   void import("./process")
     .then(({ processOutboxItem }) => processOutboxItem(client, String(data.id)))
     .catch((err) => console.warn("[inbox] outbox nudge failed", err));
 
-  return { outboxId: String(data.id), idempotencyKey };
+  return { outboxId: String(data.id), idempotencyKey, deduped: false };
 }

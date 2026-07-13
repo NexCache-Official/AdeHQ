@@ -73,8 +73,12 @@ export async function processOutboxItem(
           mailbox_id: claimed.mailbox_id,
           subject: claimed.subject,
           normalised_subject: String(claimed.subject).toLowerCase(),
-          status: "open",
+          status: "waiting",
           folder: "sent",
+          direction_state: "outbound",
+          latest_direction: "outbound",
+          has_unread: false,
+          is_spam: false,
           last_message_at: new Date().toISOString(),
         })
         .select("id")
@@ -127,9 +131,24 @@ export async function processOutboxItem(
       })
       .eq("id", claimed.id);
 
+    const { data: existingThread } = await client
+      .from("email_threads")
+      .select("direction_state")
+      .eq("id", threadId)
+      .maybeSingle();
+    const prevDirection = String(existingThread?.direction_state ?? "outbound");
+    const nextDirectionState =
+      prevDirection === "inbound" || prevDirection === "mixed" ? "mixed" : "outbound";
+
     await client
       .from("email_threads")
-      .update({ last_message_at: new Date().toISOString(), folder: "sent" })
+      .update({
+        last_message_at: new Date().toISOString(),
+        folder: "sent",
+        latest_direction: "outbound",
+        direction_state: nextDirectionState,
+        status: "waiting",
+      })
       .eq("id", threadId);
 
     await recordEmailEvent(client, {

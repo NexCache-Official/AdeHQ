@@ -144,11 +144,11 @@ Add all vars above under **Project → Settings → Environment Variables** (Pro
 Preview). Set `EMAIL_TEST_MODE=true` + `EMAIL_TEST_INBOX` on Preview so preview
 deployments never email real users. Redeploy after changes.
 
-## Workspace inbox (Slice 0 + Slice A)
+## Workspace inbox (Slice 0–B)
 
 Conversational shared-inbox transport was proven in Slice 0
-([`docs/inbox-transport-proof.md`](inbox-transport-proof.md)). Slice A adds the
-secure foundation (schema, provider, webhook, outbox, provisioning) —
+([`docs/inbox-transport-proof.md`](inbox-transport-proof.md)). Slice A–B add the
+secure foundation + claim-first UI —
 [`docs/workspace-inbox-foundation.md`](workspace-inbox-foundation.md).
 
 Do not reuse `noreply@adehq.com` / `sendEmail()` for workspace mailbox traffic.

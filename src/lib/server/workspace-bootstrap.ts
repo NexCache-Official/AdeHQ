@@ -6,10 +6,8 @@ import { ensureToolCatalog } from "@/lib/server/tool-catalog";
 import { AccountLifecycleError } from "@/lib/server/account-lifecycle";
 import { ensureMayaForWorkspace } from "@/lib/server/ensure-maya";
 import { ensureWorkspaceProviderAllocations } from "@/lib/providers/credentials/ensure-workspace-allocations";
-import { ensurePrimaryMailbox } from "@/lib/inbox/provision";
 import { sendEmail } from "@/lib/email/send";
 import { getSiteUrl } from "@/lib/site-url";
-import { createSupabaseSecretClient } from "@/lib/supabase/server";
 
 type DbRow = Record<string, unknown>;
 
@@ -127,19 +125,9 @@ export async function bootstrapWorkspaceForUser(
       .eq("id", existingId)
       .single();
     if (error) throw error;
-    const existingName = String(data.name);
-    try {
-      const secret = createSupabaseSecretClient();
-      await ensurePrimaryMailbox(secret, {
-        workspaceId: existingId,
-        workspaceName: existingName,
-      });
-    } catch (mailboxError) {
-      console.warn("[AdeHQ inbox mailbox bootstrap]", mailboxError);
-    }
     return {
       workspaceId: existingId,
-      workspaceName: existingName,
+      workspaceName: String(data.name),
       created: false,
     };
   }
@@ -179,14 +167,7 @@ export async function bootstrapWorkspaceForUser(
     console.warn("[AdeHQ provider allocations bootstrap]", error);
   });
 
-  // Primary AdeHQ-managed mailbox (immutable canonical address). Best-effort:
-  // never block workspace creation if inbox tables are not migrated yet.
-  try {
-    const secret = createSupabaseSecretClient();
-    await ensurePrimaryMailbox(secret, { workspaceId, workspaceName: name });
-  } catch (error) {
-    console.warn("[AdeHQ inbox mailbox bootstrap]", error);
-  }
+  // Mailbox is claim-first (Slice B) — owners claim via /inbox. Do not auto-provision.
 
   // First workspace created (post email-confirmation) — send the branded
   // Welcome email. Preference-gated (product_updates) and best-effort: never

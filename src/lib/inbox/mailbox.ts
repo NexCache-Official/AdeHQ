@@ -1,0 +1,102 @@
+/**
+ * Primary mailbox lookup + row → DTO mappers (Slice B).
+ */
+
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type {
+  AttachmentDTO,
+  DirectionState,
+  DraftDTO,
+  MailboxDTO,
+  MessageDTO,
+  ThreadStatus,
+  ThreadSummaryDTO,
+} from "./types";
+import type { DeliveryStatus, MessageDirection } from "./types";
+
+export async function getPrimaryMailbox(
+  secret: SupabaseClient,
+  workspaceId: string,
+): Promise<MailboxDTO | null> {
+  const { data, error } = await secret
+    .from("workspace_mailboxes")
+    .select("id, workspace_id, canonical_local_part, domain, display_name, status")
+    .eq("workspace_id", workspaceId)
+    .eq("is_primary", true)
+    .neq("status", "retired")
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) return null;
+  return {
+    id: String(data.id),
+    workspaceId: String(data.workspace_id),
+    address: `${data.canonical_local_part}@${data.domain}`,
+    displayName: String(data.display_name ?? ""),
+    status: String(data.status),
+  };
+}
+
+function snippetFrom(text: string | null, html: string | null): string {
+  const base = (text ?? html ?? "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+  return base.slice(0, 140);
+}
+
+export function mapThreadRow(row: Record<string, unknown>): ThreadSummaryDTO {
+  const last = (row.__last_message ?? {}) as Record<string, unknown>;
+  return {
+    id: String(row.id),
+    subject: String(row.subject ?? "") || "(no subject)",
+    snippet: snippetFrom(
+      (last.text_body as string) ?? null,
+      (last.html_body_sanitised as string) ?? null,
+    ),
+    sender: (last.from_address as string) ?? "",
+    senderName: (last.from_name as string) ?? null,
+    timestamp: (row.last_message_at as string) ?? null,
+    hasUnread: Boolean(row.has_unread),
+    hasAttachments: Boolean(row.__has_attachments),
+    directionState: (row.direction_state as DirectionState) ?? "inbound",
+    status: (row.status as ThreadStatus) ?? "open",
+    isSpam: Boolean(row.is_spam),
+    assigneeId: (row.assigned_human_id as string) ?? null,
+  };
+}
+
+export function mapMessageRow(
+  row: Record<string, unknown>,
+  attachments: AttachmentDTO[],
+): MessageDTO {
+  return {
+    id: String(row.id),
+    direction: (row.direction as MessageDirection) ?? "inbound",
+    fromAddress: (row.from_address as string) ?? null,
+    fromName: (row.from_name as string) ?? null,
+    to: (row.to_addresses as string[]) ?? [],
+    cc: (row.cc_addresses as string[]) ?? [],
+    bcc: (row.bcc_addresses as string[]) ?? [],
+    subject: String(row.subject ?? ""),
+    textBody: (row.text_body as string) ?? null,
+    htmlSanitised: (row.html_body_sanitised as string) ?? null,
+    deliveryStatus: (row.delivery_status as DeliveryStatus) ?? "received",
+    createdAt: String(row.created_at),
+    attachments,
+  };
+}
+
+export function mapDraftRow(
+  draft: Record<string, unknown>,
+  version: Record<string, unknown> | null,
+): DraftDTO {
+  return {
+    id: String(draft.id),
+    threadId: (draft.thread_id as string) ?? null,
+    status: String(draft.status),
+    to: (version?.to_addresses as string[]) ?? [],
+    cc: (version?.cc_addresses as string[]) ?? [],
+    bcc: (version?.bcc_addresses as string[]) ?? [],
+    subject: String(version?.subject ?? ""),
+    textBody: (version?.text_body as string) ?? null,
+    htmlBody: (version?.html_body as string) ?? null,
+    updatedAt: String(draft.updated_at ?? draft.created_at),
+  };
+}

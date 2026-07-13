@@ -1,5 +1,5 @@
 /**
- * Workspace inbox — shared types (Slice A foundation).
+ * Workspace inbox — shared types (Slice A + Slice B).
  */
 
 export type MailboxType = "adehq_managed" | "google" | "microsoft" | "imap_future";
@@ -41,6 +41,118 @@ export type DeliveryStatus =
   | "complained"
   | "failed"
   | "cancelled";
+
+export type ThreadStatus = "open" | "waiting" | "resolved" | "archived";
+
+export type DirectionState = "inbound" | "outbound" | "mixed";
+
+export type MessageDirection = "inbound" | "outbound" | "internal";
+
+/** UI folder keys — derived via query, not a DB column. */
+export type InboxFolder =
+  | "inbox"
+  | "awaiting"
+  | "sent"
+  | "drafts"
+  | "archived"
+  | "spam";
+
+export type MailboxDTO = {
+  id: string;
+  workspaceId: string;
+  address: string;
+  displayName: string;
+  status: string;
+};
+
+export type MailboxAccessFlags = {
+  canRead: boolean;
+  canSend: boolean;
+  canOrganize: boolean;
+  canManage: boolean;
+  isAdmin: boolean;
+  role: string;
+};
+
+export type InboxMailboxResponse =
+  | { claimed: false; canClaim: boolean }
+  | { claimed: true; mailbox: MailboxDTO; access: MailboxAccessFlags };
+
+export type AttachmentDTO = {
+  id: string;
+  filename: string | null;
+  contentType: string | null;
+  sizeBytes: number | null;
+  quarantineState: string;
+};
+
+export type ThreadSummaryDTO = {
+  id: string;
+  subject: string;
+  snippet: string;
+  sender: string;
+  senderName: string | null;
+  timestamp: string | null;
+  hasUnread: boolean;
+  hasAttachments: boolean;
+  directionState: DirectionState;
+  status: ThreadStatus;
+  isSpam: boolean;
+  /** Slice C placeholder — unused in B UI. */
+  assigneeId: string | null;
+};
+
+export type ThreadPageDTO = {
+  threads: ThreadSummaryDTO[];
+  nextCursor: string | null;
+};
+
+export type MessageDTO = {
+  id: string;
+  direction: MessageDirection;
+  fromAddress: string | null;
+  fromName: string | null;
+  to: string[];
+  cc: string[];
+  bcc: string[];
+  subject: string;
+  textBody: string | null;
+  htmlSanitised: string | null;
+  deliveryStatus: DeliveryStatus;
+  createdAt: string;
+  attachments: AttachmentDTO[];
+};
+
+export type ThreadDetailDTO = {
+  id: string;
+  subject: string;
+  status: ThreadStatus;
+  isSpam: boolean;
+  hasUnread: boolean;
+  directionState: DirectionState;
+  messages: MessageDTO[];
+};
+
+export type DraftDTO = {
+  id: string;
+  threadId: string | null;
+  status: string;
+  to: string[];
+  cc: string[];
+  bcc: string[];
+  subject: string;
+  textBody: string | null;
+  htmlBody: string | null;
+  updatedAt: string;
+};
+
+export type SendResultDTO = {
+  outboxId: string;
+  status: OutboxStatus;
+  deduped: boolean;
+  threadId: string | null;
+  messageId: string | null;
+};
 
 export const INBOX_DOMAIN_DEFAULT = "inbox.adehq.com";
 
