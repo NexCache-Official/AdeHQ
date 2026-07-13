@@ -46,6 +46,8 @@ Thread fields: `status`, `direction_state`, `latest_direction`, `has_unread`, `i
 - `POST /api/inbox/outbox/[id]/cancel` cancels while still queued.
 - `POST /api/inbox/outbox/[id]/flush` performs the provider send after the undo window (client-driven; cron drain also matures queued rows).
 
+## Key routes
+
 | Method | Path |
 |--------|------|
 | GET | `/api/inbox/mailbox` |
@@ -57,6 +59,8 @@ Thread fields: `status`, `direction_state`, `latest_direction`, `has_unread`, `i
 | GET/POST | `/api/inbox/drafts` |
 | PATCH/DELETE | `/api/inbox/drafts/[id]` |
 | POST | `/api/inbox/send` (`clientSendId` required) |
+| POST | `/api/inbox/outbox/[id]/cancel` |
+| POST | `/api/inbox/outbox/[id]/flush` |
 | POST | `/api/inbox/webhooks/resend` |
 | POST | `/api/inbox/jobs/process` |
 
