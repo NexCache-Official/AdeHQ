@@ -130,15 +130,24 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    const peerKind = previewDir === "outbound" ? "to" : "from";
-    const threads: ThreadSummaryDTO[] = pageRows.map((r) =>
-      mapThreadRow({
+    const threads: ThreadSummaryDTO[] = pageRows.map((r) => {
+      const preview = previewByThread.get(String(r.id)) ?? {};
+      const msgDir = String(preview.direction ?? r.latest_direction ?? "inbound");
+      const peerKind =
+        previewDir === "outbound"
+          ? "to"
+          : previewDir === "inbound"
+            ? "from"
+            : msgDir === "outbound"
+              ? "to"
+              : "from";
+      return mapThreadRow({
         ...r,
-        __preview_message: previewByThread.get(String(r.id)) ?? {},
+        __preview_message: preview,
         __peer_kind: peerKind,
         __has_attachments: attachThreads.has(String(r.id)),
-      }),
-    );
+      });
+    });
 
     const last = pageRows[pageRows.length - 1];
     const nextCursor =

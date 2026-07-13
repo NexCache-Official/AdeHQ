@@ -31,9 +31,9 @@ API gate: `requireInboxAccess` in `src/lib/inbox/access.ts`.
 
 | UI folder | Query |
 |-----------|-------|
-| Inbox | `status=open`, not spam, `latest_direction=inbound` |
+| Inbox | `status in (open,waiting)`, not spam (stays until archive — Gmail-like) |
 | Awaiting reply | `status in (open,waiting)`, not spam, `latest_direction=outbound` |
-| Sent | `direction_state in (outbound,mixed)`, not spam |
+| Sent | `direction_state in (outbound,mixed)`, not spam, not archived |
 | Drafts | `email_drafts.status=draft` |
 | Archived | `status=archived` |
 | Spam | `is_spam=true` |

@@ -87,6 +87,18 @@ export default function InboxPage() {
     mailbox && mailbox.claimed ? mailbox.access : null;
   const mailboxId = mailbox && mailbox.claimed ? mailbox.mailbox.id : null;
 
+  // Per-folder cache so Inbox ↔ Sent switches stay instant and never flash empty
+  // from a slower in-flight response for a different folder.
+  type FolderCache = {
+    threads: ThreadSummaryDTO[];
+    nextCursor: string | null;
+    drafts: DraftDTO[];
+  };
+  const folderCacheRef = useRef<Partial<Record<InboxFolder, FolderCache>>>({});
+  const folderLoadSeqRef = useRef<Partial<Record<InboxFolder, number>>>({});
+  const folderRef = useRef(folder);
+  folderRef.current = folder;
+
   // --- Mailbox lookup -------------------------------------------------------
   const loadMailbox = useCallback(async () => {
     if (!workspaceId) return;
@@ -101,44 +113,116 @@ export default function InboxPage() {
 
   useEffect(() => {
     setMailbox(null);
+    folderCacheRef.current = {};
+    setThreads([]);
+    setDrafts([]);
+    setNextCursor(null);
     void loadMailbox();
   }, [loadMailbox]);
 
   // --- Folder loading -------------------------------------------------------
+  const applyFolderToUi = useCallback((target: InboxFolder, cached: FolderCache) => {
+    if (target === "drafts") {
+      setDrafts(cached.drafts);
+      setThreads([]);
+      setNextCursor(null);
+    } else {
+      setThreads(cached.threads);
+      setNextCursor(cached.nextCursor);
+      setDrafts([]);
+    }
+  }, []);
+
   const loadFolder = useCallback(
     async (target: InboxFolder, opts?: { silent?: boolean }) => {
       if (!workspaceId || !access?.canRead) return;
-      if (!opts?.silent) setLoadingList(true);
+
+      const seq = (folderLoadSeqRef.current[target] ?? 0) + 1;
+      folderLoadSeqRef.current[target] = seq;
+
+      const cached = folderCacheRef.current[target];
+      if (!opts?.silent && folderRef.current === target) {
+        if (cached) {
+          applyFolderToUi(target, cached);
+        } else {
+          setLoadingList(true);
+        }
+      }
+
       try {
+        let next: FolderCache;
         if (target === "drafts") {
           const list = await fetchDrafts(workspaceId);
-          setDrafts(list);
-          setThreads([]);
-          setNextCursor(null);
+          next = { threads: [], nextCursor: null, drafts: list };
         } else {
           const page = await fetchThreads({ workspaceId, folder: target, limit: 30 });
-          setThreads(page.threads);
-          setNextCursor(page.nextCursor);
-          setDrafts([]);
+          next = {
+            threads: page.threads,
+            nextCursor: page.nextCursor,
+            drafts: [],
+          };
         }
+
+        // Ignore superseded fetches for this folder.
+        if (folderLoadSeqRef.current[target] !== seq) return;
+
+        folderCacheRef.current[target] = next;
+
+        // Only paint if the user is still viewing this folder.
+        if (folderRef.current === target) {
+          applyFolderToUi(target, next);
+        }
+      } catch {
+        // Keep cached rows visible on transient errors.
       } finally {
-        if (!opts?.silent) setLoadingList(false);
+        if (!opts?.silent && folderRef.current === target) {
+          setLoadingList(false);
+        }
       }
     },
-    [workspaceId, access?.canRead],
+    [workspaceId, access?.canRead, applyFolderToUi],
   );
 
   useEffect(() => {
-    if (access?.canRead) void loadFolder(folder);
+    if (!access?.canRead) return;
+    const cached = folderCacheRef.current[folder];
+    if (cached) {
+      applyFolderToUi(folder, cached);
+    } else if (folder === "drafts") {
+      setDrafts([]);
+      setThreads([]);
+      setNextCursor(null);
+    } else {
+      // Avoid painting another folder's rows under this label while loading.
+      setThreads([]);
+      setDrafts([]);
+      setNextCursor(null);
+    }
+    void loadFolder(folder);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [folder, access?.canRead, mailboxId]);
 
   const loadMore = useCallback(async () => {
     if (!workspaceId || !nextCursor || folder === "drafts") return;
-    const page = await fetchThreads({ workspaceId, folder, cursor: nextCursor, limit: 30 });
+    const target = folder;
+    const seq = folderLoadSeqRef.current[target] ?? 0;
+    const page = await fetchThreads({
+      workspaceId,
+      folder: target,
+      cursor: nextCursor,
+      limit: 30,
+    });
+    if (folderLoadSeqRef.current[target] !== seq || folderRef.current !== target) return;
+
     setThreads((prev) => {
       const seen = new Set(prev.map((t) => t.id));
-      return [...prev, ...page.threads.filter((t) => !seen.has(t.id))];
+      const merged = [...prev, ...page.threads.filter((t) => !seen.has(t.id))];
+      folderCacheRef.current[target] = {
+        threads: merged,
+        nextCursor: page.nextCursor,
+        drafts: [],
+      };
+      return merged;
     });
     setNextCursor(page.nextCursor);
   }, [workspaceId, nextCursor, folder]);
@@ -153,10 +237,15 @@ export default function InboxPage() {
       try {
         const detail = await fetchThread({ workspaceId, threadId });
         setThreadDetail(detail);
-        // Optimistically clear unread in the list.
-        setThreads((prev) =>
-          prev.map((t) => (t.id === threadId ? { ...t, hasUnread: false } : t)),
-        );
+        // Optimistically clear unread in the list + cache.
+        setThreads((prev) => {
+          const next = prev.map((t) => (t.id === threadId ? { ...t, hasUnread: false } : t));
+          const cached = folderCacheRef.current[folderRef.current];
+          if (cached && folderRef.current !== "drafts") {
+            folderCacheRef.current[folderRef.current] = { ...cached, threads: next };
+          }
+          return next;
+        });
         void threadAction({ workspaceId, threadId, action: "read" }).catch(() => {});
       } finally {
         setLoadingThread(false);
@@ -165,28 +254,32 @@ export default function InboxPage() {
     [workspaceId],
   );
 
-  // --- Realtime (patch, not full reload) ------------------------------------
+  // --- Realtime (debounced silent refresh of current folder + open thread) --
   const refreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const scheduleRefresh = useCallback(
     (affectedThreadId: string | null) => {
       if (refreshTimer.current) clearTimeout(refreshTimer.current);
       refreshTimer.current = setTimeout(() => {
-        void loadFolder(folder, { silent: true });
+        const current = folderRef.current;
+        // Keep the visible folder's cache for stable UI; drop others so the
+        // next visit refetches after inbound/outbound changes.
+        const keep = folderCacheRef.current[current];
+        folderCacheRef.current = keep ? { [current]: keep } : {};
+        void loadFolder(current, { silent: true });
         if (affectedThreadId && affectedThreadId === selectedThreadId && workspaceId) {
           void fetchThread({ workspaceId, threadId: affectedThreadId })
             .then(setThreadDetail)
             .catch(() => {});
         }
-      }, 350);
+      }, 250);
     },
-    [folder, selectedThreadId, workspaceId, loadFolder],
+    [selectedThreadId, workspaceId, loadFolder],
   );
 
   useInboxRealtime({
     workspaceId,
     enabled: Boolean(access?.canRead),
     onEvent: (event) => {
-      // Permission changes are handled by re-checking the mailbox.
       scheduleRefresh(event.threadId);
     },
   });
@@ -255,10 +348,11 @@ export default function InboxPage() {
             : prev,
         );
       } finally {
-        void loadFolder(folder, { silent: true });
+        folderCacheRef.current = {};
+        void loadFolder(folderRef.current, { silent: true });
       }
     },
-    [workspaceId, mailbox, selectedThreadId, folder, loadFolder],
+    [workspaceId, mailbox, selectedThreadId, loadFolder],
   );
 
   const startReply = useCallback(() => {
@@ -277,14 +371,15 @@ export default function InboxPage() {
     async (action: "archive" | "unarchive" | "unread" | "spam", spam?: boolean) => {
       if (!workspaceId || !selectedThreadId) return;
       await threadAction({ workspaceId, threadId: selectedThreadId, action, spam }).catch(() => {});
-      await loadFolder(folder, { silent: true });
+      folderCacheRef.current = {};
+      await loadFolder(folderRef.current, { silent: true });
       if (action === "unread" || action === "archive" || action === "spam") {
         setSelectedThreadId(null);
         setThreadDetail(null);
         setMobileView("list");
       }
     },
-    [workspaceId, selectedThreadId, folder, loadFolder],
+    [workspaceId, selectedThreadId, loadFolder],
   );
 
   // --- Render gates ---------------------------------------------------------
@@ -362,6 +457,11 @@ export default function InboxPage() {
           {loadingList && <Loader2 className="h-4 w-4 animate-spin text-ink-3" />}
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto">
+          {listItems.length === 0 && loadingList && (
+            <div className="flex items-center justify-center gap-2 p-8 text-sm text-ink-3">
+              <Loader2 className="h-4 w-4 animate-spin" /> Loading…
+            </div>
+          )}
           {listItems.length === 0 && !loadingList && (
             <p className="p-6 text-center text-sm text-ink-3">Nothing here yet.</p>
           )}

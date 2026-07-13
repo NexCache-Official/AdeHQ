@@ -69,7 +69,10 @@ export async function fetchThreads(params: {
   });
   if (params.cursor) search.set("cursor", params.cursor);
   if (params.limit) search.set("limit", String(params.limit));
-  const res = await fetch(`/api/inbox/threads?${search}`, { headers });
+  const res = await fetch(`/api/inbox/threads?${search}`, {
+    headers,
+    cache: "no-store",
+  });
   return parseJson(res);
 }
 
@@ -81,7 +84,7 @@ export async function fetchThread(params: {
   const search = new URLSearchParams({ workspaceId: params.workspaceId });
   const res = await fetch(
     `/api/inbox/threads/${encodeURIComponent(params.threadId)}?${search}`,
-    { headers },
+    { headers, cache: "no-store" },
   );
   return parseJson(res);
 }
@@ -90,7 +93,7 @@ export async function fetchDrafts(workspaceId: string): Promise<DraftDTO[]> {
   const headers = await authHeaders();
   const res = await fetch(
     `/api/inbox/drafts?workspaceId=${encodeURIComponent(workspaceId)}`,
-    { headers },
+    { headers, cache: "no-store" },
   );
   const body = await parseJson<{ drafts: DraftDTO[] }>(res);
   return body.drafts;

@@ -18,13 +18,11 @@ type ThreadQuery = {
 export function applyFolderFilter(query: ThreadQuery, folder: InboxFolder): ThreadQuery {
   switch (folder) {
     case "inbox":
-      // Needs attention: latest external message is inbound.
-      return query
-        .eq("status", "open")
-        .eq("is_spam", false)
-        .eq("latest_direction", "inbound");
+      // Gmail-like: active conversations stay in Inbox until archived/spam,
+      // including threads you've already replied to (status=waiting).
+      return query.in("status", ["open", "waiting"]).eq("is_spam", false);
     case "awaiting":
-      // We last wrote outbound; waiting on the other party.
+      // Triage view: we last wrote outbound; waiting on the other party.
       return query
         .in("status", ["open", "waiting"])
         .eq("is_spam", false)
@@ -51,9 +49,7 @@ export function applyFolderFilter(query: ThreadQuery, folder: InboxFolder): Thre
 export function listPreviewDirection(
   folder: InboxFolder,
 ): "inbound" | "outbound" | "any" {
-  if (folder === "sent") return "outbound";
-  if (folder === "inbox" || folder === "awaiting") {
-    return folder === "awaiting" ? "outbound" : "inbound";
-  }
+  if (folder === "sent" || folder === "awaiting") return "outbound";
+  // Inbox / archived / spam: latest message overall (Gmail-style).
   return "any";
 }
