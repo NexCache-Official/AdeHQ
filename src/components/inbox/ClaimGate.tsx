@@ -107,9 +107,11 @@ export function ClaimGate({
         <div className="mb-5 flex h-11 w-11 items-center justify-center rounded-xl bg-accent-soft">
           <Mail className="h-5 w-5 text-accent-d" />
         </div>
-        <h1 className="text-xl font-semibold text-ink">Claim your inbox address</h1>
+        <h1 className="text-xl font-semibold text-ink">Choose your workspace inbox</h1>
         <p className="mt-1.5 text-sm text-ink-3">
-          Pick the shared email address for this workspace. It&apos;s permanent — choose carefully.
+          Before you can send or receive email, pick a shared address for this workspace
+          (for example <span className="font-medium text-ink-2">hello@{domain}</span>).
+          Nobody gets an address automatically — you choose it, and it stays permanent.
         </p>
 
         <label className="mt-6 block text-xs font-medium text-ink-2">Address</label>

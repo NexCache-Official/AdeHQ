@@ -351,10 +351,10 @@ export async function processInboundEvent(
         latest_direction: "inbound",
         direction_state: nextDirectionState,
         has_unread: true,
-        status:
-          existingThread?.status === "archived" || existingThread?.status === "resolved"
-            ? "open"
-            : existingThread?.status ?? "open",
+        // Replies reopen the conversation so it appears in Inbox (not stuck in
+        // "waiting" after our outbound left the thread awaiting a reply).
+        status: "open",
+        is_spam: false,
       })
       .eq("id", threadId);
 
