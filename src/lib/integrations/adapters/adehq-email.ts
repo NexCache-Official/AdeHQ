@@ -1,14 +1,17 @@
 // ===========================================================================
-// AdeHQ email adapter — email.createDraft creates a reviewable email_draft
-// artifact (never sends). Sending arrives in Phase 4 behind approval.
+// AdeHQ email adapter — creates a reviewable workspace inbox draft when a
+// mailbox is claimed; also keeps an artifact for room/drive visibility.
+// Never sends. AI-origin drafts always require approval before send.
 // ===========================================================================
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { ToolExecutionContext, ToolExecutionOutput } from "@/lib/integrations/types";
 import type { CreateEmailDraftArgs } from "@/lib/integrations/registry/tool-definitions";
 import { randomUUID } from "node:crypto";
+import { createHash } from "crypto";
 import { emailMarkdownFromJson, type EmailDraftJson } from "@/lib/artifacts/intelligence";
 import { saveArtifactToDrive } from "./adehq-storage";
+import { getPrimaryMailbox } from "@/lib/inbox/mailbox";
 
 export async function createEmailDraft(
   client: SupabaseClient,
@@ -72,19 +75,90 @@ export async function createEmailDraft(
     employeeId: ctx.employeeId,
   });
 
+  let inboxDraftId: string | null = null;
+  try {
+    const mailbox = await getPrimaryMailbox(client, ctx.workspaceId);
+    if (mailbox) {
+      const to = args.recipientEmail?.trim()
+        ? [args.recipientEmail.trim().toLowerCase()]
+        : [];
+      const textBody = args.body.trim();
+      const htmlBody = `<p>${textBody
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/\n/g, "<br/>")}</p>`;
+      const subject = args.subject.trim();
+      const contentHash = createHash("sha256")
+        .update(JSON.stringify({ to, subject, text: textBody, html: htmlBody }))
+        .digest("hex");
+
+      const { data: draft, error: dErr } = await client
+        .from("email_drafts")
+        .insert({
+          workspace_id: ctx.workspaceId,
+          mailbox_id: mailbox.id,
+          thread_id: null,
+          status: "draft",
+          created_by_type: "ai_employee",
+          created_by_id: ctx.employeeId,
+          origin_type: "ai_employee",
+          current_author_type: "ai_employee",
+          requires_approval: true,
+          employee_id: ctx.employeeId,
+          is_stale: false,
+          rewrite_count: 0,
+        })
+        .select("id")
+        .single();
+      if (!dErr && draft) {
+        inboxDraftId = String(draft.id);
+        const { data: version } = await client
+          .from("email_draft_versions")
+          .insert({
+            workspace_id: ctx.workspaceId,
+            draft_id: inboxDraftId,
+            version_number: 1,
+            to_addresses: to,
+            cc_addresses: [],
+            bcc_addresses: [],
+            subject,
+            text_body: textBody,
+            html_body: htmlBody,
+            content_hash: contentHash,
+            is_original_ai: true,
+            created_by_type: "ai_employee",
+            created_by_id: ctx.employeeId,
+          })
+          .select("id")
+          .single();
+        if (version) {
+          await client
+            .from("email_drafts")
+            .update({ current_version_id: version.id })
+            .eq("id", inboxDraftId);
+        }
+      }
+    }
+  } catch (inboxErr) {
+    console.warn("[adehq-email] workspace inbox draft skipped", inboxErr);
+  }
+
   return {
-    summary: `Drafted email "${args.subject}"${args.recipientName ? ` to ${args.recipientName}` : ""} — saved as a reviewable draft.`,
+    summary: `Drafted email "${args.subject}"${args.recipientName ? ` to ${args.recipientName}` : ""} — saved as a reviewable draft${inboxDraftId ? " in the workspace inbox" : ""}.`,
     payload: {
       artifactId,
+      inboxDraftId,
       title,
       subject: json.subject,
       body: json.body,
       recipientName: json.recipientName,
       recipientOrganization: json.recipientOrganization,
+      requiresApproval: true,
     },
-    objectId: artifactId,
+    objectId: inboxDraftId ?? artifactId,
     workLogAction: "created_email_draft",
     relatedEntityType: "artifact",
-    relatedEntityId: artifactId,
+    relatedEntityId: inboxDraftId ?? artifactId,
   };
 }

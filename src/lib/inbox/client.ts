@@ -234,6 +234,7 @@ export async function assignThreadReq(params: {
   workspaceId: string;
   threadId: string;
   employeeId?: string | null;
+  humanId?: string | null;
   clear?: boolean;
 }): Promise<void> {
   const headers = await authHeaders();
@@ -339,6 +340,78 @@ export async function cancelAiDraftReq(params: {
     },
   );
   await parseJson(res);
+}
+
+export async function postInternalNoteReq(params: {
+  workspaceId: string;
+  threadId: string;
+  text: string;
+}): Promise<{ message: import("./types").MessageDTO }> {
+  const headers = await authHeaders();
+  const res = await fetch(
+    `/api/inbox/threads/${encodeURIComponent(params.threadId)}/notes`,
+    {
+      method: "POST",
+      headers,
+      body: JSON.stringify(params),
+    },
+  );
+  return parseJson(res);
+}
+
+export async function fetchAttachmentUrl(params: {
+  workspaceId: string;
+  attachmentId: string;
+}): Promise<{ url: string; filename: string | null }> {
+  const headers = await authHeaders();
+  const search = new URLSearchParams({ workspaceId: params.workspaceId });
+  const res = await fetch(
+    `/api/inbox/attachments/${encodeURIComponent(params.attachmentId)}?${search}`,
+    { headers },
+  );
+  return parseJson(res);
+}
+
+export async function fetchInboxBrief(workspaceId: string): Promise<{
+  greeting: string;
+  mailboxAddress: string;
+  stats: {
+    unread: number;
+    needsApproval: number;
+    highPriority: number;
+    assignedToMe: number;
+  };
+}> {
+  const headers = await authHeaders();
+  const res = await fetch(
+    `/api/inbox/brief?workspaceId=${encodeURIComponent(workspaceId)}`,
+    { headers, cache: "no-store" },
+  );
+  return parseJson(res);
+}
+
+export async function fetchInboxUnreadCount(workspaceId: string): Promise<number> {
+  const headers = await authHeaders();
+  const res = await fetch(
+    `/api/inbox/unread-count?workspaceId=${encodeURIComponent(workspaceId)}`,
+    { headers, cache: "no-store" },
+  );
+  const body = await parseJson<{ count: number }>(res);
+  return body.count ?? 0;
+}
+
+export async function fetchMailboxMembers(workspaceId: string): Promise<
+  Array<{ id: string; name: string; email: string | null; role: string }>
+> {
+  const headers = await authHeaders();
+  const res = await fetch(
+    `/api/inbox/mailbox/members?workspaceId=${encodeURIComponent(workspaceId)}`,
+    { headers, cache: "no-store" },
+  );
+  const body = await parseJson<{ members: Array<{ id: string; name: string; email: string | null; role: string }> }>(
+    res,
+  );
+  return body.members;
 }
 
 export async function fetchDraftVersions(params: {

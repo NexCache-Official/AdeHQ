@@ -19,13 +19,18 @@ Slice 0 transport proof remains under `src/lib/inbox-transport-proof/` — do no
 
 ## Permissions
 
-Inbox is **not** plain workspace membership. Approve = manage grant or manager-with-read (plus owners/admins).
+Inbox is **not** plain workspace membership. Coarse mailbox grants map to plan names at the API:
+
+`email.read`, `email.compose`, `email.send`, `email.assign`, `email.create_ai_draft`, `email.approve_ai_send`, `email.manage_mailbox`.
+
+Approve = manage grant or manager-with-read (plus owners/admins).
 
 ## Folders (queries)
 
 | UI folder | Query |
 |-----------|-------|
 | Inbox | `status in (open,waiting)`, not spam |
+| Assigned to me | `assigned_human_id = current user` |
 | AI working | `triage_status` or `draft_status` in queued/running (active jobs only) |
 | Needs approval | AI/origin drafts with pending approval or awaiting request; excludes stale |
 | Awaiting reply | latest outbound |

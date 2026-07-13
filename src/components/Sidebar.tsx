@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import {
@@ -24,6 +24,7 @@ import {
   SidebarNestedButton,
   SidebarNestedLink,
 } from "./SidebarCollapsibleSection";
+import { fetchInboxUnreadCount } from "@/lib/inbox/client";
 import {
   CalendarDays,
   TrendingUp,
@@ -72,6 +73,31 @@ export function Sidebar() {
   const ui = useShellUI();
   const { enabled: debugEnabled, setEnabled: setDebugEnabled } = useDebugTrace();
   const [profileOpen, setProfileOpen] = useState(false);
+  const [inboxUnread, setInboxUnread] = useState(0);
+
+  useEffect(() => {
+    const workspaceId = state.workspace?.id;
+    if (!workspaceId) {
+      setInboxUnread(0);
+      return;
+    }
+    let cancelled = false;
+    const load = () => {
+      void fetchInboxUnreadCount(workspaceId)
+        .then((n) => {
+          if (!cancelled) setInboxUnread(n);
+        })
+        .catch(() => {
+          if (!cancelled) setInboxUnread(0);
+        });
+    };
+    load();
+    const timer = setInterval(load, 60_000);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [state.workspace?.id, pathname]);
 
   const workingCount = state.employees.filter((e) => e.status === "working").length;
   const pendingApprovals = state.approvals.filter((a) => a.status === "pending").length;
@@ -135,6 +161,7 @@ export function Sidebar() {
         <Link href="/inbox" className={cn("nav-link", isActive("/inbox") && "nav-link-active")}>
           <Mail className="h-[17px] w-[17px]" strokeWidth={1.8} />
           <span className="flex-1">Inbox</span>
+          {unreadBadge(inboxUnread)}
         </Link>
 
         <Link href="/drive" className={cn("nav-link", isActive("/drive") && "nav-link-active")}>

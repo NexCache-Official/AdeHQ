@@ -14,7 +14,27 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { AuthError } from "@/lib/supabase/auth-server";
 
-export type InboxAction = "read" | "send" | "organize" | "manage" | "approve";
+export type InboxAction =
+  | "read"
+  | "send"
+  | "organize"
+  | "manage"
+  | "approve"
+  | "compose"
+  | "assign"
+  | "create_ai_draft"
+  | "approve_ai_send"
+  | "manage_mailbox";
+
+/** Plan-facing permission names mapped onto mailbox grants. */
+export type EmailPermission =
+  | "email.read"
+  | "email.compose"
+  | "email.send"
+  | "email.assign"
+  | "email.create_ai_draft"
+  | "email.approve_ai_send"
+  | "email.manage_mailbox";
 
 export type InboxAccess = {
   role: string;
@@ -24,6 +44,8 @@ export type InboxAccess = {
   canOrganize: boolean;
   canManage: boolean;
   canApprove: boolean;
+  /** Granular aliases (same underlying grants). */
+  permissions: EmailPermission[];
 };
 
 const NO_ACCESS: Omit<InboxAccess, "role"> = {
@@ -33,7 +55,26 @@ const NO_ACCESS: Omit<InboxAccess, "role"> = {
   canOrganize: false,
   canManage: false,
   canApprove: false,
+  permissions: [],
 };
+
+function buildPermissions(flags: {
+  canRead: boolean;
+  canSend: boolean;
+  canOrganize: boolean;
+  canManage: boolean;
+  canApprove: boolean;
+}): EmailPermission[] {
+  const list: EmailPermission[] = [];
+  if (flags.canRead) list.push("email.read");
+  if (flags.canSend) {
+    list.push("email.compose", "email.send", "email.create_ai_draft");
+  }
+  if (flags.canOrganize) list.push("email.assign");
+  if (flags.canApprove) list.push("email.approve_ai_send");
+  if (flags.canManage) list.push("email.manage_mailbox");
+  return list;
+}
 
 /**
  * Resolve a user's effective access to a specific mailbox. Uses the secret
@@ -58,14 +99,18 @@ export async function getInboxAccess(
   const role = String(member.role);
 
   if (role === "owner" || role === "admin") {
-    return {
-      role,
-      isAdmin: true,
+    const flags = {
       canRead: true,
       canSend: true,
       canOrganize: true,
       canManage: true,
       canApprove: true,
+    };
+    return {
+      role,
+      isAdmin: true,
+      ...flags,
+      permissions: buildPermissions(flags),
     };
   }
 
@@ -85,8 +130,9 @@ export async function getInboxAccess(
     const canOrganize = canManage || (role === "manager" && canRead);
     // Approvers: manage grant or managers who can read.
     const canApprove = canManage || (role === "manager" && canRead);
+    const flags = { canRead, canSend, canOrganize, canManage, canApprove };
 
-    return { role, isAdmin: false, canRead, canSend, canOrganize, canManage, canApprove };
+    return { role, isAdmin: false, ...flags, permissions: buildPermissions(flags) };
   }
 
   // guest and anything else
@@ -96,14 +142,19 @@ export async function getInboxAccess(
 function actionAllowed(access: InboxAccess, action: InboxAction): boolean {
   switch (action) {
     case "read":
-      return access.canRead;
+    case "compose":
+      return action === "read" ? access.canRead : access.canSend;
     case "send":
+    case "create_ai_draft":
       return access.canSend;
     case "organize":
+    case "assign":
       return access.canOrganize;
     case "manage":
+    case "manage_mailbox":
       return access.canManage;
     case "approve":
+    case "approve_ai_send":
       return access.canApprove;
     default:
       return false;

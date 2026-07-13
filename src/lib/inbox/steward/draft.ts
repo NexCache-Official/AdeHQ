@@ -72,6 +72,7 @@ export async function runDraftJob(
       "id, direction, from_address, from_name, to_addresses, subject, text_body, created_at",
     )
     .eq("thread_id", threadId)
+    .neq("direction", "internal")
     .order("created_at", { ascending: false })
     .limit(maxMessages);
 

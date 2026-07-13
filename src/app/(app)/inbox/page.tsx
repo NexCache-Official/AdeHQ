@@ -15,6 +15,8 @@ import {
   Sparkles,
   CheckCircle2,
   Settings2,
+  UserRound,
+  Folder,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useStore } from "@/lib/demo-store";
@@ -33,6 +35,10 @@ import {
   updateMailboxSettings,
   assignThreadReq,
   cancelAiDraftReq,
+  postInternalNoteReq,
+  fetchAttachmentUrl,
+  fetchInboxBrief,
+  fetchMailboxMembers,
 } from "@/lib/inbox/client";
 import { useInboxRealtime } from "@/lib/inbox/use-inbox-realtime";
 import { ClaimGate } from "@/components/inbox/ClaimGate";
@@ -50,6 +56,7 @@ import type {
 
 const FOLDERS: { key: InboxFolder; label: string; icon: typeof InboxIcon }[] = [
   { key: "inbox", label: "Inbox", icon: InboxIcon },
+  { key: "assigned_to_me", label: "Assigned to me", icon: UserRound },
   { key: "ai_working", label: "AI working", icon: Sparkles },
   { key: "needs_approval", label: "Needs approval", icon: CheckCircle2 },
   { key: "awaiting", label: "Awaiting reply", icon: Clock },
@@ -94,7 +101,7 @@ export default function InboxPage() {
     open: false,
     initial: {},
   });
-  const [mobileView, setMobileView] = useState<"list" | "thread">("list");
+  const [mobileView, setMobileView] = useState<"folders" | "list" | "thread">("list");
   const [undoBanner, setUndoBanner] = useState<{
     outboxId: string;
     undoUntil: string;
@@ -107,6 +114,13 @@ export default function InboxPage() {
   const [drafting, setDrafting] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [assistanceMode, setAssistanceMode] = useState<string>("ai_triage");
+  const [brief, setBrief] = useState<{
+    greeting: string;
+    stats: { unread: number; needsApproval: number; highPriority: number; assignedToMe: number };
+  } | null>(null);
+  const [workspaceMembers, setWorkspaceMembers] = useState<
+    Array<{ id: string; name: string; email: string | null; role: string }>
+  >([]);
 
   const access: MailboxAccessFlags | null =
     mailbox && mailbox.claimed ? mailbox.access : null;
@@ -626,10 +640,49 @@ export default function InboxPage() {
     if (detail) setThreadDetail(detail);
   }, [workspaceId, selectedThreadId]);
 
+  const handleAssignHuman = useCallback(
+    async (humanId: string) => {
+      if (!workspaceId || !selectedThreadId) return;
+      await assignThreadReq({ workspaceId, threadId: selectedThreadId, humanId }).catch(() => {});
+      const detail = await fetchThread({ workspaceId, threadId: selectedThreadId }).catch(() => null);
+      if (detail) setThreadDetail(detail);
+    },
+    [workspaceId, selectedThreadId],
+  );
+
+  const handleAddInternalNote = useCallback(
+    async (text: string) => {
+      if (!workspaceId || !selectedThreadId) return;
+      await postInternalNoteReq({ workspaceId, threadId: selectedThreadId, text });
+      const detail = await fetchThread({ workspaceId, threadId: selectedThreadId }).catch(() => null);
+      if (detail) setThreadDetail(detail);
+    },
+    [workspaceId, selectedThreadId],
+  );
+
+  const handleOpenAttachment = useCallback(
+    async (attachmentId: string) => {
+      if (!workspaceId) return;
+      try {
+        const { url } = await fetchAttachmentUrl({ workspaceId, attachmentId });
+        window.open(url, "_blank", "noopener,noreferrer");
+      } catch {
+        /* ignore */
+      }
+    },
+    [workspaceId],
+  );
+
   useEffect(() => {
     if (!workspaceId || !mailbox || !mailbox.claimed) return;
     void fetchMailboxSettings(workspaceId)
       .then((s) => setAssistanceMode(s.assistanceMode))
+      .catch(() => {});
+    void fetchInboxBrief(workspaceId)
+      .then((b) => setBrief({ greeting: b.greeting, stats: b.stats }))
+      .catch(() => {});
+    void fetchMailboxMembers(workspaceId)
+      .then(setWorkspaceMembers)
       .catch(() => {});
   }, [workspaceId, mailbox]);
 
@@ -684,8 +737,13 @@ export default function InboxPage() {
 
   return (
     <div className="relative flex h-full min-h-0 bg-canvas">
-      {/* Folders */}
-      <nav className="hidden w-52 shrink-0 flex-col border-r border-border bg-surface px-2 py-3 md:flex">
+      {/* Folders — desktop always; mobile when mobileView=folders */}
+      <nav
+        className={cn(
+          "w-full shrink-0 flex-col border-r border-border bg-surface px-2 py-3 md:flex md:w-52",
+          mobileView === "folders" ? "flex" : "hidden",
+        )}
+      >
         <div className="px-2 pb-3">
           <button
             onClick={() => setComposer({ open: true, initial: {} })}
@@ -695,6 +753,19 @@ export default function InboxPage() {
             <PenSquare className="h-4 w-4" /> Compose
           </button>
         </div>
+        {brief && (
+          <div className="mx-2 mb-3 rounded-lg border border-border bg-canvas px-3 py-2.5">
+            <p className="text-xs font-medium text-ink">
+              {brief.greeting}
+            </p>
+            <div className="mt-2 grid grid-cols-2 gap-1.5 text-[10px] text-ink-3">
+              <span>{brief.stats.unread} new</span>
+              <span>{brief.stats.needsApproval} approval</span>
+              <span>{brief.stats.highPriority} high</span>
+              <span>{brief.stats.assignedToMe} assigned</span>
+            </div>
+          </div>
+        )}
         <p className="truncate px-3 pb-2 text-xs text-ink-3">{mailbox.mailbox.address}</p>
         {FOLDERS.map((f) => (
           <button
@@ -703,6 +774,7 @@ export default function InboxPage() {
               setFolder(f.key);
               setSelectedThreadId(null);
               setThreadDetail(null);
+              setMobileView("list");
             }}
             className={cn(
               "flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-ink-2 transition hover:bg-muted",
@@ -758,15 +830,31 @@ export default function InboxPage() {
       <div
         className={cn(
           "flex min-h-0 w-full flex-col border-r border-border md:w-80 md:shrink-0",
-          mobileView === "thread" && "hidden md:flex",
+          mobileView !== "list" && "hidden md:flex",
         )}
       >
         <div className="flex items-center justify-between border-b border-border px-4 py-3">
-          <h1 className="text-sm font-semibold capitalize text-ink">
-            {FOLDERS.find((f) => f.key === folder)?.label}
-          </h1>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setMobileView("folders")}
+              className="rounded p-1 text-ink-3 hover:bg-muted md:hidden"
+              aria-label="Folders"
+            >
+              <Folder className="h-4 w-4" />
+            </button>
+            <h1 className="text-sm font-semibold capitalize text-ink">
+              {FOLDERS.find((f) => f.key === folder)?.label}
+            </h1>
+          </div>
           {loadingList && <Loader2 className="h-4 w-4 animate-spin text-ink-3" />}
         </div>
+        {brief && (
+          <div className="hidden border-b border-border px-4 py-2 text-xs text-ink-3 md:block">
+            {brief.greeting} · {brief.stats.unread} unread · {brief.stats.highPriority} high
+            priority
+          </div>
+        )}
         <div className="min-h-0 flex-1 overflow-y-auto">
           {listItems.length === 0 && loadingList && (
             <div className="flex items-center justify-center gap-2 p-8 text-sm text-ink-3">
@@ -832,7 +920,7 @@ export default function InboxPage() {
       <div
         className={cn(
           "flex min-h-0 w-full flex-1 flex-col",
-          mobileView === "list" && "hidden md:flex",
+          mobileView !== "thread" && "hidden md:flex",
         )}
       >
         <button
@@ -846,6 +934,8 @@ export default function InboxPage() {
             thread={threadDetail}
             loading={loadingThread}
             access={mailbox.access}
+            workspaceMembers={workspaceMembers}
+            currentUserId={state.user?.id ?? null}
             onReply={startReply}
             onArchive={() => runThreadAction("archive")}
             onUnarchive={() => runThreadAction("unarchive")}
@@ -854,10 +944,13 @@ export default function InboxPage() {
             onDraftWithAi={() => void handleDraftWithAi()}
             onDismissSuggestion={() => void handleDismissSuggestion()}
             onAssignSuggested={() => void handleAssignSuggested()}
+            onAssignHuman={(id) => void handleAssignHuman(id)}
             onClearAssignee={() => void handleClearAssignee()}
             onCancelDraft={() => void handleCancelDraft()}
             onRetryDraft={() => void handleDraftWithAi()}
             onOpenLatestDraft={() => void handleOpenLatestDraft()}
+            onAddInternalNote={(text) => handleAddInternalNote(text)}
+            onOpenAttachment={(id) => void handleOpenAttachment(id)}
             drafting={drafting}
           />
         </div>
@@ -931,11 +1024,21 @@ function ThreadRow({
       type="button"
       onClick={onClick}
       className={cn(
-        "flex w-full flex-col gap-0.5 border-b border-border-2 px-4 py-3 text-left transition hover:bg-muted",
+        "relative flex w-full flex-col gap-0.5 border-b border-border-2 px-4 py-3 text-left transition hover:bg-muted",
         active && "bg-accent-soft hover:bg-accent-soft",
         thread.hasUnread && "bg-accent-soft/40",
       )}
     >
+      <span
+        className={cn(
+          "absolute inset-y-0 left-0 w-0.5",
+          thread.priority === "urgent" && "bg-rose-500",
+          thread.priority === "high" && "bg-amber-500",
+          thread.priority === "low" && "bg-border",
+          (!thread.priority || thread.priority === "normal") && "bg-transparent",
+        )}
+        aria-hidden
+      />
       <div className="flex items-center justify-between gap-2">
         <div className="flex min-w-0 items-center gap-2">
           {thread.hasUnread ? (

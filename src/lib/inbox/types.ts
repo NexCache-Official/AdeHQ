@@ -57,7 +57,8 @@ export type InboxFolder =
   | "archived"
   | "spam"
   | "ai_working"
-  | "needs_approval";
+  | "needs_approval"
+  | "assigned_to_me";
 
 export type TriageStatus =
   | "not_started"
@@ -92,6 +93,7 @@ export type MailboxAccessFlags = {
   canApprove: boolean;
   isAdmin: boolean;
   role: string;
+  permissions: string[];
 };
 
 export type InboxMailboxResponse =

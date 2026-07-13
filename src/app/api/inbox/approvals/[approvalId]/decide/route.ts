@@ -24,7 +24,7 @@ export async function POST(
       decision?: "approve" | "reject";
       reason?: string;
     };
-    const ctx = await resolveInboxRoute(request, body.workspaceId, "approve");
+    const ctx = await resolveInboxRoute(request, body.workspaceId, "approve_ai_send");
     if (body.decision !== "approve" && body.decision !== "reject") {
       return NextResponse.json({ error: "decision must be approve or reject" }, { status: 400 });
     }

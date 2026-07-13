@@ -27,7 +27,7 @@ export async function POST(
       fromAddress?: string;
       replyTo?: string | null;
     };
-    const ctx = await resolveInboxRoute(request, body.workspaceId, "approve");
+    const ctx = await resolveInboxRoute(request, body.workspaceId, "approve_ai_send");
 
     const { data: draft } = await ctx.secret
       .from("email_drafts")

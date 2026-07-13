@@ -47,6 +47,9 @@ export function applyFolderFilter(query: ThreadQuery, folder: InboxFolder): Thre
         .eq("is_spam", false)
         .not("latest_draft_id", "is", null)
         .in("draft_status", ["ready", "idle"]);
+    case "assigned_to_me":
+      // Human assignee filter applied in the threads route with current user id.
+      return query.eq("is_spam", false).neq("status", "archived");
     case "drafts":
       return query.eq("id", "00000000-0000-0000-0000-000000000000");
     default:

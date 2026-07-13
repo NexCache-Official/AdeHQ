@@ -52,14 +52,14 @@ export async function storeInboundWebhookEvent(
     }
   }
 
-  const isReceived = params.meta.eventType === "email.received";
   const { data, error } = await client
     .from("email_inbound_events")
     .insert({
       svix_id: params.svixId,
       provider_email_id: params.meta.providerEmailId,
       event_type: params.meta.eventType,
-      processing_state: isReceived ? "queued" : "ready",
+      // Always queue — webhook returns 200; cron/nudge drains (including delivery events).
+      processing_state: "queued",
       raw_payload: params.meta.rawPayload as object,
     })
     .select("id, processing_state")

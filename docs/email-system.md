@@ -144,11 +144,26 @@ Add all vars above under **Project → Settings → Environment Variables** (Pro
 Preview). Set `EMAIL_TEST_MODE=true` + `EMAIL_TEST_INBOX` on Preview so preview
 deployments never email real users. Redeploy after changes.
 
-## Workspace inbox (Slice 0–B)
+## Transactional vs Workspace Inbox
+
+AdeHQ has **two separate email systems**. Do not mix them.
+
+| | Transactional (`src/lib/email/`) | Workspace Inbox (`src/lib/inbox/`) |
+| --- | --- | --- |
+| Purpose | Auth, product, security, billing notifications | Shared conversational mailbox per workspace |
+| From | `noreply@adehq.com` / `EMAIL_FROM` | `{canonical}@inbox.adehq.com` |
+| Resend account | `RESEND_API_KEY` (transactional domain) | `RESEND_INBOX_API_KEY` (inbox domain) |
+| Store | `email_send_log` | `email_threads` / `email_messages` / outbox |
+| AI | Not involved | Cost-aware steward; on-demand drafts; approval gate |
+| Docs | This file | [`docs/workspace-inbox-foundation.md`](./workspace-inbox-foundation.md), [`docs/inbox-transport-proof.md`](./inbox-transport-proof.md) |
+
+Workspace inbox is claim-first, permissioned via mailbox grants, and never auto-sends AI mail without version-locked approval.
+
+## Workspace inbox (Slice 0–C)
 
 Conversational shared-inbox transport was proven in Slice 0
-([`docs/inbox-transport-proof.md`](inbox-transport-proof.md)). Slice A–B add the
-secure foundation + claim-first UI —
+([`docs/inbox-transport-proof.md`](inbox-transport-proof.md)). Slices A–C add the
+secure foundation, human UI, and AI steward —
 [`docs/workspace-inbox-foundation.md`](workspace-inbox-foundation.md).
 
 Do not reuse `noreply@adehq.com` / `sendEmail()` for workspace mailbox traffic.

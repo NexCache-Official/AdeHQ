@@ -103,6 +103,19 @@ export async function GET(
         nameById.set(String(e.id), String(e.name ?? "Employee"));
       }
     }
+    if (thread.assigned_human_id) {
+      const { data: profile } = await ctx.secret
+        .from("profiles")
+        .select("id, name, email")
+        .eq("id", thread.assigned_human_id)
+        .maybeSingle();
+      if (profile) {
+        nameById.set(
+          String(profile.id),
+          String(profile.name ?? "").trim() || String(profile.email ?? "Teammate"),
+        );
+      }
+    }
 
     const body: ThreadDetailDTO = {
       id: String(thread.id),
@@ -129,7 +142,9 @@ export async function GET(
       suggestedEmployeeId: (thread.suggested_employee_id as string) ?? null,
       assigneeName: thread.assigned_employee_id
         ? nameById.get(String(thread.assigned_employee_id)) ?? null
-        : null,
+        : thread.assigned_human_id
+          ? nameById.get(String(thread.assigned_human_id)) ?? null
+          : null,
       suggestedEmployeeName: thread.suggested_employee_id
         ? nameById.get(String(thread.suggested_employee_id)) ?? null
         : null,

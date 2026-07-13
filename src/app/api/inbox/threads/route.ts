@@ -21,6 +21,7 @@ const VALID_FOLDERS: InboxFolder[] = [
   "spam",
   "ai_working",
   "needs_approval",
+  "assigned_to_me",
 ];
 
 function decodeCursor(raw: string | null): { ts: string; id: string } | null {
@@ -61,6 +62,10 @@ export async function GET(request: NextRequest) {
       .limit(limit + 1);
 
     query = applyFolderFilter(query as never, folder) as never;
+
+    if (folder === "assigned_to_me") {
+      query = query.eq("assigned_human_id", ctx.user.id) as never;
+    }
 
     if (cursor && cursor.ts) {
       query = query.or(

@@ -22,7 +22,7 @@ export async function POST(
       humanId?: string | null;
       clear?: boolean;
     };
-    const ctx = await resolveInboxRoute(request, body.workspaceId, "organize");
+    const ctx = await resolveInboxRoute(request, body.workspaceId, "assign");
 
     const { data: thread } = await ctx.secret
       .from("email_threads")

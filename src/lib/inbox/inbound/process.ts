@@ -301,6 +301,46 @@ export async function processInboundEvent(
 
     const messageId = String(message.id);
 
+    // Best-effort raw MIME retention (private bucket).
+    try {
+      let rawBuf: Buffer | null = null;
+      if (email.rawDownloadUrl) {
+        const rawRes = await fetch(email.rawDownloadUrl);
+        if (rawRes.ok) rawBuf = Buffer.from(await rawRes.arrayBuffer());
+      }
+      if (!rawBuf) {
+        rawBuf = Buffer.from(
+          JSON.stringify({
+            headers,
+            from: email.from,
+            to: email.to,
+            cc: email.cc,
+            subject: email.subject,
+            text: email.text,
+            html: email.html,
+            messageId: messageIdHeader,
+            providerEmailId: email.id,
+          }),
+          "utf8",
+        );
+      }
+      const mimePath = `${resolved.workspaceId}/raw/${messageId}.eml`;
+      const mimeUpload = await client.storage.from("email-raw-mime").upload(mimePath, rawBuf, {
+        contentType: email.rawDownloadUrl ? "message/rfc822" : "application/json",
+        upsert: false,
+      });
+      if (!mimeUpload.error) {
+        await client
+          .from("email_messages")
+          .update({ raw_mime_storage_path: mimePath })
+          .eq("id", messageId);
+      } else {
+        console.warn("[inbox] raw mime upload failed", mimeUpload.error.message);
+      }
+    } catch (mimeErr) {
+      console.warn("[inbox] raw mime retention failed", mimeErr);
+    }
+
     const participantRows = [
       { role: "from", address: from.address, display_name: from.name },
       ...toAddresses.map((address) => ({ role: "to" as const, address, display_name: null })),
@@ -439,11 +479,23 @@ export async function processInboundEvent(
   }
 }
 
-/** Drain a few queued inbound events (serverless nudge). */
+/** Drain a few queued inbound events (serverless nudge). Reclaims stale locks. */
 export async function processQueuedInboundEvents(
   client: SupabaseClient,
   limit = 5,
 ): Promise<number> {
+  const cutoff = new Date(Date.now() - 5 * 60_000).toISOString();
+  await client
+    .from("email_inbound_events")
+    .update({
+      processing_state: "queued",
+      locked_at: null,
+      locked_by: null,
+      error: "lease_expired",
+    })
+    .eq("processing_state", "processing")
+    .lt("locked_at", cutoff);
+
   const { data, error } = await client
     .from("email_inbound_events")
     .select("id")

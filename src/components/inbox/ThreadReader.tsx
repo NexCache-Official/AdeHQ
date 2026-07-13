@@ -57,20 +57,34 @@ function deliveryHelp(status: string, error: string | null): string | null {
   return null;
 }
 
-function MessageBubble({ message }: { message: MessageDTO }) {
+function MessageBubble({
+  message,
+  onOpenAttachment,
+}: {
+  message: MessageDTO;
+  onOpenAttachment?: (attachmentId: string) => void;
+}) {
   const outbound = message.direction === "outbound";
+  const internal = message.direction === "internal";
   const deliveryBad = ["bounced", "failed", "complained"].includes(message.deliveryStatus);
   const deliveryPending = ["queued", "sending"].includes(message.deliveryStatus);
   const help = outbound ? deliveryHelp(message.deliveryStatus, message.deliveryError) : null;
 
   return (
-    <div className="border-b border-border-2 px-5 py-4 last:border-b-0">
+    <div
+      className={cn(
+        "border-b border-border-2 px-5 py-4 last:border-b-0",
+        internal && "bg-amber-50/40",
+      )}
+    >
       <div className="mb-2 flex items-baseline justify-between gap-3">
         <div className="min-w-0">
           <span className="text-sm font-medium text-ink">
-            {message.fromName || message.fromAddress || (outbound ? "You" : "Unknown")}
+            {internal
+              ? "Internal note"
+              : message.fromName || message.fromAddress || (outbound ? "You" : "Unknown")}
           </span>
-          {message.fromAddress && (
+          {!internal && message.fromAddress && (
             <span className="ml-2 truncate text-xs text-ink-3">{message.fromAddress}</span>
           )}
         </div>
@@ -88,10 +102,12 @@ function MessageBubble({ message }: { message: MessageDTO }) {
           <span>{formatTime(message.createdAt)}</span>
         </div>
       </div>
-      <div className="text-xs text-ink-3">
-        To: {message.to.join(", ") || "—"}
-        {message.cc.length > 0 && <span> · Cc: {message.cc.join(", ")}</span>}
-      </div>
+      {!internal && (
+        <div className="text-xs text-ink-3">
+          To: {message.to.join(", ") || "—"}
+          {message.cc.length > 0 && <span> · Cc: {message.cc.join(", ")}</span>}
+        </div>
+      )}
 
       {help && (deliveryBad || deliveryPending) && (
         <div
@@ -107,7 +123,7 @@ function MessageBubble({ message }: { message: MessageDTO }) {
         </div>
       )}
 
-      {message.htmlSanitised ? (
+      {message.htmlSanitised && !internal ? (
         <div
           className="prose prose-sm mt-3 max-w-none text-ink"
           dangerouslySetInnerHTML={{ __html: message.htmlSanitised }}
@@ -121,16 +137,18 @@ function MessageBubble({ message }: { message: MessageDTO }) {
       {message.attachments.length > 0 && (
         <div className="mt-3 flex flex-wrap gap-2">
           {message.attachments.map((a) => (
-            <span
+            <button
               key={a.id}
-              className="inline-flex items-center gap-1.5 rounded border border-border bg-muted px-2 py-1 text-xs text-ink-2"
+              type="button"
+              onClick={() => onOpenAttachment?.(a.id)}
+              className="inline-flex items-center gap-1.5 rounded border border-border bg-muted px-2 py-1 text-xs text-ink-2 hover:border-accent hover:text-ink"
             >
               <Paperclip className="h-3 w-3" />
               {a.filename || "Attachment"}
               {a.quarantineState !== "clean" && (
                 <span className="text-amber-700">({a.quarantineState})</span>
               )}
-            </span>
+            </button>
           ))}
         </div>
       )}
@@ -138,10 +156,14 @@ function MessageBubble({ message }: { message: MessageDTO }) {
   );
 }
 
+type ReaderTab = "messages" | "internal" | "context";
+
 export function ThreadReader({
   thread,
   loading,
   access,
+  workspaceMembers,
+  currentUserId,
   onReply,
   onArchive,
   onUnarchive,
@@ -150,15 +172,20 @@ export function ThreadReader({
   onDraftWithAi,
   onDismissSuggestion,
   onAssignSuggested,
+  onAssignHuman,
   onClearAssignee,
   onCancelDraft,
   onRetryDraft,
   onOpenLatestDraft,
+  onAddInternalNote,
+  onOpenAttachment,
   drafting,
 }: {
   thread: ThreadDetailDTO | null;
   loading: boolean;
   access: MailboxAccessFlags;
+  workspaceMembers?: Array<{ id: string; name: string }>;
+  currentUserId?: string | null;
   onReply: () => void;
   onArchive: () => void;
   onUnarchive: () => void;
@@ -167,15 +194,21 @@ export function ThreadReader({
   onDraftWithAi?: () => void;
   onDismissSuggestion?: () => void;
   onAssignSuggested?: () => void;
+  onAssignHuman?: (humanId: string) => void;
   onClearAssignee?: () => void;
   onCancelDraft?: () => void;
   onRetryDraft?: () => void;
   onOpenLatestDraft?: () => void;
+  onAddInternalNote?: (text: string) => Promise<void> | void;
+  onOpenAttachment?: (attachmentId: string) => void;
   drafting?: boolean;
 }) {
   const archived = thread?.status === "archived";
   const isSpam = thread?.isSpam ?? false;
   const [assignBusy, setAssignBusy] = useState(false);
+  const [tab, setTab] = useState<ReaderTab>("messages");
+  const [noteText, setNoteText] = useState("");
+  const [noteBusy, setNoteBusy] = useState(false);
 
   const showNextStep =
     thread &&
@@ -191,13 +224,14 @@ export function ThreadReader({
     thread.suggestedEmployeeId !== thread.assigneeId &&
     thread.assignmentSource !== "human";
 
-  const showWhatMatters =
-    thread &&
-    (thread.keyPoints.length > 0 ||
-      thread.summary ||
-      thread.triageStatus === "queued" ||
-      thread.triageStatus === "running" ||
-      thread.triageStatus === "failed");
+  const customerMessages = useMemo(
+    () => (thread?.messages ?? []).filter((m) => m.direction !== "internal"),
+    [thread],
+  );
+  const internalMessages = useMemo(
+    () => (thread?.messages ?? []).filter((m) => m.direction === "internal"),
+    [thread],
+  );
 
   const toolbar = useMemo(
     () => (
@@ -335,7 +369,31 @@ export function ThreadReader({
         </div>
       </div>
 
-      {showWhatMatters && (
+      <div className="flex gap-1 border-b border-border px-3">
+        {(
+          [
+            ["messages", "Messages"],
+            ["internal", `Internal${internalMessages.length ? ` (${internalMessages.length})` : ""}`],
+            ["context", "Context"],
+          ] as const
+        ).map(([key, label]) => (
+          <button
+            key={key}
+            type="button"
+            onClick={() => setTab(key)}
+            className={cn(
+              "px-3 py-2 text-xs font-medium",
+              tab === key
+                ? "border-b-2 border-accent text-accent-d"
+                : "text-ink-3 hover:text-ink",
+            )}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {tab === "context" && (
         <div className="border-b border-border bg-muted/40 px-5 py-3">
           <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-ink-3">
             What matters
@@ -346,6 +404,8 @@ export function ThreadReader({
             <p className="text-sm text-rose-700">
               Triage failed — the email is still available in your inbox.
             </p>
+          ) : thread.keyPoints.length === 0 && !thread.summary ? (
+            <p className="text-sm text-ink-3">No steward signals yet.</p>
           ) : (
             <>
               <ul className="space-y-1 text-sm text-ink-2">
@@ -364,7 +424,7 @@ export function ThreadReader({
         </div>
       )}
 
-      {showSuggestOwner && (
+      {showSuggestOwner && tab === "messages" && (
         <div className="flex flex-wrap items-center gap-2 border-b border-border px-5 py-3">
           <UserPlus className="h-4 w-4 text-ink-3" />
           <span className="min-w-0 flex-1 text-sm text-ink">
@@ -402,18 +462,43 @@ export function ThreadReader({
         </div>
       )}
 
-      {thread.assigneeId && access.canOrganize && onClearAssignee && (
-        <div className="flex items-center gap-2 border-b border-border px-5 py-2 text-xs text-ink-3">
-          <span>
-            Assigned to {thread.assigneeName || "employee"} (assignment does not start drafting)
-          </span>
-          <button type="button" onClick={onClearAssignee} className="underline hover:text-ink">
-            Clear
-          </button>
+      {access.canOrganize && onAssignHuman && tab === "messages" && (
+        <div className="flex flex-wrap items-center gap-2 border-b border-border px-5 py-2 text-xs">
+          <span className="text-ink-3">Assign to human</span>
+          <select
+            className="rounded-md border border-border bg-canvas px-2 py-1 text-ink"
+            defaultValue=""
+            onChange={(e) => {
+              const id = e.target.value;
+              if (!id) return;
+              setAssignBusy(true);
+              Promise.resolve(onAssignHuman(id)).finally(() => {
+                setAssignBusy(false);
+                e.target.value = "";
+              });
+            }}
+          >
+            <option value="" disabled>
+              Choose teammate…
+            </option>
+            {(workspaceMembers ?? [])
+              .filter((m) => m.id !== currentUserId || true)
+              .map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.name}
+                  {m.id === currentUserId ? " (you)" : ""}
+                </option>
+              ))}
+          </select>
+          {thread.assigneeId && onClearAssignee && (
+            <button type="button" onClick={onClearAssignee} className="underline text-ink-3 hover:text-ink">
+              Clear assignee
+            </button>
+          )}
         </div>
       )}
 
-      {showNextStep && (
+      {showNextStep && tab === "messages" && (
         <div className="flex flex-wrap items-center gap-2 border-b border-border bg-accent-soft/50 px-5 py-3">
           <Sparkles className="h-4 w-4 text-accent-d" />
           <span className="min-w-0 flex-1 text-sm text-ink">
@@ -443,9 +528,73 @@ export function ThreadReader({
       )}
 
       <div className="min-h-0 flex-1 overflow-y-auto">
-        {thread.messages.map((m) => (
-          <MessageBubble key={m.id} message={m} />
-        ))}
+        {tab === "messages" &&
+          customerMessages.map((m) => (
+            <MessageBubble key={m.id} message={m} onOpenAttachment={onOpenAttachment} />
+          ))}
+        {tab === "internal" && (
+          <>
+            {internalMessages.length === 0 && (
+              <p className="p-6 text-center text-sm text-ink-3">
+                No internal notes yet. Notes stay inside the workspace.
+              </p>
+            )}
+            {internalMessages.map((m) => (
+              <MessageBubble key={m.id} message={m} />
+            ))}
+            {access.canSend && onAddInternalNote && (
+              <div className="border-t border-border p-4">
+                <textarea
+                  value={noteText}
+                  onChange={(e) => setNoteText(e.target.value)}
+                  rows={3}
+                  placeholder="Add an internal note…"
+                  className="w-full rounded-lg border border-border bg-canvas px-3 py-2 text-sm text-ink outline-none focus:border-accent"
+                />
+                <button
+                  type="button"
+                  disabled={noteBusy || !noteText.trim()}
+                  onClick={() => {
+                    const text = noteText.trim();
+                    if (!text) return;
+                    setNoteBusy(true);
+                    Promise.resolve(onAddInternalNote(text))
+                      .then(() => setNoteText(""))
+                      .finally(() => setNoteBusy(false));
+                  }}
+                  className="mt-2 rounded-md bg-ink px-3 py-1.5 text-xs font-medium text-white disabled:opacity-40"
+                >
+                  {noteBusy ? "Saving…" : "Add note"}
+                </button>
+              </div>
+            )}
+          </>
+        )}
+        {tab === "context" && (
+          <div className="space-y-3 p-5 text-sm text-ink-2">
+            <p>
+              <span className="text-ink-3">Category:</span> {thread.category || "—"}
+            </p>
+            <p>
+              <span className="text-ink-3">Priority:</span> {thread.priority}
+            </p>
+            <p>
+              <span className="text-ink-3">Reply required:</span>{" "}
+              {thread.replyRequired ? "Yes" : "No"}
+            </p>
+            {thread.matchReason && (
+              <p>
+                <span className="text-ink-3">Why selected:</span> {thread.matchReason}
+              </p>
+            )}
+            {thread.suggestedNextAction && (
+              <p>
+                <span className="text-ink-3">Suggested next step:</span>{" "}
+                {thread.suggestedNextAction}
+              </p>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

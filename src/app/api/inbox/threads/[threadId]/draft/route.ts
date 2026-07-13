@@ -28,7 +28,7 @@ export async function POST(
       rewriteType?: "shorter" | "warmer" | "persuasive" | null;
       requestId?: string;
     };
-    const ctx = await resolveInboxRoute(request, body.workspaceId, "send");
+    const ctx = await resolveInboxRoute(request, body.workspaceId, "create_ai_draft");
 
     const { data: thread } = await ctx.secret
       .from("email_threads")

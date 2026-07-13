@@ -2,20 +2,22 @@
  * Production Resend webhook for workspace inbox.
  * POST /api/inbox/webhooks/resend
  *
- * verify → idempotent store → process → 200
- * Never runs AI. Processing is awaited so Vercel does not freeze the
- * function after the response (fire-and-forget was dropping queued events).
+ * verify → idempotent store → 200 immediately.
+ * Processing is best-effort nudge + cron drain (/api/inbox/jobs/process).
+ * Never runs AI in this request.
  */
 
 import { NextRequest, NextResponse } from "next/server";
 import { createSupabaseSecretClient } from "@/lib/supabase/server";
 import { getWorkspaceEmailProvider } from "@/lib/inbox/provider/resend";
 import { storeInboundWebhookEvent } from "@/lib/inbox/inbound/store-event";
-import { processInboundEvent } from "@/lib/inbox/inbound/process";
+import { processQueuedInboundEvents } from "@/lib/inbox/inbound/process";
+import { processQueuedOutbox } from "@/lib/inbox/outbox/process";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-export const maxDuration = 60;
+/** Short — we return after enqueue; cron recovers abandoned work. */
+export const maxDuration = 15;
 
 export async function POST(req: NextRequest) {
   const rawBody = await req.text();
@@ -37,26 +39,21 @@ export async function POST(req: NextRequest) {
   const client = createSupabaseSecretClient();
   const stored = await storeInboundWebhookEvent(client, { meta, svixId });
 
-  let processed: { ok: boolean; reason?: string } | null = null;
+  // Best-effort drain — must not delay the 200. Cron recovers if this is killed.
   if (!stored.duplicate) {
-    try {
-      processed = await processInboundEvent(client, stored.eventId);
-    } catch (err) {
-      console.warn("[inbox] process failed after store", err);
-      processed = {
-        ok: false,
-        reason: err instanceof Error ? err.message : String(err),
-      };
-    }
+    void Promise.all([
+      processQueuedInboundEvents(client, 3),
+      // Delivery events are stored as ready and applied inside processInboundEvent;
+      // also nudge outbox for undo-window flushes.
+      processQueuedOutbox(client, 2),
+    ]).catch((err) => console.warn("[inbox] webhook drain nudge failed", err));
   }
 
-  // Always 200 after verify+store so Resend does not hammer retries.
-  // Failed process leaves the event for /api/inbox/jobs/process to drain.
   return NextResponse.json({
     ok: true,
     duplicate: stored.duplicate,
     eventId: stored.eventId,
     eventType: meta.eventType,
-    processed,
+    queued: !stored.duplicate,
   });
 }

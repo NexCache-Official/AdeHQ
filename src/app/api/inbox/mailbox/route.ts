@@ -44,6 +44,7 @@ export async function GET(request: NextRequest) {
         canOrganize: access.canOrganize,
         canManage: access.canManage,
         canApprove: access.canApprove,
+        permissions: access.permissions,
       },
     };
     return NextResponse.json(body);
