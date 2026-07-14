@@ -349,6 +349,8 @@ export function RoomChat({
   const [browserResearchBusy, setBrowserResearchBusy] = useState(false);
   const deliveredResearchRepliesRef = useRef(new Set<string>());
   const bottomRef = useRef<HTMLDivElement>(null);
+  const messagesScrollRef = useRef<HTMLDivElement>(null);
+  const scrollTopicKeyRef = useRef<string | null>(null);
 
   const allTopicMessages = topic
     ? room.messages
@@ -466,9 +468,36 @@ export function RoomChat({
     [room.humans, state.workspaceMembers],
   );
 
+  // Reset pagination when switching room/topic so we always show the latest page.
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-  }, [topicMessages.length, activeRuns.length, browserResearchRuns.length]);
+    setMessageLimit(MESSAGE_PAGE);
+  }, [room.id, topic?.id]);
+
+  useEffect(() => {
+    const key = `${room.id}:${topic?.id ?? ""}`;
+    const switched = scrollTopicKeyRef.current !== key;
+    scrollTopicKeyRef.current = key;
+    const scroller = messagesScrollRef.current;
+    if (!scroller) {
+      bottomRef.current?.scrollIntoView({
+        behavior: switched ? "auto" : "smooth",
+        block: "end",
+      });
+      return;
+    }
+    // Instant jump on chat switch; smooth only for new messages in the same thread.
+    scroller.scrollTo({
+      top: scroller.scrollHeight,
+      behavior: switched ? "auto" : "smooth",
+    });
+  }, [
+    room.id,
+    topic?.id,
+    topicMessages.length,
+    activeRuns.length,
+    browserResearchRuns.length,
+    displayMessages.at(-1)?.id,
+  ]);
 
   useEffect(() => {
     if (!topic || backend !== "supabase" || !state.workspace?.id) {
@@ -1718,7 +1747,7 @@ export function RoomChat({
         </div>
       )}
 
-      <div className="flex-1 overflow-y-auto px-[26px] pb-2 pt-[18px]">
+      <div ref={messagesScrollRef} className="flex-1 overflow-y-auto px-[26px] pb-2 pt-[18px]">
         {isMayaHiringMode && !mayaHiring ? (
           <div className="flex h-full min-h-[200px] items-center justify-center gap-2 text-sm text-ink-3">
             <Loader2 className="h-4 w-4 animate-spin" />

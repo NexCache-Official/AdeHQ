@@ -260,7 +260,9 @@ export function toolReceiptArtifact(result: ToolCallResult): MessageArtifact | n
         meta: {
           toolName: result.tool,
           toolStatus: "success",
-          href: `/drive?artifact=${objectId}`,
+          href: exportId
+            ? `/drive?export=${encodeURIComponent(exportId)}&section=exports`
+            : `/drive?artifact=${encodeURIComponent(objectId)}&section=artifacts`,
           subtitle: fileExtension ? `Open in Drive · .${fileExtension}` : "Open in Drive",
           exportId,
           fileExtension,
@@ -285,6 +287,10 @@ export function toolOutcomeArtifact(
   const label = humanToolLabel(result.tool);
 
   if (result.status === "queued") {
+    const createsDriveFile =
+      result.tool.startsWith("artifact.create") ||
+      result.tool === "artifact.convertFile" ||
+      result.tool === "artifact.updateSpreadsheet";
     return {
       type: "tool_result",
       id: result.jobId ?? result.toolRunId ?? result.tool,
@@ -293,7 +299,9 @@ export function toolOutcomeArtifact(
         toolName: result.tool,
         toolStatus: "queued",
         jobId: result.jobId,
-        subtitle: "Saved to Drive when ready. This usually takes a few seconds.",
+        subtitle: createsDriveFile
+          ? "Creating the file, then saving it to Drive…"
+          : "This usually takes a few seconds.",
         href: result.jobId ? `/work-log` : undefined,
       },
     };

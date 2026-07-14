@@ -163,9 +163,13 @@ export async function recalculateWorkspaceUsage(
   const sum = (rows: Array<{ size_bytes?: number }> | null) =>
     (rows ?? []).reduce((acc, row) => acc + Number(row.size_bytes ?? 0), 0);
 
-  const usedBytes = sum(filesResult.data as Array<{ size_bytes?: number }>)
-    + sum(evidenceResult.data as Array<{ size_bytes?: number }>)
-    + sum(exportsResult.data as Array<{ size_bytes?: number }>);
+  const uploadsBytes = sum(filesResult.data as Array<{ size_bytes?: number }>);
+  const evidenceBytes = sum(evidenceResult.data as Array<{ size_bytes?: number }>);
+  const exportsBytes = sum(exportsResult.data as Array<{ size_bytes?: number }>);
+  const uploadsCount = filesResult.data?.length ?? 0;
+  const evidenceCount = evidenceResult.data?.length ?? 0;
+  const exportsCount = exportsResult.data?.length ?? 0;
+  const usedBytes = uploadsBytes + evidenceBytes + exportsBytes;
 
   const { error } = await client
     .from("workspace_storage_quotas")
@@ -173,5 +177,15 @@ export async function recalculateWorkspaceUsage(
     .eq("workspace_id", workspaceId);
   if (error) throw error;
 
-  return { ...quota, usedBytes, updatedAt: nowISO() };
+  return {
+    ...quota,
+    usedBytes,
+    updatedAt: nowISO(),
+    breakdown: {
+      uploads: { count: uploadsCount, bytes: uploadsBytes },
+      exports: { count: exportsCount, bytes: exportsBytes },
+      evidence: { count: evidenceCount, bytes: evidenceBytes },
+      totalFiles: uploadsCount + exportsCount + evidenceCount,
+    },
+  };
 }

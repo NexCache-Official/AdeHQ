@@ -20,6 +20,7 @@ import { cn } from "@/lib/utils";
 import { AlertCircle, CheckCircle2, Clock, Loader2, RefreshCw, ShieldAlert } from "lucide-react";
 import { Button } from "@/components/ui";
 import { ChatFileMiniViewer } from "@/components/chat/ChatFileMiniViewer";
+import { notifyDriveUpdated } from "@/lib/drive/client";
 
 type ToolResultContext = {
   workspaceId?: string;
@@ -69,6 +70,7 @@ export function ToolResultInlineCard({
   const [retrying, setRetrying] = useState(false);
   const [retryMessage, setRetryMessage] = useState<string | null>(null);
   const persistedRef = useRef(false);
+  const prevStatusRef = useRef(artifact.meta?.toolStatus);
 
   const status = display.meta?.toolStatus ?? "failed";
   const href = display.meta?.href;
@@ -101,12 +103,24 @@ export function ToolResultInlineCard({
     actions.updateMessage(context.roomId, context.messageId, {
       artifacts: replaceQueuedArtifactInList(message.artifacts, jobId, resolved),
     });
+    if (resolved.meta?.toolStatus === "success" && isDriveFileTool(resolved.meta?.toolName)) {
+      notifyDriveUpdated();
+    }
   };
 
   useEffect(() => {
+    const prev = prevStatusRef.current;
+    prevStatusRef.current = artifact.meta?.toolStatus;
     setDisplay(artifact);
     setChecking(artifact.meta?.toolStatus === "queued");
     persistedRef.current = false;
+    if (
+      prev === "queued" &&
+      artifact.meta?.toolStatus === "success" &&
+      isDriveFileTool(artifact.meta?.toolName)
+    ) {
+      notifyDriveUpdated();
+    }
   }, [artifact]);
 
   useEffect(() => {
@@ -358,6 +372,12 @@ export function ToolResultInlineCard({
       display.meta?.fileName ??
       cleanChatFileTitle(display.label.replace(/^(Spreadsheet|Report|Document|Presentation|File) ready — /i, ""));
 
+    // Only pull markdown twin text for spreadsheets (table fallback). Never for
+    // pptx/pdf/docx — that made Drive/chat open the .md sales deck instead.
+    const useMarkdownTwin =
+      Boolean(exportId) &&
+      (previewKind === "spreadsheet" || fileExtension === "xlsx" || fileExtension === "csv");
+
     return (
       <ChatFileMiniViewer
         workspaceId={context.workspaceId}
@@ -368,7 +388,7 @@ export function ToolResultInlineCard({
             : { type: "artifact", id: artifactId }
         }
         previewSource={
-          exportId ? { type: "artifact", id: artifactId } : undefined
+          useMarkdownTwin ? { type: "artifact", id: artifactId } : undefined
         }
         extension={fileExtension}
         mimeType={display.meta?.mimeType}

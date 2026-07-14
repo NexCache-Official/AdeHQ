@@ -1708,7 +1708,7 @@ export async function processQueuedAgentRun(
           ...routeInput,
           message: `${content}
 
-[System reminder: This request requires real effects.toolCalls in your JSON response (e.g. artifact.createSpreadsheet, crm.createContact, tasks.createTask). Do not only describe the action in reply — emit the tool call(s) now with complete args.]`,
+[System reminder: This request requires real effects.toolCalls in your JSON response (e.g. artifact.createPdfReport, artifact.createDocx, artifact.createPresentation, artifact.createSpreadsheet, crm.createContact, tasks.createTask). Do not only say you will follow up — emit the tool call(s) now with complete args. create* already saves to Drive; do not also call artifact.saveToDrive.]`,
         },
         routeOptions,
         queuedMeta,

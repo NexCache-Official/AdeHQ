@@ -197,7 +197,7 @@ export function DriveExportTile({
       draggable={draggable}
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}
-      onOpen={onDownload ?? onPreview}
+      onOpen={onPreview ?? onDownload}
       onPreview={onPreview}
       onDownload={onDownload}
       highlightDownload

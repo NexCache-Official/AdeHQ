@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { AuthError, requireAuthUser, requireWorkspaceMembership } from "@/lib/supabase/auth-server";
-import { ensureWorkspaceQuota } from "@/lib/drive/quota-server";
+import { recalculateWorkspaceUsage } from "@/lib/drive/quota-server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -14,7 +14,8 @@ export async function GET(request: NextRequest) {
     }
 
     await requireWorkspaceMembership(client, workspaceId, user.id);
-    const quota = await ensureWorkspaceQuota(workspaceId);
+    // Recalculate from live file/export/evidence rows so the bar matches Supabase.
+    const quota = await recalculateWorkspaceUsage(workspaceId);
 
     return NextResponse.json({ quota });
   } catch (error) {

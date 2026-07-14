@@ -78,8 +78,23 @@ export async function executeEmployeeToolCalls(
     toolCalls: ToolCallEffect[];
   },
 ): Promise<EmployeeToolCallOutcome> {
-  const calls = (params.toolCalls ?? [])
-    .filter((call) => call && typeof call.tool === "string" && call.tool.includes("."))
+  const CREATE_ALREADY_SAVES = new Set([
+    "artifact.createSpreadsheet",
+    "artifact.createPdfReport",
+    "artifact.createDocx",
+    "artifact.createPresentation",
+    "artifact.convertFile",
+    "artifact.updateSpreadsheet",
+  ]);
+
+  const rawCalls = (params.toolCalls ?? []).filter(
+    (call) => call && typeof call.tool === "string" && call.tool.includes("."),
+  );
+  // create* jobs already persist a Drive binary — a parallel saveToDrive chip is
+  // redundant and shows as two "Generating…" cards at once.
+  const hasCreateThatSaves = rawCalls.some((call) => CREATE_ALREADY_SAVES.has(call.tool));
+  const calls = rawCalls
+    .filter((call) => !(hasCreateThatSaves && call.tool === "artifact.saveToDrive"))
     .slice(0, MAX_TOOL_CALLS_PER_RESPONSE);
 
   if (!calls.length) {

@@ -144,7 +144,7 @@ async function persistBinaryExport(
     workspace_id: params.workspaceId,
     room_id: params.roomId ?? null,
     topic_id: params.topicId ?? null,
-    title: `${params.title} (export)`,
+    title: params.title,
     export_type: params.exportType,
     storage_bucket: DRIVE_BUCKETS.exports,
     storage_path: storagePath,
@@ -153,20 +153,47 @@ async function persistBinaryExport(
     source_artifact_ids: [params.artifactId],
     source_file_ids: [],
     created_by_user_id: null,
-    metadata: { generatedByEmployeeId: params.employeeId },
+    metadata: {
+      generatedByEmployeeId: params.employeeId,
+      fileExtension: params.ext,
+      sourceArtifactId: params.artifactId,
+    },
   });
   if (insertError) throw insertError;
 
-  await recordStorageUsage({
-    workspaceId: params.workspaceId,
-    eventType: "export",
-    bucket: DRIVE_BUCKETS.exports,
-    objectPath: storagePath,
-    sizeBytes: params.buffer.byteLength,
-    deltaBytes: params.buffer.byteLength,
-    entityType: "export",
-    entityId: exportId,
-  }).catch(() => undefined);
+  try {
+    await recordStorageUsage({
+      workspaceId: params.workspaceId,
+      eventType: "export",
+      bucket: DRIVE_BUCKETS.exports,
+      objectPath: storagePath,
+      sizeBytes: params.buffer.byteLength,
+      deltaBytes: params.buffer.byteLength,
+      entityType: "export",
+      entityId: exportId,
+    });
+  } catch (quotaError) {
+    console.warn("[AdeHQ drive] recordStorageUsage failed after export", {
+      exportId,
+      workspaceId: params.workspaceId,
+      error: quotaError instanceof Error ? quotaError.message : String(quotaError),
+    });
+  }
+
+  // Mark the markdown twin so Drive "All files" can hide it in favor of this binary.
+  await client
+    .from("artifacts")
+    .update({
+      metadata: {
+        integrationGenerated: true,
+        binaryCompanion: true,
+        binaryExportId: exportId,
+        binaryExportExt: params.ext,
+        displayTitle: params.title,
+      },
+    })
+    .eq("id", params.artifactId)
+    .eq("workspace_id", params.workspaceId);
 
   return { exportId, storagePath };
 }
@@ -186,12 +213,16 @@ async function createArtifactRow(
   },
 ): Promise<string> {
   const artifactId = randomUUID();
+  const kind =
+    typeof params.contentJson.kind === "string" ? String(params.contentJson.kind) : "note";
+  // Distinct from the binary export title so Drive doesn't show two identical names.
+  const aiSourceTitle = `${params.title} — AI source (${kind}).md`;
   const { error } = await client.from("artifacts").insert({
     workspace_id: params.workspaceId,
     id: artifactId,
     room_id: params.roomId ?? null,
     topic_id: params.topicId ?? null,
-    title: params.title,
+    title: aiSourceTitle,
     artifact_type: params.artifactType,
     status: "saved",
     content_markdown: params.contentMarkdown,
@@ -202,7 +233,12 @@ async function createArtifactRow(
     source_message_ids: params.triggerMessageId ? [params.triggerMessageId] : [],
     source_chunk_ids: [],
     source_citations: [],
-    metadata: { integrationGenerated: true },
+    metadata: {
+      integrationGenerated: true,
+      binaryCompanion: true,
+      sourceKind: kind,
+      displayTitle: params.title,
+    },
   });
   if (error) throw error;
 

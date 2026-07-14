@@ -96,8 +96,11 @@ export default function DrivePage() {
   useEffect(() => {
     const sectionParam = searchParams.get("section");
     const artifactParam = searchParams.get("artifact");
-    if (artifactParam) {
-      setSection("all");
+    const exportParam = searchParams.get("export");
+    if (exportParam) {
+      setSection("exports");
+    } else if (artifactParam) {
+      setSection(sectionParam === "artifacts" ? "artifacts" : "all");
     } else if (
       sectionParam === "files" ||
       sectionParam === "artifacts" ||
@@ -108,13 +111,6 @@ export default function DrivePage() {
       setSection(sectionParam);
     }
   }, [searchParams]);
-
-  useEffect(() => {
-    const artifactId = searchParams.get("artifact");
-    if (!artifactId || !data?.artifacts.length) return;
-    const artifact = data.artifacts.find((item) => item.id === artifactId);
-    if (artifact) setViewerArtifact(artifact);
-  }, [data?.artifacts, searchParams]);
 
   const load = useCallback(async () => {
     if (backend !== "supabase" && !ENABLE_DEMO_MODE) {
@@ -161,7 +157,14 @@ export default function DrivePage() {
   useEffect(() => {
     const refresh = () => void load();
     window.addEventListener(DRIVE_UPDATED_EVENT, refresh);
-    return () => window.removeEventListener(DRIVE_UPDATED_EVENT, refresh);
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void load();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      window.removeEventListener(DRIVE_UPDATED_EVENT, refresh);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
   }, [load]);
 
   const itemCount = useMemo(() => {
@@ -247,6 +250,7 @@ export default function DrivePage() {
   const handlePreview = async (type: DriveItemType, id: string) => {
     if (backend !== "supabase") return;
     setError(null);
+    setViewerArtifact(null);
     try {
       const result = await fetchDriveDownload(workspaceId, type, id);
       setPreview(result);
@@ -254,6 +258,49 @@ export default function DrivePage() {
       setError(err instanceof Error ? err.message : "Could not preview item.");
     }
   };
+
+  // Deep links: prefer binary exports over markdown AI-source twins.
+  useEffect(() => {
+    if (backend !== "supabase" || !data) return;
+    const exportId = searchParams.get("export");
+    const artifactId = searchParams.get("artifact");
+
+    const openExport = (id: string) => {
+      setViewerArtifact(null);
+      void handlePreview("export", id);
+    };
+
+    if (exportId) {
+      const item = data.exports.find((entry) => entry.id === exportId);
+      if (item) openExport(item.id);
+      return;
+    }
+
+    if (!artifactId) return;
+
+    const linkedExport = data.exports.find(
+      (entry) =>
+        entry.sourceArtifactIds?.includes(artifactId) ||
+        String(entry.metadata?.sourceArtifactId ?? "") === artifactId,
+    );
+    if (linkedExport) {
+      openExport(linkedExport.id);
+      return;
+    }
+
+    const artifact = data.artifacts.find((item) => item.id === artifactId);
+    if (!artifact) return;
+    const binaryExportId = artifact.metadata?.binaryExportId;
+    if (typeof binaryExportId === "string") {
+      const byMeta = data.exports.find((entry) => entry.id === binaryExportId);
+      if (byMeta) {
+        openExport(byMeta.id);
+        return;
+      }
+    }
+    setViewerArtifact(artifact);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- deep-link once list is ready
+  }, [backend, data, searchParams, workspaceId]);
 
   const handleDownload = async (type: DriveItemType, id: string) => {
     if (backend !== "supabase") return;
@@ -401,9 +448,22 @@ export default function DrivePage() {
             <div>
               <p className="text-sm font-medium text-ink">Storage quota</p>
               <p className="text-xs text-ink-3">
-                {formatDriveBytes(quota.usedBytes)} of {formatDriveBytes(quota.maxWorkspaceBytes)} used ·{" "}
+                {formatDriveBytes(quota.usedBytes)} of {formatDriveBytes(quota.maxWorkspaceBytes)} used
+                {quota.breakdown
+                  ? ` · ${quota.breakdown.totalFiles} files in Supabase`
+                  : ""}
+                {" · "}
                 {quota.planTier} plan · max {formatDriveBytes(quota.maxFileBytes)} per file
               </p>
+              {quota.breakdown && (
+                <p className="mt-1 text-[11px] text-ink-3">
+                  Uploads {quota.breakdown.uploads.count} ({formatDriveBytes(quota.breakdown.uploads.bytes)})
+                  {" · "}
+                  Exports {quota.breakdown.exports.count} ({formatDriveBytes(quota.breakdown.exports.bytes)})
+                  {" · "}
+                  Evidence {quota.breakdown.evidence.count} ({formatDriveBytes(quota.breakdown.evidence.bytes)})
+                </p>
+              )}
             </div>
             <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-ink-2">
               {usagePct}% full
@@ -415,7 +475,7 @@ export default function DrivePage() {
                 "h-full rounded-full transition-all",
                 usagePct >= 90 ? "bg-rose-500" : usagePct >= 70 ? "bg-amber-500" : "bg-accent",
               )}
-              style={{ width: `${usagePct}%` }}
+              style={{ width: `${Math.max(usagePct, quota.usedBytes > 0 ? 1 : 0)}%` }}
             />
           </div>
         </div>
@@ -564,7 +624,10 @@ export default function DrivePage() {
                   onOpenFolder={setFolderId}
                   onDeleteFolder={handleDeleteFolder}
                   onDeleteFile={handleDeleteFile}
-                  onOpenArtifact={setViewerArtifact}
+                  onOpenArtifact={(artifact) => {
+                    setPreview(null);
+                    setViewerArtifact(artifact);
+                  }}
                   onPreview={handlePreview}
                   onDownload={handleDownload}
                 />
@@ -615,11 +678,12 @@ export default function DrivePage() {
 function QuotaPanel({ quota }: { quota: WorkspaceStorageQuota | null }) {
   if (!quota) return null;
   const pct = driveUsagePercent(quota.usedBytes, quota.maxWorkspaceBytes);
+  const b = quota.breakdown;
   return (
     <div className="rounded-2xl border border-border bg-surface p-5">
-      <h2 className="text-lg font-semibold text-ink">Workspace quotas</h2>
+      <h2 className="text-lg font-semibold text-ink">Workspace storage</h2>
       <p className="mt-1 text-sm text-ink-3">
-        AdeHQ enforces app-level limits on top of Supabase bucket settings. Supabase project limits apply separately.
+        Live totals from Supabase Storage (uploads, AI exports, and evidence). Recalculated whenever you open Drive.
       </p>
       <dl className="mt-5 grid gap-4 sm:grid-cols-2">
         <div className="rounded-xl border border-border-2 bg-muted/40 p-4">
@@ -627,21 +691,37 @@ function QuotaPanel({ quota }: { quota: WorkspaceStorageQuota | null }) {
           <dd className="mt-1 text-lg font-semibold capitalize text-ink">{quota.planTier}</dd>
         </div>
         <div className="rounded-xl border border-border-2 bg-muted/40 p-4">
-          <dt className="text-xs uppercase tracking-wide text-ink-3">Workspace storage</dt>
+          <dt className="text-xs uppercase tracking-wide text-ink-3">Total used</dt>
           <dd className="mt-1 text-lg font-semibold text-ink">
             {formatDriveBytes(quota.usedBytes)} / {formatDriveBytes(quota.maxWorkspaceBytes)}
           </dd>
-          <dd className="text-xs text-ink-3">{pct}% used</dd>
+          <dd className="text-xs text-ink-3">
+            {pct}% used
+            {b ? ` · ${b.totalFiles} files` : ""}
+          </dd>
+        </div>
+        <div className="rounded-xl border border-border-2 bg-muted/40 p-4">
+          <dt className="text-xs uppercase tracking-wide text-ink-3">AI exports (xlsx/pdf/docx/pptx)</dt>
+          <dd className="mt-1 text-lg font-semibold text-ink">
+            {b ? `${b.exports.count} · ${formatDriveBytes(b.exports.bytes)}` : "—"}
+          </dd>
+        </div>
+        <div className="rounded-xl border border-border-2 bg-muted/40 p-4">
+          <dt className="text-xs uppercase tracking-wide text-ink-3">Uploads</dt>
+          <dd className="mt-1 text-lg font-semibold text-ink">
+            {b ? `${b.uploads.count} · ${formatDriveBytes(b.uploads.bytes)}` : "—"}
+          </dd>
+        </div>
+        <div className="rounded-xl border border-border-2 bg-muted/40 p-4">
+          <dt className="text-xs uppercase tracking-wide text-ink-3">Evidence / screenshots</dt>
+          <dd className="mt-1 text-lg font-semibold text-ink">
+            {b ? `${b.evidence.count} · ${formatDriveBytes(b.evidence.bytes)}` : "—"}
+          </dd>
         </div>
         <div className="rounded-xl border border-border-2 bg-muted/40 p-4">
           <dt className="text-xs uppercase tracking-wide text-ink-3">Max file size</dt>
           <dd className="mt-1 text-lg font-semibold text-ink">{formatDriveBytes(quota.maxFileBytes)}</dd>
-        </div>
-        <div className="rounded-xl border border-border-2 bg-muted/40 p-4">
-          <dt className="text-xs uppercase tracking-wide text-ink-3">Per-file limit</dt>
-          <dd className="mt-1 text-sm text-ink-2">
-            Up to {formatDriveBytes(quota.maxFileBytes)} per upload on your {quota.planTier} plan
-          </dd>
+          <dd className="text-xs text-ink-3">Per upload on your {quota.planTier} plan</dd>
         </div>
       </dl>
     </div>

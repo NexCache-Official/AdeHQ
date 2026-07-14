@@ -11,11 +11,11 @@ export const LEGACY_FILE_BUCKET = "workspace-files";
 export type DriveSection = "files" | "artifacts" | "evidence" | "exports";
 
 export const DRIVE_SECTIONS: Array<{ id: DriveSection | "all"; label: string }> = [
-  { id: "all", label: "All" },
-  { id: "files", label: "Files" },
-  { id: "artifacts", label: "Artifacts" },
+  { id: "all", label: "All files" },
+  { id: "files", label: "Uploads" },
+  { id: "exports", label: "Spreadsheets, PDF, Word, PPTX" },
+  { id: "artifacts", label: "AI notes (.md)" },
   { id: "evidence", label: "Screenshots / Evidence" },
-  { id: "exports", label: "Spreadsheets & downloads" },
 ];
 
 export const FREE_TIER_MAX_WORKSPACE_BYTES = 100 * 1024 * 1024;

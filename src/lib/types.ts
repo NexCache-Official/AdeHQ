@@ -547,7 +547,15 @@ export type DriveExport = {
   topicId?: string | null;
   driveFolderId?: string | null;
   title: string;
-  exportType: "report" | "summary" | "memory" | "artifact_bundle" | "other";
+  exportType:
+    | "report"
+    | "summary"
+    | "memory"
+    | "artifact_bundle"
+    | "document"
+    | "presentation"
+    | "artifact_conversion"
+    | "other";
   storageBucket: string;
   storagePath: string;
   mimeType: string;
@@ -562,6 +570,13 @@ export type DriveExport = {
 
 export type StoragePlanTier = "free" | "pro" | "team" | "business" | "enterprise";
 
+export type WorkspaceStorageUsageBreakdown = {
+  uploads: { count: number; bytes: number };
+  exports: { count: number; bytes: number };
+  evidence: { count: number; bytes: number };
+  totalFiles: number;
+};
+
 export type WorkspaceStorageQuota = {
   workspaceId: string;
   planTier: StoragePlanTier;
@@ -571,6 +586,8 @@ export type WorkspaceStorageQuota = {
   metadata: Record<string, unknown>;
   createdAt: string;
   updatedAt: string;
+  /** Present on Drive quota API responses after recalculation. */
+  breakdown?: WorkspaceStorageUsageBreakdown;
 };
 
 export type SavedArtifact = {

@@ -94,7 +94,8 @@ Research lead-list example for "Give me 5 Zone 2 flat leads under £900k as a ta
 ]`
     : "";
   const asyncArtifactRule = artifactAsyncTools.length
-    ? `\n- ${artifactAsyncTools.join(", ")} run in the background — tell the user the file is generating and will appear in Drive when ready.`
+    ? `\n- ${artifactAsyncTools.join(", ")} run in the background — tell the user the file is generating and will appear in Drive when ready.
+- artifact.createSpreadsheet / createPdfReport / createDocx / createPresentation already save the binary to Drive. Never also call artifact.saveToDrive in the same turn — that creates a duplicate "Generating Drive export…" chip.`
     : "";
 
   const teamworkRule = availableNames.has("team.coordinate")

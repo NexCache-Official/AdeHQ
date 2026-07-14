@@ -49,9 +49,11 @@ export function artifactFromCompletedJob(
     meta: {
       toolName: prior.meta?.toolName,
       toolStatus: "success",
-      href: artifactId
-        ? `/drive?artifact=${encodeURIComponent(artifactId)}`
-        : "/drive?section=exports",
+      href: exportId
+        ? `/drive?export=${encodeURIComponent(exportId)}&section=exports`
+        : artifactId
+          ? `/drive?artifact=${encodeURIComponent(artifactId)}&section=artifacts`
+          : "/drive?section=exports",
       subtitle: subtitleForExtension(fileExtension),
       exportId,
       fileExtension,

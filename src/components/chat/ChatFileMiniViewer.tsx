@@ -270,18 +270,20 @@ export function ChatFileMiniViewer({
       return <img src={signedUrl} alt={displayTitle} className="max-h-56 w-full object-contain bg-white" />;
     }
 
-    if (previewText) {
+    // Presentations: never fall through to the markdown twin (looks like a .md deck).
+    if (kind === "presentation") {
       return (
-        <div className="max-h-56 overflow-y-auto px-3 py-2">
-          <MessageMarkdown content={previewText.slice(0, 6000)} />
+        <div className="px-3 py-5 text-center text-xs text-ink-3">
+          Slide deck ready — use Download or Drive to open the PowerPoint.
         </div>
       );
     }
 
-    if (kind === "presentation") {
+    // Markdown preview is only for sheets/docs when the binary parse failed.
+    if (previewText && (kind === "spreadsheet" || kind === "document" || kind === "other")) {
       return (
-        <div className="px-3 py-5 text-center text-xs text-ink-3">
-          Slide deck ready — open in Drive or download to preview slides.
+        <div className="max-h-56 overflow-y-auto px-3 py-2">
+          <MessageMarkdown content={previewText.slice(0, 6000)} />
         </div>
       );
     }

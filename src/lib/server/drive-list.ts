@@ -212,7 +212,7 @@ export async function listDriveContents(
     ((filesResult.data ?? []) as DbRow[]).map(workspaceFileFromRow),
     (f) => f.displayName,
   );
-  const artifacts = filterName(
+  const allArtifacts = filterName(
     ((artifactsResult.data ?? []) as DbRow[]).map(artifactFromRow),
     (a) => a.title,
   );
@@ -224,6 +224,27 @@ export async function listDriveContents(
     ((exportsResult.data ?? []) as DbRow[]).map(driveExportFromRow),
     (e) => e.title,
   );
+
+  // Binary create* jobs also write a markdown "AI source" twin. Keep those under
+  // the AI notes section only so All / Exports stay focused on real files.
+  const artifactIdsWithBinaryExport = new Set<string>();
+  for (const item of exports) {
+    for (const id of item.sourceArtifactIds ?? []) {
+      if (id) artifactIdsWithBinaryExport.add(id);
+    }
+  }
+  const artifacts =
+    params.section === "artifacts"
+      ? allArtifacts
+      : allArtifacts.filter((artifact) => {
+          const meta = artifact.metadata ?? {};
+          const isBinaryCompanion =
+            meta.binaryCompanion === true ||
+            meta.integrationGenerated === true ||
+            Boolean(meta.binaryExportExt);
+          if (!isBinaryCompanion) return true;
+          return !artifactIdsWithBinaryExport.has(artifact.id);
+        });
 
   return {
     section: params.section,

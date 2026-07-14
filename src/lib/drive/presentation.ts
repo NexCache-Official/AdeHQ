@@ -149,7 +149,16 @@ export function driveFilePresentation(input: {
   let categoryLabel = "File";
 
   if (input.itemType === "export") {
-    categoryLabel = kind === "spreadsheet" ? "Spreadsheet" : "Download";
+    categoryLabel =
+      kind === "spreadsheet"
+        ? "Spreadsheet"
+        : kind === "pdf"
+          ? "PDF"
+          : kind === "document"
+            ? "Word"
+            : kind === "presentation"
+              ? "PowerPoint"
+              : "Download";
   } else if (input.itemType === "artifact") {
     if (input.contentKind === "spreadsheet" || input.artifactType === "spreadsheet") {
       kind = "spreadsheet";
@@ -161,8 +170,17 @@ export function driveFilePresentation(input: {
       input.exportType === "report"
     ) {
       kind = "report";
+    } else if (
+      /\.md$/i.test(displayTitle) ||
+      /AI source/i.test(displayTitle) ||
+      extension === "md"
+    ) {
+      kind = "markdown";
     }
-    categoryLabel = "Artifact";
+    categoryLabel =
+      kind === "markdown" || /\.md$/i.test(displayTitle) || /AI source/i.test(displayTitle)
+        ? "AI note (.md)"
+        : "Artifact";
   } else if (input.itemType === "evidence") {
     kind = input.mimeType?.startsWith("image/") ? "image" : "evidence";
     categoryLabel = "Evidence";
