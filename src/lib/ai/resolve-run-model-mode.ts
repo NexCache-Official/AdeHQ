@@ -1,5 +1,10 @@
 import type { EmployeeRoleKey } from "@/lib/types";
 import { defaultModelModeForRole, type ModelMode } from "./model-catalog";
+import { messageLikelyNeedsStructuredEffects } from "./message-intent";
+import {
+  artifactAskNeedsStrongModel,
+  isDriveArtifactAsk,
+} from "./detect-drive-artifact-ask";
 
 const DEEP_RESEARCH_PATTERNS = [
   /\bdeep dive\b/i,
@@ -41,6 +46,8 @@ function needsStrongReasoning(message: string): boolean {
 
 /**
  * Pick model mode per run — prefer fast balanced paths for panel opinions and room chat.
+ * Drive artifact / tool work uses structured-friendly balanced/strong — never MiniMax
+ * long_context solely because the employee role defaults to research.
  */
 export function resolveRunModelMode(params: {
   roleKey: EmployeeRoleKey;
@@ -61,6 +68,15 @@ export function resolveRunModelMode(params: {
     if (/\b(code|bug|fix|implement|refactor|api|typescript)\b/i.test(text)) {
       return "coding";
     }
+  }
+
+  // Artifact/tool deliverables first: structured JSON + toolCalls need Flash/Pro,
+  // not long_context MiniMax (burns tokens and often drops toolCalls).
+  if (isDriveArtifactAsk(text) || messageLikelyNeedsStructuredEffects(text)) {
+    if (artifactAskNeedsStrongModel(text) || needsStrongReasoning(text)) {
+      return "strong";
+    }
+    return "balanced";
   }
 
   if (needsLongContext(text)) {

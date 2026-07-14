@@ -114,9 +114,10 @@ function fileAwareRules(hasFileContext: boolean, artifactIntent?: PromptContext[
 
   if (artifactIntent) {
     parts.push(`Artifact generation requested (${artifactIntent.type.replace(/_/g, " ")}):
-- Put the full deliverable in effects.artifacts[0] with title, artifactType "${artifactIntent.type}", contentMarkdown, contentJson (structured fields when applicable), source_file/chunk ids, and sourceCitations.
+- If the user asked to save a PDF/DOCX/PPTX/Excel to Drive (or named createPdfReport/createDocx/createPresentation/createSpreadsheet), you MUST emit effects.toolCalls with that artifact.create* tool — do not only fill effects.artifacts markdown.
+- Otherwise put the deliverable in effects.artifacts[0] with title, artifactType "${artifactIntent.type}", contentMarkdown, contentJson (structured fields when applicable), source_file/chunk ids, and sourceCitations.
 - For email drafts: contentJson must include subject, body, recipientName, recipientOrganization when known.
-- Keep reply short (1–3 sentences) pointing to the generated artifact. Do NOT paste the full deliverable in reply.
+- Keep reply short (1–3 sentences) pointing to the generated file/artifact. Do NOT paste the full deliverable in reply.
 - ${artifactTypeInstructions(artifactIntent.type)}
 - Include a Sources section in the artifact content when file context was used.`);
   }

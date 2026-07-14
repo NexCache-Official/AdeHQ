@@ -74,7 +74,10 @@ const SOCIAL_PATTERNS = [
 ];
 
 const ARTIFACT_PATTERNS = [
-  /\b(create|draft|write|build|make)\b.{0,40}\b(doc|document|deck|brief|artifact|report|memo|email|plan)\b/i,
+  /\b(create|draft|write|build|make|generate|prepare|compile)\b.{0,60}\b(doc|document|deck|brief|briefing|artifact|report|memo|email|plan|pdf|docx|pptx|xlsx|spreadsheet|workbook|excel|powerpoint|presentation|slides?|sow|rfp|scorecard|tracker)\b/i,
+  /\b(?:createPdfReport|createDocx|createPresentation|createSpreadsheet|artifact\.create)\b/i,
+  /\b(?:pdf|docx|pptx|xlsx|spreadsheet|workbook|powerpoint|deck)\b.{0,80}\b(?:drive|save(?:\s+it)?\s+to)\b/i,
+  /\b(?:drive|save(?:\s+it)?\s+to)\b.{0,80}\b(?:pdf|docx|pptx|xlsx|spreadsheet|workbook|brief|report|deck)\b/i,
 ];
 
 const TASK_PATTERNS = [
@@ -193,6 +196,20 @@ export function classifyDmMessageWithSteward(input: DmStewardInput): DmStewardDe
     };
   }
 
+  // File deliverables before generic draft/write or market-research search diversion.
+  if (ARTIFACT_PATTERNS.some((p) => p.test(message))) {
+    return {
+      intent: "artifact_request",
+      shouldRespond: true,
+      route: "employee_model",
+      browserRequired: false,
+      searchRequired: false,
+      reason: "Drive/artifact deliverable — employee model with structured tools.",
+      contextPolicy,
+      costPolicy: { stewardModel: "efficient", estimatedWorkMinutes: 3 },
+    };
+  }
+
   if (/\b(draft|write|compose|brainstorm|outline)\b/i.test(message) && !isQuickFactLookup(message)) {
     return {
       intent: "direct_answer",
@@ -224,19 +241,6 @@ export function classifyDmMessageWithSteward(input: DmStewardInput): DmStewardDe
         stewardModel: "efficient",
         estimatedWorkMinutes: 15,
       },
-    };
-  }
-
-  if (ARTIFACT_PATTERNS.some((p) => p.test(message))) {
-    return {
-      intent: "artifact_request",
-      shouldRespond: true,
-      route: "employee_model",
-      browserRequired: false,
-      searchRequired: false,
-      reason: "Artifact/draft request — employee model.",
-      contextPolicy,
-      costPolicy: { stewardModel: "efficient", estimatedWorkMinutes: 3 },
     };
   }
 

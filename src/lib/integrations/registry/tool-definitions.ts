@@ -529,7 +529,8 @@ const createDocx: ToolDefinition<CreateDocxArgs> = {
   asyncJobType: "artifact_docx",
   argsSchema: CreateDocxArgsSchema,
   promptUsage:
-    'artifact.createDocx — args: { "title": "Sales brief", "template"?: "business_brief"|"sales_outreach_brief"|"investor_brief"|"research_report", "summary"?: "...", "sections": [{ "heading": "Overview", "body": "..." }] }',
+    'artifact.createDocx — args: { "title": "Sales brief", "template"?: "business_brief"|"sales_outreach_brief"|"investor_brief"|"research_report", "summary"?: "...", "sections": [{ "heading": "Overview", "body": "..." }] }. ' +
+    "Fill every section with concrete prose from the user ask (scope, timeline, fees, risks). Prefer business_brief for SOW/RFP. Never submit empty bodies or a single placeholder paragraph when the message lists multiple sections.",
   buildPreview: (args) => ({
     title: `Document — ${args.title}`,
     summary: args.summary ?? `${args.title} with ${args.sections.length} sections${args.template ? ` (${args.template})` : ""}.`,
@@ -553,7 +554,8 @@ const createPresentation: ToolDefinition<CreatePresentationArgs> = {
   asyncJobType: "artifact_pptx",
   argsSchema: CreatePresentationArgsSchema,
   promptUsage:
-    'artifact.createPresentation — args: { "title": "Investor update", "template"?: "sales_deck"|"investor_update"|"campaign_review"|"research_brief", "slides": [{ "title": "Overview", "bullets": ["Point"] }] }',
+    'artifact.createPresentation — args: { "title": "Investor update", "template"?: "sales_deck"|"investor_update"|"campaign_review"|"research_brief", "slides": [{ "title": "Overview", "bullets": ["Point"] }] }. ' +
+    "Aim for 5–6 slides with 3–5 concrete bullets each. For ops/exec reviews cover incidents, capacity, risk, hiring/cost, and decisions needed. Never return a 2-slide stub when the user asked for a board deck.",
   buildPreview: (args) => ({
     title: `Presentation — ${args.title}`,
     summary: `${args.title}: ${args.slides.length} slides${args.template ? ` (${args.template})` : ""}.`,

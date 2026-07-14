@@ -1,5 +1,15 @@
 import type { ToolCallResult } from "@/lib/integrations/types";
 import { coerceToolArgs } from "@/lib/integrations/coerce-tool-args";
+import {
+  buildPdfSectionsFromMessage,
+  buildPresentationSlidesFromMessage,
+  buildSpreadsheetRowsFromMessage,
+  detectSowOrRfp,
+  detectVendorCompare,
+  extractColumnList,
+  extractRequestedCount,
+  firstSentence as firstSentenceFromMessage,
+} from "@/lib/integrations/artifact-content-from-message";
 
 export type ToolHydrationState = {
   userMessage?: string;
@@ -19,7 +29,7 @@ function hasText(value: unknown): value is string {
 }
 
 function firstSentence(text: string): string {
-  return text.trim().split(/[.!?\n]/)[0]?.trim() || text.trim();
+  return firstSentenceFromMessage(text);
 }
 
 function cleanEntityName(value: string): string {
@@ -127,12 +137,12 @@ function defaultEmailBody(args: Record<string, unknown>, state: ToolHydrationSta
   return `Hi ${contact},\n\nI wanted to follow up on ${company}${amount ? ` and the opportunity${amount}` : ""}. Would you be open to a quick conversation this week?\n\nBest,\n${"AdeHQ"}`;
 }
 
-function defaultSections(title: string, state: ToolHydrationState): Array<{ heading: string; body: string }> {
-  const context = firstSentence(state.userMessage ?? title);
-  return [
-    { heading: "Summary", body: context || title },
-    { heading: "Next Steps", body: "Review the generated artifact in Drive and update the source records if needed." },
-  ];
+function defaultSections(
+  title: string,
+  state: ToolHydrationState,
+  template?: string,
+): Array<{ heading: string; body: string }> {
+  return buildPdfSectionsFromMessage(state.userMessage ?? title, title, template);
 }
 
 export function hydrateToolCallArgs(
@@ -204,52 +214,52 @@ export function hydrateToolCallArgs(
       const wantsLeadList =
         state.roleKey === "research" ||
         /\b(?:lead list|leads?|prospects?|shortlist|comps?|table of|as a table)\b/i.test(message);
+      const wantsOpsTracker =
+        /\b(?:sla|kpi|breach|ops|branch|week|tickets?|nps|revenue)\b/i.test(message);
       const template =
-        args.template ?? (wantsLeadList ? "lead_list" : "sales_pipeline");
+        args.template ??
+        (wantsLeadList ? "lead_list" : wantsOpsTracker ? "market_research" : "sales_pipeline");
       if (!args.title) {
         args.title = wantsLeadList
           ? state.companyName
             ? `${state.companyName} lead list`
             : "Lead list"
-          : state.companyName
-            ? `${state.companyName} pipeline summary`
-            : "Pipeline summary";
+          : firstSentence(message).slice(0, 72) ||
+            (state.companyName ? `${state.companyName} pipeline summary` : "Ops workbook");
       }
       if (!args.template) args.template = template;
+      const fromMessage = extractColumnList(message);
       if (!Array.isArray(args.columns) || !args.columns.length) {
-        args.columns = wantsLeadList
-          ? [
-              "Name",
-              "Company",
-              "Area",
-              "Portfolio",
-              "Email / Phone",
-              "Source URL",
-              "Priority",
-              "Why now",
-            ]
-          : ["Company", "Contact", "Stage", "Amount", "Currency", "Notes"];
+        args.columns = fromMessage?.length
+          ? fromMessage
+          : wantsLeadList
+            ? [
+                "Name",
+                "Company",
+                "Area",
+                "Portfolio",
+                "Email / Phone",
+                "Source URL",
+                "Priority",
+                "Why now",
+              ]
+            : wantsOpsTracker
+              ? [
+                  "Week",
+                  "Team",
+                  "Breaches",
+                  "P1 count",
+                  "P2 count",
+                  "Mean time to restore (hrs)",
+                  "Owner",
+                  "Remediation",
+                ]
+              : ["Company", "Contact", "Stage", "Amount", "Currency", "Notes"];
       }
-      if (!Array.isArray(args.rows) || !args.rows.length) {
-        args.rows = wantsLeadList
-          ? [[
-              state.contactName ?? "",
-              state.companyName ?? "",
-              "",
-              "",
-              "",
-              "",
-              "M",
-              "Created from chat request — replace with researched leads",
-            ]]
-          : [[
-              state.companyName ?? "",
-              state.contactName ?? "",
-              state.stage ?? "Qualified",
-              state.amount ?? "",
-              state.currency ?? "GBP",
-              "Created from chat request",
-            ]];
+      const columns = args.columns as string[];
+      const requested = extractRequestedCount(message) ?? (wantsOpsTracker ? 8 : wantsLeadList ? 6 : 4);
+      if (!Array.isArray(args.rows) || args.rows.length < 2) {
+        args.rows = buildSpreadsheetRowsFromMessage(message, columns, requested);
       }
       break;
     }
@@ -279,19 +289,54 @@ export function hydrateToolCallArgs(
     }
     case "artifact.createPdfReport":
     case "artifact.createDocx": {
-      if (!args.title) args.title = state.companyName ? `${state.companyName} brief` : "AdeHQ brief";
-      if (!Array.isArray(args.sections) || !args.sections.length) {
-        args.sections = defaultSections(String(args.title), state);
+      const message = state.userMessage ?? "";
+      if (!args.title) {
+        args.title =
+          firstSentence(message).slice(0, 72) ||
+          (state.companyName ? `${state.companyName} brief` : "AdeHQ brief");
+      }
+      if (!args.template && tool === "artifact.createPdfReport") {
+        if (detectVendorCompare(message) || state.roleKey === "research") {
+          args.template = "market_research_report";
+        }
+      }
+      if (!args.template && tool === "artifact.createDocx" && detectSowOrRfp(message)) {
+        args.template = "business_brief";
+      }
+      if (!args.summary && message) args.summary = message.slice(0, 220);
+      const thinSections =
+        !Array.isArray(args.sections) ||
+        !args.sections.length ||
+        (args.sections as Array<{ body?: string }>).every(
+          (section) => !String(section.body ?? "").trim() || String(section.body).length < 40,
+        );
+      if (thinSections) {
+        args.sections = defaultSections(
+          String(args.title),
+          state,
+          args.template ? String(args.template) : undefined,
+        );
       }
       break;
     }
     case "artifact.createPresentation": {
-      if (!args.title) args.title = state.companyName ? `${state.companyName} deck` : "AdeHQ deck";
-      if (!Array.isArray(args.slides) || !args.slides.length) {
-        args.slides = [
-          { title: String(args.title), bullets: [firstSentence(state.userMessage ?? String(args.title))] },
-          { title: "Next Steps", bullets: ["Review in Drive", "Share or revise after approval"] },
-        ];
+      const message = state.userMessage ?? "";
+      if (!args.title) {
+        args.title =
+          firstSentence(message).slice(0, 72) ||
+          (state.companyName ? `${state.companyName} deck` : "AdeHQ deck");
+      }
+      if (!args.template) {
+        args.template = detectVendorCompare(message) ? "research_brief" : "sales_deck";
+      }
+      const thinSlides =
+        !Array.isArray(args.slides) ||
+        args.slides.length < 3 ||
+        (args.slides as Array<{ bullets?: unknown[] }>).every(
+          (slide) => !Array.isArray(slide.bullets) || slide.bullets.length < 2,
+        );
+      if (thinSlides) {
+        args.slides = buildPresentationSlidesFromMessage(message, String(args.title));
       }
       break;
     }

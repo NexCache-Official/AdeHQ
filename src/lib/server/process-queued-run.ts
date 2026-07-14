@@ -56,6 +56,10 @@ import { canEmployeeUseBrowserResearch } from "@/lib/ai/browser-research/permiss
 import { resolveEmployeePromptTier } from "@/lib/ai/employee-prompt-tier";
 import { messageLikelyNeedsStructuredEffects } from "@/lib/ai/message-intent";
 import {
+  inferRequiredArtifactToolCall,
+  replyForInferredArtifactTool,
+} from "@/lib/integrations/infer-artifact-tool-call";
+import {
   executePlannedResearch,
   getResearchCapabilities,
   planResearch,
@@ -1694,24 +1698,35 @@ export async function processQueuedAgentRun(
 
     // If the user clearly asked for CRM/Drive/task work but the model returned
     // zero toolCalls (often narrating success or inventing prose instead), retry
-    // once on the blocking structured path with an explicit tool reminder.
+    // once on a stronger structured model with an explicit tool reminder.
     const needsTools = messageLikelyNeedsStructuredEffects(content);
-    const gotTools = (response.effect?.toolCalls?.length ?? 0) > 0;
+    let gotTools = (response.effect?.toolCalls?.length ?? 0) > 0;
     if (needsTools && !gotTools && !failed && aiMode !== "error") {
+      const retryMode: ModelMode = "strong";
       console.warn("[AdeHQ process-queued-run] retrying employee reply — missing toolCalls", {
         runId,
         employeeId: employee.id,
         aiMode,
+        fromMode: modelMode,
+        retryMode,
       });
       const retry = await dispatchEmployeeQueuedResponse(
         {
           ...routeInput,
           message: `${content}
 
-[System reminder: This request requires real effects.toolCalls in your JSON response (e.g. artifact.createPdfReport, artifact.createDocx, artifact.createPresentation, artifact.createSpreadsheet, crm.createContact, tasks.createTask). Do not only say you will follow up — emit the tool call(s) now with complete args. create* already saves to Drive; do not also call artifact.saveToDrive.]`,
+[System reminder: This request requires real effects.toolCalls in your JSON response (e.g. artifact.createPdfReport, artifact.createDocx, artifact.createPresentation, artifact.createSpreadsheet, crm.createContact, tasks.createTask). Do not only say you will follow up — emit the tool call(s) now with complete args. Fill every section/slide/row with concrete content from the user message. create* already saves to Drive; do not also call artifact.saveToDrive.]`,
         },
-        routeOptions,
-        queuedMeta,
+        {
+          ...routeOptions,
+          modelMode: retryMode,
+          maxOutputTokens: getOutputTokenCap(retryMode),
+          timeoutMs: getTimeoutMs(retryMode),
+        },
+        {
+          ...queuedMeta,
+          resolvedRunModelMode: retryMode,
+        },
         // Never stream the retry — streaming cannot carry toolCalls.
         undefined,
       );
@@ -1722,6 +1737,31 @@ export async function processQueuedAgentRun(
         failed = retry.failed;
         errorMessage = retry.errorMessage;
         usedRuntime = retry.usedRuntime;
+        gotTools = true;
+      }
+    }
+
+    // Last resort for explicit Drive artifact asks: MiniMax/etc. sometimes burn
+    // tokens and still leave effects.toolCalls empty → "I'll follow up" no-op.
+    if (needsTools && !gotTools && !failed && aiMode !== "error") {
+      const inferred = inferRequiredArtifactToolCall(content);
+      if (inferred) {
+        console.warn("[AdeHQ process-queued-run] synthesizing artifact toolCall", {
+          runId,
+          employeeId: employee.id,
+          tool: inferred.tool,
+        });
+        const fallbackReply = /^Got it — I'll follow up/i.test(response.reply.trim());
+        response = {
+          ...response,
+          reply: fallbackReply
+            ? replyForInferredArtifactTool(inferred.tool)
+            : response.reply,
+          effect: {
+            ...response.effect,
+            toolCalls: [inferred],
+          },
+        };
       }
     }
 
