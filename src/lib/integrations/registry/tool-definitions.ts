@@ -473,7 +473,7 @@ const createSpreadsheet: ToolDefinition<CreateSpreadsheetArgs> = {
   asyncJobType: "artifact_xlsx",
   argsSchema: CreateSpreadsheetArgsSchema,
   promptUsage:
-    'artifact.createSpreadsheet — args: { "title": "Q3 pipeline export", "template"?: "sales_pipeline"|"investor_target"|"content_calendar"|"market_research"|"lead_list", "columns": ["Company", "Stage", "Amount"], "rows": [["Acme", "Qualified", 5000]], "sheetName"?: "Pipeline" }. For prospect/lead lists use template "lead_list".',
+    'artifact.createSpreadsheet — args: { "title": "Q3 pipeline export", "template"?: "sales_pipeline"|"investor_target"|"content_calendar"|"market_research"|"lead_list", "columns": ["Company", "Stage", "Amount"], "rows": [["Acme", "Qualified", 5000]], "sheetName"?: "Pipeline" }. For prospect/lead lists use template "lead_list" with columns that match each row cell order (e.g. Name, Company, Area, Portfolio, Email / Phone, Source URL, Priority, Why now) — never put person names under Company while companies sit under Contact.',
   buildPreview: (args) => ({
     title: `Spreadsheet — ${args.title}`,
     summary: `${args.title}: ${args.rows.length} rows × ${args.columns.length} columns${args.template ? ` (${args.template})` : ""}.`,

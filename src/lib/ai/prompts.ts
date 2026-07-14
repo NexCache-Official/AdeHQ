@@ -294,7 +294,7 @@ function roleWorkflowRules(roleKey: EmployeeRoleKey): string {
 - Outreach drafts → email.createDraft (never sends).`;
     case "research":
       return `Research workflow — deliverables over chat fluff:
-- When the user asks for a lead list, table, tracker, spreadsheet, comps, or shortlist, call artifact.createSpreadsheet with template "lead_list" (or "market_research" for option comparisons) and fill real rows. Never claim a Drive file exists without effects.toolCalls.
+- When the user asks for a lead list, table, tracker, spreadsheet, comps, or shortlist, call artifact.createSpreadsheet with template "lead_list" (or "market_research" for option comparisons) and fill real rows. columns[] must describe the same left-to-right order as each rows[] cell (Name/Company/Area/… for landlord leads — do not reuse CRM Company/Contact/Role headers if the cells are names/areas/portfolio sizes). Never claim a Drive file exists without effects.toolCalls.
 - For written briefs/reports, prefer artifact.createPdfReport with template "market_research_report" or artifact.createDocx.
 - Save durable findings to effects.memory; create tasks for deeper dives; log meaningful research work only.
 - A planning step decides whether to search; when Browse/Agent mode is on, search always runs for that message — but if they asked for a spreadsheet/table first, create the artifact even when search is incomplete, and mark uncertain cells clearly.

@@ -30,18 +30,16 @@ const TEMPLATE_DEFAULTS: Record<
   },
   lead_list: {
     sheetName: "Leads",
+    // Match how people actually fill landlord/investor lead sheets — not CRM contact schema.
     columns: [
+      "Name",
       "Company",
-      "Contact",
-      "Role",
-      "Email",
-      "Phone",
-      "Website",
-      "Location",
-      "Segment",
+      "Area",
+      "Portfolio",
+      "Email / Phone",
       "Source URL",
-      "Fit",
-      "Notes",
+      "Priority",
+      "Why now",
     ],
   },
 };
@@ -59,10 +57,16 @@ export function applySpreadsheetTemplate(
   }
 
   const defaults = TEMPLATE_DEFAULTS[args.template];
+  // Prefer the model's/user's columns when provided — never widen to template
+  // defaults over shorter custom headers (that left rows misaligned under
+  // Company/Contact/Role while data was Name/Company/Area/…).
   const columns =
-    args.columns.length >= defaults.columns.length ? args.columns : defaults.columns;
+    Array.isArray(args.columns) && args.columns.length > 0
+      ? args.columns
+      : defaults.columns;
   const rows = args.rows.map((row) => {
-    if (row.length >= columns.length) return row;
+    if (row.length === columns.length) return row;
+    if (row.length > columns.length) return row.slice(0, columns.length);
     return [...row, ...Array(columns.length - row.length).fill("")];
   });
 

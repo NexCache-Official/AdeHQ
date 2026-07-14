@@ -90,7 +90,7 @@ Complete Sales bundle example for "Create a company called GreenEdge Robotics, a
 
 Research lead-list example for "Give me 5 Zone 2 flat leads under £900k as a table spreadsheet":
 [
-  { "tool": "artifact.createSpreadsheet", "mode": "execute", "args": { "title": "Zone 2 flats under £900k — lead list", "template": "lead_list", "columns": ["Company", "Contact", "Role", "Email", "Phone", "Website", "Location", "Segment", "Source URL", "Fit", "Notes"], "rows": [["—", "—", "Listing", "", "", "", "Stratford", "2-bed flat", "https://example.com", "High", "Ask ~£850k; verify 90d move"]] } }
+  { "tool": "artifact.createSpreadsheet", "mode": "execute", "args": { "title": "Zone 2 flats under £900k — lead list", "template": "lead_list", "columns": ["Name", "Company", "Area", "Portfolio", "Email / Phone", "Source URL", "Priority", "Why now"], "rows": [["James Whitfield", "Whitfield Properties Ltd", "Stratford", "3 flats", "—", "https://example.com", "H", "Active buyer — looking to expand Zone 2"]] } }
 ]`
     : "";
   const asyncArtifactRule = artifactAsyncTools.length

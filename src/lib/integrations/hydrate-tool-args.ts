@@ -219,33 +219,27 @@ export function hydrateToolCallArgs(
       if (!Array.isArray(args.columns) || !args.columns.length) {
         args.columns = wantsLeadList
           ? [
+              "Name",
               "Company",
-              "Contact",
-              "Role",
-              "Email",
-              "Phone",
-              "Website",
-              "Location",
-              "Segment",
+              "Area",
+              "Portfolio",
+              "Email / Phone",
               "Source URL",
-              "Fit",
-              "Notes",
+              "Priority",
+              "Why now",
             ]
           : ["Company", "Contact", "Stage", "Amount", "Currency", "Notes"];
       }
       if (!Array.isArray(args.rows) || !args.rows.length) {
         args.rows = wantsLeadList
           ? [[
-              state.companyName ?? "",
               state.contactName ?? "",
+              state.companyName ?? "",
               "",
               "",
               "",
               "",
-              "",
-              "",
-              "",
-              "",
+              "M",
               "Created from chat request — replace with researched leads",
             ]]
           : [[
