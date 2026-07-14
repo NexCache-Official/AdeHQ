@@ -1763,10 +1763,14 @@ export async function processQueuedAgentRun(
           employeeId: employee.id,
           tool: inferred.tool,
         });
-        const fallbackReply = /^Got it — I'll follow up/i.test(response.reply.trim());
+        const narratedOnly =
+          /^Got it — I'll follow up/i.test(response.reply.trim()) ||
+          (/generat(?:e|ing)|creating|drafting|building/i.test(response.reply) &&
+            /drive/i.test(response.reply) &&
+            response.reply.trim().length < 320);
         response = {
           ...response,
-          reply: fallbackReply
+          reply: narratedOnly
             ? replyForInferredArtifactTool(inferred.tool)
             : response.reply,
           effect: {
