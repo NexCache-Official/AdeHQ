@@ -539,7 +539,7 @@ export function AssignScreen({
 
   return (
     <motion.div
-      initial={{ opacity: 0 }}
+      initial={false}
       animate={{ opacity: 1 }}
       className="relative w-full max-w-[640px]"
     >

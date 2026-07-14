@@ -11,6 +11,7 @@ export type ToolHydrationState = {
   stage?: string;
   campaignName?: string;
   firmName?: string;
+  roleKey?: string;
 };
 
 function hasText(value: unknown): value is string {
@@ -107,8 +108,11 @@ function inferState(userMessage?: string): ToolHydrationState {
   return state;
 }
 
-export function createToolHydrationState(userMessage?: string): ToolHydrationState {
-  return inferState(userMessage);
+export function createToolHydrationState(
+  userMessage?: string,
+  extras?: { roleKey?: string },
+): ToolHydrationState {
+  return { ...inferState(userMessage), roleKey: extras?.roleKey };
 }
 
 function mergeState(state: ToolHydrationState | undefined, userMessage?: string): ToolHydrationState {
@@ -196,25 +200,62 @@ export function hydrateToolCallArgs(
       break;
     }
     case "artifact.createSpreadsheet": {
-      const template = args.template ?? "sales_pipeline";
+      const message = state.userMessage ?? "";
+      const wantsLeadList =
+        state.roleKey === "research" ||
+        /\b(?:lead list|leads?|prospects?|shortlist|comps?|table of|as a table)\b/i.test(message);
+      const template =
+        args.template ?? (wantsLeadList ? "lead_list" : "sales_pipeline");
       if (!args.title) {
-        args.title = state.companyName
-          ? `${state.companyName} pipeline summary`
-          : "Pipeline summary";
+        args.title = wantsLeadList
+          ? state.companyName
+            ? `${state.companyName} lead list`
+            : "Lead list"
+          : state.companyName
+            ? `${state.companyName} pipeline summary`
+            : "Pipeline summary";
       }
       if (!args.template) args.template = template;
       if (!Array.isArray(args.columns) || !args.columns.length) {
-        args.columns = ["Company", "Contact", "Stage", "Amount", "Currency", "Notes"];
+        args.columns = wantsLeadList
+          ? [
+              "Company",
+              "Contact",
+              "Role",
+              "Email",
+              "Phone",
+              "Website",
+              "Location",
+              "Segment",
+              "Source URL",
+              "Fit",
+              "Notes",
+            ]
+          : ["Company", "Contact", "Stage", "Amount", "Currency", "Notes"];
       }
       if (!Array.isArray(args.rows) || !args.rows.length) {
-        args.rows = [[
-          state.companyName ?? "",
-          state.contactName ?? "",
-          state.stage ?? "Qualified",
-          state.amount ?? "",
-          state.currency ?? "GBP",
-          "Created from chat request",
-        ]];
+        args.rows = wantsLeadList
+          ? [[
+              state.companyName ?? "",
+              state.contactName ?? "",
+              "",
+              "",
+              "",
+              "",
+              "",
+              "",
+              "",
+              "",
+              "Created from chat request — replace with researched leads",
+            ]]
+          : [[
+              state.companyName ?? "",
+              state.contactName ?? "",
+              state.stage ?? "Qualified",
+              state.amount ?? "",
+              state.currency ?? "GBP",
+              "Created from chat request",
+            ]];
       }
       break;
     }

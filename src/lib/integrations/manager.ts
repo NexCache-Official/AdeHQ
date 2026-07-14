@@ -115,7 +115,9 @@ export async function executeEmployeeToolCalls(
   const triggerMessageText =
     params.triggerMessageText ??
     (await loadTriggerMessageText(client, params.workspaceId, params.triggerMessageId));
-  const hydrationState = createToolHydrationState(triggerMessageText);
+  const hydrationState = createToolHydrationState(triggerMessageText, {
+    roleKey: employee.roleKey,
+  });
   ctx.triggerMessageText = triggerMessageText;
   ctx.toolHydrationState = hydrationState as Record<string, unknown>;
 

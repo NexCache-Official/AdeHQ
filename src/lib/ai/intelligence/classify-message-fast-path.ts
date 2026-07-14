@@ -17,6 +17,10 @@ const GREETING =
 const DIRECT_WORK =
   /\b(?:write|draft|compose|rewrite|summarize|outline|brainstorm|plan|create|make|edit|review)\b/i;
 
+/** Spreadsheet / table deliverables should not be forced into web-search by Research mode. */
+const ARTIFACT_DELIVERABLE =
+  /\b(?:spreadsheet|workbook|xlsx|csv|tracker|lead list|table of|as a table|create a table|build a table|comps? sheet)\b/i;
+
 const CURRENT_TIME =
   /\b(?:today|tonight|tomorrow|yesterday|this (?:week|month|quarter|year|season)|latest|recent|recently|current|currently|now|live|up[- ]to[- ]date|in 20\d{2})\b/i;
 
@@ -87,6 +91,14 @@ export function classifyMessageFastPath(
       confidence: 0.97,
       reason: "Explicit live-site/browser task.",
       suggestedSearchQuery: normalizedSearchQuery(text),
+    };
+  }
+
+  if (ARTIFACT_DELIVERABLE.test(text) || (DIRECT_WORK.test(text) && /\b(?:table|spreadsheet|workbook|tracker|leads?)\b/i.test(text))) {
+    return {
+      decision: "direct",
+      confidence: 0.94,
+      reason: "Artifact/spreadsheet deliverable — answer with tools, not forced search.",
     };
   }
 

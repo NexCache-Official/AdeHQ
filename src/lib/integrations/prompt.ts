@@ -86,6 +86,11 @@ Complete Sales bundle example for "Create a company called GreenEdge Robotics, a
   { "tool": "email.createDraft", "mode": "execute", "args": { "subject": "Quick follow-up — GreenEdge Robotics", "body": "Hi Praveen,\\n\\nI wanted to follow up on GreenEdge Robotics and the pilot opportunity. Would you be open to a quick conversation this week?\\n\\nBest,", "recipientName": "Praveen", "recipientOrganization": "GreenEdge Robotics" } },
   { "tool": "tasks.createTask", "mode": "execute", "args": { "title": "Follow up with Praveen re GreenEdge Robotics", "description": "Follow up on the £5,000 qualified deal.", "priority": "medium" } },
   { "tool": "artifact.createSpreadsheet", "mode": "execute", "args": { "title": "GreenEdge Robotics pipeline summary", "template": "sales_pipeline", "columns": ["Company", "Contact", "Stage", "Amount", "Currency", "Notes"], "rows": [["GreenEdge Robotics", "Praveen", "Qualified", 5000, "GBP", "Created from sales chat"]] } }
+]
+
+Research lead-list example for "Give me 5 Zone 2 flat leads under £900k as a table spreadsheet":
+[
+  { "tool": "artifact.createSpreadsheet", "mode": "execute", "args": { "title": "Zone 2 flats under £900k — lead list", "template": "lead_list", "columns": ["Company", "Contact", "Role", "Email", "Phone", "Website", "Location", "Segment", "Source URL", "Fit", "Notes"], "rows": [["—", "—", "Listing", "", "", "", "Stratford", "2-bed flat", "https://example.com", "High", "Ask ~£850k; verify 90d move"]] } }
 ]`
     : "";
   const asyncArtifactRule = artifactAsyncTools.length

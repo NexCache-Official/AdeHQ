@@ -306,9 +306,13 @@ export function ThreadReader({
     thread.draftStatus !== "queued" &&
     thread.draftStatus !== "running";
 
+  const suggestedOwnerAssignable =
+    Boolean(thread?.suggestedEmployeeId) &&
+    (aiEmployees ?? []).some((e) => e.id === thread?.suggestedEmployeeId);
+
   const showSuggestOwner =
     thread &&
-    thread.suggestedEmployeeId &&
+    suggestedOwnerAssignable &&
     thread.suggestedEmployeeId !== thread.assigneeId &&
     thread.assignmentSource !== "human";
 

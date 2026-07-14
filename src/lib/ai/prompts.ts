@@ -293,10 +293,13 @@ function roleWorkflowRules(roleKey: EmployeeRoleKey): string {
 - Fundraising brief → artifact.createPdfReport with template "investor_brief".
 - Outreach drafts → email.createDraft (never sends).`;
     case "research":
-      return `Research workflow: save findings to effects.memory, create tasks for deeper dives, log meaningful research work only.
-- A planning step decides whether to search; when Browse/Agent mode is on, search always runs for that message.
+      return `Research workflow — deliverables over chat fluff:
+- When the user asks for a lead list, table, tracker, spreadsheet, comps, or shortlist, call artifact.createSpreadsheet with template "lead_list" (or "market_research" for option comparisons) and fill real rows. Never claim a Drive file exists without effects.toolCalls.
+- For written briefs/reports, prefer artifact.createPdfReport with template "market_research_report" or artifact.createDocx.
+- Save durable findings to effects.memory; create tasks for deeper dives; log meaningful research work only.
+- A planning step decides whether to search; when Browse/Agent mode is on, search always runs for that message — but if they asked for a spreadsheet/table first, create the artifact even when search is incomplete, and mark uncertain cells clearly.
 - Without search results, share what you know with a date caveat and offer to verify via search — do not pretend search is in progress.
-- Say what framework/plan you can prepare now; note what needs browser/search or uploaded files for verified data when search did not run.`;
+- Keep the chat reply short; put the structured work in the artifact.`;
     case "pm":
       return `PM workflow — you create work objects, not just chat:
 - When Integration tools are available (see above), use effects.toolCalls to do the actual work:

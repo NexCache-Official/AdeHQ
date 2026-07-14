@@ -69,8 +69,15 @@ export async function loadWorkAssignableEmployee(
     .eq("id", params.employeeId)
     .maybeSingle();
   if (error) throw error;
-  if (!data || data.status !== "active") {
+  if (!data) {
     throw new AuthError("Employee not found or inactive.", 404);
+  }
+  const presenceOk = !data.status ||
+    ["online", "idle", "working", "waiting_approval", "on_call", "active"].includes(
+      String(data.status),
+    );
+  if (!presenceOk) {
+    throw new AuthError("Employee is not available for inbox work.", 400);
   }
   if (
     isMayaEmployee({

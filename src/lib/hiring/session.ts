@@ -68,7 +68,13 @@ export type HiringAction =
   | { type: "SELECT_CANDIDATE"; id: string }
   | { type: "TOGGLE_CANDIDATE_SELECT"; id: string }
   | { type: "SELECT_CANDIDATES"; ids: string[] }
-  | { type: "COMPLETE_HIRE"; employeeId: string; dmRoomId: string; employeeIds?: string[] }
+  | {
+      type: "COMPLETE_HIRE";
+      employeeId: string;
+      dmRoomId: string;
+      dmTopicId?: string;
+      employeeIds?: string[];
+    }
   | { type: "SET_PENDING_ROOM"; roomId: string }
   | { type: "SET_GEN_STEP"; genStep: number }
   | { type: "SET_SUCCESS_STEP"; successStep: number }
@@ -202,6 +208,7 @@ export function hiringReducer(state: HiringSessionState, action: HiringAction): 
         hiredEmployeeId: action.employeeId,
         hiredEmployeeIds: action.employeeIds ?? [action.employeeId],
         dmRoomId: action.dmRoomId,
+        dmTopicId: action.dmTopicId,
         step: "success",
       };
     case "SET_PENDING_ROOM":

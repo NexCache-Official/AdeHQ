@@ -342,7 +342,7 @@ export type CompleteHireFromSessionParams = {
 };
 
 export type CompleteHireResult =
-  | { ok: true; employeeId: string; dmRoomId: string; employeeIds?: string[] }
+  | { ok: true; employeeId: string; dmRoomId: string; topicId?: string; employeeIds?: string[] }
   | { ok: false; message: string };
 
 export async function completeHireFromSession(
@@ -370,7 +370,7 @@ export async function completeHireFromSession(
 
   try {
     const hires = params.candidatesToHire ?? [params.candidate];
-    const { employeeIds, dmRoomId } = completeHiresFromCandidates({
+    const { employeeIds, dmRoomId, topicId } = completeHiresFromCandidates({
       actions: params.actions,
       userName: params.userName,
       candidates: hires,
@@ -446,7 +446,7 @@ export async function completeHireFromSession(
       }
     }
 
-    return { ok: true, employeeId, dmRoomId, employeeIds };
+    return { ok: true, employeeId, dmRoomId, topicId, employeeIds };
   } catch (error) {
     params.releaseHireLock();
     throw error;

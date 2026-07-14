@@ -7,8 +7,18 @@
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { AuthError } from "@/lib/supabase/auth-server";
 import type { AssignmentSource, EmailCategory, EmailTriageResult } from "./types";
 import { DEFAULT_ASSIGN_THRESHOLD } from "./types";
+
+const PRESENCE_STATUSES = new Set([
+  "online",
+  "idle",
+  "working",
+  "waiting_approval",
+  "on_call",
+  "active", // legacy / mistaken filter value — keep accepting if present
+]);
 
 export type StewardEmployee = {
   id: string;
@@ -68,11 +78,11 @@ export async function loadEligibleEmployees(
     .select(
       "id, name, role, role_key, instructions, status, is_system_employee, system_employee_key, metadata",
     )
-    .eq("workspace_id", workspaceId)
-    .eq("status", "active");
+    .eq("workspace_id", workspaceId);
   if (error) throw error;
 
   return ((data ?? []) as EmployeeRow[])
+    .filter((row) => PRESENCE_STATUSES.has(String(row.status ?? "idle")) || !row.status)
     .filter(isInboxAssignableRow)
     .map((row) => ({
       id: String(row.id),
@@ -180,12 +190,42 @@ export async function assertEmployeeEligible(
   client: SupabaseClient,
   params: { workspaceId: string; employeeId: string },
 ): Promise<StewardEmployee> {
-  const list = await loadEligibleEmployees(client, params.workspaceId);
-  const found = list.find((e) => e.id === params.employeeId);
-  if (!found) {
-    throw new Error(
-      "Employee is not active or cannot own inbox work (Maya and system employees are excluded).",
+  const { data, error } = await client
+    .from("ai_employees")
+    .select(
+      "id, name, role, role_key, instructions, status, is_system_employee, system_employee_key, metadata",
+    )
+    .eq("workspace_id", params.workspaceId)
+    .eq("id", params.employeeId)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) {
+    throw new AuthError("Employee not found in this workspace.", 404);
+  }
+
+  const row = data as EmployeeRow;
+  if (row.is_system_employee || row.system_employee_key) {
+    throw new AuthError(
+      "Maya and system employees cannot own inbox work. Choose a hired AI employee.",
+      400,
     );
   }
-  return found;
+  const meta =
+    row.metadata && typeof row.metadata === "object"
+      ? (row.metadata as { dmOnly?: boolean; canBeAssignedToRooms?: boolean })
+      : null;
+  if (meta?.dmOnly === true || meta?.canBeAssignedToRooms === false) {
+    throw new AuthError("This employee cannot be assigned inbox work.", 400);
+  }
+  if (row.status && !PRESENCE_STATUSES.has(String(row.status))) {
+    throw new AuthError("Employee is not available for inbox work.", 400);
+  }
+
+  return {
+    id: String(row.id),
+    name: String(row.name ?? "Employee"),
+    roleTitle: String(row.role ?? ""),
+    roleKey: String(row.role_key ?? ""),
+    expertiseSummary: String(row.instructions ?? "").slice(0, 500),
+  };
 }

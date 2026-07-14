@@ -39,7 +39,7 @@ export function completeHireFromCandidate(params: {
   defaultRoomId?: string;
   /** When onboarding persists via completeFirstHire, skip duplicate work-log */
   skipWorkLog?: boolean;
-}): { employeeId: string; dmRoomId: string } {
+}): { employeeId: string; dmRoomId: string; topicId?: string } {
   const employee = candidateToEmployee(
     params.candidate,
     params.brief,
@@ -55,9 +55,9 @@ export function completeHireFromCandidate(params: {
 
   const dm = params.actions.openOrCreateDM(employee.id);
   const firstName = params.userName?.split(" ")[0] ?? "there";
-  const generalTopicId = params.allTopics
-    ? generalTopicForRoom(params.allTopics, dm.id)?.id
-    : undefined;
+  const generalTopicId =
+    (params.allTopics ? generalTopicForRoom(params.allTopics, dm.id)?.id : undefined) ??
+    `topic-general-${dm.id}`;
   params.actions.addMessage(dm.id, {
     senderType: "ai",
     senderId: employee.id,
@@ -89,7 +89,7 @@ export function completeHireFromCandidate(params: {
     });
   }
 
-  return { employeeId: employee.id, dmRoomId: dm.id };
+  return { employeeId: employee.id, dmRoomId: dm.id, topicId: generalTopicId };
 }
 
 export function completeHiresFromCandidates(params: {
@@ -104,9 +104,10 @@ export function completeHiresFromCandidates(params: {
   allTopics?: RoomTopic[];
   defaultRoomId?: string;
   skipWorkLog?: boolean;
-}): { employeeIds: string[]; dmRoomId: string } {
+}): { employeeIds: string[]; dmRoomId: string; topicId?: string } {
   const employeeIds: string[] = [];
   let primaryDmRoomId = "";
+  let primaryTopicId: string | undefined;
 
   for (const candidate of params.candidates) {
     const result = completeHireFromCandidate({
@@ -123,7 +124,10 @@ export function completeHiresFromCandidates(params: {
       skipWorkLog: params.skipWorkLog,
     });
     employeeIds.push(result.employeeId);
-    if (!primaryDmRoomId) primaryDmRoomId = result.dmRoomId;
+    if (!primaryDmRoomId) {
+      primaryDmRoomId = result.dmRoomId;
+      primaryTopicId = result.topicId;
+    }
   }
 
   if (params.mayaRoomId && params.candidates.length > 1) {
@@ -137,7 +141,7 @@ export function completeHiresFromCandidates(params: {
     });
   }
 
-  return { employeeIds, dmRoomId: primaryDmRoomId };
+  return { employeeIds, dmRoomId: primaryDmRoomId, topicId: primaryTopicId };
 }
 
 export function logCandidatesGenerated(

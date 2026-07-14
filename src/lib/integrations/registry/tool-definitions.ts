@@ -183,7 +183,7 @@ export const CreateSpreadsheetArgsSchema = z.object({
   columns: z.array(z.string().min(1)).min(1).max(40),
   rows: z.array(SpreadsheetRowSchema).max(500),
   template: z
-    .enum(["sales_pipeline", "investor_target", "content_calendar", "market_research"])
+    .enum(["sales_pipeline", "investor_target", "content_calendar", "market_research", "lead_list"])
     .optional(),
 });
 export type CreateSpreadsheetArgs = z.infer<typeof CreateSpreadsheetArgsSchema>;
@@ -233,7 +233,7 @@ export const UpdateSpreadsheetArgsSchema = z.object({
   rows: z.array(SpreadsheetRowSchema).max(500).optional(),
   appendRows: z.array(SpreadsheetRowSchema).max(500).optional(),
   template: z
-    .enum(["sales_pipeline", "investor_target", "content_calendar", "market_research"])
+    .enum(["sales_pipeline", "investor_target", "content_calendar", "market_research", "lead_list"])
     .optional(),
 });
 export type UpdateSpreadsheetArgs = z.infer<typeof UpdateSpreadsheetArgsSchema>;
@@ -473,7 +473,7 @@ const createSpreadsheet: ToolDefinition<CreateSpreadsheetArgs> = {
   asyncJobType: "artifact_xlsx",
   argsSchema: CreateSpreadsheetArgsSchema,
   promptUsage:
-    'artifact.createSpreadsheet — args: { "title": "Q3 pipeline export", "template"?: "sales_pipeline"|"investor_target"|"content_calendar"|"market_research", "columns": ["Company", "Stage", "Amount"], "rows": [["Acme", "Qualified", 5000]], "sheetName"?: "Pipeline" }',
+    'artifact.createSpreadsheet — args: { "title": "Q3 pipeline export", "template"?: "sales_pipeline"|"investor_target"|"content_calendar"|"market_research"|"lead_list", "columns": ["Company", "Stage", "Amount"], "rows": [["Acme", "Qualified", 5000]], "sheetName"?: "Pipeline" }. For prospect/lead lists use template "lead_list".',
   buildPreview: (args) => ({
     title: `Spreadsheet — ${args.title}`,
     summary: `${args.title}: ${args.rows.length} rows × ${args.columns.length} columns${args.template ? ` (${args.template})` : ""}.`,

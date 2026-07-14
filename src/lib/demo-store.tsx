@@ -42,6 +42,7 @@ import { mayaWelcomeMessage, MAYA_EMPLOYEE_ID } from "@/lib/hiring/maya";
 import { resolveUniqueRoomName } from "@/lib/room-naming";
 import { isMayaEmployee, isSystemEmployee, mergeMayaIntoState, mayaEmployeeStatus, buildMayaDmRoom, buildMayaEmployee, ensureMayaDmTopicsInState, dedupeMayaDmRooms, mergeEmployeesById, resolveMayaDmRoomId } from "@/lib/maya-employee";
 import { isGroupRoom } from "@/lib/rooms";
+import { ensureDmGeneralTopicInState } from "@/lib/dm-general-topic";
 import { nowISO, uid } from "./utils";
 import { SUPABASE_WORKSPACE_TABLES } from "./supabase/config";
 import { supabase } from "./supabase/client";
@@ -252,6 +253,12 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const backendRef = useRef<BackendMode>(backend);
   const authUserRef = useRef<User | null>(null);
   const authBusyRef = useRef(false);
+  const setupOnboardingInFlightRef = useRef<Promise<{
+    workspaceId: string;
+    firstRoomId: string;
+    roomName: string;
+    mayaDmRoomId: string;
+  }> | null>(null);
   const remoteQueueRef = useRef<Promise<void>>(Promise.resolve());
 
   stateRef.current = state;
@@ -697,171 +704,166 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       },
 
       setupOnboardingWorkspace: async ({ workspaceName, room: roomInput }) => {
-        authBusyRef.current = true;
-        try {
-          const user = authUserRef.current;
-          if (!user) throw new Error("Sign in to continue.");
-          if (!isEmailConfirmed(user)) {
-            throw new Error("Confirm your email before creating a workspace.");
-          }
+        if (setupOnboardingInFlightRef.current) {
+          return setupOnboardingInFlightRef.current;
+        }
 
-          const name =
-            workspaceName.trim() ||
-            stateRef.current.workspace.name ||
-            (typeof user.user_metadata?.workspace_name === "string"
-              ? user.user_metadata.workspace_name
-              : "My AI Workspace");
+        const run = (async () => {
+          authBusyRef.current = true;
+          try {
+            const user = authUserRef.current;
+            if (!user) throw new Error("Sign in to continue.");
+            if (!isEmailConfirmed(user)) {
+              throw new Error("Confirm your email before creating a workspace.");
+            }
 
-          // Idempotent: never recreate workspace/first room if setup already ran.
-          const existingProjectRoom = stateRef.current.rooms.find((r) => r.kind === "room");
-          if (stateRef.current.workspace.id && existingProjectRoom) {
-            return {
-              workspaceId: stateRef.current.workspace.id,
-              firstRoomId: existingProjectRoom.id,
-              roomName: existingProjectRoom.name,
-              mayaDmRoomId: resolveMayaDmRoomId(stateRef.current.rooms),
-            };
-          }
+            const name =
+              workspaceName.trim() ||
+              stateRef.current.workspace.name ||
+              (typeof user.user_metadata?.workspace_name === "string"
+                ? user.user_metadata.workspace_name
+                : "My AI Workspace");
 
-          if (backendRef.current !== "supabase") {
-            const workspaceId = uid("ws");
-            const timestamp = nowISO();
-            const roomId = uid("room");
-            const uniqueName = resolveUniqueRoomName(stateRef.current.rooms, roomInput.name);
-            const room: ProjectRoom = {
-              id: roomId,
-              name: uniqueName,
-              kind: "room",
-              description: roomInput.description ?? `${uniqueName} workstream`,
-              brief: "",
-              humans: [user.id],
-              aiEmployees: [],
-              accent: roomInput.accent,
-              messages: [
-                {
-                  id: uid("msg"),
-                  roomId,
-                  senderType: "system",
-                  senderId: "system",
-                  senderName: "AdeHQ",
-                  content: `Your ${uniqueName} workstream is ready.`,
-                  createdAt: timestamp,
-                },
-              ],
-              tasks: [],
-              memory: [],
-              unread: 0,
-              createdAt: timestamp,
-              updatedAt: timestamp,
-            };
-            const welcome = mayaWelcomeMessage(
-              typeof user.user_metadata?.name === "string"
-                ? user.user_metadata.name.split(" ")[0] ?? "there"
-                : "there",
-            );
-            set((s) => {
-              const merged = mergeMayaIntoState(
-                { ...s, workspace: { ...s.workspace, id: workspaceId, name } },
-                user.id,
-                welcome,
-              );
+            // Idempotent: never recreate workspace/first room if setup already ran.
+            const existingProjectRoom = stateRef.current.rooms.find((r) => r.kind === "room");
+            if (stateRef.current.workspace.id && existingProjectRoom) {
               return {
-                ...merged,
-                rooms: [room, ...merged.rooms.filter((r) => r.id !== room.id)],
+                workspaceId: stateRef.current.workspace.id,
+                firstRoomId: existingProjectRoom.id,
+                roomName: existingProjectRoom.name,
+                mayaDmRoomId: resolveMayaDmRoomId(stateRef.current.rooms),
               };
-            });
-            return {
-              workspaceId,
-              firstRoomId: roomId,
-              roomName: uniqueName,
-              mayaDmRoomId: resolveMayaDmRoomId(stateRef.current.rooms),
-            };
-          }
+            }
 
-          const bootstrapped = await bootstrapWorkspaceRemote(name);
-          await loadRemote(user, bootstrapped.workspaceId);
-
-          const { authHeaders } = await import("@/lib/api/auth-client");
-          const headers = await authHeaders();
-          const profileFirstName = stateRef.current.user?.name?.split(/\s+/)[0];
-          const mayaRes = await fetch("/api/workspaces/ensure-maya", {
-            method: "POST",
-            headers,
-            body: JSON.stringify({
-              workspaceId: bootstrapped.workspaceId,
-              ...(profileFirstName ? { firstName: profileFirstName } : {}),
-            }),
-          });
-          const mayaPayload = await mayaRes.json().catch(() => ({}));
-          if (!mayaRes.ok) {
-            throw new Error(
-              typeof mayaPayload.error === "string"
-                ? mayaPayload.error
-                : "Could not set up Maya.",
-            );
-          }
-          await loadRemote(user, bootstrapped.workspaceId);
-
-          const alreadyProvisioned = stateRef.current.rooms.find((r) => r.kind === "room");
-          if (alreadyProvisioned) {
-            return {
-              workspaceId: bootstrapped.workspaceId,
-              firstRoomId: alreadyProvisioned.id,
-              roomName: alreadyProvisioned.name,
-              mayaDmRoomId: resolveMayaDmRoomId(stateRef.current.rooms),
-            };
-          }
-
-          const timestamp = nowISO();
-          const roomId = uid("room");
-          const uniqueName = resolveUniqueRoomName(stateRef.current.rooms, roomInput.name);
-          const created: ProjectRoom = {
-            id: roomId,
-            name: uniqueName,
-            kind: "room",
-            description: roomInput.description ?? `${uniqueName} workstream`,
-            brief: "",
-            humans: [user.id],
-            aiEmployees: [],
-            accent: roomInput.accent,
-            messages: [
-              {
-                id: uid("msg"),
-                roomId,
-                senderType: "system",
-                senderId: "system",
-                senderName: "AdeHQ",
-                content: `Your ${uniqueName} workstream is ready.`,
+            if (backendRef.current !== "supabase") {
+              const workspaceId = uid("ws");
+              const timestamp = nowISO();
+              const roomId = uid("room");
+              // Demo mode: first room keeps the requested name (no suffix race).
+              const roomName = roomInput.name.trim() || "Launch Room";
+              const room: ProjectRoom = {
+                id: roomId,
+                name: roomName,
+                kind: "room",
+                description: roomInput.description ?? `${roomName} workstream`,
+                brief: "",
+                humans: [user.id],
+                aiEmployees: [],
+                accent: roomInput.accent,
+                messages: [
+                  {
+                    id: uid("msg"),
+                    roomId,
+                    senderType: "system",
+                    senderId: "system",
+                    senderName: "AdeHQ",
+                    content: `Your ${roomName} workstream is ready.`,
+                    createdAt: timestamp,
+                  },
+                ],
+                tasks: [],
+                memory: [],
+                unread: 0,
                 createdAt: timestamp,
-              },
-            ],
-            tasks: [],
-            memory: [],
-            unread: 0,
-            createdAt: timestamp,
-            updatedAt: timestamp,
-          };
+                updatedAt: timestamp,
+              };
+              const welcome = mayaWelcomeMessage(
+                typeof user.user_metadata?.name === "string"
+                  ? user.user_metadata.name.split(" ")[0] ?? "there"
+                  : "there",
+              );
+              set((s) => {
+                const merged = mergeMayaIntoState(
+                  { ...s, workspace: { ...s.workspace, id: workspaceId, name } },
+                  user.id,
+                  welcome,
+                );
+                return {
+                  ...merged,
+                  rooms: [room, ...merged.rooms.filter((r) => r.id !== room.id)],
+                };
+              });
+              return {
+                workspaceId,
+                firstRoomId: roomId,
+                roomName,
+                mayaDmRoomId: resolveMayaDmRoomId(stateRef.current.rooms),
+              };
+            }
 
-          set((s) => ({ ...s, rooms: [created, ...s.rooms.filter((r) => r.id !== created.id)] }));
-          await persistRoom(bootstrapped.workspaceId, created);
-          await Promise.all(
-            created.humans.map((id) =>
-              persistRoomMember(bootstrapped.workspaceId, created.id, "human", id),
-            ),
-          );
-          await Promise.all(
-            created.messages.map((message) => persistMessage(bootstrapped.workspaceId, message)),
-          );
-          await loadRemote(user, bootstrapped.workspaceId);
+            const bootstrapped = await bootstrapWorkspaceRemote(name);
+            await loadRemote(user, bootstrapped.workspaceId);
 
-          return {
-            workspaceId: bootstrapped.workspaceId,
-            firstRoomId: roomId,
-            roomName: uniqueName,
-            mayaDmRoomId: resolveMayaDmRoomId(stateRef.current.rooms),
-          };
+            const { authHeaders } = await import("@/lib/api/auth-client");
+            const headers = await authHeaders();
+            const profileFirstName = stateRef.current.user?.name?.split(/\s+/)[0];
+            const mayaRes = await fetch("/api/workspaces/ensure-maya", {
+              method: "POST",
+              headers,
+              body: JSON.stringify({
+                workspaceId: bootstrapped.workspaceId,
+                ...(profileFirstName ? { firstName: profileFirstName } : {}),
+              }),
+            });
+            const mayaPayload = await mayaRes.json().catch(() => ({}));
+            if (!mayaRes.ok) {
+              throw new Error(
+                typeof mayaPayload.error === "string"
+                  ? mayaPayload.error
+                  : "Could not set up Maya.",
+              );
+            }
+            await loadRemote(user, bootstrapped.workspaceId);
+
+            const alreadyProvisioned = stateRef.current.rooms.find((r) => r.kind === "room");
+            if (alreadyProvisioned) {
+              return {
+                workspaceId: bootstrapped.workspaceId,
+                firstRoomId: alreadyProvisioned.id,
+                roomName: alreadyProvisioned.name,
+                mayaDmRoomId: resolveMayaDmRoomId(stateRef.current.rooms),
+              };
+            }
+
+            // Server-side idempotent first room — never suffix for onboarding.
+            const roomRes = await fetch("/api/workspaces/ensure-first-room", {
+              method: "POST",
+              headers,
+              body: JSON.stringify({
+                workspaceId: bootstrapped.workspaceId,
+                name: roomInput.name.trim() || "Launch Room",
+                accent: roomInput.accent,
+                description: roomInput.description,
+              }),
+            });
+            const roomPayload = await roomRes.json().catch(() => ({}));
+            if (!roomRes.ok) {
+              throw new Error(
+                typeof roomPayload.error === "string"
+                  ? roomPayload.error
+                  : "Could not create your first room.",
+              );
+            }
+            await loadRemote(user, bootstrapped.workspaceId);
+
+            return {
+              workspaceId: bootstrapped.workspaceId,
+              firstRoomId: String(roomPayload.roomId),
+              roomName: String(roomPayload.roomName),
+              mayaDmRoomId: resolveMayaDmRoomId(stateRef.current.rooms),
+            };
+          } finally {
+            authBusyRef.current = false;
+          }
+        })();
+
+        setupOnboardingInFlightRef.current = run;
+        try {
+          return await run;
         } finally {
-          authBusyRef.current = false;
+          if (setupOnboardingInFlightRef.current === run) {
+            setupOnboardingInFlightRef.current = null;
+          }
         }
       },
 
@@ -1210,10 +1212,15 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         }
 
         const existing = s.rooms.find((r) => r.kind === "dm" && r.dmEmployeeId === employeeId);
-        if (existing) return existing;
+        if (existing) {
+          set((st) => ensureDmGeneralTopicInState(st, existing.id, userId, employeeId).state);
+          void refreshTopicsForRoom(existing.id);
+          return existing;
+        }
         const id = uid("dm");
         const timestamp = nowISO();
         const welcomeContent = `This is the start of your direct message with ${employee?.name ?? "your employee"}.`;
+        const topicId = `topic-general-${id}`;
         const created: ProjectRoom = {
           id,
           name: employee?.name ?? "Direct message",
@@ -1227,6 +1234,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
             {
               id: uid("msg"),
               roomId: id,
+              topicId,
               senderType: "system",
               senderId: "system",
               senderName: "AdeHQ",
@@ -1242,15 +1250,23 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           updatedAt: timestamp,
         };
 
-        set((st) => ({ ...st, rooms: [created, ...st.rooms] }));
+        set((st) => {
+          const withRoom = { ...st, rooms: [created, ...st.rooms] };
+          return ensureDmGeneralTopicInState(withRoom, created.id, userId, employeeId).state;
+        });
 
         runRemote(async (workspaceId) => {
           await persistRoom(workspaceId, created);
           await Promise.all([
-            ...created.humans.map((id) => persistRoomMember(workspaceId, created.id, "human", id)),
-            ...created.aiEmployees.map((id) => persistRoomMember(workspaceId, created.id, "ai", id)),
+            ...created.humans.map((memberId) =>
+              persistRoomMember(workspaceId, created.id, "human", memberId),
+            ),
+            ...created.aiEmployees.map((memberId) =>
+              persistRoomMember(workspaceId, created.id, "ai", memberId),
+            ),
           ]);
           await persistMessage(workspaceId, created.messages[0]);
+          await refreshTopicsForRoom(created.id);
         });
 
         return created;

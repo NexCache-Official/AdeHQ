@@ -188,6 +188,7 @@ export type HiringSessionState = {
   hiredEmployeeId?: string;
   hiredEmployeeIds?: string[];
   dmRoomId?: string;
+  dmTopicId?: string;
   pendingRoomAssignment?: string;
   genStep: number;
   successStep: number;

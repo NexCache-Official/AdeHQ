@@ -170,8 +170,28 @@ export async function exportArtifactToDrive(
     entityId: exportId,
   });
 
-  const signed = await client.storage.from(DRIVE_BUCKETS.exports).createSignedUrl(storagePath, 60 * 5);
-  return { exportId, storagePath, signedUrl: signed.data?.signedUrl ?? null };
+  const signedUrl = await createSignedDriveUrl(client, DRIVE_BUCKETS.exports, storagePath, 60 * 5);
+  return { exportId, storagePath, signedUrl };
+}
+
+/** Ensure signed URLs never leave spaces unencoded (Next.js fetch cache-key failures). */
+export function sanitizeSignedUrl(url: string): string {
+  try {
+    const parsed = new URL(url);
+    parsed.pathname = parsed.pathname
+      .split("/")
+      .map((segment) => {
+        try {
+          return encodeURIComponent(decodeURIComponent(segment));
+        } catch {
+          return encodeURIComponent(segment);
+        }
+      })
+      .join("/");
+    return parsed.toString();
+  } catch {
+    return url.replace(/ /g, "%20");
+  }
 }
 
 export async function createSignedDriveUrl(
@@ -185,5 +205,6 @@ export async function createSignedDriveUrl(
     console.warn("[AdeHQ drive] signed URL failed", error);
     return null;
   }
-  return data?.signedUrl ?? null;
+  if (!data?.signedUrl) return null;
+  return sanitizeSignedUrl(data.signedUrl);
 }

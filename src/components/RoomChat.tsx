@@ -1571,8 +1571,12 @@ export function RoomChat({
       <div className="flex h-full items-center justify-center p-8">
         <EmptyState
           icon={MessagesSquare}
-          title="Choose or create a topic"
-          description="Topics keep AI context focused. Select a topic from the list or create a new one to start messaging."
+          title={isDm ? "Opening chat…" : "Choose or create a topic"}
+          description={
+            isDm
+              ? "Setting up your direct message thread. This usually takes a moment."
+              : "Topics keep AI context focused. Select a topic from the list or create a new one to start messaging."
+          }
         />
       </div>
     );

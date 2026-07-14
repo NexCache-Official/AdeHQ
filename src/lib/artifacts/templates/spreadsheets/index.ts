@@ -5,7 +5,8 @@ export type SpreadsheetTemplateId =
   | "sales_pipeline"
   | "investor_target"
   | "content_calendar"
-  | "market_research";
+  | "market_research"
+  | "lead_list";
 
 const TEMPLATE_DEFAULTS: Record<
   SpreadsheetTemplateId,
@@ -26,6 +27,22 @@ const TEMPLATE_DEFAULTS: Record<
   market_research: {
     sheetName: "Comparison",
     columns: ["Option", "Category", "Strengths", "Weaknesses", "Price", "Source", "Notes"],
+  },
+  lead_list: {
+    sheetName: "Leads",
+    columns: [
+      "Company",
+      "Contact",
+      "Role",
+      "Email",
+      "Phone",
+      "Website",
+      "Location",
+      "Segment",
+      "Source URL",
+      "Fit",
+      "Notes",
+    ],
   },
 };
 

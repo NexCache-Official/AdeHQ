@@ -871,6 +871,7 @@ export function HireFlow({ onboarding = false, entrySource = "hire_route" }: Hir
         existingMemory: appState.memory,
         userName: appState.user.name,
         mayaRoomId,
+        allTopics: appState.topics,
         tryClaimHireLock,
         releaseHireLock,
         completeDurableHire,
@@ -892,6 +893,7 @@ export function HireFlow({ onboarding = false, entrySource = "hire_route" }: Hir
         employeeId: result.employeeId,
         employeeIds: result.employeeIds ?? [result.employeeId],
         dmRoomId: result.dmRoomId,
+        dmTopicId: result.topicId,
       });
       dispatch({ type: "SET_STEP", step: "assign_optional" });
     } catch (e) {
@@ -921,7 +923,14 @@ export function HireFlow({ onboarding = false, entrySource = "hire_route" }: Hir
       clearOnboardingDrafts();
     }
     clearHiringSession(scope);
-    router.replace(session.dmRoomId ? `/rooms/${session.dmRoomId}` : "/workforce");
+    if (!session.dmRoomId) {
+      router.replace("/workforce");
+      return;
+    }
+    const topicQuery = session.dmTopicId
+      ? `?topic=${encodeURIComponent(session.dmTopicId)}`
+      : "";
+    router.replace(`/rooms/${session.dmRoomId}${topicQuery}`);
   };
 
   const backLabel =

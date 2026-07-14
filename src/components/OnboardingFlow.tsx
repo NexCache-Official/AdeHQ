@@ -77,6 +77,7 @@ export function OnboardingFlow() {
   const [mayaDone, setMayaDone] = useState(false);
   const typedRef = useRef(false);
   const typeIntervalRef = useRef<ReturnType<typeof setInterval>>();
+  const setupInFlightRef = useRef<Promise<{ firstRoomId: string; roomName: string }> | null>(null);
 
   const companyName = state.workspace.name || "My AI Workspace";
   const ownerInitial = (companyName.trim()[0] || "N").toUpperCase();
@@ -163,22 +164,32 @@ export function OnboardingFlow() {
 
   const ensureWorkspaceSetup = async () => {
     if (setupResult) return setupResult;
+    if (setupInFlightRef.current) return setupInFlightRef.current;
     if (!activePreset || !outcomeId) {
       throw new Error("Complete the earlier steps before continuing.");
     }
 
-    const result = await actions.setupOnboardingWorkspace({
-      workspaceName: companyName,
-      room: {
-        name: roomName,
-        accent: activePreset.accent,
-        description: `${roomName} — your first AI workstream`,
-      },
-    });
-    const resolved = { firstRoomId: result.firstRoomId, roomName: result.roomName };
-    persistDrafts(result.firstRoomId, result.roomName);
-    setSetupResult(resolved);
-    return resolved;
+    const run = (async () => {
+      const result = await actions.setupOnboardingWorkspace({
+        workspaceName: companyName,
+        room: {
+          name: roomName,
+          accent: activePreset.accent,
+          description: `${roomName} — your first AI workstream`,
+        },
+      });
+      const resolved = { firstRoomId: result.firstRoomId, roomName: result.roomName };
+      persistDrafts(result.firstRoomId, result.roomName);
+      setSetupResult(resolved);
+      return resolved;
+    })();
+
+    setupInFlightRef.current = run;
+    try {
+      return await run;
+    } finally {
+      if (setupInFlightRef.current === run) setupInFlightRef.current = null;
+    }
   };
 
   const skipToWorkspace = async () => {
