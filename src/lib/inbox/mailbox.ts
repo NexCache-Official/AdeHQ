@@ -98,6 +98,9 @@ export function mapThreadRow(row: Record<string, unknown>): ThreadSummaryDTO {
     draftStatus: (row.draft_status as ThreadSummaryDTO["draftStatus"]) ?? "idle",
     category: (row.category as string) ?? null,
     aiActivity: buildAiActivity(row),
+    labels: Array.isArray(row.__labels)
+      ? (row.__labels as Array<{ id: string; name: string; color: string | null }>)
+      : [],
   };
 }
 

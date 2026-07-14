@@ -13,6 +13,7 @@ export const EMAIL_WORK_RELATIONS = {
   linkedArtifact: "linked_artifact",
   sourcesMemory: "sources_memory",
   linkedDeal: "linked_deal",
+  linkedContact: "linked_contact",
 } as const;
 
 export type EmailWorkRelation =

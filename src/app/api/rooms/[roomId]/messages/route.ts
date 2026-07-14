@@ -5,9 +5,12 @@ import {
   getWorkspaceIdForRoom,
   insertHumanMessage,
   loadRespondersContext,
+  loadTopicContext,
   parseEmployeeMentions,
+  persistEmployeeEffects,
 } from "@/lib/server/room-messages";
 import { assertTopicInRoom, ensureGeneralTopic } from "@/lib/server/topic-helpers";
+import { tryResolveCapabilityGrantFromHumanReply } from "@/lib/integrations/resolve-capability-grant";
 import { filterOrchestrationEmployees } from "@/lib/orchestration/collaboration-permissions";
 import { applyRoomGovernanceToPlan } from "@/lib/orchestration/ambient-governance";
 import { orchestrateConversation } from "@/lib/orchestration/conversation-orchestrator";
@@ -257,6 +260,74 @@ export async function POST(
         blockedRuns: [],
         skippedOrchestration: true,
       });
+    }
+
+    // Conversational Allow once / Always allow / Not now for pending tool access.
+    try {
+      const grantResolved = await tryResolveCapabilityGrantFromHumanReply(client, {
+        workspaceId,
+        roomId: params.roomId,
+        topicId,
+        userId: user.id,
+        content: trimmed,
+      });
+      if (grantResolved) {
+        const ctx = await loadTopicContext(client, workspaceId, params.roomId, topicId);
+        const employee = ctx.employees.find((e) => e.id === grantResolved.employeeId);
+        let ackMessageId: string | undefined;
+        if (employee) {
+          const { aiMessage } = await persistEmployeeEffects(
+            client,
+            workspaceId,
+            params.roomId,
+            topicId,
+            employee,
+            grantResolved.acknowledgment,
+            { workLog: [], tasks: [], memory: [], approvals: [] },
+            humanMessage.id,
+          );
+          ackMessageId = aiMessage.id;
+        }
+
+        // If access was granted, continue the original task in a follow-up run.
+        let queued: Awaited<ReturnType<typeof queueAgentRuns>>["queued"] = [];
+        let blocked: Awaited<ReturnType<typeof queueAgentRuns>>["blocked"] = [];
+        if (grantResolved.scope !== "deny" && employee) {
+          const continueContent = [
+            `The human granted me ${grantResolved.scope === "always" ? "always-on" : "one-time"} access to ${grantResolved.domainLabel}.`,
+            `Continue the previous request now that I can use ${grantResolved.toolName}.`,
+            `Original human reply was: ${trimmed}`,
+          ].join(" ");
+          const followUp = await queueAgentRuns(client, {
+            workspaceId,
+            roomId: params.roomId,
+            topicId,
+            triggerMessageId: humanMessage.id,
+            responders: [
+              {
+                employee,
+                reason: "capability_grant_continue",
+              },
+            ],
+            content: continueContent,
+          });
+          queued = followUp.queued;
+          blocked = followUp.blocked;
+        }
+
+        return NextResponse.json({
+          humanMessage,
+          queuedRuns: queued,
+          blockedRuns: blocked,
+          capabilityGrant: {
+            approvalId: grantResolved.approvalId,
+            scope: grantResolved.scope,
+            acknowledgmentMessageId: ackMessageId,
+          },
+        });
+      }
+    } catch (grantError) {
+      console.warn("[AdeHQ messages] capability grant reply handling failed", grantError);
     }
 
     const stopDetection = detectWorkStopRequest(trimmed);

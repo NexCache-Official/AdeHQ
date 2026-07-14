@@ -437,6 +437,18 @@ export async function processInboundEvent(
       },
     });
 
+    // Slice E: auto-link existing CRM contact even when triage is skipped (manual mode).
+    try {
+      const { resolveAndLinkThreadContact } = await import("@/lib/inbox/crm-resolve");
+      await resolveAndLinkThreadContact(client, {
+        workspaceId: resolved.workspaceId,
+        threadId,
+        fromAddress: from.address,
+      });
+    } catch (crmErr) {
+      console.warn("[inbox] CRM resolve on inbound failed", crmErr);
+    }
+
     // Slice C: stale AI drafts + enqueue triage (never blocks visibility).
     try {
       const { markDraftsStaleOnInbound, enqueueTriageAfterInbound } = await import(

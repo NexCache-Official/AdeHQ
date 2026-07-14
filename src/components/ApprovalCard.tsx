@@ -62,6 +62,9 @@ export function ApprovalCard({ approval }: { approval: Approval }) {
   const resolved = approval.status !== "pending";
   const isDemoWorkspace = state.workspace.workspaceMode === "demo";
   const hasActionPayload = Boolean(approval.actionPayload?.tool);
+  const isCapabilityGrant =
+    approval.actionType === "tool_access" &&
+    approval.actionPayload?.kind === "capability_grant";
 
   const [busyAction, setBusyAction] = useState<ResolveAction | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -77,12 +80,16 @@ export function ApprovalCard({ approval }: { approval: Approval }) {
   );
   const editEntries = useMemo(() => editableArgEntries(payloadArgs), [payloadArgs]);
 
-  async function resolveOnServer(action: ResolveAction) {
+  async function resolveOnServer(
+    action: ResolveAction,
+    grantScope?: "once" | "always",
+  ) {
     setBusyAction(action);
     setError(null);
     setNotice(null);
     try {
       const body: Record<string, unknown> = { action };
+      if (grantScope) body.grantScope = grantScope;
       if (action === "revise" || note.trim()) body.note = note.trim();
       if (action === "edit") {
         const editedArgs: Record<string, unknown> = { ...payloadArgs };
@@ -103,7 +110,9 @@ export function ApprovalCard({ approval }: { approval: Approval }) {
         headers: await authHeaders(),
         body: JSON.stringify(body),
       });
-      const data = await parseJsonResponse<ResolveResponse>(response);
+      const data = await parseJsonResponse<
+        ResolveResponse & { acknowledgment?: string }
+      >(response);
       if (!response.ok) {
         throw new Error(data.error ?? "Unable to resolve approval.");
       }
@@ -111,7 +120,9 @@ export function ApprovalCard({ approval }: { approval: Approval }) {
       if (data.approval) {
         actions.mergeApproval({ ...approval, ...data.approval });
       }
-      if (data.execution) {
+      if (data.acknowledgment) {
+        setNotice(data.acknowledgment);
+      } else if (data.execution) {
         if (data.execution.status === "success") {
           setNotice(data.execution.output?.summary ?? "Action executed.");
         } else if (data.execution.error) {
@@ -263,7 +274,60 @@ export function ApprovalCard({ approval }: { approval: Approval }) {
         </div>
       )}
 
-      {!resolved && panel === null && (
+      {!resolved && panel === null && isCapabilityGrant && (
+        <div className="mt-3.5 flex flex-wrap gap-2 border-t border-border pt-3.5">
+          <Button
+            size="sm"
+            className="flex-1"
+            disabled={busy}
+            onClick={() => {
+              if (isDemoWorkspace) {
+                actions.resolveApproval(approval.id, true);
+                return;
+              }
+              void resolveOnServer("approve", "once");
+            }}
+          >
+            {busyAction === "approve" ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Check className="h-4 w-4" />
+            )}
+            Allow once
+          </Button>
+          <Button
+            size="sm"
+            variant="secondary"
+            className="flex-1"
+            disabled={busy}
+            onClick={() => {
+              if (isDemoWorkspace) {
+                actions.resolveApproval(approval.id, true);
+                return;
+              }
+              void resolveOnServer("approve", "always");
+            }}
+          >
+            Always allow
+          </Button>
+          <Button
+            size="sm"
+            variant="secondary"
+            className="flex-1"
+            disabled={busy}
+            onClick={() => resolve("reject")}
+          >
+            {busyAction === "reject" ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <X className="h-4 w-4" />
+            )}
+            Not now
+          </Button>
+        </div>
+      )}
+
+      {!resolved && panel === null && !isCapabilityGrant && (
         <div className="mt-3.5 flex flex-wrap gap-2 border-t border-border pt-3.5">
           <Button size="sm" className="flex-1" disabled={busy} onClick={() => resolve("approve")}>
             {busyAction === "approve" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}

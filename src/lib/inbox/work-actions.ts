@@ -35,6 +35,10 @@ import type { InboxAccess } from "./access";
 import { isMayaEmployee } from "@/lib/maya-employee";
 import { resolveMemoryInsert } from "@/lib/memory/dedupe";
 import { uid as memoryUid } from "@/lib/utils";
+import {
+  findContactByEmail,
+  normalizeEmailAddress,
+} from "@/lib/inbox/crm-resolve";
 
 export type WorkActionBase = {
   client: SupabaseClient;
@@ -51,6 +55,7 @@ type ThreadWorkSource = {
   subject: string;
   stewardMeta: Record<string, unknown>;
   dealId: string | null;
+  contactId: string | null;
   assignedEmployeeId: string | null;
   latestMessage: {
     id: string;
@@ -70,7 +75,9 @@ async function loadThreadWorkSource(
 ): Promise<ThreadWorkSource> {
   const { data: thread, error } = await client
     .from("email_threads")
-    .select("id, subject, steward_meta, deal_id, assigned_employee_id, mailbox_id")
+    .select(
+      "id, subject, steward_meta, deal_id, contact_id, assigned_employee_id, mailbox_id",
+    )
     .eq("id", threadId)
     .eq("workspace_id", workspaceId)
     .eq("mailbox_id", mailboxId)
@@ -80,7 +87,9 @@ async function loadThreadWorkSource(
 
   const { data: messages } = await client
     .from("email_messages")
-    .select("id, text_body, from_address, to_addresses, created_at, direction")
+    .select(
+      "id, text_body, html_body_sanitised, from_address, to_addresses, created_at, direction",
+    )
     .eq("thread_id", threadId)
     .eq("workspace_id", workspaceId)
     .order("created_at", { ascending: false })
@@ -96,17 +105,27 @@ async function loadThreadWorkSource(
     hasAttachments = (count ?? 0) > 0;
   }
 
+  const textBodyRaw = latest?.text_body ? String(latest.text_body).trim() : "";
+  const htmlPlain = latest?.html_body_sanitised
+    ? String(latest.html_body_sanitised)
+        .replace(/<[^>]+>/g, " ")
+        .replace(/\s+/g, " ")
+        .trim()
+    : "";
+  const textBody = textBodyRaw || htmlPlain || null;
+
   return {
     subject: String(thread.subject ?? "(no subject)"),
     stewardMeta: (thread.steward_meta as Record<string, unknown>) ?? {},
     dealId: thread.deal_id ? String(thread.deal_id) : null,
+    contactId: thread.contact_id ? String(thread.contact_id) : null,
     assignedEmployeeId: thread.assigned_employee_id
       ? String(thread.assigned_employee_id)
       : null,
     latestMessage: latest
       ? {
           id: String(latest.id),
-          textBody: latest.text_body ? String(latest.text_body) : null,
+          textBody,
           fromAddress: latest.from_address ? String(latest.from_address) : null,
           toAddresses: Array.isArray(latest.to_addresses)
             ? (latest.to_addresses as string[])
@@ -648,6 +667,41 @@ export async function askEmployeeFromEmail(
       `email-ask-${base.clientActionId}`,
     );
 
+    const workType = params.workType ?? "email_ask_employee";
+    const since = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+    const { data: existingRuns } = await base.client
+      .from("agent_runs")
+      .select("id, status, run_metadata")
+      .eq("workspace_id", base.workspaceId)
+      .eq("room_id", roomId!)
+      .eq("topic_id", topicId)
+      .eq("employee_id", params.employeeId)
+      .in("status", ["queued", "running", "waiting", "completed"])
+      .gte("created_at", since)
+      .order("created_at", { ascending: false })
+      .limit(10);
+    const deduped = (existingRuns ?? []).find((row) => {
+      const meta = (row.run_metadata as Record<string, unknown>) ?? {};
+      return (
+        meta.emailThreadId === base.threadId &&
+        (meta.workType === workType || meta.workType === "email_ask_employee")
+      );
+    });
+    if (deduped) {
+      return {
+        roomId: roomId!,
+        topicId,
+        messageId: message.id,
+        employeeId: params.employeeId,
+        employeeName: empMeta.name,
+        queuedRuns: [String(deduped.id)],
+        blocked: [],
+        provenance,
+        workHoursEvent: workType,
+        deduped: true,
+      };
+    }
+
     const { queued, blocked } = await queueAgentRuns(base.client, {
       workspaceId: base.workspaceId,
       roomId: roomId!,
@@ -658,7 +712,7 @@ export async function askEmployeeFromEmail(
           employee,
           reason: "explicit_mention",
           runMetadata: {
-            workType: params.workType ?? "email_ask_employee",
+            workType,
             emailThreadId: base.threadId,
             emailMessageId: ctx.latestMessageId,
             ...provenance,
@@ -668,7 +722,6 @@ export async function askEmployeeFromEmail(
       content,
     });
 
-    const workHoursEvent = params.workType ?? "email_ask_employee";
     return {
       roomId: roomId!,
       topicId,
@@ -678,7 +731,7 @@ export async function askEmployeeFromEmail(
       queuedRuns: queued.map((q) => q.runId),
       blocked,
       provenance,
-      workHoursEvent,
+      workHoursEvent: workType,
     };
   });
 }
@@ -929,6 +982,217 @@ export async function saveDecisionFromEmail(
   });
 }
 
+// --- E1 CRM actions -------------------------------------------------------------
+
+export async function attachContactFromEmail(
+  base: WorkActionBase,
+  params: { contactId: string },
+) {
+  return withIdempotency(base, "attach_contact", async () => {
+    const { data: contact, error } = await base.client
+      .from("crm_contacts")
+      .select("id, full_name, email")
+      .eq("workspace_id", base.workspaceId)
+      .eq("id", params.contactId)
+      .maybeSingle();
+    if (error) throw error;
+    if (!contact) throw new AuthError("Contact not found.", 404);
+
+    const { error: updateError } = await base.client
+      .from("email_threads")
+      .update({
+        contact_id: params.contactId,
+        updated_at: nowISO(),
+      })
+      .eq("id", base.threadId)
+      .eq("workspace_id", base.workspaceId);
+    if (updateError) throw updateError;
+
+    const ctx = await buildContextForThread(base);
+    const provenance = provenanceFromContext(ctx);
+    const edge = await upsertWorkGraphEdge(base.client, {
+      workspaceId: base.workspaceId,
+      fromObjectType: "email_thread",
+      fromObjectId: base.threadId,
+      relationType: EMAIL_WORK_RELATIONS.linkedContact,
+      toObjectType: "crm_contact",
+      toObjectId: params.contactId,
+      metadata: {
+        ...provenance,
+        contactName: String(contact.full_name ?? "Contact"),
+      },
+    });
+
+    return {
+      contactId: params.contactId,
+      contactName: String(contact.full_name ?? "Contact"),
+      edgeId: edge.id,
+      provenance,
+    };
+  });
+}
+
+export async function createContactFromEmail(
+  base: WorkActionBase,
+  params?: { firstName?: string; lastName?: string; email?: string },
+) {
+  return withIdempotency(base, "create_contact", async () => {
+    const src = await loadThreadWorkSource(
+      base.client,
+      base.workspaceId,
+      base.mailboxId,
+      base.threadId,
+    );
+    const email =
+      normalizeEmailAddress(params?.email) ||
+      normalizeEmailAddress(src.latestMessage?.fromAddress);
+    if (!email) throw new AuthError("No sender email to create a contact from.", 400);
+
+    const existing = await findContactByEmail(base.client, base.workspaceId, email);
+    if (existing) {
+      return attachContactFromEmail(
+        { ...base, clientActionId: `${base.clientActionId}:attach` },
+        { contactId: existing.id },
+      );
+    }
+
+    const fromName = (src.latestMessage?.fromAddress ?? "").split("@")[0] || "Contact";
+    const firstName = params?.firstName?.trim() || fromName;
+    const lastName = params?.lastName?.trim() || null;
+    const fullName = [firstName, lastName].filter(Boolean).join(" ");
+    const contactId = uid("contact");
+    const { error } = await base.client.from("crm_contacts").insert({
+      workspace_id: base.workspaceId,
+      id: contactId,
+      first_name: firstName,
+      last_name: lastName,
+      full_name: fullName,
+      email,
+      phone: null,
+      title: null,
+      company_id: null,
+      company_name: null,
+      notes: `Created from inbox thread ${base.threadId}`,
+      source: "inbox",
+      owner_employee_id: null,
+      created_by_type: "human",
+      created_by_id: base.userId,
+      created_at: nowISO(),
+      updated_at: nowISO(),
+    });
+    if (error) throw error;
+
+    return attachContactFromEmail(
+      { ...base, clientActionId: `${base.clientActionId}:attach` },
+      { contactId },
+    );
+  });
+}
+
+export async function createFollowUpFromEmail(
+  base: WorkActionBase,
+  params: {
+    roomId: string;
+    topicId?: string;
+    title: string;
+    dueDate: string;
+    description?: string;
+  },
+) {
+  return withIdempotency(base, "create_follow_up", async () => {
+    await assertCanBridgeIntoRoom(base.client, {
+      workspaceId: base.workspaceId,
+      roomId: params.roomId,
+      userId: base.userId,
+    });
+    if (!params.dueDate?.trim()) {
+      throw new AuthError("dueDate required for follow-up.", 400);
+    }
+    const ctx = await buildContextForThread(base);
+    const provenance = provenanceFromContext(ctx);
+    const topicId =
+      params.topicId ??
+      (await ensureGeneralTopic(base.client, base.workspaceId, params.roomId)).id;
+    const taskId = uid("task");
+    const now = nowISO();
+
+    const { data: thread } = await base.client
+      .from("email_threads")
+      .select("contact_id, deal_id")
+      .eq("id", base.threadId)
+      .maybeSingle();
+
+    const { error } = await base.client.from("tasks").insert({
+      workspace_id: base.workspaceId,
+      id: taskId,
+      room_id: params.roomId,
+      topic_id: topicId,
+      title: params.title.trim(),
+      description:
+        params.description?.trim() ||
+        ctx.stewardSummary ||
+        `Follow up on email: ${ctx.subject}`,
+      status: "open",
+      priority: "medium",
+      assignee_type: "human",
+      assignee_id: base.userId,
+      created_from: "inbox_follow_up",
+      created_by_run_id: null,
+      due_date: params.dueDate.trim(),
+      created_at: now,
+      updated_at: now,
+    });
+    if (error) throw error;
+
+    if (thread?.contact_id || thread?.deal_id) {
+      try {
+        await base.client.from("crm_tasks").insert({
+          workspace_id: base.workspaceId,
+          id: uid("crmtask"),
+          title: params.title.trim(),
+          due_date: params.dueDate.trim(),
+          status: "open",
+          contact_id: thread.contact_id ? String(thread.contact_id) : null,
+          deal_id: thread.deal_id ? String(thread.deal_id) : null,
+          created_by_type: "human",
+          created_by_id: base.userId,
+          created_at: now,
+          updated_at: now,
+        });
+      } catch {
+        /* optional mirror */
+      }
+    }
+
+    const edge = await upsertWorkGraphEdge(base.client, {
+      workspaceId: base.workspaceId,
+      fromObjectType: "email_thread",
+      fromObjectId: base.threadId,
+      relationType: EMAIL_WORK_RELATIONS.linkedTask,
+      toObjectType: "task",
+      toObjectId: taskId,
+      metadata: {
+        ...provenance,
+        roomId: params.roomId,
+        topicId,
+        title: params.title.trim(),
+        dueDate: params.dueDate.trim(),
+        kind: "follow_up",
+      },
+    });
+
+    return {
+      taskId,
+      roomId: params.roomId,
+      topicId,
+      edgeId: edge.id,
+      title: params.title.trim(),
+      dueDate: params.dueDate.trim(),
+      provenance,
+    };
+  });
+}
+
 // --- D3 actions ----------------------------------------------------------------
 
 export async function attachDealFromEmail(
@@ -1080,7 +1344,58 @@ export async function unlinkEmailWork(
       unlinkedBy: base.userId,
     });
     if (!edge) throw new AuthError("Edge not found or already unlinked.", 404);
+
+    // Keep thread FK in sync when detaching CRM links.
+    if (
+      edge.relationType === EMAIL_WORK_RELATIONS.linkedContact &&
+      edge.fromObjectType === "email_thread"
+    ) {
+      await base.client
+        .from("email_threads")
+        .update({ contact_id: null, updated_at: nowISO() })
+        .eq("id", edge.fromObjectId)
+        .eq("workspace_id", base.workspaceId)
+        .eq("contact_id", edge.toObjectId);
+    }
+    if (
+      edge.relationType === EMAIL_WORK_RELATIONS.linkedDeal &&
+      edge.fromObjectType === "email_thread"
+    ) {
+      await base.client
+        .from("email_threads")
+        .update({ deal_id: null, updated_at: nowISO() })
+        .eq("id", edge.fromObjectId)
+        .eq("workspace_id", base.workspaceId)
+        .eq("deal_id", edge.toObjectId);
+    }
+
     return { edgeId: edge.id, unlinked: true };
+  });
+}
+
+/** Detach linked contact from a thread (tombstone edge + clear contact_id). */
+export async function detachContactFromEmail(base: WorkActionBase) {
+  return withIdempotency(base, "detach_contact", async () => {
+    const edges = await listActiveEdgesForThread(base.client, {
+      workspaceId: base.workspaceId,
+      threadId: base.threadId,
+    });
+    const contactEdge = edges.find(
+      (e) => e.relationType === EMAIL_WORK_RELATIONS.linkedContact,
+    );
+    if (!contactEdge) {
+      await base.client
+        .from("email_threads")
+        .update({ contact_id: null, updated_at: nowISO() })
+        .eq("id", base.threadId)
+        .eq("workspace_id", base.workspaceId);
+      return { unlinked: true, edgeId: null as string | null };
+    }
+    const result = await unlinkEmailWork(
+      { ...base, clientActionId: `${base.clientActionId}:unlink` },
+      { edgeId: contactEdge.id },
+    );
+    return { unlinked: true, edgeId: result.edgeId };
   });
 }
 
@@ -1114,7 +1429,32 @@ export async function getEmailThreadWorkContext(
     detail: string;
   };
   dealId: string | null;
+  contactId: string | null;
   keyPointSuggestions: string[];
+  crm: {
+    contact: {
+      id: string;
+      name: string;
+      email: string | null;
+      phone: string | null;
+      companyName: string | null;
+      companyId: string | null;
+    } | null;
+    deal: {
+      id: string;
+      name: string;
+      stageName: string;
+      amount: number | null;
+      status: string;
+    } | null;
+    suggestedContact: { email: string; name: string | null } | null;
+    openFollowUps: Array<{
+      taskId: string;
+      title: string;
+      dueDate: string | null;
+      status: string;
+    }>;
+  };
 }> {
   const src = await loadThreadWorkSource(
     client,
@@ -1207,12 +1547,106 @@ export async function getEmailThreadWorkContext(
     };
   }
 
+  let contact: {
+    id: string;
+    name: string;
+    email: string | null;
+    phone: string | null;
+    companyName: string | null;
+    companyId: string | null;
+  } | null = null;
+  if (src.contactId) {
+    const { data } = await client
+      .from("crm_contacts")
+      .select("id, full_name, email, phone, company_name, company_id")
+      .eq("workspace_id", params.workspaceId)
+      .eq("id", src.contactId)
+      .maybeSingle();
+    if (data) {
+      contact = {
+        id: String(data.id),
+        name: String(data.full_name ?? ""),
+        email: data.email ? String(data.email) : null,
+        phone: data.phone ? String(data.phone) : null,
+        companyName: data.company_name ? String(data.company_name) : null,
+        companyId: data.company_id ? String(data.company_id) : null,
+      };
+    }
+  }
+
+  let deal: {
+    id: string;
+    name: string;
+    stageName: string;
+    amount: number | null;
+    status: string;
+  } | null = null;
+  if (src.dealId) {
+    const { data } = await client
+      .from("crm_deals")
+      .select("id, name, stage_name, amount, status")
+      .eq("workspace_id", params.workspaceId)
+      .eq("id", src.dealId)
+      .maybeSingle();
+    if (data) {
+      deal = {
+        id: String(data.id),
+        name: String(data.name ?? ""),
+        stageName: String(data.stage_name ?? ""),
+        amount: data.amount != null ? Number(data.amount) : null,
+        status: String(data.status ?? "open"),
+      };
+    }
+  }
+
+  const suggestedEmail = normalizeEmailAddress(src.latestMessage?.fromAddress);
+  const suggestedContact =
+    !contact && suggestedEmail
+      ? {
+          email: suggestedEmail,
+          name: src.latestMessage?.fromAddress?.split("@")[0] ?? null,
+        }
+      : null;
+
+  const followUpEdges = linkedWork.filter(
+    (l) => l.objectType === "task" && l.meta?.kind === "follow_up",
+  );
+  const openFollowUps: Array<{
+    taskId: string;
+    title: string;
+    dueDate: string | null;
+    status: string;
+  }> = [];
+  for (const item of followUpEdges) {
+    const { data: task } = await client
+      .from("tasks")
+      .select("id, title, due_date, status")
+      .eq("workspace_id", params.workspaceId)
+      .eq("id", item.objectId)
+      .maybeSingle();
+    if (task && ["open", "in_progress", "waiting_approval", "blocked"].includes(String(task.status))) {
+      openFollowUps.push({
+        taskId: String(task.id),
+        title: String(task.title ?? item.title),
+        dueDate: task.due_date ? String(task.due_date) : null,
+        status: String(task.status),
+      });
+    }
+  }
+
   return {
     workContext,
     linkedWork,
     recommendedAction,
     dealId: src.dealId,
+    contactId: src.contactId,
     keyPointSuggestions: workContext.keyPoints,
+    crm: {
+      contact,
+      deal,
+      suggestedContact,
+      openFollowUps,
+    },
   };
 }
 
@@ -1282,6 +1716,22 @@ async function hydrateLinkedObject(
     case "crm_deal": {
       return {
         title: metaTitle ?? "Deal",
+        href: "/crm",
+      };
+    }
+    case "crm_contact": {
+      const { data } = await client
+        .from("crm_contacts")
+        .select("full_name")
+        .eq("workspace_id", workspaceId)
+        .eq("id", edge.toObjectId)
+        .maybeSingle();
+      return {
+        title: data?.full_name
+          ? String(data.full_name)
+          : typeof edge.metadata.contactName === "string"
+            ? edge.metadata.contactName
+            : "Contact",
         href: "/crm",
       };
     }

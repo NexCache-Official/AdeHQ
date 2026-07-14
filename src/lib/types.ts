@@ -271,6 +271,8 @@ export type MessageArtifact = {
     error?: string;
     toolRunId?: string;
     jobId?: string;
+    /** Pending approval id (e.g. Allow once / Always allow capability grant). */
+    approvalId?: string;
     triggerMessageId?: string;
     idempotencyKey?: string;
     retryArgs?: Record<string, unknown>;
@@ -320,7 +322,8 @@ export type ResponseReason =
   | "ambient_role_match"
   | "ambient_collaboration_lead"
   | "ambient_collaboration_collaborator"
-  | "manual_retry";
+  | "manual_retry"
+  | "capability_grant_continue";
 
 export type ConversationMode =
   | "direct_reply"

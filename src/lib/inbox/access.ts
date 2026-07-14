@@ -34,7 +34,8 @@ export type EmailPermission =
   | "email.assign"
   | "email.create_ai_draft"
   | "email.approve_ai_send"
-  | "email.manage_mailbox";
+  | "email.manage_mailbox"
+  | "email.manage_rules";
 
 export type InboxAccess = {
   role: string;
@@ -72,7 +73,9 @@ function buildPermissions(flags: {
   }
   if (flags.canOrganize) list.push("email.assign");
   if (flags.canApprove) list.push("email.approve_ai_send");
-  if (flags.canManage) list.push("email.manage_mailbox");
+  if (flags.canManage) {
+    list.push("email.manage_mailbox", "email.manage_rules");
+  }
   return list;
 }
 

@@ -13,6 +13,10 @@ import type {
 } from "./types";
 import { runToolCall } from "./executor/tool-executor";
 import { ensureDefaultEmployeeToolGrants } from "./permissions";
+import {
+  loadActiveSessionGrantToolIds,
+  withSessionGrantsOnEmployee,
+} from "./capability-grants";
 import { getToolDefinition } from "./registry/tool-definitions";
 import { mergeToolOutcomeArtifacts } from "./tool-outcome-artifacts";
 import { coerceToolCall } from "./coerce-tool-args";
@@ -82,12 +86,19 @@ export async function executeEmployeeToolCalls(
     return { results: [], messageArtifacts: [], summaries: [] };
   }
 
-  // Self-heal grants for employees hired before the Integration Layer.
-  const employee = await ensureDefaultEmployeeToolGrants(
+  // Self-heal grants for employees hired before the Integration Layer, then
+  // overlay any active Allow-once session grants for this room.
+  const seeded = await ensureDefaultEmployeeToolGrants(
     client,
     params.workspaceId,
     params.employee,
   );
+  const sessionIds = await loadActiveSessionGrantToolIds(client, {
+    workspaceId: params.workspaceId,
+    employeeId: seeded.id,
+    roomId: params.roomId,
+  });
+  const employee = withSessionGrantsOnEmployee(seeded, sessionIds);
 
   const ctx: ToolExecutionContext = {
     client,

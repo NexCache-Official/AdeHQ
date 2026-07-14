@@ -1,8 +1,9 @@
 /**
- * GET /api/inbox/threads?workspaceId=&folder=&cursor=&limit=
+ * GET /api/inbox/threads?workspaceId=&folder=&cursor=&limit=&label=
  *
  * Query-based folders + keyset pagination. List-row preview is folder-aware:
  * Inbox → last inbound; Sent / Awaiting → last outbound.
+ * Optional `label` filters to threads carrying that label id.
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -50,6 +51,21 @@ export async function GET(request: NextRequest) {
     const limit = Math.min(Math.max(Number(params.get("limit")) || 30, 1), 50);
     const cursor = decodeCursor(params.get("cursor"));
     const previewDir = listPreviewDirection(folder);
+    const labelFilter = params.get("label")?.trim() || null;
+
+    let labelThreadIds: string[] | null = null;
+    if (labelFilter) {
+      const { data: labeled, error: labelError } = await ctx.secret
+        .from("email_thread_labels")
+        .select("thread_id")
+        .eq("workspace_id", ctx.workspaceId)
+        .eq("label_id", labelFilter);
+      if (labelError) throw labelError;
+      labelThreadIds = [...new Set((labeled ?? []).map((r) => String(r.thread_id)))];
+      if (labelThreadIds.length === 0) {
+        return NextResponse.json({ threads: [], nextCursor: null } satisfies ThreadPageDTO);
+      }
+    }
 
     let query = ctx.secret
       .from("email_threads")
@@ -65,6 +81,9 @@ export async function GET(request: NextRequest) {
 
     if (folder === "assigned_to_me") {
       query = query.eq("assigned_human_id", ctx.user.id) as never;
+    }
+    if (labelThreadIds) {
+      query = query.in("id", labelThreadIds) as never;
     }
 
     if (cursor && cursor.ts) {
@@ -184,6 +203,34 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    const labelsByThread = new Map<
+      string,
+      Array<{ id: string; name: string; color: string | null }>
+    >();
+    if (threadIds.length > 0) {
+      const { data: labelRows } = await ctx.secret
+        .from("email_thread_labels")
+        .select("thread_id, label_id, email_labels(id, name, color)")
+        .eq("workspace_id", ctx.workspaceId)
+        .in("thread_id", threadIds);
+      for (const row of labelRows ?? []) {
+        const tid = String(row.thread_id);
+        const label = row.email_labels as unknown as {
+          id?: string;
+          name?: string;
+          color?: string | null;
+        } | null;
+        const entry = {
+          id: String(label?.id ?? row.label_id),
+          name: String(label?.name ?? ""),
+          color: label?.color ? String(label.color) : null,
+        };
+        const list = labelsByThread.get(tid) ?? [];
+        list.push(entry);
+        labelsByThread.set(tid, list);
+      }
+    }
+
     const threads: ThreadSummaryDTO[] = pageRows.map((r) => {
       const preview = previewByThread.get(String(r.id)) ?? {};
       const msgDir = String(preview.direction ?? r.latest_direction ?? "inbound");
@@ -200,6 +247,7 @@ export async function GET(request: NextRequest) {
         __preview_message: preview,
         __peer_kind: peerKind,
         __has_attachments: attachThreads.has(String(r.id)),
+        __labels: labelsByThread.get(String(r.id)) ?? [],
       });
     });
 

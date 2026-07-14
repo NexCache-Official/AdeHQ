@@ -1,10 +1,12 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Loader2, ExternalLink, AlertTriangle, Link2, Sparkles } from "lucide-react";
 import { workAssignableEmployees } from "@/lib/maya-employee";
 import { useStore } from "@/lib/demo-store";
 import {
+  createInboxLabel,
+  fetchInboxLabels,
   fetchThreadWorkContext,
   inboxAskEmployee,
   inboxAttachDeal,
@@ -17,8 +19,11 @@ import {
   inboxSaveMemory,
   inboxStartRoom,
   inboxUnlinkWork,
+  newClientActionId,
+  setThreadLabels,
 } from "@/lib/inbox/client";
 import { cn } from "@/lib/utils";
+import { CrmContextPanel } from "@/components/inbox/CrmContextPanel";
 
 type PanelProps = {
   workspaceId: string;
@@ -50,9 +55,15 @@ export function EmailWorkPanel({
   const rooms = state.rooms.filter((r) => r.kind === "room" && r.status !== "archived");
   const employees = workAssignableEmployees(state.employees);
   const [deals, setDeals] = useState<Array<{ id: string; name: string }>>([]);
+  const [allLabels, setAllLabels] = useState<
+    Array<{ id: string; name: string; color: string | null }>
+  >([]);
+  const [threadLabelIds, setThreadLabelIds] = useState<string[]>([]);
+  const [newLabelName, setNewLabelName] = useState("");
 
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  const inFlightRef = useRef(false);
   const [error, setError] = useState<string | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [action, setAction] = useState<MenuAction>(null);
@@ -94,13 +105,29 @@ export function EmailWorkPanel({
       try {
         const { authHeaders } = await import("@/lib/api/auth-client");
         const headers = await authHeaders();
-        const res = await fetch(
-          `/api/inbox/deals?workspaceId=${encodeURIComponent(workspaceId)}`,
-          { headers, cache: "no-store" },
-        );
-        if (res.ok) {
-          const body = (await res.json()) as { deals?: Array<{ id: string; name: string }> };
+        const [dealsRes, labelsRes, threadLabelsRes] = await Promise.all([
+          fetch(`/api/inbox/deals?workspaceId=${encodeURIComponent(workspaceId)}`, {
+            headers,
+            cache: "no-store",
+          }),
+          fetchInboxLabels({ workspaceId }),
+          fetch(
+            `/api/inbox/threads/${encodeURIComponent(threadId)}/labels?workspaceId=${encodeURIComponent(workspaceId)}`,
+            { headers, cache: "no-store" },
+          ),
+        ]);
+        if (dealsRes.ok) {
+          const body = (await dealsRes.json()) as {
+            deals?: Array<{ id: string; name: string }>;
+          };
           setDeals(body.deals ?? []);
+        }
+        setAllLabels(labelsRes.labels ?? []);
+        if (threadLabelsRes.ok) {
+          const body = (await threadLabelsRes.json()) as {
+            labels?: Array<{ id: string }>;
+          };
+          setThreadLabelIds((body.labels ?? []).map((l) => l.id));
         }
       } catch {
         /* optional */
@@ -146,11 +173,92 @@ export function EmailWorkPanel({
   }
 
   return (
-    <div className="space-y-4 p-5 text-sm">
+    <div className="space-y-4 text-sm">
+      {ctx.crm && (
+        <CrmContextPanel
+          workspaceId={workspaceId}
+          threadId={threadId}
+          canOrganize={canOrganize}
+          crm={ctx.crm}
+          rooms={rooms.map((r) => ({ id: r.id, name: r.name }))}
+          onChanged={() => void reload()}
+        />
+      )}
+
+      <div className="space-y-4 px-5 pb-5">
       {error && (
         <p className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-800">
           {error}
         </p>
+      )}
+
+      {canOrganize && (
+        <div className="space-y-2">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-3">
+            Labels
+          </p>
+          <div className="flex flex-wrap gap-1.5">
+            {allLabels.map((label) => {
+              const on = threadLabelIds.includes(label.id);
+              return (
+                <button
+                  key={label.id}
+                  type="button"
+                  disabled={busy}
+                  onClick={() => {
+                    const next = on
+                      ? threadLabelIds.filter((id) => id !== label.id)
+                      : [...threadLabelIds, label.id];
+                    setThreadLabelIds(next);
+                    void run(() =>
+                      setThreadLabels({
+                        workspaceId,
+                        threadId,
+                        labelIds: next,
+                      }),
+                    );
+                  }}
+                  className={cn(
+                    "rounded-full border px-2.5 py-0.5 text-[11px] font-medium",
+                    on
+                      ? "border-accent bg-accent-soft text-accent-d"
+                      : "border-border text-ink-2 hover:bg-muted",
+                  )}
+                >
+                  {label.name}
+                </button>
+              );
+            })}
+          </div>
+          <div className="flex gap-2">
+            <input
+              className="flex-1 rounded-lg border border-border bg-canvas px-2 py-1 text-xs text-ink"
+              placeholder="New label"
+              value={newLabelName}
+              onChange={(e) => setNewLabelName(e.target.value)}
+            />
+            <button
+              type="button"
+              disabled={busy || !newLabelName.trim()}
+              onClick={() =>
+                void run(async () => {
+                  const created = await createInboxLabel({
+                    workspaceId,
+                    name: newLabelName.trim(),
+                  });
+                  setAllLabels((prev) => [...prev, created.label]);
+                  const next = [...threadLabelIds, created.label.id];
+                  setThreadLabelIds(next);
+                  await setThreadLabels({ workspaceId, threadId, labelIds: next });
+                  setNewLabelName("");
+                })
+              }
+              className="rounded-lg border border-border px-2 py-1 text-xs text-ink-2 hover:bg-muted disabled:opacity-50"
+            >
+              Add
+            </button>
+          </div>
+        </div>
       )}
 
       {ctx.recommendedAction.kind !== "none" && canOrganize && (
@@ -373,6 +481,9 @@ export function EmailWorkPanel({
           busy={busy}
           onCancel={() => setAction(null)}
           onConfirm={() => {
+            if (inFlightRef.current || busy) return;
+            inFlightRef.current = true;
+            const askActionId = newClientActionId();
             void (async () => {
               setBusy(true);
               setError(null);
@@ -382,6 +493,7 @@ export function EmailWorkPanel({
                   const started = (await inboxStartRoom({
                     workspaceId,
                     threadId,
+                    clientActionId: `${askActionId}:start`,
                   })) as { roomId?: string };
                   if (!started.roomId) throw new Error("Failed to start room");
                   targetRoomId = started.roomId;
@@ -391,6 +503,7 @@ export function EmailWorkPanel({
                     threadId,
                     roomId: targetRoomId,
                     seedBridge: false,
+                    clientActionId: `${askActionId}:link`,
                   }).catch(() => {
                     /* already linked is fine */
                   });
@@ -401,6 +514,7 @@ export function EmailWorkPanel({
                   employeeId,
                   target: askTarget === "dm" ? "dm" : "room",
                   roomId: askTarget === "dm" ? undefined : targetRoomId,
+                  clientActionId: askActionId,
                 });
                 setLastCard({
                   title: `Asked ${employees.find((e) => e.id === employeeId)?.name ?? "employee"}`,
@@ -419,6 +533,7 @@ export function EmailWorkPanel({
                 setError(err instanceof Error ? err.message : "Action failed");
               } finally {
                 setBusy(false);
+                inFlightRef.current = false;
               }
             })();
           }}
@@ -691,7 +806,7 @@ export function EmailWorkPanel({
         </div>
       )}
 
-      <div>
+      <div className="pt-1">
         <p className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-ink-3">
           <Link2 className="h-3 w-3" /> Linked work
         </p>
@@ -755,6 +870,7 @@ export function EmailWorkPanel({
             ))}
           </ul>
         )}
+      </div>
       </div>
     </div>
   );

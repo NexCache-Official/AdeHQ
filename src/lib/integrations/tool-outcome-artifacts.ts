@@ -282,15 +282,23 @@ export function toolOutcomeArtifact(
   }
 
   if (result.status === "blocked") {
+    const needsAccess = Boolean(result.approvalId);
     return {
       type: "tool_result",
-      id: result.toolRunId ?? result.tool,
-      label: `Could not run ${label}`,
+      id: result.approvalId ?? result.toolRunId ?? result.tool,
+      label: needsAccess
+        ? `Needs access to run ${label}`
+        : `Could not run ${label}`,
       meta: {
         toolName: result.tool,
         toolStatus: "blocked",
+        approvalId: result.approvalId,
         error: result.error ?? "This employee does not have permission for this action.",
-        subtitle: result.error,
+        subtitle: needsAccess
+          ? "Allow once or always — tap the request card, or reply once / always / no."
+          : result.error,
+        retryArgs: result.inputArgs,
+        triggerMessageId: result.triggerMessageId,
       },
     };
   }

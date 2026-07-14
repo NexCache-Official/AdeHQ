@@ -59,14 +59,14 @@ export function checkEmployeeToolGrant(
   if (!grant || grant.permission === "none") {
     return {
       granted: false,
-      reason: `${employee.name} does not have the ${tool.domain} capability enabled. Toggle it on in Workforce settings.`,
+      reason: `${employee.name} does not have the ${tool.domain} capability enabled. Asking for Allow once or Always allow.`,
     };
   }
 
   if (!tool.readOnly && grant.permission === "read") {
     return {
       granted: false,
-      reason: `${employee.name} has read-only ${tool.domain} access — ${tool.name} needs write permission.`,
+      reason: `${employee.name} has read-only ${tool.domain} access — asking for write (Allow once or Always allow).`,
     };
   }
 

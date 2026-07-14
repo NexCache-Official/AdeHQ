@@ -21,6 +21,12 @@ import type {
 } from "@/lib/integrations/types";
 import { getToolDefinition } from "@/lib/integrations/registry/tool-definitions";
 import { checkEmployeeToolGrant, touchEmployeeToolGrant } from "@/lib/integrations/permissions";
+import {
+  consumeSessionGrant,
+  conversationalGrantAskMessage,
+  createCapabilityGrantApproval,
+} from "@/lib/integrations/capability-grants";
+import { CAPABILITY_DOMAINS, catalogToolIdForDomain } from "@/lib/integrations/registry/capabilities";
 import { estimateToolRunCost } from "@/lib/integrations/cost";
 import {
   buildIdempotencyKey,
@@ -244,9 +250,27 @@ export async function runToolCall(
   }
   const args = parsed.data as Record<string, unknown>;
 
-  // Gate 1: AI employee capability grant.
+  // Gate 1: AI employee capability grant (permanent or Allow-once session).
   const grant = checkEmployeeToolGrant(options.employee, tool);
   if (!grant.granted) {
+    const domainLabel = CAPABILITY_DOMAINS[tool.domain]?.label ?? tool.domain;
+    const ask = conversationalGrantAskMessage({
+      employeeName: options.employee.name,
+      domainLabel,
+      toolName: tool.name,
+    });
+    let approvalId: string | undefined;
+    try {
+      approvalId = await createCapabilityGrantApproval(
+        client,
+        ctx,
+        tool,
+        args,
+        options.employee.name,
+      );
+    } catch (error) {
+      console.warn("[AdeHQ integrations] capability grant approval failed", error);
+    }
     try {
       await createToolRun(client, {
         ctx,
@@ -255,6 +279,7 @@ export async function runToolCall(
         mode,
         status: "blocked",
         inputPayload: args,
+        approvalId,
       });
     } catch (error) {
       console.warn("[AdeHQ integrations] blocked tool run write failed", error);
@@ -263,13 +288,33 @@ export async function runToolCall(
       action: "tool_call_blocked",
       summary: grant.reason,
       toolUsed: tool.name,
-      status: "failed",
+      status: "needs_approval",
+      relatedEntityType: approvalId ? "approval" : undefined,
+      relatedEntityId: approvalId,
     });
     return {
-      ...failedResult(request, mode, grant.reason, "blocked"),
-      messageArtifacts: workLogEventId
-        ? [{ type: "work_log", id: workLogEventId, label: grant.reason.slice(0, 80) }]
-        : [],
+      ...failedResult(request, mode, ask, "blocked"),
+      approvalId,
+      messageArtifacts: [
+        ...(approvalId
+          ? [
+              {
+                type: "approval" as const,
+                id: approvalId,
+                label: `Access: ${domainLabel}`,
+              },
+            ]
+          : []),
+        ...(workLogEventId
+          ? [
+              {
+                type: "work_log" as const,
+                id: workLogEventId,
+                label: `Needs ${domainLabel} access`,
+              },
+            ]
+          : []),
+      ],
     };
   }
 
@@ -509,6 +554,13 @@ export async function runToolCall(
     }
 
     void touchEmployeeToolGrant(client, ctx.workspaceId, ctx.employeeId, tool);
+    // Best-effort: burn an Allow-once session grant if this run used one.
+    void consumeSessionGrant(client, {
+      workspaceId: ctx.workspaceId,
+      employeeId: ctx.employeeId,
+      catalogToolId: catalogToolIdForDomain(tool.domain),
+      roomId: ctx.roomId,
+    });
 
     return {
       status: "success",

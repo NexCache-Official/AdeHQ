@@ -110,7 +110,8 @@ export function formatEmailWorkBridgeMessage(ctx: EmailWorkContext): string {
   }
   lines.push(
     ``,
-    `Open in inbox (requires inbox access): ${ctx.inboxDeepLink}`,
+    `This block **is** the email context for AI employees — use subject, summary, key points, and excerpt above. Do not claim you cannot see the email when those fields are present.`,
+    `Human teammates can open the full thread here: ${ctx.inboxDeepLink}`,
     ``,
     `_Snapshot: ${ctx.sourceSnapshotAt}_`,
   );

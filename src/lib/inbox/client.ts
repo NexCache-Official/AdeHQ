@@ -61,6 +61,7 @@ export async function fetchThreads(params: {
   folder: InboxFolder;
   cursor?: string | null;
   limit?: number;
+  labelId?: string | null;
 }): Promise<ThreadPageDTO> {
   const headers = await authHeaders();
   const search = new URLSearchParams({
@@ -69,6 +70,7 @@ export async function fetchThreads(params: {
   });
   if (params.cursor) search.set("cursor", params.cursor);
   if (params.limit) search.set("limit", String(params.limit));
+  if (params.labelId) search.set("label", params.labelId);
   const res = await fetch(`/api/inbox/threads?${search}`, {
     headers,
     cache: "no-store",
@@ -470,19 +472,25 @@ async function postWorkAction<T>(
   body: Record<string, unknown>,
 ): Promise<T> {
   const headers = await authHeaders();
+  const clientActionId =
+    typeof body.clientActionId === "string" && body.clientActionId
+      ? body.clientActionId
+      : newClientActionId();
   const res = await fetch(
     `/api/inbox/threads/${encodeURIComponent(threadId)}/work/${path}`,
     {
       method: "POST",
       headers,
       body: JSON.stringify({
-        clientActionId: newClientActionId(),
         ...body,
+        clientActionId,
       }),
     },
   );
   return parseJson(res);
 }
+
+export { newClientActionId };
 
 export async function fetchThreadWorkContext(params: {
   workspaceId: string;
@@ -506,6 +514,7 @@ export async function fetchThreadWorkContext(params: {
     provenance: {
       sourceSnapshotAt: string;
     } | null;
+    meta?: Record<string, unknown>;
   }>;
   recommendedAction: {
     kind: "create_task" | "start_room" | "save_memory" | "none";
@@ -513,7 +522,32 @@ export async function fetchThreadWorkContext(params: {
     detail: string;
   };
   dealId: string | null;
+  contactId: string | null;
   keyPointSuggestions: string[];
+  crm: {
+    contact: {
+      id: string;
+      name: string;
+      email: string | null;
+      phone: string | null;
+      companyName: string | null;
+      companyId: string | null;
+    } | null;
+    deal: {
+      id: string;
+      name: string;
+      stageName: string;
+      amount: number | null;
+      status: string;
+    } | null;
+    suggestedContact: { email: string; name: string | null } | null;
+    openFollowUps: Array<{
+      taskId: string;
+      title: string;
+      dueDate: string | null;
+      status: string;
+    }>;
+  };
 }> {
   const headers = await authHeaders();
   const search = new URLSearchParams({ workspaceId: params.workspaceId });
@@ -528,6 +562,7 @@ export async function inboxStartRoom(params: {
   workspaceId: string;
   threadId: string;
   roomName?: string;
+  clientActionId?: string;
 }) {
   return postWorkAction(params.threadId, "start-room", params);
 }
@@ -537,6 +572,7 @@ export async function inboxLinkRoom(params: {
   threadId: string;
   roomId: string;
   seedBridge?: boolean;
+  clientActionId?: string;
 }) {
   return postWorkAction(params.threadId, "link-room", params);
 }
@@ -570,6 +606,7 @@ export async function inboxAskEmployee(params: {
   target: "dm" | "room";
   roomId?: string;
   topicId?: string;
+  clientActionId?: string;
 }) {
   return postWorkAction(params.threadId, "ask-employee", params);
 }
@@ -614,8 +651,98 @@ export async function inboxAttachDeal(params: {
   workspaceId: string;
   threadId: string;
   dealId: string;
+  clientActionId?: string;
 }) {
   return postWorkAction(params.threadId, "attach-deal", params);
+}
+
+export async function inboxAttachContact(params: {
+  workspaceId: string;
+  threadId: string;
+  contactId: string;
+  clientActionId?: string;
+}) {
+  return postWorkAction(params.threadId, "attach-contact", params);
+}
+
+export async function inboxCreateContact(params: {
+  workspaceId: string;
+  threadId: string;
+  firstName?: string;
+  lastName?: string;
+  email?: string;
+  clientActionId?: string;
+}) {
+  return postWorkAction(params.threadId, "create-contact", params);
+}
+
+export async function inboxDetachContact(params: {
+  workspaceId: string;
+  threadId: string;
+  clientActionId?: string;
+}) {
+  return postWorkAction(params.threadId, "detach-contact", params);
+}
+
+export async function inboxCreateFollowUp(params: {
+  workspaceId: string;
+  threadId: string;
+  roomId: string;
+  topicId?: string;
+  title: string;
+  dueDate: string;
+  description?: string;
+  clientActionId?: string;
+}) {
+  return postWorkAction(params.threadId, "create-follow-up", params);
+}
+
+export async function fetchInboxLabels(params: { workspaceId: string }) {
+  const headers = await authHeaders();
+  const search = new URLSearchParams({ workspaceId: params.workspaceId });
+  const res = await fetch(`/api/inbox/labels?${search}`, {
+    headers,
+    cache: "no-store",
+  });
+  return parseJson(res) as Promise<{
+    labels: Array<{ id: string; name: string; color: string | null }>;
+  }>;
+}
+
+export async function setThreadLabels(params: {
+  workspaceId: string;
+  threadId: string;
+  labelIds: string[];
+}) {
+  const headers = await authHeaders();
+  const res = await fetch(
+    `/api/inbox/threads/${encodeURIComponent(params.threadId)}/labels`,
+    {
+      method: "PUT",
+      headers,
+      body: JSON.stringify({
+        workspaceId: params.workspaceId,
+        labelIds: params.labelIds,
+      }),
+    },
+  );
+  return parseJson(res);
+}
+
+export async function createInboxLabel(params: {
+  workspaceId: string;
+  name: string;
+  color?: string | null;
+}) {
+  const headers = await authHeaders();
+  const res = await fetch("/api/inbox/labels", {
+    method: "POST",
+    headers,
+    body: JSON.stringify(params),
+  });
+  return parseJson(res) as Promise<{
+    label: { id: string; name: string; color: string | null };
+  }>;
 }
 
 export async function inboxSaveMemory(params: {

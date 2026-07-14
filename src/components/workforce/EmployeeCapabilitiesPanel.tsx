@@ -104,8 +104,8 @@ export function EmployeeCapabilitiesPanel({
             Tools & capabilities
           </h2>
           <p className="mt-0.5 text-xs text-slate-500">
-            Control what this employee can do inside AdeHQ. Maya suggests defaults at hire — you can
-            change them anytime.
+            New hires start with every tool on. Turn off what they shouldn’t use — if they need
+            something later, they’ll ask in chat for Allow once or Always allow.
           </p>
         </div>
         <button

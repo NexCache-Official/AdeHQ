@@ -133,6 +133,7 @@ export type ThreadSummaryDTO = {
   draftStatus: DraftJobStatus;
   category: string | null;
   aiActivity: string | null;
+  labels: Array<{ id: string; name: string; color: string | null }>;
 };
 
 export type ThreadPageDTO = {

@@ -280,6 +280,13 @@ export function ThreadReader({
   }, [thread?.id]);
 
   useEffect(() => {
+    if (!thread) return;
+    // Sync draft when server assignee changes (e.g. after successful save/reload).
+    setAssignDraft(draftFromThread(thread));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [thread?.assigneeId, thread?.assigneeKind]);
+
+  useEffect(() => {
     if (!onClose) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
@@ -353,6 +360,9 @@ export function ThreadReader({
       }
       setSavedFlash(true);
       window.setTimeout(() => setSavedFlash(false), 1400);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Could not save assignment";
+      window.alert(msg);
     } finally {
       setAssignBusy(false);
     }

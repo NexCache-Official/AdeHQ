@@ -40,6 +40,7 @@ import {
   fetchAttachmentUrl,
   fetchInboxBrief,
   fetchMailboxMembers,
+  fetchInboxLabels,
 } from "@/lib/inbox/client";
 import { useInboxRealtime } from "@/lib/inbox/use-inbox-realtime";
 import { ClaimGate } from "@/components/inbox/ClaimGate";
@@ -94,6 +95,10 @@ export default function InboxPage() {
   const [mailboxError, setMailboxError] = useState<string | null>(null);
 
   const [folder, setFolder] = useState<InboxFolder>("inbox");
+  const [labelFilter, setLabelFilter] = useState<string | null>(null);
+  const [mailboxLabels, setMailboxLabels] = useState<
+    Array<{ id: string; name: string; color: string | null }>
+  >([]);
   const [threads, setThreads] = useState<ThreadSummaryDTO[]>([]);
   const [drafts, setDrafts] = useState<DraftDTO[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
@@ -200,7 +205,12 @@ export default function InboxPage() {
           const list = await fetchDrafts(workspaceId);
           next = { threads: [], nextCursor: null, drafts: list };
         } else {
-          const page = await fetchThreads({ workspaceId, folder: target, limit: 30 });
+          const page = await fetchThreads({
+            workspaceId,
+            folder: target,
+            limit: 30,
+            labelId: labelFilter,
+          });
           next = {
             threads: page.threads,
             nextCursor: page.nextCursor,
@@ -225,13 +235,24 @@ export default function InboxPage() {
         }
       }
     },
-    [workspaceId, access?.canRead, applyFolderToUi],
+    [workspaceId, access?.canRead, applyFolderToUi, labelFilter],
   );
 
   useEffect(() => {
+    if (!workspaceId || !access?.canRead) return;
+    void fetchInboxLabels({ workspaceId })
+      .then((res) => setMailboxLabels(res.labels ?? []))
+      .catch(() => setMailboxLabels([]));
+  }, [workspaceId, access?.canRead, mailboxId]);
+
+  useEffect(() => {
     if (!access?.canRead) return;
+    // Label filter changes the list shape — bypass folder cache.
+    if (labelFilter) {
+      delete folderCacheRef.current[folder];
+    }
     const cached = folderCacheRef.current[folder];
-    if (cached) {
+    if (cached && !labelFilter) {
       applyFolderToUi(folder, cached);
     } else if (folder === "drafts") {
       setDrafts([]);
@@ -245,7 +266,7 @@ export default function InboxPage() {
     }
     void loadFolder(folder);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [folder, access?.canRead, mailboxId]);
+  }, [folder, access?.canRead, mailboxId, labelFilter]);
 
   const loadMore = useCallback(async () => {
     if (!workspaceId || !nextCursor || folder === "drafts") return;
@@ -256,6 +277,7 @@ export default function InboxPage() {
       folder: target,
       cursor: nextCursor,
       limit: 30,
+      labelId: labelFilter,
     });
     if (folderLoadSeqRef.current[target] !== seq || folderRef.current !== target) return;
 
@@ -270,7 +292,7 @@ export default function InboxPage() {
       return merged;
     });
     setNextCursor(page.nextCursor);
-  }, [workspaceId, nextCursor, folder]);
+  }, [workspaceId, nextCursor, folder, labelFilter]);
 
   // --- Thread open ----------------------------------------------------------
   const openThread = useCallback(
@@ -594,6 +616,7 @@ export default function InboxPage() {
     if (!workspaceId || !selectedThreadId || !threadDetail?.suggestedEmployeeId) return;
     const employeeId = threadDetail.suggestedEmployeeId;
     const label = threadDetail.suggestedEmployeeName;
+    const previous = threadDetail;
     setThreadDetail((prev) =>
       prev
         ? {
@@ -605,18 +628,26 @@ export default function InboxPage() {
           }
         : prev,
     );
-    await assignThreadReq({
-      workspaceId,
-      threadId: selectedThreadId,
-      employeeId,
-    }).catch(() => {});
-    const detail = await fetchThread({ workspaceId, threadId: selectedThreadId }).catch(() => null);
-    if (detail) setThreadDetail(detail);
+    try {
+      await assignThreadReq({
+        workspaceId,
+        threadId: selectedThreadId,
+        employeeId,
+      });
+      const detail = await fetchThread({ workspaceId, threadId: selectedThreadId });
+      setThreadDetail(detail);
+    } catch (err) {
+      setThreadDetail(previous);
+      window.alert(
+        err instanceof Error ? err.message : "Could not assign suggested employee.",
+      );
+    }
   }, [workspaceId, selectedThreadId, threadDetail]);
 
   const handleSaveAssign = useCallback(
     async (payload: AssignSavePayload) => {
       if (!workspaceId || !selectedThreadId) return;
+      const previous = threadDetail;
       setThreadDetail((prev) =>
         prev
           ? {
@@ -628,20 +659,25 @@ export default function InboxPage() {
             }
           : prev,
       );
-      await assignThreadReq({
-        workspaceId,
-        threadId: selectedThreadId,
-        humanId: payload.humanId,
-        employeeId: payload.employeeId,
-        clear: payload.clear,
-      }).catch(() => {});
-      void fetchThread({ workspaceId, threadId: selectedThreadId })
-        .then((detail) => {
-          if (detail) setThreadDetail(detail);
-        })
-        .catch(() => {});
+      try {
+        await assignThreadReq({
+          workspaceId,
+          threadId: selectedThreadId,
+          humanId: payload.humanId,
+          employeeId: payload.employeeId,
+          clear: payload.clear,
+        });
+        const detail = await fetchThread({
+          workspaceId,
+          threadId: selectedThreadId,
+        });
+        setThreadDetail(detail);
+      } catch (err) {
+        if (previous) setThreadDetail(previous);
+        throw err;
+      }
     },
-    [workspaceId, selectedThreadId],
+    [workspaceId, selectedThreadId, threadDetail],
   );
 
   const closeThread = useCallback(() => {
@@ -894,6 +930,7 @@ export default function InboxPage() {
               AdeHQ will classify and prioritise incoming email. It will not generate or send
               replies unless you request it.
             </p>
+            <MailboxRulesMini workspaceId={workspaceId} />
           </div>
         )}
       </nav>
@@ -905,21 +942,38 @@ export default function InboxPage() {
           mobileView !== "list" && "hidden md:flex",
         )}
       >
-        <div className="flex items-center justify-between border-b border-border px-4 py-3">
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setMobileView("folders")}
-              className="rounded p-1 text-ink-3 hover:bg-muted md:hidden"
-              aria-label="Folders"
-            >
-              <Folder className="h-4 w-4" />
-            </button>
-            <h1 className="text-sm font-semibold capitalize text-ink">
-              {FOLDERS.find((f) => f.key === folder)?.label}
-            </h1>
+        <div className="space-y-2 border-b border-border px-4 py-3">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setMobileView("folders")}
+                className="rounded p-1 text-ink-3 hover:bg-muted md:hidden"
+                aria-label="Folders"
+              >
+                <Folder className="h-4 w-4" />
+              </button>
+              <h1 className="text-sm font-semibold capitalize text-ink">
+                {FOLDERS.find((f) => f.key === folder)?.label}
+              </h1>
+            </div>
+            {loadingList && <Loader2 className="h-4 w-4 animate-spin text-ink-3" />}
           </div>
-          {loadingList && <Loader2 className="h-4 w-4 animate-spin text-ink-3" />}
+          {folder !== "drafts" && mailboxLabels.length > 0 && (
+            <select
+              value={labelFilter ?? ""}
+              onChange={(e) => setLabelFilter(e.target.value || null)}
+              className="w-full rounded-lg border border-border bg-canvas px-2 py-1.5 text-xs text-ink"
+              aria-label="Filter by label"
+            >
+              <option value="">All labels</option>
+              {mailboxLabels.map((label) => (
+                <option key={label.id} value={label.id}>
+                  {label.name}
+                </option>
+              ))}
+            </select>
+          )}
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto">
           {listItems.length === 0 && loadingList && (
@@ -928,7 +982,25 @@ export default function InboxPage() {
             </div>
           )}
           {listItems.length === 0 && !loadingList && (
-            <p className="p-6 text-center text-sm text-ink-3">Nothing here yet.</p>
+            <div className="space-y-1 p-6 text-center text-sm text-ink-3">
+              <p>
+                {folder === "awaiting"
+                  ? "No threads waiting on a reply."
+                  : folder === "ai_working"
+                    ? "No active AI triage or draft jobs."
+                    : "Nothing here yet."}
+              </p>
+              {folder === "awaiting" && (
+                <p className="text-xs">
+                  Threads appear here after you send and are waiting on the other party.
+                </p>
+              )}
+              {folder === "ai_working" && (
+                <p className="text-xs">
+                  Shows only while triage or Draft with AI is queued or running.
+                </p>
+              )}
+            </div>
           )}
           {folder === "drafts"
             ? drafts.map((d) => (
@@ -1166,6 +1238,23 @@ function ThreadRow({
           {thread.aiActivity || thread.snippet}
         </span>
       </div>
+      {thread.labels?.length > 0 && (
+        <div className="flex flex-wrap gap-1 pl-4 pt-1">
+          {thread.labels.slice(0, 3).map((label) => (
+            <span
+              key={label.id}
+              className="rounded-md bg-muted px-1.5 py-0.5 text-[10px] font-medium text-ink-2"
+              style={
+                label.color
+                  ? { backgroundColor: `${label.color}22`, color: label.color }
+                  : undefined
+              }
+            >
+              {label.name}
+            </span>
+          ))}
+        </div>
+      )}
     </motion.button>
   );
 }
@@ -1195,6 +1284,78 @@ function CenterMessage({ text, spinner }: { text: string; spinner?: boolean }) {
         {spinner && <Loader2 className="h-4 w-4 animate-spin" />}
         {text}
       </div>
+    </div>
+  );
+}
+
+/** Minimal domain→label rule creator (Slice E simple rules). */
+function MailboxRulesMini({ workspaceId }: { workspaceId: string | null }) {
+  const [domain, setDomain] = useState("");
+  const [label, setLabel] = useState("Sales");
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+
+  if (!workspaceId) return null;
+
+  return (
+    <div className="mt-2 border-t border-border pt-2">
+      <p className="px-2 text-[10px] font-semibold uppercase tracking-wide text-ink-3">
+        Simple rule
+      </p>
+      <p className="px-2 pb-1 text-[10px] text-ink-3">
+        If from domain → add label (no send, no rooms).
+      </p>
+      <input
+        className="mb-1 w-full rounded border border-border bg-canvas px-2 py-1 text-[11px] text-ink"
+        placeholder="example.com"
+        value={domain}
+        onChange={(e) => setDomain(e.target.value)}
+      />
+      <input
+        className="mb-1 w-full rounded border border-border bg-canvas px-2 py-1 text-[11px] text-ink"
+        placeholder="Label name"
+        value={label}
+        onChange={(e) => setLabel(e.target.value)}
+      />
+      <button
+        type="button"
+        disabled={busy || !domain.trim() || !label.trim()}
+        onClick={() => {
+          void (async () => {
+            setBusy(true);
+            setMsg(null);
+            try {
+              const { authHeaders } = await import("@/lib/api/auth-client");
+              const headers = await authHeaders();
+              const res = await fetch("/api/inbox/rules", {
+                method: "POST",
+                headers,
+                body: JSON.stringify({
+                  workspaceId,
+                  name: `From ${domain.trim()} → ${label.trim()}`,
+                  priority: 50,
+                  conditions: { from_domain: domain.trim().toLowerCase() },
+                  actions: { add_label: label.trim() },
+                }),
+              });
+              if (!res.ok) {
+                const body = (await res.json().catch(() => ({}))) as { error?: string };
+                throw new Error(body.error || "Failed to create rule");
+              }
+              setMsg("Rule saved.");
+              setDomain("");
+            } catch (err) {
+              setMsg(err instanceof Error ? err.message : "Failed");
+            } finally {
+              setBusy(false);
+            }
+          })();
+        }}
+        className="w-full rounded-md bg-muted px-2 py-1.5 text-[11px] font-medium text-ink hover:bg-border disabled:opacity-50"
+      >
+        {busy ? "Saving…" : "Add domain rule"}
+      </button>
+      {msg && <p className="px-2 pt-1 text-[10px] text-ink-3">{msg}</p>}
     </div>
   );
 }

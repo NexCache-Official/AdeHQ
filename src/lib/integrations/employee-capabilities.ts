@@ -19,7 +19,8 @@ export type EmployeeCapabilityToggle = {
   suggested: boolean;
 };
 
-const UI_DOMAINS: CapabilityDomain[] = ["crm", "email", "tasks", "drive", "artifact"];
+/** All capability domains shown in Workforce — new hires get all; owners prune. */
+const UI_DOMAINS = Object.keys(CAPABILITY_DOMAINS) as CapabilityDomain[];
 
 export function listEmployeeCapabilityToggles(
   employee: Pick<IntegrationEmployee, "roleKey" | "tools">,

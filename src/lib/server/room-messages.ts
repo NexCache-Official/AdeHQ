@@ -329,13 +329,14 @@ export async function loadTopicContext(
     profilesResult,
   ] = await Promise.all([
     client.from("workspaces").select("id, name").eq("id", workspaceId).single(),
+    // Load newest messages first (lean/DM especially), then reverse to chronological.
     client
       .from("messages")
       .select("*")
       .eq("workspace_id", workspaceId)
       .eq("room_id", roomId)
       .eq("topic_id", topicId)
-      .order("created_at", { ascending: true })
+      .order("created_at", { ascending: false })
       .limit(messageLimit),
     client.from("ai_employees").select("*").eq("workspace_id", workspaceId),
     client.from("employee_tools").select("*").eq("workspace_id", workspaceId),
@@ -400,7 +401,10 @@ export async function loadTopicContext(
     toolsByEmployee,
   );
 
-  const messages = ((messagesResult.data as DbRow[] | null) ?? []).map(messageFromRow);
+  const messages = ((messagesResult.data as DbRow[] | null) ?? [])
+    .slice()
+    .reverse()
+    .map(messageFromRow);
   const topicMemory = ((topicMemoryResult.data as DbRow[] | null) ?? []).map(memoryFromRow);
   const roomPinned = ((roomPinnedMemoryResult.data as DbRow[] | null) ?? []).map(memoryFromRow);
   const memory = [...topicMemory, ...roomPinned];
@@ -633,6 +637,29 @@ export async function persistEmployeeEffects(
   const createdMemoryIds: string[] = [];
   const createdApprovalIds: string[] = [];
   const createdArtifactIds: string[] = [];
+
+  if (agentRunId) {
+    const { data: existingRun } = await client
+      .from("agent_runs")
+      .select("response_message_id")
+      .eq("workspace_id", workspaceId)
+      .eq("id", agentRunId)
+      .maybeSingle();
+    const existingMsgId = existingRun?.response_message_id
+      ? String(existingRun.response_message_id)
+      : null;
+    if (existingMsgId) {
+      const { data: existingMsg } = await client
+        .from("messages")
+        .select("*")
+        .eq("workspace_id", workspaceId)
+        .eq("id", existingMsgId)
+        .maybeSingle();
+      if (existingMsg) {
+        return { aiMessage: messageFromRow(existingMsg as DbRow), artifacts: [] };
+      }
+    }
+  }
 
   const validatedCitations =
     options?.fileContext && effect.citations?.length
@@ -1013,13 +1040,29 @@ export async function persistEmployeeEffects(
         toolCalls: effect.toolCalls,
       });
       artifacts.push(...toolOutcome.messageArtifacts);
+      const accessAsks: string[] = [];
       for (const result of toolOutcome.results) {
         if (result.status === "success") {
           toolSuccessCount += 1;
           const action = result.output?.workLogAction;
           if (action) verifiedToolWorkLogActions.add(action);
-        } else if (result.status === "failed" || result.status === "blocked") toolFailureCount += 1;
-        else toolPendingCount += 1;
+        } else if (result.status === "failed" || result.status === "blocked") {
+          toolFailureCount += 1;
+          if (result.status === "blocked" && result.approvalId && result.error) {
+            accessAsks.push(result.error);
+          }
+        } else toolPendingCount += 1;
+      }
+      // Conversational Allow once / Always allow — append if the model didn't already ask.
+      if (accessAsks.length) {
+        const askBlock = accessAsks.join("\n\n");
+        const alreadyAsked =
+          /allow once|always allow|doesn't currently have access|do not have access/i.test(
+            reply,
+          );
+        if (!alreadyAsked) {
+          reply = `${reply.trim()}\n\n${askBlock}`;
+        }
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : "Tool execution failed.";

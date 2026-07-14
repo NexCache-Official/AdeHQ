@@ -4,16 +4,48 @@ import {
   requireAuthUser,
   requireWorkspaceMembership,
 } from "@/lib/supabase/auth-server";
-import { canResolveApprovals } from "@/lib/integrations/permissions";
+import {
+  canResolveApprovals,
+  resolveHumanIntegrationPermissions,
+} from "@/lib/integrations/permissions";
 import { runToolCall } from "@/lib/integrations/executor/tool-executor";
 import { buildIdempotencyKey } from "@/lib/integrations/tool-runs";
 import { getToolDefinition } from "@/lib/integrations/registry/tool-definitions";
 import { loadIntegrationEmployee } from "@/lib/integrations/load-employee";
+import {
+  isCapabilityGrantPayload,
+  resolveCapabilityGrantApproval,
+} from "@/lib/integrations/resolve-capability-grant";
+import type { CapabilityGrantScope } from "@/lib/integrations/capability-grants";
 import type { ToolCallResult, ToolPreview } from "@/lib/integrations/types";
-import { insertHumanMessage, loadTopicContext } from "@/lib/server/room-messages";
+import {
+  insertHumanMessage,
+  loadTopicContext,
+  persistEmployeeEffects,
+  type RoomContext,
+} from "@/lib/server/room-messages";
 import { ensureGeneralTopic } from "@/lib/server/topic-helpers";
 import { processEmployeeResponse } from "@/lib/server/process-employee-response";
+import type { ResolveCapabilityGrantResult } from "@/lib/integrations/resolve-capability-grant";
 import { nowISO, uid } from "@/lib/utils";
+
+async function persistCapabilityGrantAck(
+  client: import("@supabase/supabase-js").SupabaseClient,
+  ctx: RoomContext,
+  resolved: ResolveCapabilityGrantResult,
+): Promise<void> {
+  const employee = ctx.employees.find((e) => e.id === resolved.employeeId);
+  if (!employee) return;
+  await persistEmployeeEffects(
+    client,
+    ctx.workspaceId,
+    ctx.room.id,
+    ctx.topic.id,
+    employee,
+    resolved.acknowledgment,
+    { workLog: [], tasks: [], memory: [], approvals: [] },
+  );
+}
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -25,6 +57,8 @@ type ResolveBody = {
   note?: string;
   /** For "edit" — replacement args validated against the tool schema. */
   editedArgs?: Record<string, unknown>;
+  /** For tool_access capability grants — Allow once vs Always allow. */
+  grantScope?: CapabilityGrantScope;
 };
 
 type DbRow = Record<string, unknown>;
@@ -101,16 +135,98 @@ export async function POST(
     const workspaceId = String((approvalRow as DbRow).workspace_id);
     const { role } = await requireWorkspaceMembership(client, workspaceId, user.id);
 
+    const row = approvalRow as DbRow;
+    const actionPayload = (row.action_payload as Record<string, unknown> | null) ?? null;
+    const toolName = actionPayload?.tool ? String(actionPayload.tool) : null;
+    const isCapabilityGrant =
+      String(row.action_type) === "tool_access" && isCapabilityGrantPayload(actionPayload);
+
+    // Capability grants (Allow once / Always) — any chat-capable member can answer.
+    // Other approvals stay manager+.
+    if (isCapabilityGrant) {
+      if (!resolveHumanIntegrationPermissions(role).requestViaAi) {
+        return NextResponse.json(
+          { error: "Your workspace role cannot grant tool access." },
+          { status: 403 },
+        );
+      }
+      if (action === "revise" || action === "edit") {
+        return NextResponse.json(
+          { error: "Use Allow once, Always allow, or Not now for access requests." },
+          { status: 400 },
+        );
+      }
+      const scope: CapabilityGrantScope | "deny" =
+        action === "reject"
+          ? "deny"
+          : body.grantScope === "always"
+            ? "always"
+            : "once";
+      const resolved = await resolveCapabilityGrantApproval(client, {
+        workspaceId,
+        approvalId: params.approvalId,
+        scope,
+        resolvedByUserId: user.id,
+        note: body.note,
+      });
+      if ("error" in resolved) {
+        return NextResponse.json({ error: resolved.error }, { status: resolved.status });
+      }
+
+      // Conversational acknowledgment + continue the task after Allow once/Always.
+      try {
+        const roomId = String(row.room_id);
+        const topicId = row.topic_id
+          ? String(row.topic_id)
+          : (await ensureGeneralTopic(client, workspaceId, roomId)).id;
+        const ctx = await loadTopicContext(client, workspaceId, roomId, topicId);
+        await persistCapabilityGrantAck(client, ctx, resolved);
+        if (resolved.scope !== "deny") {
+          const employee = ctx.employees.find((e) => e.id === resolved.employeeId);
+          const triggerId =
+            typeof actionPayload?.triggerMessageId === "string"
+              ? actionPayload.triggerMessageId
+              : null;
+          if (employee && triggerId) {
+            const { queueAgentRuns } = await import("@/lib/server/queue-agent-runs");
+            const content = [
+              `The human granted me ${resolved.scope === "always" ? "always-on" : "one-time"} access to ${resolved.domainLabel}.`,
+              `Continue the previous request now that I can use ${resolved.toolName}.`,
+            ].join(" ");
+            await queueAgentRuns(client, {
+              workspaceId,
+              roomId,
+              topicId,
+              triggerMessageId: triggerId,
+              responders: [{ employee, reason: "capability_grant_continue" }],
+              content,
+            });
+          }
+        }
+      } catch (error) {
+        console.warn("[AdeHQ approvals resolve] capability grant ack failed", error);
+      }
+
+      const { data: finalRow } = await client
+        .from("approvals")
+        .select("*")
+        .eq("workspace_id", workspaceId)
+        .eq("id", params.approvalId)
+        .maybeSingle();
+
+      return NextResponse.json({
+        approval: approvalResponse((finalRow as DbRow) ?? row),
+        execution: resolved.execution,
+        acknowledgment: resolved.acknowledgment,
+      });
+    }
+
     if (!canResolveApprovals(role)) {
       return NextResponse.json(
         { error: "Only owners, admins, and managers can resolve approvals." },
         { status: 403 },
       );
     }
-
-    const row = approvalRow as DbRow;
-    const actionPayload = (row.action_payload as Record<string, unknown> | null) ?? null;
-    const toolName = actionPayload?.tool ? String(actionPayload.tool) : null;
 
     // -------------------------------------------------------------------
     // revise — keep it pending-ish: bump revision_count, note the feedback,

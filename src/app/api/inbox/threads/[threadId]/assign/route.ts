@@ -33,7 +33,7 @@ export async function POST(
     if (!thread) throw new AuthError("Thread not found.", 404);
 
     if (body.clear) {
-      await ctx.secret
+      const { error } = await ctx.secret
         .from("email_threads")
         .update({
           assigned_employee_id: null,
@@ -42,12 +42,13 @@ export async function POST(
           assignment_confidence: 1,
         })
         .eq("id", threadId);
+      if (error) throw error;
     } else if (body.employeeId) {
       await assertEmployeeEligible(ctx.secret, {
         workspaceId: ctx.workspaceId,
         employeeId: body.employeeId,
       });
-      await ctx.secret
+      const { error } = await ctx.secret
         .from("email_threads")
         .update({
           assigned_employee_id: body.employeeId,
@@ -57,8 +58,9 @@ export async function POST(
           assignment_confidence: 1,
         })
         .eq("id", threadId);
+      if (error) throw error;
     } else if (body.humanId) {
-      await ctx.secret
+      const { error } = await ctx.secret
         .from("email_threads")
         .update({
           assigned_human_id: body.humanId,
@@ -67,6 +69,7 @@ export async function POST(
           assignment_confidence: 1,
         })
         .eq("id", threadId);
+      if (error) throw error;
     } else {
       return NextResponse.json({ error: "employeeId, humanId, or clear required" }, { status: 400 });
     }

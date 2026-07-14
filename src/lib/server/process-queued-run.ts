@@ -825,21 +825,49 @@ export async function processQueuedAgentRun(
       ? GREETING_MAX_OUTPUT_TOKENS
       : maxOutputTokens ?? getOutputTokenCap(modelMode);
 
+    const emailWorkType =
+      typeof runMetadata.workType === "string" ? runMetadata.workType : "";
+    const isEmailWorkAsk =
+      emailWorkType === "email_ask_employee" ||
+      emailWorkType === "email_prepare_proposal";
+    if (isEmailWorkAsk) {
+      const emailBlock = [
+        "EMAIL WORK CONTEXT (internal AdeHQ inbox bridge):",
+        "- The user message is a privacy-safe Email bridge for an inbox thread.",
+        "- That bridge IS your email context (subject, summary, key points, excerpt).",
+        "- Do NOT say you cannot see the email, need a sync, or lack inbox access when those fields are present.",
+        "- Do NOT send external email. Drafts stay approval-gated if you use email tools.",
+        typeof runMetadata.emailThreadId === "string"
+          ? `- emailThreadId: ${runMetadata.emailThreadId}`
+          : null,
+      ]
+        .filter(Boolean)
+        .join("\n");
+      fileContextPrompt = [fileContextPrompt, emailBlock].filter(Boolean).join("\n\n");
+    }
+
+    const triggerAlreadyInHistory = ctx.room.messages.some(
+      (m) => m.id === triggerMessageId,
+    );
     const roomWithMessages = {
       ...ctx.room,
-      messages: [
-        ...ctx.room.messages,
-        {
-          id: triggerMessageId,
-          roomId,
-          topicId,
-          senderType: "human" as const,
-          senderId: "user",
-          senderName: "User",
-          content,
-          createdAt: nowISO(),
-        },
-      ],
+      messages: triggerAlreadyInHistory
+        ? ctx.room.messages.map((m) =>
+            m.id === triggerMessageId ? { ...m, content: content || m.content } : m,
+          )
+        : [
+            ...ctx.room.messages,
+            {
+              id: triggerMessageId,
+              roomId,
+              topicId,
+              senderType: "human" as const,
+              senderId: "user",
+              senderName: "User",
+              content,
+              createdAt: nowISO(),
+            },
+          ],
     };
 
     if (!isLive || !usageId) {

@@ -10,6 +10,10 @@ import {
   ensureDefaultEmployeeToolGrants,
   resolveHumanIntegrationPermissions,
 } from "@/lib/integrations/permissions";
+import {
+  loadActiveSessionGrantToolIds,
+  withSessionGrantsOnEmployee,
+} from "@/lib/integrations/capability-grants";
 import { loadIntegrationEmployee } from "@/lib/integrations/load-employee";
 import { getToolDefinition } from "@/lib/integrations/registry/tool-definitions";
 import type { ToolCallMode } from "@/lib/integrations/types";
@@ -84,11 +88,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Employee not found in workspace." }, { status: 404 });
     }
 
-    const employeeWithGrants = await ensureDefaultEmployeeToolGrants(
+    const seeded = await ensureDefaultEmployeeToolGrants(
       client,
       body.workspaceId,
       employee,
     );
+    const sessionIds = await loadActiveSessionGrantToolIds(client, {
+      workspaceId: body.workspaceId,
+      employeeId: seeded.id,
+      roomId: body.roomId,
+    });
+    const employeeWithGrants = withSessionGrantsOnEmployee(seeded, sessionIds);
     const triggerMessageText = await loadTriggerMessageText(
       client,
       body.workspaceId,

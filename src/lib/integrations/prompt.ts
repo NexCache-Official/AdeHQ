@@ -7,7 +7,7 @@ import type { IntegrationEmployee } from "./types";
 import { listToolDefinitions } from "./registry/tool-definitions";
 import { catalogToolIdForDomain } from "./registry/capabilities";
 import { suggestedCapabilityToolIds } from "./registry/prefab-toolsets";
-import { INTERNAL_CAPABILITY_TOOL_IDS } from "./registry/capabilities";
+import { CAPABILITY_DOMAINS, INTERNAL_CAPABILITY_TOOL_IDS } from "./registry/capabilities";
 
 /**
  * Resolve the granted catalog tool ids, mirroring the executor's self-heal:
@@ -26,29 +26,37 @@ function effectiveCapabilityToolIds(employee: IntegrationEmployee): Set<string> 
 
 /**
  * Compact list of the tool usage docs an employee may call (one per line).
- * Used by the autonomy engine's tool catalog. "" when nothing is granted.
+ * Used by the autonomy engine's tool catalog. Includes tools that need a
+ * human Allow once / Always allow so the model can still emit the call.
  */
-export function listGrantedToolUsage(employee: IntegrationEmployee): string {
-  const grantedToolIds = effectiveCapabilityToolIds(employee);
-  if (!grantedToolIds.size) return "";
+export function listGrantedToolUsage(_employee: IntegrationEmployee): string {
   return listToolDefinitions()
-    .filter((tool) => grantedToolIds.has(catalogToolIdForDomain(tool.domain)))
     .map((tool) => `- ${tool.promptUsage}`)
     .join("\n");
 }
 
-/** Build the "Integration tools" prompt block, or "" when nothing is granted. */
+/** Build the "Integration tools" prompt block, or "" when nothing is registered. */
 export function buildIntegrationToolsPrompt(employee: IntegrationEmployee): string {
   const grantedToolIds = effectiveCapabilityToolIds(employee);
-  if (!grantedToolIds.size) return "";
+  const allTools = listToolDefinitions();
+  if (!allTools.length) return "";
 
-  const available = listToolDefinitions().filter((tool) =>
+  const granted = allTools.filter((tool) =>
     grantedToolIds.has(catalogToolIdForDomain(tool.domain)),
   );
-  if (!available.length) return "";
+  const needsPermission = allTools.filter(
+    (tool) => !grantedToolIds.has(catalogToolIdForDomain(tool.domain)),
+  );
 
-  const availableNames = new Set(available.map((tool) => tool.name));
-  const toolDocs = available.map((tool) => `- ${tool.promptUsage}`).join("\n");
+  const availableNames = new Set(allTools.map((tool) => tool.name));
+  const grantedDocs = granted.map((tool) => `- ${tool.promptUsage}`).join("\n");
+  const lockedDocs = needsPermission
+    .map((tool) => {
+      const label = CAPABILITY_DOMAINS[tool.domain]?.label ?? tool.domain;
+      return `- ${tool.promptUsage}  ⟶ needs ${label} access (still emit the toolCall — the system will ask the human Allow once / Always allow)`;
+    })
+    .join("\n");
+
   const hasSalesBundleExample = [
     "crm.createCompany",
     "crm.createContact",
@@ -96,26 +104,36 @@ Working with teammates (this is a shared workspace — it's yours too):
 - After delegating, tell the user where you took it (which room) and what you asked for.`
     : "";
 
+  const lockedSection = lockedDocs
+    ? `
+
+Tools that need permission right now (still emit toolCalls — do not refuse politely and stop):
+${lockedDocs}
+When you emit one of these, also briefly ask in your reply for Allow once or Always allow (iPhone-style). The system attaches a request card. After the human answers, continue the task.`
+    : "";
+
   return `Integration tools (effects.toolCalls) — you can DO real work, not just describe it:
 You have access to these AdeHQ tools. To use one, add an entry to effects.toolCalls:
   { "tool": "crm.createContact", "mode": "execute", "args": { ... } }
 
-Available tools:
-${toolDocs}
+Tools you can use now:
+${grantedDocs || "(none permanently granted — use the needs-permission list below and ask)"}
+${lockedSection}
 
 CRITICAL — actions only happen through effects.toolCalls:
 - Writing "Created X", "Added Y", "Logged the deal", "Drafted the email", or "Generated the spreadsheet" in your reply does NOTHING on its own. The ONLY way anything is saved is by emitting a matching entry in effects.toolCalls in THIS SAME response.
 - If the user asks you to create a company, contact, deal, task, email draft, or spreadsheet, you MUST include one effects.toolCalls entry per action. One reply can carry several tool calls at once.
 - NEVER claim in your reply that something was created/added/logged/drafted/generated unless effects.toolCalls contains the matching call. If you cannot emit the tool call, say what you could not do — do not pretend it happened.
+- If a tool needs permission, still emit the toolCall. Ask conversationally for Allow once / Always allow / Not now. Do not invent a workaround that pretends the action succeeded.
 ${salesBundleExample}
 
 Tool call rules:
 - Every toolCall MUST include a non-empty "args" object with every required field for that tool. Do not put fields like name, firstName, columns, rows, subject, or title at the root of the toolCall — they belong inside args.
 - "mode": "execute" runs internal AdeHQ tools immediately when the user explicitly asked for the action (contacts, companies, deals, tasks, email drafts, lists).
 - "mode": "preview" does NOT run the action — it creates an approval card. Use preview only when the user asked to review first, or for external sends/publishes/deletes — not for routine internal CRM records the user explicitly requested.
-- Wording: say "created" only when mode was execute and the tool succeeded. Say "prepared for approval" when preview/approval_pending. Say "generating" for queued artifact jobs. Never say "created" and "waiting for approval" for the same object.
+- Wording: say "created" only when mode was execute and the tool succeeded. Say "prepared for approval" when preview/approval_pending. Say "generating" for queued artifact jobs. Say you need access when blocked awaiting Allow once / Always. Never say "created" and "waiting for approval" for the same object.
 - Tool result cards (CRM records, tasks, drafts, receipts) attach to your message automatically — do NOT also add duplicate workLog entries for the same tool call.
-- Never invent tool names or args not listed above. If a needed tool is missing, say so.
+- Never invent tool names or args not listed above.
 - When you create a contact and a deal in the same reply, use "contactName" on the deal so they link.
 - Use tasks.createTask for follow-ups instead of only mentioning them in text.
 - NEVER write "effects", "toolCalls", "tool:", "mode:", or "args:" as literal text inside "reply" — those are backend-only JSON fields the user never sees. If you are about to describe a tool call in words, stop and put it in the real effects.toolCalls array instead. "reply" is spoken words only, never schema.
