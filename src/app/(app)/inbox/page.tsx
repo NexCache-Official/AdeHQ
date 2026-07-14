@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import {
   Inbox as InboxIcon,
   Send as SendIcon,
@@ -297,6 +298,17 @@ export default function InboxPage() {
     },
     [workspaceId],
   );
+
+  // Deep link from EmailWorkContext bridge: /inbox?thread=… (requires inbox ACL).
+  const searchParams = useSearchParams();
+  const deepLinkThreadId = searchParams.get("thread");
+  const deepLinkOpened = useRef<string | null>(null);
+  useEffect(() => {
+    if (!deepLinkThreadId || !access?.canRead || !workspaceId) return;
+    if (deepLinkOpened.current === deepLinkThreadId) return;
+    deepLinkOpened.current = deepLinkThreadId;
+    void openThread(deepLinkThreadId);
+  }, [deepLinkThreadId, access?.canRead, workspaceId, openThread]);
 
   // --- Realtime (debounced silent refresh of current folder + open thread) --
   const refreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -989,6 +1001,7 @@ export default function InboxPage() {
             thread={threadDetail}
             loading={loadingThread}
             access={mailbox.access}
+            workspaceId={workspaceId}
             workspaceMembers={workspaceMembers}
             aiEmployees={workAssignableEmployees(state.employees).map((e) => ({
               id: e.id,

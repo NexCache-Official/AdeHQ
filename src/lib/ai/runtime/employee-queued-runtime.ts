@@ -54,6 +54,10 @@ export type EmployeeQueuedRuntimeMeta = {
   oldProvider: string;
   oldModel: string;
   oldModelMode: ModelMode;
+  /** Override ledger work_type when set (e.g. email_ask_employee). */
+  workType?: string;
+  emailThreadId?: string;
+  emailMessageId?: string;
 };
 
 export type EmployeeQueuedRouteResult = {
@@ -103,7 +107,7 @@ function workUnitMetadata(
   runtimeMode?: string,
 ) {
   return {
-    source: "employee_queued_response",
+    source: meta.workType ?? "employee_queued_response",
     runId: meta.runId,
     usageId: meta.usageId,
     messageId: meta.messageId,
@@ -119,6 +123,8 @@ function workUnitMetadata(
     oldProvider: meta.oldProvider,
     oldModel: meta.oldModel,
     oldModelMode: meta.oldModelMode,
+    emailThreadId: meta.emailThreadId,
+    emailMessageId: meta.emailMessageId,
     capability,
     runtimeMode,
   };
@@ -152,7 +158,7 @@ export async function generateEmployeeQueuedResponseRuntime(
       roomId: ctx.roomId,
       topicId: ctx.topicId,
       employeeId: input.employee.id,
-      workType: "employee_queued_response",
+      workType: meta.workType ?? "employee_queued_response",
       capability,
       objective: "Queued employee reply via Runtime V2",
       status: "created",

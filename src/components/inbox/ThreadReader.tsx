@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import type { MailboxAccessFlags, MessageDTO, ThreadDetailDTO } from "@/lib/inbox/types";
 import { cn } from "@/lib/utils";
+import { EmailWorkPanel } from "@/components/inbox/EmailWorkPanel";
 
 const DELIVERY_LABEL: Record<string, string> = {
   received: "Received",
@@ -233,10 +234,12 @@ export function ThreadReader({
   onOpenAttachment,
   onClose,
   drafting,
+  workspaceId,
 }: {
   thread: ThreadDetailDTO | null;
   loading: boolean;
   access: MailboxAccessFlags;
+  workspaceId?: string;
   workspaceMembers?: Array<{ id: string; name: string }>;
   aiEmployees?: Array<{ id: string; name: string; role?: string }>;
   currentUserId?: string | null;
@@ -788,28 +791,33 @@ export function ThreadReader({
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.15 }}
-              className="space-y-3 p-5 text-sm text-ink-2"
             >
-              <p>
-                <span className="text-ink-3">Category:</span> {thread.category || "—"}
-              </p>
-              <p>
-                <span className="text-ink-3">Priority:</span> {thread.priority}
-              </p>
-              <p>
-                <span className="text-ink-3">Reply required:</span>{" "}
-                {thread.replyRequired ? "Yes" : "No"}
-              </p>
-              {thread.matchReason && (
+              <div className="space-y-2 border-b border-border px-5 py-3 text-sm text-ink-2">
                 <p>
-                  <span className="text-ink-3">Why selected:</span> {thread.matchReason}
+                  <span className="text-ink-3">Category:</span> {thread.category || "—"}
                 </p>
-              )}
-              {thread.suggestedNextAction && (
                 <p>
-                  <span className="text-ink-3">Suggested next step:</span>{" "}
-                  {thread.suggestedNextAction}
+                  <span className="text-ink-3">Priority:</span> {thread.priority}
                 </p>
+                <p>
+                  <span className="text-ink-3">Reply required:</span>{" "}
+                  {thread.replyRequired ? "Yes" : "No"}
+                </p>
+                {thread.matchReason && (
+                  <p>
+                    <span className="text-ink-3">Why selected:</span> {thread.matchReason}
+                  </p>
+                )}
+              </div>
+              {workspaceId ? (
+                <EmailWorkPanel
+                  workspaceId={workspaceId}
+                  threadId={thread.id}
+                  canOrganize={access.canOrganize}
+                  defaultTaskTitle={thread.subject}
+                />
+              ) : (
+                <p className="p-5 text-sm text-ink-3">Workspace unavailable.</p>
               )}
             </motion.div>
           )}

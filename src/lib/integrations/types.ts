@@ -60,6 +60,9 @@ export type ToolExecutionContext = {
   triggerMessageId?: string;
   /** Original human text that caused the run, used only to repair weak model args. */
   triggerMessageText?: string;
+  /** When the run was bridged from the workspace inbox (Slice D). */
+  emailThreadId?: string;
+  emailMessageId?: string;
   /** Mutable per-batch hydration state shared across sequential tool calls. */
   toolHydrationState?: Record<string, unknown>;
 };

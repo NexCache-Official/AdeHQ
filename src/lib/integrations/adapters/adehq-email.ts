@@ -98,7 +98,7 @@ export async function createEmailDraft(
         .insert({
           workspace_id: ctx.workspaceId,
           mailbox_id: mailbox.id,
-          thread_id: null,
+          thread_id: ctx.emailThreadId ?? null,
           status: "draft",
           created_by_type: "ai_employee",
           created_by_id: ctx.employeeId,

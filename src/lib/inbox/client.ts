@@ -456,3 +456,182 @@ export async function updateMailboxSettings(params: {
   });
   await parseJson(res);
 }
+
+function newClientActionId(): string {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+    return crypto.randomUUID();
+  }
+  return `act_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+}
+
+async function postWorkAction<T>(
+  threadId: string,
+  path: string,
+  body: Record<string, unknown>,
+): Promise<T> {
+  const headers = await authHeaders();
+  const res = await fetch(
+    `/api/inbox/threads/${encodeURIComponent(threadId)}/work/${path}`,
+    {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        clientActionId: newClientActionId(),
+        ...body,
+      }),
+    },
+  );
+  return parseJson(res);
+}
+
+export async function fetchThreadWorkContext(params: {
+  workspaceId: string;
+  threadId: string;
+}): Promise<{
+  workContext: {
+    subject: string;
+    keyPoints: string[];
+    excerpt: string;
+    inboxDeepLink: string;
+    sourceSnapshotAt: string;
+  };
+  linkedWork: Array<{
+    edgeId: string;
+    relationType: string;
+    objectType: string;
+    objectId: string;
+    title: string;
+    href: string | null;
+    stale: boolean;
+    provenance: {
+      sourceSnapshotAt: string;
+    } | null;
+  }>;
+  recommendedAction: {
+    kind: "create_task" | "start_room" | "save_memory" | "none";
+    label: string;
+    detail: string;
+  };
+  dealId: string | null;
+  keyPointSuggestions: string[];
+}> {
+  const headers = await authHeaders();
+  const search = new URLSearchParams({ workspaceId: params.workspaceId });
+  const res = await fetch(
+    `/api/inbox/threads/${encodeURIComponent(params.threadId)}/context?${search}`,
+    { headers, cache: "no-store" },
+  );
+  return parseJson(res);
+}
+
+export async function inboxStartRoom(params: {
+  workspaceId: string;
+  threadId: string;
+  roomName?: string;
+}) {
+  return postWorkAction(params.threadId, "start-room", params);
+}
+
+export async function inboxLinkRoom(params: {
+  workspaceId: string;
+  threadId: string;
+  roomId: string;
+  seedBridge?: boolean;
+}) {
+  return postWorkAction(params.threadId, "link-room", params);
+}
+
+export async function inboxLinkTopic(params: {
+  workspaceId: string;
+  threadId: string;
+  roomId: string;
+  topicId?: string;
+  topicTitle?: string;
+}) {
+  return postWorkAction(params.threadId, "link-topic", params);
+}
+
+export async function inboxCreateTask(params: {
+  workspaceId: string;
+  threadId: string;
+  roomId: string;
+  topicId?: string;
+  title: string;
+  description?: string;
+  assigneeEmployeeId?: string | null;
+}) {
+  return postWorkAction(params.threadId, "create-task", params);
+}
+
+export async function inboxAskEmployee(params: {
+  workspaceId: string;
+  threadId: string;
+  employeeId: string;
+  target: "dm" | "room";
+  roomId?: string;
+  topicId?: string;
+}) {
+  return postWorkAction(params.threadId, "ask-employee", params);
+}
+
+export async function inboxCreateProposal(params: {
+  workspaceId: string;
+  threadId: string;
+  roomId: string;
+  topicId?: string;
+  title?: string;
+}) {
+  return postWorkAction(params.threadId, "create-proposal", params);
+}
+
+export async function inboxPrepareProposal(params: {
+  workspaceId: string;
+  threadId: string;
+  employeeId: string;
+  roomId: string;
+  topicId?: string;
+  artifactId?: string;
+}) {
+  return postWorkAction(params.threadId, "prepare-proposal", params);
+}
+
+export async function inboxSaveDecision(params: {
+  workspaceId: string;
+  threadId: string;
+  roomId: string;
+  topicId?: string;
+  decisionStatement: string;
+  rationale: string;
+  ownerName?: string;
+  decisionDate?: string;
+  alternatives?: string;
+  consequences?: string;
+}) {
+  return postWorkAction(params.threadId, "save-decision", params);
+}
+
+export async function inboxAttachDeal(params: {
+  workspaceId: string;
+  threadId: string;
+  dealId: string;
+}) {
+  return postWorkAction(params.threadId, "attach-deal", params);
+}
+
+export async function inboxSaveMemory(params: {
+  workspaceId: string;
+  threadId: string;
+  title: string;
+  content: string;
+  roomId?: string | null;
+}) {
+  return postWorkAction(params.threadId, "memory", params);
+}
+
+export async function inboxUnlinkWork(params: {
+  workspaceId: string;
+  threadId: string;
+  edgeId: string;
+}) {
+  return postWorkAction(params.threadId, "unlink", params);
+}

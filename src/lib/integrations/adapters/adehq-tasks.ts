@@ -44,6 +44,33 @@ export async function createTask(
   });
   if (error) throw error;
 
+  if (ctx.emailThreadId) {
+    try {
+      const { upsertWorkGraphEdge, EMAIL_WORK_RELATIONS } = await import(
+        "@/lib/inbox/work-graph"
+      );
+      await upsertWorkGraphEdge(client, {
+        workspaceId: ctx.workspaceId,
+        fromObjectType: "email_thread",
+        fromObjectId: ctx.emailThreadId,
+        relationType: EMAIL_WORK_RELATIONS.linkedTask,
+        toObjectType: "task",
+        toObjectId: taskId,
+        metadata: {
+          sourceEmailThreadId: ctx.emailThreadId,
+          sourceEmailMessageId: ctx.emailMessageId ?? null,
+          sourceSnapshotAt: nowISO(),
+          roomId: ctx.roomId,
+          topicId,
+          title: args.title.trim(),
+          createdFrom: "integration_tool",
+        },
+      });
+    } catch (edgeErr) {
+      console.warn("[adehq-tasks] work graph edge failed", edgeErr);
+    }
+  }
+
   if (args.contactId || args.dealId) {
     const { error: crmError } = await client.from("crm_tasks").insert({
       workspace_id: ctx.workspaceId,

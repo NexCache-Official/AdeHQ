@@ -1590,6 +1590,16 @@ export async function processQueuedAgentRun(
       oldProvider,
       oldModel,
       oldModelMode,
+      workType:
+        typeof runMetadata.workType === "string" ? runMetadata.workType : undefined,
+      emailThreadId:
+        typeof runMetadata.emailThreadId === "string"
+          ? runMetadata.emailThreadId
+          : undefined,
+      emailMessageId:
+        typeof runMetadata.emailMessageId === "string"
+          ? runMetadata.emailMessageId
+          : undefined,
     };
 
     const routeInput = {

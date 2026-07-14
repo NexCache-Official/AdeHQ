@@ -69,6 +69,8 @@ export async function executeEmployeeToolCalls(
     triggerMessageId?: string;
     /** Test/API override; production normally fetches this from triggerMessageId. */
     triggerMessageText?: string;
+    emailThreadId?: string;
+    emailMessageId?: string;
     toolCalls: ToolCallEffect[];
   },
 ): Promise<EmployeeToolCallOutcome> {
@@ -96,6 +98,8 @@ export async function executeEmployeeToolCalls(
     topicId: params.topicId,
     agentRunId: params.agentRunId,
     triggerMessageId: params.triggerMessageId,
+    emailThreadId: params.emailThreadId,
+    emailMessageId: params.emailMessageId,
   };
   const triggerMessageText =
     params.triggerMessageText ??

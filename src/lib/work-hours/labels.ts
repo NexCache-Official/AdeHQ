@@ -27,6 +27,14 @@ export const WORK_TYPE_LABELS: Record<string, string> = {
   employee_queued_response_shadow: "Queued replies shadow",
   employee_direct_response: "Direct replies",
   employee_queued_response: "Queued replies",
+  email_ask_employee: "Inbox ask employee",
+  email_prepare_proposal: "Inbox prepare proposal",
+  email_extract_work_suggestions: "Inbox extract suggestions",
+  email_memory_curation: "Inbox memory curation",
+  email_decision_generation: "Inbox decision drafting",
+  email_triage: "Inbox triage",
+  email_draft: "Inbox draft",
+  email_draft_rewrite: "Inbox draft rewrite",
 };
 
 export const WORK_HOURS_SHADOW_BADGE = "Shadow estimate — not billed";

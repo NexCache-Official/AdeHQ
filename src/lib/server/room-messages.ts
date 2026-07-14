@@ -988,6 +988,19 @@ export async function persistEmployeeEffects(
   const verifiedToolWorkLogActions = new Set<string>();
   if (effect.toolCalls?.length) {
     try {
+      let emailThreadId: string | undefined;
+      let emailMessageId: string | undefined;
+      if (agentRunId) {
+        const { data: runRow } = await client
+          .from("agent_runs")
+          .select("run_metadata")
+          .eq("workspace_id", workspaceId)
+          .eq("id", agentRunId)
+          .maybeSingle();
+        const meta = (runRow?.run_metadata as Record<string, unknown>) ?? {};
+        if (typeof meta.emailThreadId === "string") emailThreadId = meta.emailThreadId;
+        if (typeof meta.emailMessageId === "string") emailMessageId = meta.emailMessageId;
+      }
       const toolOutcome = await executeEmployeeToolCalls(client, {
         workspaceId,
         employee,
@@ -995,6 +1008,8 @@ export async function persistEmployeeEffects(
         topicId,
         agentRunId,
         triggerMessageId,
+        emailThreadId,
+        emailMessageId,
         toolCalls: effect.toolCalls,
       });
       artifacts.push(...toolOutcome.messageArtifacts);
