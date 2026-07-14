@@ -220,17 +220,35 @@ export async function POST(
       } catch (migrateErr) {
         console.warn("[AdeHQ topics POST] message migrate failed", migrateErr);
         migrateWarning =
-          "Topic created, but some messages could not be moved. Context was still imported when possible.";
+          "Topic created, but some messages could not be moved. You can still continue in the new topic.";
         migratedMessageIds = [];
+      }
+    }
+
+    // When messages were moved, stamp the system note just after the last moved
+    // message so the timeline reads as the original chat, then a short continue cue.
+    let systemCreatedAt = nowISO();
+    if (migratedMessageIds.length) {
+      const { data: lastMoved } = await client
+        .from("messages")
+        .select("created_at")
+        .eq("workspace_id", workspaceId)
+        .in("id", migratedMessageIds)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (lastMoved?.created_at) {
+        const base = new Date(String(lastMoved.created_at)).getTime();
+        systemCreatedAt = new Date(base + 1).toISOString();
       }
     }
 
     const systemMessageId = uid("msg");
     const systemContent =
       migratedMessageIds.length > 0
-        ? `Topic created: ${title}\n\nMoved ${migratedMessageIds.length} related message${
+        ? `Moved ${migratedMessageIds.length} message${
             migratedMessageIds.length === 1 ? "" : "s"
-          } here. Continue this workstream in this topic — pick up where you left off.`
+          } into “${title}”. Continue here.`
         : `Topic created: ${title}`;
     const { error: messageError } = await client.from("messages").insert({
       workspace_id: workspaceId,
@@ -244,7 +262,7 @@ export async function POST(
       mentions: [],
       mentions_json: [],
       pending: false,
-      created_at: nowISO(),
+      created_at: systemCreatedAt,
     });
     if (messageError) throw messageError;
 
@@ -312,7 +330,9 @@ export async function POST(
 
     let contextImportWarning: string | undefined;
     let contextImportId: string | undefined;
-    if (body.contextImport) {
+    // Prefer real moved chats over an "Imported context" receipt card.
+    // Only create a context-import receipt when nothing was migrated.
+    if (body.contextImport && migratedMessageIds.length === 0) {
       try {
         const sourceRoomId = body.contextImport.sourceRoomId ?? params.roomId;
         const sourceTopicId = body.contextImport.sourceTopicId ?? null;
@@ -321,7 +341,7 @@ export async function POST(
         );
         const allMessages = await fetchMessagesForImportSelection(client, workspaceId, {
           sourceRoomId,
-          sourceTopicId: migratedMessageIds.length ? topic.id : sourceTopicId,
+          sourceTopicId,
           limit: 50,
         });
         const preferred = allMessages.filter((m) => preferredIds.has(m.id));
@@ -339,38 +359,52 @@ export async function POST(
                 suggestedTopicTitle: body.contextImport.suggestedTitle ?? title,
                 maxMessages: 8,
               });
-        const importRecord = await createTopicContextImport(client, {
-          workspaceId,
-          createdBy: user.id,
-          targetRoomId: params.roomId,
-          targetTopicId: topic.id,
-          sourceRoomId,
-          sourceTopicId,
-          sourceDmId: body.contextImport.sourceDmId ?? null,
-          triggerMessageId:
-            body.contextImport.triggerMessageId ??
-            selected[selected.length - 1]?.id ??
-            "",
-          suggestedTitle: body.contextImport.suggestedTitle ?? title,
-          importReason: body.contextImport.importReason ?? "topic_suggestion",
-          sourceMessages: selected,
-          metadata: {
-            sourceScope: body.contextImport.sourceScope ?? (sourceTopicId ? "topic" : "room"),
-            suggestionId: body.contextImport.suggestionId ?? null,
-            migratedMessageIds,
-          },
-        });
-        contextImportId = importRecord.id;
+        if (selected.length) {
+          const importRecord = await createTopicContextImport(client, {
+            workspaceId,
+            createdBy: user.id,
+            targetRoomId: params.roomId,
+            targetTopicId: topic.id,
+            sourceRoomId,
+            sourceTopicId,
+            sourceDmId: body.contextImport.sourceDmId ?? null,
+            triggerMessageId:
+              body.contextImport.triggerMessageId ??
+              selected[selected.length - 1]?.id ??
+              "",
+            suggestedTitle: body.contextImport.suggestedTitle ?? title,
+            importReason: body.contextImport.importReason ?? "topic_suggestion",
+            sourceMessages: selected,
+            metadata: {
+              sourceScope: body.contextImport.sourceScope ?? (sourceTopicId ? "topic" : "room"),
+              suggestionId: body.contextImport.suggestionId ?? null,
+              migratedMessageIds,
+            },
+          });
+          contextImportId = importRecord.id;
+        }
       } catch (importError) {
         console.warn("[AdeHQ topics POST] context import failed", importError);
         contextImportWarning =
-          "Topic created, but context import failed. You can still continue manually.";
+          "Topic created, but relevant messages could not be attached. You can still continue manually.";
       }
     }
 
     return NextResponse.json({
       topic: refreshed ? topicFromRow(refreshed) : topic,
       systemMessageId,
+      systemMessage: {
+        id: systemMessageId,
+        roomId: params.roomId,
+        topicId: topic.id,
+        senderType: "system" as const,
+        senderId: "system",
+        senderName: "AdeHQ",
+        content: systemContent,
+        createdAt: systemCreatedAt,
+        mentions: [] as string[],
+        pending: false,
+      },
       contextImportId,
       contextImportWarning: contextImportWarning ?? migrateWarning,
       migratedMessageIds,

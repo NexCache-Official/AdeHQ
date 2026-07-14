@@ -236,8 +236,8 @@ export async function suggestTopics(
         reason:
           decision.reason?.trim() ||
           (onGeneral
-            ? "This looks like a focused workstream that deserves its own topic so the team can continue it cleanly."
-            : "This thread has enough detail to split into its own topic."),
+            ? "This looks like a focused workstream. AdeHQ can move the relevant chats into a new topic so you can continue there."
+            : "This thread has enough detail to split into its own topic with the relevant chats moved over."),
         confidence: Math.min(0.96, Math.max(0.72, decision.confidence)),
         messageIds,
         contextSummary: decision.contextSummary?.trim() || summary,

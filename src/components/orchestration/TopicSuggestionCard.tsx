@@ -40,15 +40,20 @@ export function TopicSuggestionCard({
       ? `Move to existing topic`
       : suggestion.title ?? "New topic";
   const description = suggestion.metadata?.description?.trim();
+  const willMigrate = suggestion.metadata?.migrateMessages !== false;
   const subtitle =
     suggestion.type === "move_to_existing_topic"
       ? suggestion.reason ?? "This conversation may fit better in an existing topic."
       : suggestion.reason ??
-        "This looks like a focused workstream. AdeHQ can move the relevant messages into a new topic so the team can continue there.";
-  const preview = suggestion.metadata?.contextSummary?.trim();
+        "This looks like a focused workstream. AdeHQ can move the relevant chats into a new topic so the team can continue there.";
+  // When chats will move, skip the old "imported context" preview blurb —
+  // the moved messages are the preview.
+  const preview =
+    willMigrate && suggestion.type === "create_topic"
+      ? null
+      : suggestion.metadata?.contextSummary?.trim() || null;
   const previewBullets = suggestion.metadata?.previewBullets ?? [];
   const messageCount = suggestion.message_ids?.length ?? 0;
-  const willMigrate = suggestion.metadata?.migrateMessages !== false;
 
   const handleCreate = async () => {
     if (!suggestion.title || busy) return;

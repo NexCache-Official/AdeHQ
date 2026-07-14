@@ -1551,6 +1551,20 @@ export function RoomChat({
       for (const messageId of migratedIds) {
         actions.updateLocalMessage(room.id, messageId, { topicId: payload.topic.id });
       }
+      // No imported-context card when chats were actually moved.
+      setContextImports([]);
+    }
+    if (payload.systemMessage && payload.topic?.id) {
+      actions.addLocalMessage(room.id, {
+        id: String(payload.systemMessage.id),
+        topicId: payload.topic.id,
+        senderType: "system",
+        senderId: "system",
+        senderName: "AdeHQ",
+        content: String(payload.systemMessage.content ?? ""),
+        mentions: [],
+        createdAt: String(payload.systemMessage.createdAt ?? new Date().toISOString()),
+      });
     }
     if (payload.topic?.id) {
       void actions.refreshTopics(room.id);
@@ -1855,31 +1869,34 @@ export function RoomChat({
           )
         ) : (
           <div className={cn("mx-auto", ROOM_CHAT_MAX_WIDTH)}>
-            {contextImports.map((contextImport) => (
-              <TopicContextImportCard
-                key={contextImport.id}
-                contextImport={contextImport}
-                sourceLabel={
-                  contextImport.sourceTopicId && contextImport.sourceTopicId !== topic?.id
-                    ? "previous topic"
-                    : "previous conversation"
-                }
-                onViewSource={
-                  contextImport.sourceTopicId
-                    ? () => {
-                        if (contextImport.sourceTopicId) {
-                          onSelectTopic?.(contextImport.sourceTopicId);
-                        }
-                      }
-                    : undefined
-                }
-              />
-            ))}
-            {topicMessages.length === 0 ? (
+            {/* Receipt card only when chats were NOT moved (legacy / failed migrate). */}
+            {topicMessages.length === 0
+              ? contextImports.map((contextImport) => (
+                  <TopicContextImportCard
+                    key={contextImport.id}
+                    contextImport={contextImport}
+                    sourceLabel={
+                      contextImport.sourceTopicId && contextImport.sourceTopicId !== topic?.id
+                        ? "previous topic"
+                        : "previous conversation"
+                    }
+                    onViewSource={
+                      contextImport.sourceTopicId
+                        ? () => {
+                            if (contextImport.sourceTopicId) {
+                              onSelectTopic?.(contextImport.sourceTopicId);
+                            }
+                          }
+                        : undefined
+                    }
+                  />
+                ))
+              : null}
+            {topicMessages.length === 0 && contextImports.length > 0 ? (
               <div className="mx-auto flex max-w-md flex-col items-center gap-3 px-4 py-6 text-center">
                 <h3 className="text-base font-semibold text-ink">Continue this workstream</h3>
                 <p className="text-sm leading-relaxed text-ink-2">
-                  Imported context is above. Send a message when you are ready to continue.
+                  Context from the previous conversation is above. Send a message to continue.
                 </p>
               </div>
             ) : null}
