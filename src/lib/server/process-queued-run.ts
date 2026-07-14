@@ -1710,7 +1710,8 @@ export async function processQueuedAgentRun(
     // If the user clearly asked for CRM/Drive/task work but the model returned
     // zero toolCalls (often narrating success or inventing prose instead), retry
     // once on a stronger structured model with an explicit tool reminder.
-    const needsTools = messageLikelyNeedsStructuredEffects(content);
+    const needsTools =
+      messageLikelyNeedsStructuredEffects(content) || driveArtifactAsk;
     let gotTools = (response.effect?.toolCalls?.length ?? 0) > 0;
     if (needsTools && !gotTools && !failed && aiMode !== "error") {
       const retryMode: ModelMode = "strong";

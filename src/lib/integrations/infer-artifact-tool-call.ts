@@ -86,7 +86,7 @@ export function inferRequiredArtifactToolCall(message: string): ToolCallEffect |
 
   if (
     /\bcreateSpreadsheet\b/i.test(text) ||
-    (/\b(?:excel|spreadsheet|workbook|xlsx)\b/i.test(text) && wantsDrive)
+    (/\b(?:excel|spreadsheet|workbook|xlsx|scorecard)\b/i.test(text) && wantsDrive)
   ) {
     return {
       tool: "artifact.createSpreadsheet",
