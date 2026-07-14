@@ -258,6 +258,9 @@ export type MessageArtifact = {
     fileSizeLabel?: string;
     fileStatus?: "attached" | "processing" | "ready" | "failed";
     fileId?: string;
+    /** Binary Drive export id (xlsx/docx/pdf/pptx) for in-chat preview. */
+    exportId?: string;
+    mimeType?: string;
     chunkId?: string;
     locator?: string;
     quote?: string;

@@ -3,6 +3,10 @@ import type { ToolCallEffect, ToolCallResult } from "./types";
 import { crmEntityHref } from "@/lib/crm/client";
 import { calendarEntityHref } from "@/lib/calendar/client";
 import { investorEntityHref } from "@/lib/investors/client";
+import {
+  cleanChatFileTitle,
+  extensionFromToolName,
+} from "@/lib/chat/file-preview-kind";
 
 const TOOL_LABELS: Record<string, string> = {
   "crm.createContact": "CRM contact",
@@ -238,15 +242,29 @@ export function toolReceiptArtifact(result: ToolCallResult): MessageArtifact | n
         result.tool === "artifact.updateSpreadsheet") &&
       objectId
     ) {
+      const payload = (output?.payload ?? {}) as Record<string, unknown>;
+      const exportId = payload.exportId ? String(payload.exportId) : undefined;
+      const fileExtension =
+        (payload.targetFormat ? String(payload.targetFormat) : undefined) ??
+        (payload.exportFormat ? String(payload.exportFormat) : undefined) ??
+        extensionFromToolName(result.tool);
+      const titleFromPayload = payload.title ? cleanChatFileTitle(String(payload.title)) : undefined;
+      const summary = output?.summary
+        ? cleanChatFileTitle(String(output.summary))
+        : `${label} created`;
+
       return {
         type: "tool_result",
         id: objectId,
-        label: output?.summary ?? `${label} created`,
+        label: titleFromPayload ? `${label} ready — ${titleFromPayload}` : summary,
         meta: {
           toolName: result.tool,
           toolStatus: "success",
           href: `/drive?artifact=${objectId}`,
-          subtitle: "Open in Drive",
+          subtitle: fileExtension ? `Open in Drive · .${fileExtension}` : "Open in Drive",
+          exportId,
+          fileExtension,
+          fileName: titleFromPayload,
         },
       };
     }

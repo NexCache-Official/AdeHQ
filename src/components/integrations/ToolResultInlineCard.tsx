@@ -9,10 +9,17 @@ import {
   queuedArtifactJobId,
   replaceQueuedArtifactInList,
 } from "@/lib/integrations/reconcile-queued-artifacts";
+import {
+  cleanChatFileTitle,
+  extensionFromToolName,
+  isPreviewableChatFile,
+  chatFilePreviewKind,
+} from "@/lib/chat/file-preview-kind";
 import { useStore } from "@/lib/demo-store";
 import { cn } from "@/lib/utils";
 import { AlertCircle, CheckCircle2, Clock, Loader2, RefreshCw, ShieldAlert } from "lucide-react";
 import { Button } from "@/components/ui";
+import { ChatFileMiniViewer } from "@/components/chat/ChatFileMiniViewer";
 
 type ToolResultContext = {
   workspaceId?: string;
@@ -26,9 +33,26 @@ type IntegrationJobResponse = {
   job?: {
     status?: string;
     errorMessage?: string;
-    result?: { artifactId?: string; title?: string; rowCount?: number };
+    result?: {
+      artifactId?: string;
+      exportId?: string;
+      title?: string;
+      rowCount?: number;
+    };
   };
 };
+
+function isDriveFileTool(toolName?: string): boolean {
+  if (!toolName?.startsWith("artifact.")) return false;
+  return (
+    toolName.includes("Spreadsheet") ||
+    toolName.includes("Pdf") ||
+    toolName.includes("Docx") ||
+    toolName.includes("Presentation") ||
+    toolName.includes("convertFile") ||
+    toolName.includes("saveToDrive")
+  );
+}
 
 export function ToolResultInlineCard({
   artifact,
@@ -190,13 +214,23 @@ export function ToolResultInlineCard({
     });
     const body = (await res.json().catch(() => ({}))) as {
       error?: string;
-      result?: { status?: string; error?: string; output?: { summary?: string; objectId?: string } };
+      result?: {
+        status?: string;
+        error?: string;
+        output?: {
+          summary?: string;
+          objectId?: string;
+          payload?: { exportId?: string; title?: string };
+        };
+      };
     };
     if (!res.ok) throw new Error(body.error ?? "Retry failed.");
     if (body.result?.status !== "success") {
       throw new Error(body.result?.error ?? `Retry ${body.result?.status ?? "failed"}.`);
     }
     const objectId = body.result.output?.objectId;
+    const exportId = body.result.output?.payload?.exportId;
+    const retryExt = extensionFromToolName(display.meta?.toolName);
     setDisplay({
       ...display,
       label: body.result.output?.summary ?? "Action succeeded.",
@@ -204,7 +238,12 @@ export function ToolResultInlineCard({
         ...display.meta,
         toolStatus: "success",
         href: objectId ? `/drive?artifact=${objectId}` : "/drive",
-        subtitle: "Open in Drive",
+        subtitle: retryExt ? `Open in Drive · .${retryExt}` : "Open in Drive",
+        exportId,
+        fileExtension: retryExt,
+        fileName: body.result.output?.payload?.title
+          ? cleanChatFileTitle(String(body.result.output.payload.title))
+          : display.meta?.fileName,
         error: undefined,
       },
     });
@@ -297,6 +336,47 @@ export function ToolResultInlineCard({
   };
 
   const showQueued = status === "queued" && !checking;
+  const fileExtension =
+    display.meta?.fileExtension ?? extensionFromToolName(display.meta?.toolName);
+  const previewKind = chatFilePreviewKind({
+    extension: fileExtension,
+    mimeType: display.meta?.mimeType,
+    toolName: display.meta?.toolName,
+    fileName: display.meta?.fileName ?? display.label,
+  });
+  const showFileViewer =
+    status === "success" &&
+    !checking &&
+    Boolean(context?.workspaceId) &&
+    isDriveFileTool(display.meta?.toolName) &&
+    isPreviewableChatFile(previewKind);
+
+  if (showFileViewer && context?.workspaceId) {
+    const artifactId = display.id;
+    const exportId = display.meta?.exportId;
+    const viewerTitle =
+      display.meta?.fileName ??
+      cleanChatFileTitle(display.label.replace(/^(Spreadsheet|Report|Document|Presentation|File) ready — /i, ""));
+
+    return (
+      <ChatFileMiniViewer
+        workspaceId={context.workspaceId}
+        title={viewerTitle}
+        source={
+          exportId
+            ? { type: "export", id: exportId }
+            : { type: "artifact", id: artifactId }
+        }
+        previewSource={
+          exportId ? { type: "artifact", id: artifactId } : undefined
+        }
+        extension={fileExtension}
+        mimeType={display.meta?.mimeType}
+        toolName={display.meta?.toolName}
+        driveHref={href}
+      />
+    );
+  }
 
   const Icon =
     checking

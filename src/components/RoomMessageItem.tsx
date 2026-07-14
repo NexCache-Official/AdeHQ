@@ -25,6 +25,7 @@ import {
   type MessageSourceRef,
 } from "@/lib/message-actions";
 import { ArtifactCard, FileArtifactCard } from "./ArtifactCard";
+import { ChatFileMiniViewer } from "@/components/chat/ChatFileMiniViewer";
 import { EmailArtifactInlineCard } from "@/components/artifacts/ArtifactViewerModal";
 import { CrmInlineCard } from "@/components/crm/CrmInlineCard";
 import { ToolResultInlineCard } from "@/components/integrations/ToolResultInlineCard";
@@ -32,6 +33,10 @@ import { AutonomousLauncher } from "@/components/autonomy/AutonomousLauncher";
 import { AutonomousSessionChip } from "@/components/autonomy/AutonomousSessionChip";
 import { CompactSourcesRow } from "@/components/search/CompactSourcesRow";
 import { resolveWebSources } from "@/lib/message-artifacts/resolve-source-artifacts";
+import {
+  chatFilePreviewKind,
+  isPreviewableChatFile,
+} from "@/lib/chat/file-preview-kind";
 import { MessageMarkdown } from "./MessageMarkdown";
 import {
   BrainCircuit,
@@ -964,16 +969,47 @@ export function RoomMessageItem({
           </div>
         )}
 
-        {fileArtifacts.map((artifact) => (
-          <FileArtifactCard
-            key={artifact.id}
-            fileName={artifact.meta?.fileName ?? artifact.label}
-            extension={artifact.meta?.fileExtension}
-            size={artifact.meta?.fileSizeLabel}
-            status={artifact.meta?.fileStatus ?? "attached"}
-            className="mt-2 max-w-lg"
-          />
-        ))}
+        {fileArtifacts.map((artifact) => {
+          const fileId = artifact.meta?.fileId ?? artifact.id;
+          const extension = artifact.meta?.fileExtension;
+          const previewKind = chatFilePreviewKind({
+            extension,
+            mimeType: artifact.meta?.mimeType,
+            fileName: artifact.meta?.fileName ?? artifact.label,
+          });
+          const canPreview =
+            Boolean(state.workspace.id && fileId) &&
+            isPreviewableChatFile(previewKind) &&
+            (artifact.meta?.fileStatus === "ready" ||
+              artifact.meta?.fileStatus === "attached" ||
+              !artifact.meta?.fileStatus);
+
+          if (canPreview) {
+            return (
+              <ChatFileMiniViewer
+                key={artifact.id}
+                workspaceId={state.workspace.id}
+                title={artifact.meta?.fileName ?? artifact.label}
+                source={{ type: "file", id: fileId }}
+                extension={extension}
+                mimeType={artifact.meta?.mimeType}
+                driveHref={`/drive?file=${encodeURIComponent(fileId)}`}
+                className="max-w-xl"
+              />
+            );
+          }
+
+          return (
+            <FileArtifactCard
+              key={artifact.id}
+              fileName={artifact.meta?.fileName ?? artifact.label}
+              extension={extension}
+              size={artifact.meta?.fileSizeLabel}
+              status={artifact.meta?.fileStatus ?? "attached"}
+              className="mt-2 max-w-lg"
+            />
+          );
+        })}
 
         {(otherArtifacts.length > 0 || debugWorkLogArtifacts.length > 0) && (
           <div className="mt-2.5 flex flex-wrap gap-1.5">

@@ -1,10 +1,11 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { IntegrationJobRecord, ToolCallResult } from "@/lib/integrations/types";
+import { cleanChatFileTitle } from "@/lib/chat/file-preview-kind";
 import { getIntegrationJob } from "./queue";
 import { processIntegrationJob } from "./worker";
 
 function artifactSummary(tool: string, payload: Record<string, unknown>): string {
-  const title = payload.title ? String(payload.title) : "file";
+  const title = cleanChatFileTitle(payload.title ? String(payload.title) : "file");
   if (tool === "artifact.createSpreadsheet") {
     const rows = payload.rowCount != null ? Number(payload.rowCount) : null;
     return `Generated spreadsheet "${title}"${rows != null ? ` (${rows} rows)` : ""} — saved to Drive.`;

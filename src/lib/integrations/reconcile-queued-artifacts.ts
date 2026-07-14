@@ -1,4 +1,8 @@
 import type { MessageArtifact, RoomMessage } from "@/lib/types";
+import {
+  cleanChatFileTitle,
+  extensionFromToolName,
+} from "@/lib/chat/file-preview-kind";
 import type { IntegrationJobRecord } from "./types";
 
 /** Job id stored on a queued inline tool chip, or the chip id for artifact.* tools. */
@@ -20,6 +24,11 @@ function artifactKindFromTool(tool: string | undefined): string {
   return "File";
 }
 
+function subtitleForExtension(extension: string | undefined): string {
+  if (!extension) return "Open in Drive";
+  return `Open in Drive · .${extension}`;
+}
+
 /** Resolved success chip after a background artifact job finishes. */
 export function artifactFromCompletedJob(
   prior: MessageArtifact,
@@ -27,8 +36,11 @@ export function artifactFromCompletedJob(
 ): MessageArtifact {
   const payload = job.result ?? {};
   const artifactId = payload.artifactId ? String(payload.artifactId) : undefined;
-  const title = payload.title ? String(payload.title) : "file";
+  const exportId = payload.exportId ? String(payload.exportId) : undefined;
+  const title = cleanChatFileTitle(payload.title ? String(payload.title) : "file");
   const kind = artifactKindFromTool(prior.meta?.toolName);
+  const fileExtension =
+    prior.meta?.fileExtension ?? extensionFromToolName(prior.meta?.toolName);
 
   return {
     type: "tool_result",
@@ -40,7 +52,10 @@ export function artifactFromCompletedJob(
       href: artifactId
         ? `/drive?artifact=${encodeURIComponent(artifactId)}`
         : "/drive?section=exports",
-      subtitle: "Open in Drive (check Exports for the .xlsx download)",
+      subtitle: subtitleForExtension(fileExtension),
+      exportId,
+      fileExtension,
+      fileName: title,
     },
   };
 }
