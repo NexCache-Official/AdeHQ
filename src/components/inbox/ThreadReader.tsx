@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { AnimatePresence, motion } from "framer-motion";
 import {
   Archive,
   ArchiveRestore,
@@ -14,6 +15,8 @@ import {
   Sparkles,
   X,
   UserPlus,
+  Bot,
+  Users,
 } from "lucide-react";
 import type { MailboxAccessFlags, MessageDTO, ThreadDetailDTO } from "@/lib/inbox/types";
 import { cn } from "@/lib/utils";
@@ -28,6 +31,19 @@ const DELIVERY_LABEL: Record<string, string> = {
   complained: "Marked spam",
   failed: "Not delivered",
   cancelled: "Cancelled",
+};
+
+type AssignDraft =
+  | { kind: "none" }
+  | { kind: "human"; id: string }
+  | { kind: "ai_employee"; id: string };
+
+export type AssignSavePayload = {
+  humanId?: string | null;
+  employeeId?: string | null;
+  clear?: boolean;
+  label: string | null;
+  kind: "human" | "ai_employee" | null;
 };
 
 function formatTime(iso: string): string {
@@ -57,6 +73,21 @@ function deliveryHelp(status: string, error: string | null): string | null {
   return null;
 }
 
+function draftFromThread(thread: ThreadDetailDTO): AssignDraft {
+  if (!thread.assigneeId) return { kind: "none" };
+  if (thread.assigneeKind === "human") return { kind: "human", id: thread.assigneeId };
+  if (thread.assigneeKind === "ai_employee") {
+    return { kind: "ai_employee", id: thread.assigneeId };
+  }
+  return { kind: "ai_employee", id: thread.assigneeId };
+}
+
+function draftsEqual(a: AssignDraft, b: AssignDraft): boolean {
+  if (a.kind !== b.kind) return false;
+  if (a.kind === "none" || b.kind === "none") return true;
+  return a.id === b.id;
+}
+
 function MessageBubble({
   message,
   onOpenAttachment,
@@ -71,7 +102,10 @@ function MessageBubble({
   const help = outbound ? deliveryHelp(message.deliveryStatus, message.deliveryError) : null;
 
   return (
-    <div
+    <motion.div
+      initial={{ opacity: 0, y: 6 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
       className={cn(
         "border-b border-border-2 px-5 py-4 last:border-b-0",
         internal && "bg-amber-50/40",
@@ -141,7 +175,7 @@ function MessageBubble({
               key={a.id}
               type="button"
               onClick={() => onOpenAttachment?.(a.id)}
-              className="inline-flex items-center gap-1.5 rounded border border-border bg-muted px-2 py-1 text-xs text-ink-2 hover:border-accent hover:text-ink"
+              className="inline-flex items-center gap-1.5 rounded border border-border bg-muted px-2 py-1 text-xs text-ink-2 transition-colors hover:border-accent hover:text-ink"
             >
               <Paperclip className="h-3 w-3" />
               {a.filename || "Attachment"}
@@ -152,17 +186,36 @@ function MessageBubble({
           ))}
         </div>
       )}
-    </div>
+    </motion.div>
   );
 }
 
 type ReaderTab = "messages" | "internal" | "context";
+
+function ToolbarButton({
+  onClick,
+  children,
+}: {
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-sm text-ink-2 transition-colors hover:bg-muted hover:text-ink active:scale-[0.98]"
+    >
+      {children}
+    </button>
+  );
+}
 
 export function ThreadReader({
   thread,
   loading,
   access,
   workspaceMembers,
+  aiEmployees,
   currentUserId,
   onReply,
   onArchive,
@@ -172,19 +225,20 @@ export function ThreadReader({
   onDraftWithAi,
   onDismissSuggestion,
   onAssignSuggested,
-  onAssignHuman,
-  onClearAssignee,
+  onSaveAssign,
   onCancelDraft,
   onRetryDraft,
   onOpenLatestDraft,
   onAddInternalNote,
   onOpenAttachment,
+  onClose,
   drafting,
 }: {
   thread: ThreadDetailDTO | null;
   loading: boolean;
   access: MailboxAccessFlags;
   workspaceMembers?: Array<{ id: string; name: string }>;
+  aiEmployees?: Array<{ id: string; name: string; role?: string }>;
   currentUserId?: string | null;
   onReply: () => void;
   onArchive: () => void;
@@ -194,13 +248,13 @@ export function ThreadReader({
   onDraftWithAi?: () => void;
   onDismissSuggestion?: () => void;
   onAssignSuggested?: () => void;
-  onAssignHuman?: (humanId: string) => void;
-  onClearAssignee?: () => void;
+  onSaveAssign?: (payload: AssignSavePayload) => Promise<void> | void;
   onCancelDraft?: () => void;
   onRetryDraft?: () => void;
   onOpenLatestDraft?: () => void;
   onAddInternalNote?: (text: string) => Promise<void> | void;
   onOpenAttachment?: (attachmentId: string) => void;
+  onClose?: () => void;
   drafting?: boolean;
 }) {
   const archived = thread?.status === "archived";
@@ -209,6 +263,30 @@ export function ThreadReader({
   const [tab, setTab] = useState<ReaderTab>("messages");
   const [noteText, setNoteText] = useState("");
   const [noteBusy, setNoteBusy] = useState(false);
+  const [assignDraft, setAssignDraft] = useState<AssignDraft>({ kind: "none" });
+  const [savedFlash, setSavedFlash] = useState(false);
+
+  useEffect(() => {
+    if (!thread) {
+      setAssignDraft({ kind: "none" });
+      return;
+    }
+    setAssignDraft(draftFromThread(thread));
+    setTab("messages");
+    setSavedFlash(false);
+  }, [thread?.id]);
+
+  useEffect(() => {
+    if (!onClose) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  const committedDraft = thread ? draftFromThread(thread) : { kind: "none" as const };
+  const assignDirty = !draftsEqual(assignDraft, committedDraft);
 
   const showNextStep =
     thread &&
@@ -233,65 +311,49 @@ export function ThreadReader({
     [thread],
   );
 
-  const toolbar = useMemo(
-    () => (
-      <div className="flex items-center gap-1 border-b border-border bg-surface px-3 py-2">
-        {access.canSend && (
-          <button
-            type="button"
-            onClick={onReply}
-            className="flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-sm text-ink-2 hover:bg-muted"
-          >
-            <Reply className="h-4 w-4" /> Reply
-          </button>
-        )}
-        {access.canRead && (
-          <button
-            type="button"
-            onClick={onMarkUnread}
-            className="flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-sm text-ink-2 hover:bg-muted"
-          >
-            <MailOpen className="h-4 w-4" /> Mark unread
-          </button>
-        )}
-        {access.canOrganize && (
-          <>
-            <button
-              type="button"
-              onClick={archived ? onUnarchive : onArchive}
-              className="flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-sm text-ink-2 hover:bg-muted"
-            >
-              {archived ? (
-                <>
-                  <ArchiveRestore className="h-4 w-4" /> Unarchive
-                </>
-              ) : (
-                <>
-                  <Archive className="h-4 w-4" /> Archive
-                </>
-              )}
-            </button>
-            <button
-              type="button"
-              onClick={onToggleSpam}
-              className="flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-sm text-ink-2 hover:bg-muted"
-            >
-              {isSpam ? (
-                <>
-                  <ShieldCheck className="h-4 w-4" /> Not spam
-                </>
-              ) : (
-                <>
-                  <ShieldAlert className="h-4 w-4" /> Spam
-                </>
-              )}
-            </button>
-          </>
-        )}
-      </div>
-    ),
-    [access, archived, isSpam, onReply, onArchive, onUnarchive, onMarkUnread, onToggleSpam],
-  );
+  const selectValue =
+    assignDraft.kind === "none"
+      ? "none"
+      : assignDraft.kind === "human"
+        ? `human:${assignDraft.id}`
+        : `ai:${assignDraft.id}`;
+
+  const resolveLabel = (draft: AssignDraft): string | null => {
+    if (draft.kind === "none") return null;
+    if (draft.kind === "human") {
+      const m = (workspaceMembers ?? []).find((x) => x.id === draft.id);
+      return m?.name ?? "Teammate";
+    }
+    const e = (aiEmployees ?? []).find((x) => x.id === draft.id);
+    return e?.name ?? "AI employee";
+  };
+
+  const handleSaveAssign = async () => {
+    if (!onSaveAssign || !assignDirty) return;
+    setAssignBusy(true);
+    try {
+      const label = resolveLabel(assignDraft);
+      if (assignDraft.kind === "none") {
+        await onSaveAssign({ clear: true, label: null, kind: null });
+      } else if (assignDraft.kind === "human") {
+        await onSaveAssign({
+          humanId: assignDraft.id,
+          label,
+          kind: "human",
+        });
+      } else {
+        await onSaveAssign({
+          employeeId: assignDraft.id,
+          label,
+          kind: "ai_employee",
+        });
+      }
+      setSavedFlash(true);
+      window.setTimeout(() => setSavedFlash(false), 1400);
+    } finally {
+      setAssignBusy(false);
+    }
+  };
 
   if (loading && !thread) {
     return (
@@ -303,32 +365,100 @@ export function ThreadReader({
 
   if (!thread) {
     return (
-      <div className="flex h-full items-center justify-center p-8 text-center text-sm text-ink-3">
-        Select a conversation to read it.
+      <div className="flex h-full flex-col items-center justify-center gap-2 p-8 text-center">
+        <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-accent-soft/80 text-accent-d">
+          <MailOpen className="h-5 w-5" />
+        </div>
+        <p className="text-sm font-medium text-ink">No conversation open</p>
+        <p className="max-w-xs text-xs text-ink-3">
+          Pick a thread from the list, or keep browsing folders — you can close any open email anytime.
+        </p>
       </div>
     );
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
-      {toolbar}
+    <motion.div
+      key={thread.id}
+      initial={{ opacity: 0, x: 10 }}
+      animate={{ opacity: 1, x: 0 }}
+      transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
+      className="flex h-full min-h-0 flex-col"
+    >
+      <div className="flex items-center gap-1 border-b border-border bg-surface/95 px-2 py-1.5 backdrop-blur-sm">
+        {access.canSend && (
+          <ToolbarButton onClick={onReply}>
+            <Reply className="h-4 w-4" /> Reply
+          </ToolbarButton>
+        )}
+        {access.canRead && (
+          <ToolbarButton onClick={onMarkUnread}>
+            <MailOpen className="h-4 w-4" /> Mark unread
+          </ToolbarButton>
+        )}
+        {access.canOrganize && (
+          <>
+            <ToolbarButton onClick={archived ? onUnarchive : onArchive}>
+              {archived ? (
+                <>
+                  <ArchiveRestore className="h-4 w-4" /> Unarchive
+                </>
+              ) : (
+                <>
+                  <Archive className="h-4 w-4" /> Archive
+                </>
+              )}
+            </ToolbarButton>
+            <ToolbarButton onClick={onToggleSpam}>
+              {isSpam ? (
+                <>
+                  <ShieldCheck className="h-4 w-4" /> Not spam
+                </>
+              ) : (
+                <>
+                  <ShieldAlert className="h-4 w-4" /> Spam
+                </>
+              )}
+            </ToolbarButton>
+          </>
+        )}
+        {onClose && (
+          <button
+            type="button"
+            onClick={onClose}
+            className="ml-auto flex h-8 w-8 items-center justify-center rounded-md text-ink-3 transition-colors hover:bg-muted hover:text-ink"
+            aria-label="Close conversation"
+            title="Close"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        )}
+      </div>
+
       <div className="border-b border-border px-5 py-3">
-        <h2 className="truncate text-base font-semibold text-ink">{thread.subject}</h2>
-        <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-ink-3">
+        <h2 className="truncate text-base font-semibold tracking-tight text-ink">
+          {thread.subject}
+        </h2>
+        <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs text-ink-3">
           {thread.category && (
-            <span className="rounded bg-muted px-1.5 py-0.5 capitalize">{thread.category}</span>
+            <span className="rounded-md bg-muted px-1.5 py-0.5 capitalize">{thread.category}</span>
           )}
           {thread.priority !== "normal" && (
-            <span className="rounded bg-amber-50 px-1.5 py-0.5 capitalize text-amber-800">
+            <span className="rounded-md bg-amber-50 px-1.5 py-0.5 capitalize text-amber-800">
               {thread.priority}
             </span>
           )}
           {thread.assigneeName && (
-            <span className="rounded bg-muted px-1.5 py-0.5">
-              Assigned to {thread.assigneeName}
+            <span className="inline-flex items-center gap-1 rounded-md bg-accent-soft px-1.5 py-0.5 text-accent-d">
+              {thread.assigneeKind === "ai_employee" ? (
+                <Bot className="h-3 w-3" />
+              ) : (
+                <Users className="h-3 w-3" />
+              )}
+              {thread.assigneeName}
             </span>
           )}
-          {thread.hasUnread && <span className="text-accent-d">Unread</span>}
+          {thread.hasUnread && <span className="font-medium text-accent-d">Unread</span>}
           {(thread.triageStatus === "queued" || thread.triageStatus === "running") && (
             <span className="flex items-center gap-1 text-accent-d">
               <Loader2 className="h-3 w-3 animate-spin" /> Organising…
@@ -382,13 +512,18 @@ export function ThreadReader({
             type="button"
             onClick={() => setTab(key)}
             className={cn(
-              "px-3 py-2 text-xs font-medium",
-              tab === key
-                ? "border-b-2 border-accent text-accent-d"
-                : "text-ink-3 hover:text-ink",
+              "relative px-3 py-2 text-xs font-medium transition-colors",
+              tab === key ? "text-accent-d" : "text-ink-3 hover:text-ink",
             )}
           >
             {label}
+            {tab === key && (
+              <motion.span
+                layoutId="inbox-reader-tab"
+                className="absolute inset-x-1 -bottom-px h-0.5 rounded-full bg-accent"
+                transition={{ type: "spring", stiffness: 420, damping: 34 }}
+              />
+            )}
           </button>
         ))}
       </div>
@@ -425,8 +560,8 @@ export function ThreadReader({
       )}
 
       {showSuggestOwner && tab === "messages" && (
-        <div className="flex flex-wrap items-center gap-2 border-b border-border px-5 py-3">
-          <UserPlus className="h-4 w-4 text-ink-3" />
+        <div className="flex flex-wrap items-center gap-2 border-b border-border bg-accent-soft/30 px-5 py-3">
+          <UserPlus className="h-4 w-4 text-accent-d" />
           <span className="min-w-0 flex-1 text-sm text-ink">
             Suggested owner:{" "}
             <span className="font-medium">
@@ -444,7 +579,7 @@ export function ThreadReader({
                 setAssignBusy(true);
                 Promise.resolve(onAssignSuggested()).finally(() => setAssignBusy(false));
               }}
-              className="rounded-md bg-accent px-3 py-1.5 text-xs font-medium text-white hover:opacity-90 disabled:opacity-50"
+              className="rounded-md bg-accent px-3 py-1.5 text-xs font-medium text-white transition hover:opacity-90 disabled:opacity-50"
             >
               Assign
             </button>
@@ -453,7 +588,7 @@ export function ThreadReader({
             <button
               type="button"
               onClick={onDismissSuggestion}
-              className="rounded-md p-1.5 text-ink-3 hover:bg-muted hover:text-ink"
+              className="rounded-md p-1.5 text-ink-3 transition hover:bg-muted hover:text-ink"
               aria-label="Dismiss suggestion"
             >
               <X className="h-4 w-4" />
@@ -462,39 +597,99 @@ export function ThreadReader({
         </div>
       )}
 
-      {access.canOrganize && onAssignHuman && tab === "messages" && (
-        <div className="flex flex-wrap items-center gap-2 border-b border-border px-5 py-2 text-xs">
-          <span className="text-ink-3">Assign to human</span>
-          <select
-            className="rounded-md border border-border bg-canvas px-2 py-1 text-ink"
-            defaultValue=""
-            onChange={(e) => {
-              const id = e.target.value;
-              if (!id) return;
-              setAssignBusy(true);
-              Promise.resolve(onAssignHuman(id)).finally(() => {
-                setAssignBusy(false);
-                e.target.value = "";
-              });
-            }}
-          >
-            <option value="" disabled>
-              Choose teammate…
-            </option>
-            {(workspaceMembers ?? [])
-              .filter((m) => m.id !== currentUserId || true)
-              .map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.name}
-                  {m.id === currentUserId ? " (you)" : ""}
-                </option>
-              ))}
-          </select>
-          {thread.assigneeId && onClearAssignee && (
-            <button type="button" onClick={onClearAssignee} className="underline text-ink-3 hover:text-ink">
-              Clear assignee
-            </button>
-          )}
+      {access.canOrganize && onSaveAssign && tab === "messages" && (
+        <div className="border-b border-border bg-surface px-5 py-3">
+          <div className="flex flex-wrap items-end gap-2">
+            <label className="min-w-[12rem] flex-1">
+              <span className="mb-1 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-ink-3">
+                <Users className="h-3 w-3" /> Assign
+              </span>
+              <select
+                className="w-full rounded-lg border border-border bg-canvas px-2.5 py-2 text-sm text-ink outline-none transition focus:border-accent focus:ring-2 focus:ring-accent-soft"
+                value={selectValue}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  if (v === "none") {
+                    setAssignDraft({ kind: "none" });
+                    return;
+                  }
+                  if (v.startsWith("human:")) {
+                    setAssignDraft({ kind: "human", id: v.slice("human:".length) });
+                    return;
+                  }
+                  if (v.startsWith("ai:")) {
+                    setAssignDraft({ kind: "ai_employee", id: v.slice("ai:".length) });
+                  }
+                }}
+              >
+                <option value="none">Unassigned</option>
+                {(workspaceMembers ?? []).length > 0 && (
+                  <optgroup label="Teammates">
+                    {(workspaceMembers ?? []).map((m) => (
+                      <option key={m.id} value={`human:${m.id}`}>
+                        {m.name}
+                        {m.id === currentUserId ? " (you)" : ""}
+                      </option>
+                    ))}
+                  </optgroup>
+                )}
+                {(aiEmployees ?? []).length > 0 && (
+                  <optgroup label="AI employees">
+                    {(aiEmployees ?? []).map((e) => (
+                      <option key={e.id} value={`ai:${e.id}`}>
+                        {e.name}
+                        {e.role ? ` · ${e.role}` : ""}
+                      </option>
+                    ))}
+                  </optgroup>
+                )}
+              </select>
+            </label>
+            <div className="flex items-center gap-1.5 pb-0.5">
+              <button
+                type="button"
+                disabled={!assignDirty || assignBusy}
+                onClick={() => void handleSaveAssign()}
+                className={cn(
+                  "rounded-lg px-3 py-2 text-xs font-semibold transition",
+                  assignDirty
+                    ? "bg-accent text-white shadow-sm hover:opacity-90"
+                    : "bg-muted text-ink-3",
+                  "disabled:cursor-not-allowed disabled:opacity-50",
+                )}
+              >
+                {assignBusy ? (
+                  <span className="inline-flex items-center gap-1.5">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" /> Saving
+                  </span>
+                ) : (
+                  "Save"
+                )}
+              </button>
+              <button
+                type="button"
+                disabled={!assignDirty || assignBusy}
+                onClick={() => setAssignDraft(committedDraft)}
+                className="rounded-lg px-3 py-2 text-xs font-medium text-ink-2 transition hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+          <AnimatePresence>
+            {(assignDirty || savedFlash) && (
+              <motion.p
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: "auto" }}
+                exit={{ opacity: 0, height: 0 }}
+                className="mt-1.5 overflow-hidden text-[11px] text-ink-3"
+              >
+                {savedFlash
+                  ? "Assignment saved."
+                  : "Changes aren’t applied until you save — you can cancel if this was a mistake."}
+              </motion.p>
+            )}
+          </AnimatePresence>
         </div>
       )}
 
@@ -509,7 +704,7 @@ export function ThreadReader({
               type="button"
               disabled={drafting}
               onClick={onDraftWithAi}
-              className="rounded-md bg-accent px-3 py-1.5 text-xs font-medium text-white hover:opacity-90 disabled:opacity-50"
+              className="rounded-md bg-accent px-3 py-1.5 text-xs font-medium text-white transition hover:opacity-90 disabled:opacity-50"
             >
               Draft with AI
             </button>
@@ -518,7 +713,7 @@ export function ThreadReader({
             <button
               type="button"
               onClick={onDismissSuggestion}
-              className="rounded-md p-1.5 text-ink-3 hover:bg-muted hover:text-ink"
+              className="rounded-md p-1.5 text-ink-3 transition hover:bg-muted hover:text-ink"
               aria-label="Dismiss suggestion"
             >
               <X className="h-4 w-4" />
@@ -528,74 +723,98 @@ export function ThreadReader({
       )}
 
       <div className="min-h-0 flex-1 overflow-y-auto">
-        {tab === "messages" &&
-          customerMessages.map((m) => (
-            <MessageBubble key={m.id} message={m} onOpenAttachment={onOpenAttachment} />
-          ))}
-        {tab === "internal" && (
-          <>
-            {internalMessages.length === 0 && (
-              <p className="p-6 text-center text-sm text-ink-3">
-                No internal notes yet. Notes stay inside the workspace.
-              </p>
-            )}
-            {internalMessages.map((m) => (
-              <MessageBubble key={m.id} message={m} />
-            ))}
-            {access.canSend && onAddInternalNote && (
-              <div className="border-t border-border p-4">
-                <textarea
-                  value={noteText}
-                  onChange={(e) => setNoteText(e.target.value)}
-                  rows={3}
-                  placeholder="Add an internal note…"
-                  className="w-full rounded-lg border border-border bg-canvas px-3 py-2 text-sm text-ink outline-none focus:border-accent"
-                />
-                <button
-                  type="button"
-                  disabled={noteBusy || !noteText.trim()}
-                  onClick={() => {
-                    const text = noteText.trim();
-                    if (!text) return;
-                    setNoteBusy(true);
-                    Promise.resolve(onAddInternalNote(text))
-                      .then(() => setNoteText(""))
-                      .finally(() => setNoteBusy(false));
-                  }}
-                  className="mt-2 rounded-md bg-ink px-3 py-1.5 text-xs font-medium text-white disabled:opacity-40"
-                >
-                  {noteBusy ? "Saving…" : "Add note"}
-                </button>
-              </div>
-            )}
-          </>
-        )}
-        {tab === "context" && (
-          <div className="space-y-3 p-5 text-sm text-ink-2">
-            <p>
-              <span className="text-ink-3">Category:</span> {thread.category || "—"}
-            </p>
-            <p>
-              <span className="text-ink-3">Priority:</span> {thread.priority}
-            </p>
-            <p>
-              <span className="text-ink-3">Reply required:</span>{" "}
-              {thread.replyRequired ? "Yes" : "No"}
-            </p>
-            {thread.matchReason && (
+        <AnimatePresence mode="wait">
+          {tab === "messages" && (
+            <motion.div
+              key="messages"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.15 }}
+            >
+              {customerMessages.map((m) => (
+                <MessageBubble key={m.id} message={m} onOpenAttachment={onOpenAttachment} />
+              ))}
+            </motion.div>
+          )}
+          {tab === "internal" && (
+            <motion.div
+              key="internal"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.15 }}
+            >
+              {internalMessages.length === 0 && (
+                <p className="p-6 text-center text-sm text-ink-3">
+                  No internal notes yet. Notes stay inside the workspace.
+                </p>
+              )}
+              {internalMessages.map((m) => (
+                <MessageBubble key={m.id} message={m} />
+              ))}
+              {access.canSend && onAddInternalNote && (
+                <div className="border-t border-border p-4">
+                  <textarea
+                    value={noteText}
+                    onChange={(e) => setNoteText(e.target.value)}
+                    rows={3}
+                    placeholder="Add an internal note…"
+                    className="w-full rounded-lg border border-border bg-canvas px-3 py-2 text-sm text-ink outline-none transition focus:border-accent focus:ring-2 focus:ring-accent-soft"
+                  />
+                  <button
+                    type="button"
+                    disabled={noteBusy || !noteText.trim()}
+                    onClick={() => {
+                      const text = noteText.trim();
+                      if (!text) return;
+                      setNoteBusy(true);
+                      Promise.resolve(onAddInternalNote(text))
+                        .then(() => setNoteText(""))
+                        .finally(() => setNoteBusy(false));
+                    }}
+                    className="mt-2 rounded-md bg-ink px-3 py-1.5 text-xs font-medium text-white transition hover:opacity-90 disabled:opacity-40"
+                  >
+                    {noteBusy ? "Saving…" : "Add note"}
+                  </button>
+                </div>
+              )}
+            </motion.div>
+          )}
+          {tab === "context" && (
+            <motion.div
+              key="context"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.15 }}
+              className="space-y-3 p-5 text-sm text-ink-2"
+            >
               <p>
-                <span className="text-ink-3">Why selected:</span> {thread.matchReason}
+                <span className="text-ink-3">Category:</span> {thread.category || "—"}
               </p>
-            )}
-            {thread.suggestedNextAction && (
               <p>
-                <span className="text-ink-3">Suggested next step:</span>{" "}
-                {thread.suggestedNextAction}
+                <span className="text-ink-3">Priority:</span> {thread.priority}
               </p>
-            )}
-          </div>
-        )}
+              <p>
+                <span className="text-ink-3">Reply required:</span>{" "}
+                {thread.replyRequired ? "Yes" : "No"}
+              </p>
+              {thread.matchReason && (
+                <p>
+                  <span className="text-ink-3">Why selected:</span> {thread.matchReason}
+                </p>
+              )}
+              {thread.suggestedNextAction && (
+                <p>
+                  <span className="text-ink-3">Suggested next step:</span>{" "}
+                  {thread.suggestedNextAction}
+                </p>
+              )}
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
-    </div>
+    </motion.div>
   );
 }

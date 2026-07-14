@@ -42,7 +42,10 @@ import {
 } from "@/lib/inbox/client";
 import { useInboxRealtime } from "@/lib/inbox/use-inbox-realtime";
 import { ClaimGate } from "@/components/inbox/ClaimGate";
-import { ThreadReader } from "@/components/inbox/ThreadReader";
+import {
+  ThreadReader,
+  type AssignSavePayload,
+} from "@/components/inbox/ThreadReader";
 import { Composer, type ComposerInitial, type SendPayload } from "@/components/inbox/Composer";
 import type {
   DraftDTO,
@@ -53,6 +56,7 @@ import type {
   ThreadDetailDTO,
   ThreadSummaryDTO,
 } from "@/lib/inbox/types";
+import { motion } from "framer-motion";
 
 const FOLDERS: { key: InboxFolder; label: string; icon: typeof InboxIcon }[] = [
   { key: "inbox", label: "Inbox", icon: InboxIcon },
@@ -575,25 +579,63 @@ export default function InboxPage() {
 
   const handleAssignSuggested = useCallback(async () => {
     if (!workspaceId || !selectedThreadId || !threadDetail?.suggestedEmployeeId) return;
+    const employeeId = threadDetail.suggestedEmployeeId;
+    const label = threadDetail.suggestedEmployeeName;
+    setThreadDetail((prev) =>
+      prev
+        ? {
+            ...prev,
+            assigneeId: employeeId,
+            assigneeKind: "ai_employee",
+            assigneeName: label,
+            assignmentSource: "human",
+          }
+        : prev,
+    );
     await assignThreadReq({
       workspaceId,
       threadId: selectedThreadId,
-      employeeId: threadDetail.suggestedEmployeeId,
+      employeeId,
     }).catch(() => {});
     const detail = await fetchThread({ workspaceId, threadId: selectedThreadId }).catch(() => null);
     if (detail) setThreadDetail(detail);
   }, [workspaceId, selectedThreadId, threadDetail]);
 
-  const handleClearAssignee = useCallback(async () => {
-    if (!workspaceId || !selectedThreadId) return;
-    await assignThreadReq({
-      workspaceId,
-      threadId: selectedThreadId,
-      clear: true,
-    }).catch(() => {});
-    const detail = await fetchThread({ workspaceId, threadId: selectedThreadId }).catch(() => null);
-    if (detail) setThreadDetail(detail);
-  }, [workspaceId, selectedThreadId]);
+  const handleSaveAssign = useCallback(
+    async (payload: AssignSavePayload) => {
+      if (!workspaceId || !selectedThreadId) return;
+      setThreadDetail((prev) =>
+        prev
+          ? {
+              ...prev,
+              assigneeId: payload.clear ? null : payload.humanId ?? payload.employeeId ?? null,
+              assigneeKind: payload.kind,
+              assigneeName: payload.label,
+              assignmentSource: "human",
+            }
+          : prev,
+      );
+      await assignThreadReq({
+        workspaceId,
+        threadId: selectedThreadId,
+        humanId: payload.humanId,
+        employeeId: payload.employeeId,
+        clear: payload.clear,
+      }).catch(() => {});
+      void fetchThread({ workspaceId, threadId: selectedThreadId })
+        .then((detail) => {
+          if (detail) setThreadDetail(detail);
+        })
+        .catch(() => {});
+    },
+    [workspaceId, selectedThreadId],
+  );
+
+  const closeThread = useCallback(() => {
+    setSelectedThreadId(null);
+    setThreadDetail(null);
+    setMobileView("list");
+  }, []);
 
   const handleCancelDraft = useCallback(async () => {
     if (!workspaceId || !selectedThreadId) return;
@@ -639,16 +681,6 @@ export default function InboxPage() {
     const detail = await fetchThread({ workspaceId, threadId: selectedThreadId }).catch(() => null);
     if (detail) setThreadDetail(detail);
   }, [workspaceId, selectedThreadId]);
-
-  const handleAssignHuman = useCallback(
-    async (humanId: string) => {
-      if (!workspaceId || !selectedThreadId) return;
-      await assignThreadReq({ workspaceId, threadId: selectedThreadId, humanId }).catch(() => {});
-      const detail = await fetchThread({ workspaceId, threadId: selectedThreadId }).catch(() => null);
-      if (detail) setThreadDetail(detail);
-    },
-    [workspaceId, selectedThreadId],
-  );
 
   const handleAddInternalNote = useCallback(
     async (text: string) => {
@@ -754,17 +786,46 @@ export default function InboxPage() {
           </button>
         </div>
         {brief && (
-          <div className="mx-2 mb-3 rounded-lg border border-border bg-canvas px-3 py-2.5">
-            <p className="text-xs font-medium text-ink">
+          <motion.div
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
+            className="relative mx-2 mb-3 overflow-hidden rounded-xl border border-border bg-gradient-to-br from-accent-soft/80 via-canvas to-canvas px-3 py-3 shadow-[0_1px_0_rgba(15,23,42,0.04)]"
+          >
+            <div
+              className="pointer-events-none absolute -right-6 -top-8 h-20 w-20 rounded-full bg-accent/10 blur-2xl"
+              aria-hidden
+            />
+            <p className="relative text-[13px] font-semibold tracking-tight text-ink">
               {brief.greeting}
             </p>
-            <div className="mt-2 grid grid-cols-2 gap-1.5 text-[10px] text-ink-3">
-              <span>{brief.stats.unread} new</span>
-              <span>{brief.stats.needsApproval} approval</span>
-              <span>{brief.stats.highPriority} high</span>
-              <span>{brief.stats.assignedToMe} assigned</span>
+            <p className="relative mt-0.5 text-[10px] text-ink-3">Your inbox pulse</p>
+            <div className="relative mt-2.5 grid grid-cols-2 gap-1.5">
+              {(
+                [
+                  { label: "New", value: brief.stats.unread },
+                  { label: "Approval", value: brief.stats.needsApproval },
+                  { label: "High", value: brief.stats.highPriority },
+                  { label: "Assigned", value: brief.stats.assignedToMe },
+                ] as const
+              ).map((stat) => (
+                <div
+                  key={stat.label}
+                  className="rounded-lg border border-border/70 bg-surface/80 px-2 py-1.5 backdrop-blur-sm"
+                >
+                  <p
+                    className={cn(
+                      "text-sm font-semibold tabular-nums",
+                      stat.value > 0 ? "text-accent-d" : "text-ink-2",
+                    )}
+                  >
+                    {stat.value}
+                  </p>
+                  <p className="text-[10px] text-ink-3">{stat.label}</p>
+                </div>
+              ))}
             </div>
-          </div>
+          </motion.div>
         )}
         <p className="truncate px-3 pb-2 text-xs text-ink-3">{mailbox.mailbox.address}</p>
         {FOLDERS.map((f) => (
@@ -772,12 +833,10 @@ export default function InboxPage() {
             key={f.key}
             onClick={() => {
               setFolder(f.key);
-              setSelectedThreadId(null);
-              setThreadDetail(null);
               setMobileView("list");
             }}
             className={cn(
-              "flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-ink-2 transition hover:bg-muted",
+              "relative flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-ink-2 transition hover:bg-muted",
               folder === f.key && "bg-accent-soft font-medium text-accent-d hover:bg-accent-soft",
             )}
           >
@@ -849,12 +908,6 @@ export default function InboxPage() {
           </div>
           {loadingList && <Loader2 className="h-4 w-4 animate-spin text-ink-3" />}
         </div>
-        {brief && (
-          <div className="hidden border-b border-border px-4 py-2 text-xs text-ink-3 md:block">
-            {brief.greeting} · {brief.stats.unread} unread · {brief.stats.highPriority} high
-            priority
-          </div>
-        )}
         <div className="min-h-0 flex-1 overflow-y-auto">
           {listItems.length === 0 && loadingList && (
             <div className="flex items-center justify-center gap-2 p-8 text-sm text-ink-3">
@@ -896,19 +949,20 @@ export default function InboxPage() {
                   }
                 />
               ))
-            : threads.map((t) => (
+            : threads.map((t, index) => (
                 <ThreadRow
                   key={t.id}
                   thread={t}
                   folder={folder}
                   active={t.id === selectedThreadId}
+                  index={index}
                   onClick={() => openThread(t.id)}
                 />
               ))}
           {nextCursor && folder !== "drafts" && (
             <button
               onClick={loadMore}
-              className="w-full py-3 text-center text-xs text-ink-3 hover:text-ink"
+              className="w-full py-3 text-center text-xs text-ink-3 transition hover:text-ink"
             >
               Load more
             </button>
@@ -935,6 +989,11 @@ export default function InboxPage() {
             loading={loadingThread}
             access={mailbox.access}
             workspaceMembers={workspaceMembers}
+            aiEmployees={state.employees.map((e) => ({
+              id: e.id,
+              name: e.name,
+              role: e.role,
+            }))}
             currentUserId={state.user?.id ?? null}
             onReply={startReply}
             onArchive={() => runThreadAction("archive")}
@@ -944,13 +1003,13 @@ export default function InboxPage() {
             onDraftWithAi={() => void handleDraftWithAi()}
             onDismissSuggestion={() => void handleDismissSuggestion()}
             onAssignSuggested={() => void handleAssignSuggested()}
-            onAssignHuman={(id) => void handleAssignHuman(id)}
-            onClearAssignee={() => void handleClearAssignee()}
+            onSaveAssign={(payload) => handleSaveAssign(payload)}
             onCancelDraft={() => void handleCancelDraft()}
             onRetryDraft={() => void handleDraftWithAi()}
             onOpenLatestDraft={() => void handleOpenLatestDraft()}
             onAddInternalNote={(text) => handleAddInternalNote(text)}
             onOpenAttachment={(id) => void handleOpenAttachment(id)}
+            onClose={closeThread}
             drafting={drafting}
           />
         </div>
@@ -998,11 +1057,13 @@ function ThreadRow({
   thread,
   folder,
   active,
+  index = 0,
   onClick,
 }: {
   thread: ThreadSummaryDTO;
   folder: InboxFolder;
   active: boolean;
+  index?: number;
   onClick: () => void;
 }) {
   const peerLabel =
@@ -1020,11 +1081,14 @@ function ThreadRow({
     thread.deliveryStatus === "sending" || thread.deliveryStatus === "queued";
 
   return (
-    <button
+    <motion.button
       type="button"
       onClick={onClick}
+      initial={{ opacity: 0, y: 4 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.2, delay: Math.min(index, 8) * 0.02 }}
       className={cn(
-        "relative flex w-full flex-col gap-0.5 border-b border-border-2 px-4 py-3 text-left transition hover:bg-muted",
+        "relative flex w-full flex-col gap-0.5 border-b border-border-2 px-4 py-3 text-left transition-colors hover:bg-muted",
         active && "bg-accent-soft hover:bg-accent-soft",
         thread.hasUnread && "bg-accent-soft/40",
       )}
@@ -1088,7 +1152,7 @@ function ThreadRow({
           {thread.aiActivity || thread.snippet}
         </span>
       </div>
-    </button>
+    </motion.button>
   );
 }
 

@@ -175,6 +175,8 @@ export type ThreadDetailDTO = {
   assignmentConfidence: number;
   assignmentSource: string | null;
   assigneeId: string | null;
+  /** Who the current assignee is — human teammate or AI employee. */
+  assigneeKind: "human" | "ai_employee" | null;
   suggestedEmployeeId: string | null;
   assigneeName: string | null;
   suggestedEmployeeName: string | null;

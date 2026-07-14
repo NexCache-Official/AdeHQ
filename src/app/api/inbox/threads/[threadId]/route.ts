@@ -139,6 +139,11 @@ export async function GET(
         (thread.assigned_employee_id as string) ??
         (thread.assigned_human_id as string) ??
         null,
+      assigneeKind: thread.assigned_employee_id
+        ? "ai_employee"
+        : thread.assigned_human_id
+          ? "human"
+          : null,
       suggestedEmployeeId: (thread.suggested_employee_id as string) ?? null,
       assigneeName: thread.assigned_employee_id
         ? nameById.get(String(thread.assigned_employee_id)) ?? null
