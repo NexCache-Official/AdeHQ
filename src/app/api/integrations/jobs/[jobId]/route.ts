@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { AuthError, requireAuthUser, requireWorkspaceMembership } from "@/lib/supabase/auth-server";
 import { getIntegrationJob } from "@/lib/integrations/jobs/queue";
 import { processIntegrationJob } from "@/lib/integrations/jobs/worker";
+import { reconcileChatArtifactsForJob } from "@/lib/integrations/jobs/reconcile-message-for-job";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -32,6 +33,9 @@ export async function GET(
     if (job?.status === "queued") {
       const processed = await processIntegrationJob(client, workspaceId, job.id);
       if (processed) job = processed;
+    } else if (job && (job.status === "success" || job.status === "failed")) {
+      // Heal stuck "Generating…" chips when the job already finished.
+      await reconcileChatArtifactsForJob(client, job).catch(() => undefined);
     }
 
     return NextResponse.json({ job });

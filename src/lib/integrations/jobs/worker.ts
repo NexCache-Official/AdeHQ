@@ -13,6 +13,7 @@ import { finalizeToolRun } from "@/lib/integrations/tool-runs";
 import { workMinutesForCost } from "@/lib/integrations/cost";
 import { jobFromRow } from "./queue";
 import { getJobHandler } from "./registry";
+import { reconcileChatArtifactsForJob } from "./reconcile-message-for-job";
 import { nowISO } from "@/lib/utils";
 
 // Register Phase 2 artifact job handlers.
@@ -36,6 +37,18 @@ async function claimJob(
     .maybeSingle();
   if (error) throw error;
   return data ? jobFromRow(data as DbRow) : null;
+}
+
+async function finalizeJobOutcome(
+  client: SupabaseClient,
+  job: IntegrationJobRecord,
+): Promise<IntegrationJobRecord> {
+  if (job.status === "success" || job.status === "failed") {
+    await reconcileChatArtifactsForJob(client, job).catch((err) =>
+      console.warn("[AdeHQ integrations] chat artifact reconcile error", err),
+    );
+  }
+  return job;
 }
 
 export async function processIntegrationJob(
@@ -69,7 +82,12 @@ export async function processIntegrationJob(
         errorMessage: message,
       }).catch(() => undefined);
     }
-    return { ...job, status: "failed", attempts, errorMessage: message };
+    return finalizeJobOutcome(client, {
+      ...job,
+      status: "failed",
+      attempts,
+      errorMessage: message,
+    });
   }
 
   try {
@@ -98,7 +116,12 @@ export async function processIntegrationJob(
       }).catch((err) => console.warn("[AdeHQ integrations] job tool-run finalize failed", err));
     }
 
-    return { ...job, status: "success", attempts, result: outcome.result };
+    return finalizeJobOutcome(client, {
+      ...job,
+      status: "success",
+      attempts,
+      result: outcome.result,
+    });
   } catch (error) {
     const message =
       error instanceof Error
@@ -129,7 +152,12 @@ export async function processIntegrationJob(
       }).catch(() => undefined);
     }
 
-    return { ...job, status: exhausted ? "failed" : "queued", attempts, errorMessage: message };
+    return finalizeJobOutcome(client, {
+      ...job,
+      status: exhausted ? "failed" : "queued",
+      attempts,
+      errorMessage: message,
+    });
   }
 }
 

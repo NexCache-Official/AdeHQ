@@ -71,6 +71,9 @@ export function ToolResultInlineCard({
   const [retryMessage, setRetryMessage] = useState<string | null>(null);
   const persistedRef = useRef(false);
   const prevStatusRef = useRef(artifact.meta?.toolStatus);
+  const locallyResolvedJobRef = useRef<string | null>(null);
+  const artifactRef = useRef(artifact);
+  artifactRef.current = artifact;
 
   const status = display.meta?.toolStatus ?? "failed";
   const href = display.meta?.href;
@@ -91,7 +94,7 @@ export function ToolResultInlineCard({
     (display.meta?.triggerMessageId ?? context?.messageId);
   const canRetry = Boolean(canRetryTool || canRetryReply);
 
-  const persistResolvedArtifact = (resolved: MessageArtifact, jobId: string) => {
+  const persistResolvedArtifact = (resolved: MessageArtifact, resolvedJobId: string) => {
     if (persistedRef.current || !context?.roomId || !context?.messageId) return;
     if (resolved.meta?.toolStatus !== "success" && resolved.meta?.toolStatus !== "failed") return;
 
@@ -100,32 +103,44 @@ export function ToolResultInlineCard({
     if (!message) return;
 
     persistedRef.current = true;
+    locallyResolvedJobRef.current = resolvedJobId;
     actions.updateMessage(context.roomId, context.messageId, {
-      artifacts: replaceQueuedArtifactInList(message.artifacts, jobId, resolved),
+      artifacts: replaceQueuedArtifactInList(message.artifacts, resolvedJobId, resolved),
     });
     if (resolved.meta?.toolStatus === "success" && isDriveFileTool(resolved.meta?.toolName)) {
       notifyDriveUpdated();
     }
   };
 
-  useEffect(() => {
-    const prev = prevStatusRef.current;
-    prevStatusRef.current = artifact.meta?.toolStatus;
-    setDisplay(artifact);
-    setChecking(artifact.meta?.toolStatus === "queued");
-    persistedRef.current = false;
-    if (
-      prev === "queued" &&
-      artifact.meta?.toolStatus === "success" &&
-      isDriveFileTool(artifact.meta?.toolName)
-    ) {
-      notifyDriveUpdated();
-    }
-  }, [artifact]);
+  const jobId = queuedArtifactJobId(artifact) ?? artifact.meta?.jobId;
+  const toolStatus = artifact.meta?.toolStatus;
+  const toolName = artifact.meta?.toolName;
 
   useEffect(() => {
-    const jobId = queuedArtifactJobId(artifact);
-    if (artifact.meta?.toolStatus !== "queued" || !jobId) {
+    const prev = prevStatusRef.current;
+    prevStatusRef.current = toolStatus;
+
+    const holdLocalResolution =
+      Boolean(jobId) &&
+      locallyResolvedJobRef.current === jobId &&
+      toolStatus === "queued";
+
+    if (!holdLocalResolution) {
+      setDisplay(artifact);
+      setChecking(toolStatus === "queued");
+      if (toolStatus === "success" || toolStatus === "failed") {
+        locallyResolvedJobRef.current = jobId ?? null;
+        persistedRef.current = false;
+      }
+    }
+
+    if (prev === "queued" && toolStatus === "success" && isDriveFileTool(toolName)) {
+      notifyDriveUpdated();
+    }
+  }, [artifact, artifact.id, jobId, toolStatus, toolName]);
+
+  useEffect(() => {
+    if (toolStatus !== "queued" || !jobId) {
       setChecking(false);
       return;
     }
@@ -133,8 +148,48 @@ export function ToolResultInlineCard({
     let cancelled = false;
     let attempts = 0;
 
+    const applyTerminal = (
+      terminal: "success" | "failed",
+      bodyJob: NonNullable<IntegrationJobResponse["job"]>,
+    ) => {
+      const snapshot = artifactRef.current;
+      if (terminal === "success") {
+        const resolved = artifactFromCompletedJob(snapshot, {
+          id: jobId,
+          workspaceId: context?.workspaceId ?? "",
+          jobType: toolName ?? "artifact",
+          status: "success",
+          payload: {},
+          result: bodyJob.result ?? {},
+          attempts: 0,
+          maxAttempts: 3,
+          scheduledAt: "",
+          createdAt: "",
+        });
+        locallyResolvedJobRef.current = jobId;
+        setDisplay(resolved);
+        setChecking(false);
+        persistResolvedArtifact(resolved, jobId);
+        return;
+      }
+      const resolved: MessageArtifact = {
+        ...snapshot,
+        label: `Failed: ${toolName?.split(".").pop() ?? "action"}`,
+        meta: {
+          ...snapshot.meta,
+          toolStatus: "failed",
+          error: bodyJob.errorMessage ?? "Background job failed.",
+          subtitle: bodyJob.errorMessage ?? "Background job failed.",
+        },
+      };
+      locallyResolvedJobRef.current = jobId;
+      setDisplay(resolved);
+      setChecking(false);
+      persistResolvedArtifact(resolved, jobId);
+    };
+
     const poll = async () => {
-      if (cancelled || attempts > 30) {
+      if (cancelled || attempts > 45) {
         if (!cancelled) setChecking(false);
         return;
       }
@@ -153,43 +208,19 @@ export function ToolResultInlineCard({
           return;
         }
         const body = (await res.json()) as IntegrationJobResponse;
-        if (cancelled || !body.job) {
+        if (!body.job) {
           if (!cancelled) setChecking(false);
           return;
         }
 
+        // Apply terminal status even if this effect was cleaned up — otherwise
+        // parent re-renders cancel in-flight polls and the chip stays forever.
         if (body.job.status === "success") {
-          const resolved = artifactFromCompletedJob(artifact, {
-            id: jobId,
-            workspaceId: context?.workspaceId ?? "",
-            jobType: artifact.meta?.toolName ?? "artifact",
-            status: "success",
-            payload: {},
-            result: body.job.result ?? {},
-            attempts: 0,
-            maxAttempts: 3,
-            scheduledAt: "",
-            createdAt: "",
-          });
-          setDisplay(resolved);
-          setChecking(false);
-          persistResolvedArtifact(resolved, jobId);
+          applyTerminal("success", body.job);
           return;
         }
         if (body.job.status === "failed") {
-          const resolved: MessageArtifact = {
-            ...artifact,
-            label: `Failed: ${artifact.meta?.toolName?.split(".").pop() ?? "action"}`,
-            meta: {
-              ...artifact.meta,
-              toolStatus: "failed",
-              error: body.job.errorMessage ?? "Background job failed.",
-              subtitle: body.job.errorMessage ?? "Background job failed.",
-            },
-          };
-          setDisplay(resolved);
-          setChecking(false);
-          persistResolvedArtifact(resolved, jobId);
+          applyTerminal("failed", body.job);
           return;
         }
       } catch {
@@ -206,7 +237,7 @@ export function ToolResultInlineCard({
     return () => {
       cancelled = true;
     };
-  }, [artifact, context?.messageId, context?.roomId, context?.workspaceId, actions]);
+  }, [jobId, toolStatus, toolName, context?.messageId, context?.roomId, context?.workspaceId]);
 
   const retryToolCall = async () => {
     const headers = await authHeaders();

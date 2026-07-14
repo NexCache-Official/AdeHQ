@@ -57,7 +57,15 @@ export function toolResultFromCompletedJob(
   };
 }
 
-/** Process a queued async tool job inline so chat artifacts reflect the final outcome. */
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Process a queued async tool job inline so chat artifacts reflect the final outcome.
+ * If another worker already claimed the job, wait briefly for success/failure instead of
+ * leaving the AI message stuck on "Generating…".
+ */
 export async function drainQueuedToolResult(
   client: SupabaseClient,
   workspaceId: string,
@@ -70,6 +78,19 @@ export async function drainQueuedToolResult(
     job = await getIntegrationJob(client, workspaceId, result.jobId);
   }
   if (!job) return result;
+
+  // Fire-and-forget enqueue may already own the claim — poll until terminal.
+  for (let i = 0; i < 20 && (job.status === "queued" || job.status === "running"); i += 1) {
+    if (job.status === "queued") {
+      const processed = await processIntegrationJob(client, workspaceId, result.jobId);
+      if (processed) {
+        job = processed;
+        break;
+      }
+    }
+    await sleep(250);
+    job = (await getIntegrationJob(client, workspaceId, result.jobId)) ?? job;
+  }
 
   if (job.status === "success") {
     return toolResultFromCompletedJob(result, job);
