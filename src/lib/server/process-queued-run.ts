@@ -11,6 +11,7 @@ import {
   type ModelMode,
 } from "@/lib/ai/model-catalog";
 import { resolveRunModelMode } from "@/lib/ai/resolve-run-model-mode";
+import { isDriveArtifactAsk } from "@/lib/ai/detect-drive-artifact-ask";
 import {
   appendRunStep,
   claimAgentRun,
@@ -918,10 +919,16 @@ export async function processQueuedAgentRun(
     const preferAgentMode = Boolean(runMetadata.preferAgentMode ?? runMetadata.preferBrowserbase);
     const isDmRoom = ctx.room.kind === "dm";
 
+    // Drive file asks must never enter search/browse — planResearch and
+    // intelligence often treat "vendor/PropTech" wording as market research and
+    // the model then falsely claims it cannot save to Drive.
+    const driveArtifactAsk = isDriveArtifactAsk(content);
+
     if (
       !isGreetingRun &&
       !collaborationOnly &&
       !artifactIntent &&
+      !driveArtifactAsk &&
       !shouldAnswerFromKnowledge(intelligence) &&
       (getResearchCapabilities(employee).canSearch ||
         canEmployeeUseBrowserResearch(employee))
@@ -1037,7 +1044,11 @@ export async function processQueuedAgentRun(
             },
           };
         } else if (dmSteward.route === "employee_model" || dmSteward.route === "ask_clarification") {
-          researchPlan = null;
+          // Pin artifact asks to direct reply so planResearch cannot re-open search.
+          researchPlan =
+            dmSteward.intent === "artifact_request"
+              ? directReplyResearchPlan(content)
+              : null;
         }
       }
 

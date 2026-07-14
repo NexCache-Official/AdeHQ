@@ -3,6 +3,7 @@ import {
   isQuickFactLookup,
   requiresDeepBrowserResearch,
 } from "@/lib/ai/search/search-router";
+import { isDriveArtifactAsk } from "@/lib/ai/detect-drive-artifact-ask";
 import { detectWorkStopRequest } from "@/lib/orchestration/work-stop";
 
 export type DmStewardIntent =
@@ -197,7 +198,7 @@ export function classifyDmMessageWithSteward(input: DmStewardInput): DmStewardDe
   }
 
   // File deliverables before generic draft/write or market-research search diversion.
-  if (ARTIFACT_PATTERNS.some((p) => p.test(message))) {
+  if (isDriveArtifactAsk(message) || ARTIFACT_PATTERNS.some((p) => p.test(message))) {
     return {
       intent: "artifact_request",
       shouldRespond: true,

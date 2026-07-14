@@ -17,7 +17,7 @@ export function isDriveArtifactAsk(message: string): boolean {
   }
 
   const hasFileKind =
-    /\b(?:pdf|docx|pptx|xlsx|spreadsheet|workbook|excel|powerpoint|word(?:\s+doc(?:ument)?)?|deck|slides?|presentation)\b/i.test(
+    /\b(?:pdf|docx|pptx|xlsx|spreadsheet|workbook|excel|powerpoint|word(?:\s+doc(?:ument)?)?|deck|slides?|presentation|scorecard|tracker)\b/i.test(
       text,
     );
   const hasCreateVerb =
