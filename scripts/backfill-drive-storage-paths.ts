@@ -85,11 +85,18 @@ async function main() {
       console.warn(`${table}: ${error.message}`);
       continue;
     }
-    for (const row of data ?? []) {
-      const path = String((row as { storage_path?: string }).storage_path ?? "");
+    type StorageRow = {
+      id: string;
+      workspace_id: string;
+      storage_path: string | null;
+      storage_bucket?: string | null;
+    };
+    for (const raw of data ?? []) {
+      const row = raw as StorageRow;
+      const path = String(row.storage_path ?? "");
       if (!path.includes(" ")) continue;
       const bucket = String(
-        (row as { storage_bucket?: string }).storage_bucket ||
+        row.storage_bucket ||
           (table === "drive_exports" ? "adehq-exports" : "adehq-files"),
       );
       await moveAndUpdate({
