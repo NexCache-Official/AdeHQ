@@ -6,7 +6,7 @@ import { Button } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import { isMayaEmployee } from "@/lib/maya-employee";
 import { MAYA_EMPLOYEE_NAME } from "@/lib/hiring/maya";
-import { Check, Pencil, ScrollText, X } from "lucide-react";
+import { Check, Eye, Pencil, ScrollText, X } from "lucide-react";
 
 type BriefPatch = {
   instructions: string;
@@ -22,33 +22,129 @@ type Props = {
   onSave: (patch: BriefPatch) => void | Promise<void>;
 };
 
-/** Turn packed hire briefs into readable paragraphs for display. */
-export function formatInstructionsAsProse(value: string): string[] {
+type BriefBlock =
+  | { kind: "kv"; label: string; value: string }
+  | { kind: "heading"; label: string }
+  | { kind: "bullet"; text: string }
+  | { kind: "paragraph"; text: string }
+  | { kind: "empty" };
+
+const KNOWN_LABELS =
+  "Role|Department|Domain|Mission|Seniority|Autonomy|Core responsibilities|Technical focus|Business focus|Communication style|Proactivity|Quality preference|Approval rules|Success metrics|Assumptions|Open questions";
+
+/**
+ * Normalize packed hire briefs and freeform notes into document blocks
+ * so titles, key/value rows, and bullets render with real hierarchy.
+ */
+export function parseInstructionsDocument(value: string): BriefBlock[] {
   const raw = value?.trim();
-  if (!raw) return ["No standing instructions yet."];
+  if (!raw) return [{ kind: "paragraph", text: "No standing instructions yet." }];
 
   const normalized = raw
-    .replace(
-      /\s+(Role|Department|Domain|Mission|Seniority|Autonomy|Core responsibilities|Business focus|Communication style|Proactivity|Quality preference|Approval rules|Success metrics|Open questions):/gi,
-      "\n$1:",
-    )
+    .replace(new RegExp(`\\s+(${KNOWN_LABELS}):`, "gi"), "\n$1:")
+    .replace(/\r\n/g, "\n")
     .replace(/\s+-\s+/g, "\n- ")
     .trim();
 
   const lines = normalized
-    .split(/\n+/)
-    .map((line) => line.trim().replace(/^-\s*/, ""))
-    .filter(Boolean);
+    .split("\n")
+    .map((line) => line.replace(/\t/g, "  ").trimEnd())
+    .filter((line, index, arr) => {
+      // Keep single blank lines as section breaks; collapse runs of blanks.
+      if (line.trim()) return true;
+      return index > 0 && Boolean(arr[index - 1]?.trim());
+    });
 
-  if (lines.length <= 1 && !lines[0]?.includes(":")) {
-    return [raw];
+  const blocks: BriefBlock[] = [];
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) {
+      blocks.push({ kind: "empty" });
+      continue;
+    }
+
+    const bullet = trimmed.match(/^[-*•]\s+(.+)$/);
+    if (bullet) {
+      blocks.push({ kind: "bullet", text: bullet[1].trim() });
+      continue;
+    }
+
+    // Section heading only: "Core responsibilities:"
+    const headingOnly = trimmed.match(/^([^:]{2,48}):\s*$/);
+    if (headingOnly) {
+      blocks.push({ kind: "heading", label: headingOnly[1].trim() });
+      continue;
+    }
+
+    // Key / value: "Mission: Drive top-of-funnel…"
+    const kv = trimmed.match(/^([^:]{2,48}):\s+(.+)$/);
+    if (kv) {
+      blocks.push({ kind: "kv", label: kv[1].trim(), value: kv[2].trim() });
+      continue;
+    }
+
+    blocks.push({ kind: "paragraph", text: trimmed });
   }
 
-  return lines.map((line) => {
-    const match = line.match(/^([^:]{2,40}):\s*(.+)$/);
-    if (!match) return line;
-    return `${match[1]}: ${match[2]}`;
-  });
+  return blocks.length ? blocks : [{ kind: "paragraph", text: raw }];
+}
+
+export function BriefDocumentView({
+  value,
+  className,
+}: {
+  value: string;
+  className?: string;
+}) {
+  const blocks = useMemo(() => parseInstructionsDocument(value), [value]);
+
+  return (
+    <div
+      className={cn(
+        "prose-brief max-w-none space-y-3 text-[15px] leading-[1.65] text-ink-2",
+        className,
+      )}
+    >
+      {blocks.map((block, index) => {
+        if (block.kind === "empty") {
+          return <div key={`gap-${index}`} className="h-2" aria-hidden />;
+        }
+        if (block.kind === "heading") {
+          return (
+            <h3
+              key={`h-${index}`}
+              className="pt-2 text-[13px] font-semibold tracking-tight text-ink first:pt-0"
+            >
+              {block.label}
+            </h3>
+          );
+        }
+        if (block.kind === "kv") {
+          return (
+            <p key={`kv-${index}`} className="m-0">
+              <span className="font-semibold text-ink">{block.label}</span>
+              <span className="text-ink-3"> · </span>
+              <span className="text-ink-2">{block.value}</span>
+            </p>
+          );
+        }
+        if (block.kind === "bullet") {
+          return (
+            <div key={`b-${index}`} className="flex gap-2.5 pl-0.5">
+              <span className="mt-[0.55em] h-1.5 w-1.5 shrink-0 rounded-full bg-ink-3" />
+              <p className="m-0 min-w-0 flex-1 text-ink-2">{block.text}</p>
+            </div>
+          );
+        }
+        return (
+          <p key={`p-${index}`} className="m-0 text-ink-2">
+            {block.text}
+          </p>
+        );
+      })}
+    </div>
+  );
 }
 
 export function EmployeeOperatingBriefPanel({ employee, onSave }: Props) {
@@ -57,6 +153,7 @@ export function EmployeeOperatingBriefPanel({ employee, onSave }: Props) {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [messageIsError, setMessageIsError] = useState(false);
+  const [showPreview, setShowPreview] = useState(true);
 
   const [instructions, setInstructions] = useState(employee.instructions);
   const [communicationStyle, setCommunicationStyle] = useState(employee.communicationStyle);
@@ -88,6 +185,7 @@ export function EmployeeOperatingBriefPanel({ employee, onSave }: Props) {
     setSeniority(employee.seniority);
     setMessage(null);
     setMessageIsError(false);
+    setShowPreview(true);
     setEditing(true);
   };
 
@@ -134,7 +232,7 @@ export function EmployeeOperatingBriefPanel({ employee, onSave }: Props) {
           <p className="mt-0.5 text-xs text-ink-3">
             {locked
               ? `${MAYA_EMPLOYEE_NAME}'s instructions are fixed by the product and cannot be changed.`
-              : "Standing instructions the model follows. Edit anytime — saved changes apply on the next turn."}
+              : "Standing instructions the model follows. Edit anytime — use Title: value lines and bullets for clear structure."}
           </p>
         </div>
         {!locked && !editing && (
@@ -144,6 +242,15 @@ export function EmployeeOperatingBriefPanel({ employee, onSave }: Props) {
         )}
         {!locked && editing && (
           <div className="flex flex-wrap gap-2">
+            <Button
+              size="sm"
+              variant="ghost"
+              disabled={saving}
+              onClick={() => setShowPreview((v) => !v)}
+            >
+              <Eye className="h-3.5 w-3.5" />
+              {showPreview ? "Hide preview" : "Show preview"}
+            </Button>
             <Button size="sm" variant="ghost" disabled={saving} onClick={cancel}>
               <X className="h-3.5 w-3.5" /> Cancel
             </Button>
@@ -155,77 +262,94 @@ export function EmployeeOperatingBriefPanel({ employee, onSave }: Props) {
         )}
       </div>
 
-      <div className="rounded-2xl border border-border bg-surface px-5 py-5">
+      <div className="overflow-hidden rounded-2xl border border-border bg-surface">
         {editing && !locked ? (
-          <div className="space-y-4">
-            <label className="block space-y-1.5">
-              <span className="text-[11px] font-semibold uppercase tracking-wide text-ink-3">
-                Standing instructions
-              </span>
+          <div className="grid lg:grid-cols-2">
+            <div className="border-b border-border lg:border-b-0 lg:border-r">
+              <div className="flex items-center justify-between border-b border-border bg-muted/40 px-4 py-2">
+                <span className="text-[11px] font-semibold uppercase tracking-wide text-ink-3">
+                  Editor
+                </span>
+                <span className="text-[11px] text-ink-3">Plain text · Title: value · - bullets</span>
+              </div>
               <textarea
-                className="input-field min-h-[200px] resize-y text-sm leading-relaxed"
+                className="min-h-[340px] w-full resize-y border-0 bg-transparent px-5 py-4 font-mono text-[13px] leading-relaxed text-ink outline-none placeholder:text-ink-3 focus:ring-0"
                 value={instructions}
                 onChange={(e) => setInstructions(e.target.value)}
-                placeholder="How should this employee approach work? Tone, priorities, what to avoid…"
+                placeholder={
+                  "Role: Sales Development Rep\nMission: Qualify inbound leads\n\nCore responsibilities:\n- Research accounts\n- Draft outreach"
+                }
+                spellCheck
                 autoFocus
               />
-            </label>
-            <div className="grid gap-4 sm:grid-cols-3">
-              <label className="block space-y-1.5 sm:col-span-1">
-                <span className="text-[11px] font-semibold uppercase tracking-wide text-ink-3">
-                  Seniority
-                </span>
-                <input
-                  className="input-field"
-                  value={seniority}
-                  onChange={(e) => setSeniority(e.target.value)}
-                  placeholder="e.g. Senior"
-                />
-              </label>
-              <label className="block space-y-1.5 sm:col-span-2">
-                <span className="text-[11px] font-semibold uppercase tracking-wide text-ink-3">
-                  Communication style
-                </span>
-                <textarea
-                  className="input-field min-h-[72px] resize-none"
-                  value={communicationStyle}
-                  onChange={(e) => setCommunicationStyle(e.target.value)}
-                />
-              </label>
-              <label className="block space-y-1.5 sm:col-span-3">
-                <span className="text-[11px] font-semibold uppercase tracking-wide text-ink-3">
-                  Success criteria
-                </span>
-                <textarea
-                  className="input-field min-h-[72px] resize-none"
-                  value={successCriteria}
-                  onChange={(e) => setSuccessCriteria(e.target.value)}
-                />
-              </label>
+              <div className="space-y-3 border-t border-border px-5 py-4">
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <label className="block space-y-1.5">
+                    <span className="text-[11px] font-semibold uppercase tracking-wide text-ink-3">
+                      Seniority
+                    </span>
+                    <input
+                      className="input-field"
+                      value={seniority}
+                      onChange={(e) => setSeniority(e.target.value)}
+                      placeholder="e.g. Senior"
+                    />
+                  </label>
+                  <label className="block space-y-1.5 sm:col-span-2">
+                    <span className="text-[11px] font-semibold uppercase tracking-wide text-ink-3">
+                      Communication style
+                    </span>
+                    <input
+                      className="input-field"
+                      value={communicationStyle}
+                      onChange={(e) => setCommunicationStyle(e.target.value)}
+                    />
+                  </label>
+                </div>
+                <label className="block space-y-1.5">
+                  <span className="text-[11px] font-semibold uppercase tracking-wide text-ink-3">
+                    Success criteria
+                  </span>
+                  <textarea
+                    className="input-field min-h-[64px] resize-none"
+                    value={successCriteria}
+                    onChange={(e) => setSuccessCriteria(e.target.value)}
+                  />
+                </label>
+              </div>
             </div>
+
+            {showPreview && (
+              <div className="bg-muted/20">
+                <div className="flex items-center border-b border-border bg-muted/40 px-4 py-2">
+                  <span className="text-[11px] font-semibold uppercase tracking-wide text-ink-3">
+                    Preview
+                  </span>
+                </div>
+                <div className="max-h-[520px] overflow-y-auto px-5 py-5">
+                  <BriefDocumentView value={instructions} />
+                </div>
+              </div>
+            )}
           </div>
         ) : (
-          <>
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-3">
+          <div className="px-5 py-5 sm:px-6 sm:py-6">
+            <p className="mb-4 text-[11px] font-semibold uppercase tracking-wide text-ink-3">
               Standing instructions
             </p>
-            <div className="mt-3 space-y-3 text-sm leading-relaxed text-ink-2">
-              {formatInstructionsAsProse(employee.instructions).map((paragraph, i) => (
-                <p key={i}>{paragraph}</p>
-              ))}
-            </div>
-            <div className="mt-6 grid gap-4 border-t border-border pt-5 sm:grid-cols-3">
+            <BriefDocumentView value={employee.instructions} />
+            <div className="mt-8 grid gap-5 border-t border-border pt-5 sm:grid-cols-3">
               <BriefMeta label="Communication" value={employee.communicationStyle} />
               <BriefMeta label="Success criteria" value={employee.successCriteria} />
               <BriefMeta label="Seniority" value={employee.seniority} />
             </div>
-          </>
+          </div>
         )}
 
         {message && (
           <p
             className={cn(
-              "mt-4 text-xs font-medium",
+              "border-t border-border px-5 py-3 text-xs font-medium",
               messageIsError ? "text-rose-600" : "text-emerald-700",
             )}
           >
@@ -241,7 +365,7 @@ function BriefMeta({ label, value }: { label: string; value: string }) {
   return (
     <div>
       <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-3">{label}</p>
-      <p className="mt-1 text-sm leading-relaxed text-ink-2">{value?.trim() || "—"}</p>
+      <p className="mt-1.5 text-sm leading-relaxed text-ink-2">{value?.trim() || "—"}</p>
     </div>
   );
 }
