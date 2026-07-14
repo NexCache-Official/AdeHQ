@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { AIEmployee } from "@/lib/types";
 import type { CapabilityDomain } from "@/lib/integrations/types";
 import {
@@ -9,6 +9,7 @@ import {
 } from "@/lib/integrations/employee-capabilities";
 import { cn } from "@/lib/utils";
 import { authHeaders } from "@/lib/api/auth-client";
+import { Button } from "@/components/ui";
 import { Sparkles, Wrench } from "lucide-react";
 
 type Props = {
@@ -33,6 +34,10 @@ export function EmployeeCapabilitiesPanel({
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [messageIsError, setMessageIsError] = useState(false);
+
+  useEffect(() => {
+    setDraft(new Set(toggles.filter((t) => t.enabled).map((t) => t.domain)));
+  }, [toggles]);
 
   const dirty = useMemo(() => {
     const current = new Set(toggles.filter((t) => t.enabled).map((t) => t.domain));
@@ -95,28 +100,32 @@ export function EmployeeCapabilitiesPanel({
     }
   };
 
+  const activeGrants = toggles.filter((t) => draft.has(t.domain));
+
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
+    <div className="space-y-5">
+      <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-900">
+          <h2 className="flex items-center gap-2 text-sm font-semibold text-ink">
             <Wrench className="h-4 w-4 text-accent" />
             Tools & capabilities
           </h2>
-          <p className="mt-0.5 text-xs text-slate-500">
-            New hires start with every tool on. Turn off what they shouldn’t use — if they need
-            something later, they’ll ask in chat for Allow once or Always allow.
+          <p className="mt-0.5 max-w-xl text-xs text-ink-3">
+            New hires start with every AdeHQ tool on. Turn off what they shouldn&apos;t use — if they
+            need something later, they&apos;ll ask in chat for Allow once or Always allow. Email here
+            means draft artifacts inside AdeHQ, not Gmail or inbox send.
           </p>
         </div>
-        <button
+        <Button
           type="button"
+          size="sm"
+          variant="secondary"
           disabled={disabled || saving}
           onClick={applySuggested}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium text-ink-2 hover:bg-muted disabled:opacity-50"
         >
           <Sparkles className="h-3.5 w-3.5" />
           Apply role suggestions
-        </button>
+        </Button>
       </div>
 
       <div className="grid gap-2">
@@ -126,51 +135,63 @@ export function EmployeeCapabilitiesPanel({
             <label
               key={item.domain}
               className={cn(
-                "flex cursor-pointer items-start gap-3 rounded-xl border p-3.5 transition",
-                on ? "border-accent/30 bg-accent-soft/20" : "border-slate-200 bg-slate-50",
+                "flex cursor-pointer items-start gap-3 rounded-xl border px-3.5 py-3 transition",
+                on ? "border-accent/35 bg-accent-soft/25" : "border-border bg-muted/40",
                 disabled && "cursor-not-allowed opacity-60",
               )}
             >
               <input
                 type="checkbox"
-                className="mt-1 h-4 w-4 rounded border-slate-300 accent-accent"
+                className="mt-1 h-4 w-4 rounded border-border accent-accent"
                 checked={on}
                 disabled={disabled || saving}
                 onChange={() => toggle(item.domain)}
               />
               <span className="min-w-0 flex-1">
                 <span className="flex flex-wrap items-center gap-2">
-                  <span className="text-sm font-medium text-slate-900">{item.label}</span>
+                  <span className="text-sm font-medium text-ink">{item.label}</span>
                   {item.suggested && (
-                    <span className="rounded-full bg-accent-soft px-2 py-0.5 text-[10px] font-semibold text-accent">
+                    <span className="rounded-md bg-accent-soft px-1.5 py-0.5 text-[10px] font-semibold text-accent-d">
                       Suggested
                     </span>
                   )}
                 </span>
-                <span className="mt-0.5 block text-xs text-slate-500">{item.description}</span>
+                <span className="mt-0.5 block text-xs leading-relaxed text-ink-3">
+                  {item.description}
+                </span>
               </span>
             </label>
           );
         })}
       </div>
 
+      {activeGrants.length > 0 && (
+        <div className="rounded-xl border border-border bg-muted/30 px-3.5 py-3">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-3">
+            Active grants ({activeGrants.length})
+          </p>
+          <p className="mt-1.5 text-xs leading-relaxed text-ink-2">
+            {activeGrants.map((g) => g.label).join(" · ")}
+          </p>
+        </div>
+      )}
+
       <div className="flex flex-wrap items-center gap-3">
-        <button
+        <Button
           type="button"
+          size="sm"
           disabled={!dirty || disabled || saving}
           onClick={() => void save()}
-          className="rounded-lg bg-ink px-4 py-2 text-sm font-medium text-white disabled:opacity-40"
         >
           {saving ? "Saving…" : "Save capabilities"}
-        </button>
+        </Button>
         {message && (
           <span
             className={cn(
               "text-xs font-medium",
-              messageIsError ? "text-red-600" : "text-emerald-600",
+              messageIsError ? "text-rose-600" : "text-emerald-700",
             )}
           >
-            {messageIsError ? "⚠ " : "✓ "}
             {message}
           </span>
         )}

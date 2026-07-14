@@ -1044,7 +1044,27 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       updateEmployee: (id, patch) => {
         const current = stateRef.current.employees.find((e) => e.id === id);
         if (!current) return;
-        const safePatch = isMayaEmployee(current) ? { ...patch, status: mayaEmployeeStatus() } : patch;
+
+        // Maya is product-immutable: ignore brief/permissions/tools/identity edits.
+        // Only runtime counters (and forced online status) may refresh locally.
+        let safePatch: Partial<AIEmployee>;
+        if (isMayaEmployee(current)) {
+          safePatch = { status: mayaEmployeeStatus() };
+          if (typeof patch.messagesSent === "number") safePatch.messagesSent = patch.messagesSent;
+          if (typeof patch.memoryCount === "number") safePatch.memoryCount = patch.memoryCount;
+          if (typeof patch.approvalsRequested === "number") {
+            safePatch.approvalsRequested = patch.approvalsRequested;
+          }
+          if (typeof patch.lastActiveAt === "string") safePatch.lastActiveAt = patch.lastActiveAt;
+          const onlyStatus =
+            Object.keys(safePatch).length === 1 && safePatch.status !== undefined;
+          if (onlyStatus && current.status === mayaEmployeeStatus()) {
+            return;
+          }
+        } else {
+          safePatch = patch;
+        }
+
         const updated = { ...current, ...safePatch };
         set((s) => ({
           ...s,

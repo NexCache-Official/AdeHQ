@@ -22,8 +22,9 @@ export const CAPABILITY_DOMAINS: Record<CapabilityDomain, CapabilityDomainInfo> 
   },
   email: {
     domain: "email",
-    label: "Email drafts",
-    description: "Draft outreach and follow-up emails as reviewable artifacts.",
+    label: "Email (drafts)",
+    description:
+      "Create reviewable email drafts inside AdeHQ (not Gmail and not workspace inbox send).",
     catalogToolId: "adehq-email",
   },
   tasks: {

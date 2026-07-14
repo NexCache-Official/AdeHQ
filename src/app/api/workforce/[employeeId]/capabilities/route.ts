@@ -15,11 +15,21 @@ import {
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+const CapabilityDomainSchema = z.enum([
+  "crm",
+  "email",
+  "tasks",
+  "artifact",
+  "social",
+  "calendar",
+  "investor",
+  "team",
+  "drive",
+]);
+
 const PatchBodySchema = z.object({
   workspaceId: z.string().min(1),
-  enabledDomains: z.array(
-    z.enum(["crm", "email", "tasks", "artifact", "social", "drive"]),
-  ),
+  enabledDomains: z.array(CapabilityDomainSchema),
 });
 
 export async function GET(
