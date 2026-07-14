@@ -119,8 +119,14 @@ async function persistBinaryExport(
     params.ext,
   );
 
+  // Storage bucket allowlists are narrower than Office MIME types — upload as
+  // octet-stream (same as xlsx/pdf) while keeping the real mime on drive_exports.
   const mimeType =
     params.mimeType === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" ||
+    params.mimeType ===
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
+    params.mimeType ===
+      "application/vnd.openxmlformats-officedocument.presentationml.presentation" ||
     params.mimeType === "application/pdf"
       ? "application/octet-stream"
       : params.mimeType;
