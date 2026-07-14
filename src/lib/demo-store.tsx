@@ -154,7 +154,7 @@ type StoreActions = {
   loginDemo: () => void;
   logout: () => Promise<void>;
   clearError: () => void;
-  completeOnboarding: () => void;
+  completeOnboarding: () => Promise<void>;
   updateProfile: (patch: { name?: string; email?: string; workspaceName?: string }) => void;
 
   // employees
@@ -712,6 +712,17 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
               ? user.user_metadata.workspace_name
               : "My AI Workspace");
 
+          // Idempotent: never recreate workspace/first room if setup already ran.
+          const existingProjectRoom = stateRef.current.rooms.find((r) => r.kind === "room");
+          if (stateRef.current.workspace.id && existingProjectRoom) {
+            return {
+              workspaceId: stateRef.current.workspace.id,
+              firstRoomId: existingProjectRoom.id,
+              roomName: existingProjectRoom.name,
+              mayaDmRoomId: resolveMayaDmRoomId(stateRef.current.rooms),
+            };
+          }
+
           if (backendRef.current !== "supabase") {
             const workspaceId = uid("ws");
             const timestamp = nowISO();
@@ -790,6 +801,16 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
             );
           }
           await loadRemote(user, bootstrapped.workspaceId);
+
+          const alreadyProvisioned = stateRef.current.rooms.find((r) => r.kind === "room");
+          if (alreadyProvisioned) {
+            return {
+              workspaceId: bootstrapped.workspaceId,
+              firstRoomId: alreadyProvisioned.id,
+              roomName: alreadyProvisioned.name,
+              mayaDmRoomId: resolveMayaDmRoomId(stateRef.current.rooms),
+            };
+          }
 
           const timestamp = nowISO();
           const roomId = uid("room");
@@ -971,9 +992,13 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 
       clearError: () => setError(null),
 
-      completeOnboarding: () => {
+      completeOnboarding: async () => {
+        if (stateRef.current.onboardingComplete) return;
         set((s) => ({ ...s, onboardingComplete: true }));
-        runRemote((workspaceId) => persistWorkspace(workspaceId, { onboardingComplete: true }));
+        if (backendRef.current !== "supabase") return;
+        const workspaceId = stateRef.current.workspace.id;
+        if (!workspaceId) return;
+        await persistWorkspace(workspaceId, { onboardingComplete: true });
       },
 
       updateProfile: (patch) => {

@@ -217,6 +217,8 @@ export const SUCCESS_LABELS = [
 
 export const ONBOARDING_ROOM_KEY = "adehq-onboarding-room";
 export const ONBOARDING_CONTEXT_KEY = "adehq-onboarding-context";
+/** Allows the Launch (step 5) screen to stay visible after onboarding_complete is persisted. */
+export const ONBOARDING_LAUNCH_PENDING_KEY = "adehq-onboarding-launch-pending";
 
 export function readOnboardingContext(): import("./types").OnboardingContext | null {
   if (typeof window === "undefined") return null;
@@ -233,8 +235,24 @@ export function storeOnboardingContext(context: import("./types").OnboardingCont
   sessionStorage.setItem(ONBOARDING_CONTEXT_KEY, JSON.stringify(context));
 }
 
+export function markOnboardingLaunchPending() {
+  if (typeof window === "undefined") return;
+  sessionStorage.setItem(ONBOARDING_LAUNCH_PENDING_KEY, "1");
+}
+
+export function clearOnboardingLaunchPending() {
+  if (typeof window === "undefined") return;
+  sessionStorage.removeItem(ONBOARDING_LAUNCH_PENDING_KEY);
+}
+
+export function isOnboardingLaunchPending(): boolean {
+  if (typeof window === "undefined") return false;
+  return sessionStorage.getItem(ONBOARDING_LAUNCH_PENDING_KEY) === "1";
+}
+
 export function clearOnboardingDrafts() {
   if (typeof window === "undefined") return;
   sessionStorage.removeItem(ONBOARDING_ROOM_KEY);
   sessionStorage.removeItem(ONBOARDING_CONTEXT_KEY);
+  sessionStorage.removeItem(ONBOARDING_LAUNCH_PENDING_KEY);
 }

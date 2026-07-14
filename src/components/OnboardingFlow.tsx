@@ -8,7 +8,6 @@ import {
   Check,
   LayoutGrid,
   Loader2,
-  RefreshCw,
   Rocket,
   User,
 } from "lucide-react";
@@ -17,6 +16,8 @@ import { useStore } from "@/lib/demo-store";
 import {
   ONBOARDING_CONTEXT_KEY,
   ONBOARDING_ROOM_KEY,
+  clearOnboardingLaunchPending,
+  markOnboardingLaunchPending,
   storeOnboardingContext,
 } from "@/lib/hiring/data";
 import type { OnboardingContext } from "@/lib/hiring/types";
@@ -185,7 +186,8 @@ export function OnboardingFlow() {
     setError(null);
     try {
       const result = await ensureWorkspaceSetup();
-      actions.completeOnboarding();
+      await actions.completeOnboarding();
+      clearOnboardingLaunchPending();
       router.push(`/rooms/${result.firstRoomId}`);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not finish setup.");
@@ -198,6 +200,11 @@ export function OnboardingFlow() {
     setError(null);
     try {
       await ensureWorkspaceSetup();
+      // Mark Launch handoff BEFORE persisting complete, so /onboarding does not
+      // redirect away while this tab still needs to show step 5.
+      markOnboardingLaunchPending();
+      // Workspace + first room exist — onboarding is done even if they hire later.
+      await actions.completeOnboarding();
       setBusy(false);
       next();
     } catch (e) {
@@ -211,6 +218,8 @@ export function OnboardingFlow() {
     setError(null);
     try {
       await ensureWorkspaceSetup();
+      await actions.completeOnboarding();
+      clearOnboardingLaunchPending();
       router.push("/hire?onboarding=1");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not open Maya.");
@@ -218,20 +227,18 @@ export function OnboardingFlow() {
     }
   };
 
-  const resetFlow = () => {
-    if (typeIntervalRef.current) clearInterval(typeIntervalRef.current);
-    typedRef.current = false;
-    setStage(0);
-    setOutcomeId(null);
-    setGoalText("");
-    setDomainText("");
-    setPresetId("");
-    setCustomRoomName("");
-    setMayaText("");
-    setMayaDone(false);
+  const goToWorkspaceFromLaunch = async () => {
+    setBusy(true);
     setError(null);
-    setBusy(false);
-    setSetupResult(null);
+    try {
+      const result = await ensureWorkspaceSetup();
+      await actions.completeOnboarding();
+      clearOnboardingLaunchPending();
+      router.push(`/rooms/${result.firstRoomId}`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not open workspace.");
+      setBusy(false);
+    }
   };
 
   const goStage = (n: number) => setStage(n);
@@ -698,12 +705,11 @@ export function OnboardingFlow() {
           <footer className="flex flex-none items-center justify-between border-t border-border bg-[color-mix(in_srgb,var(--canvas)_85%,transparent)] px-12 py-4 backdrop-blur-sm">
             <button
               type="button"
-              onClick={resetFlow}
+              onClick={() => void goToWorkspaceFromLaunch()}
               disabled={busy}
               className="inline-flex items-center gap-2 rounded-[10px] border-0 bg-transparent px-1 py-2.5 text-sm font-medium text-ink-2 transition hover:text-ink disabled:opacity-50"
             >
-              <RefreshCw className="h-4 w-4" />
-              Start over
+              Go to workspace
             </button>
             <button
               type="button"
