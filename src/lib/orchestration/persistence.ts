@@ -390,7 +390,7 @@ export async function fetchTopicSuggestionGovernance(
       .gte("created_at", since24h),
     client
       .from("topics")
-      .select("title, metadata")
+      .select("id, title, metadata")
       .eq("workspace_id", workspaceId)
       .eq("room_id", roomId)
       .neq("status", "archived"),
@@ -442,15 +442,19 @@ export async function fetchTopicSuggestionGovernance(
     ),
   );
 
-  const existingTopicTitles = ((existingTopicsResult.data ?? []) as Record<string, unknown>[])
-    .map((row) => String(row.title ?? "").trim())
-    .filter((title) => title && title.toLowerCase() !== "general");
+  const existingTopics = ((existingTopicsResult.data ?? []) as Record<string, unknown>[])
+    .map((row) => ({
+      id: String(row.id ?? ""),
+      title: String(row.title ?? "").trim(),
+    }))
+    .filter((topic) => topic.id && topic.title && topic.title.toLowerCase() !== "general");
 
   return {
     dismissedTitles,
     recentSuggestedTitles,
     dismissedTriggerMessageIds,
-    existingTopicTitles,
+    existingTopics,
+    existingTopicTitles: existingTopics.map((topic) => topic.title),
   };
 }
 

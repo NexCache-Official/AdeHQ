@@ -1552,23 +1552,23 @@ export function RoomChat({
     } else {
       setContextImportWarning(null);
     }
-    const migratedIds = Array.isArray(payload.migratedMessageIds)
-      ? (payload.migratedMessageIds as string[])
-      : suggestion.message_ids ?? [];
-    if (payload.topic?.id && migratedIds.length) {
-      const migratedMessages = Array.isArray(payload.migratedMessages)
-        ? (payload.migratedMessages as Array<Record<string, unknown>>)
-        : [];
+    const migratedIds =
+      Array.isArray(payload.migratedMessageIds) && payload.migratedMessageIds.length
+        ? (payload.migratedMessageIds as string[])
+        : suggestion.message_ids ?? [];
+    const migratedMessages = Array.isArray(payload.migratedMessages)
+      ? (payload.migratedMessages as Array<Record<string, unknown>>)
+      : [];
+    if (payload.topic?.id && (migratedIds.length || migratedMessages.length)) {
       if (migratedMessages.length) {
         for (const message of migratedMessages) {
-          const existing = room.messages.find((m) => m.id === String(message.id));
+          const id = String(message.id);
+          const existing = room.messages.find((m) => m.id === id);
           if (existing) {
-            actions.updateLocalMessage(room.id, String(message.id), {
-              topicId: payload.topic.id,
-            });
+            actions.updateLocalMessage(room.id, id, { topicId: payload.topic.id });
           } else {
             actions.addLocalMessage(room.id, {
-              id: String(message.id),
+              id,
               topicId: payload.topic.id,
               senderType: message.senderType as "human" | "ai" | "system",
               senderId: String(message.senderId ?? ""),
@@ -1600,7 +1600,7 @@ export function RoomChat({
       });
     }
     if (payload.topic?.id) {
-      void actions.refreshTopics(room.id);
+      await actions.refreshTopics(room.id);
       onSelectTopic?.(payload.topic.id);
       const continuedTrigger =
         (payload.continuedWork?.triggerMessageId as string | undefined) ??
@@ -1611,8 +1611,12 @@ export function RoomChat({
       const queuedRuns = Array.isArray(payload.queuedRuns)
         ? (payload.queuedRuns as QueuedRunClient[])
         : [];
+      // Let the topic switch commit before processing continued runs so reply
+      // placeholders land on the new topic id.
       if (queuedRuns.length) {
-        void processQueuedRuns(queuedRuns);
+        window.setTimeout(() => {
+          void processQueuedRuns(queuedRuns);
+        }, 0);
       }
     }
   };

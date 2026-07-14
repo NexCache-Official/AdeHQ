@@ -8,7 +8,9 @@ export type TopicSuggestionGovernanceContext = {
   dismissedTitles: Array<{ title: string; dismissedAt: string }>;
   recentSuggestedTitles: Array<{ title: string; suggestedAt: string }>;
   dismissedTriggerMessageIds: string[];
-  /** Active non-General topic titles in the room (block near-duplicate creates). */
+  /** Active non-General topics in the room (block / redirect near-duplicate creates). */
+  existingTopics?: Array<{ id: string; title: string }>;
+  /** @deprecated Prefer existingTopics */
   existingTopicTitles?: string[];
 };
 
@@ -35,12 +37,18 @@ export function titlesAreNearDuplicate(a: string, b: string): boolean {
   const overlap = tokensA.filter((t) => setB.has(t)).length;
   if (!overlap) return false;
 
+  // Same product stem (e.g. "Harborline Guarantor Shield …") with different suffixes.
+  const coreA = tokensA.slice(0, 3);
+  const coreB = tokensB.slice(0, 3);
+  const sharedCore = coreA.filter((t) => coreB.includes(t)).length;
+  if (sharedCore >= 2) return true;
+
   const union = new Set([...tokensA, ...tokensB]).size;
   const jaccard = overlap / union;
-  if (jaccard >= 0.55) return true;
+  if (jaccard >= 0.4) return true;
 
   const minLen = Math.min(tokensA.length, tokensB.length);
-  return overlap >= 2 && overlap >= Math.ceil(minLen * 0.75);
+  return overlap >= 2 && overlap >= Math.ceil(minLen * 0.66);
 }
 
 function suggestionTitle(suggestion: TopicStewardSuggestion): string {
@@ -56,19 +64,22 @@ export function filterTopicSuggestionsByGovernance(
 ): TopicStewardSuggestion[] {
   if (ctx.dismissedTriggerMessageIds.includes(input.messageId)) return [];
 
-  const existingTitles = ctx.existingTopicTitles ?? [];
+  const existingTopics =
+    ctx.existingTopics ??
+    (ctx.existingTopicTitles ?? []).map((title) => ({ id: "", title }));
 
-  return suggestions.filter((suggestion) => {
+  return suggestions.flatMap((suggestion) => {
     const title = suggestionTitle(suggestion);
     const norm = normalizeTopicTitle(title);
-    if (!norm) return false;
+    if (!norm) return [];
 
-    // Never propose creating a near-duplicate of an existing room topic.
+    // Near-duplicate of an existing topic → never create another banner.
+    // (Move-to-existing accept is not wired yet; suppressing is better than a dupe.)
     if (suggestion.type === "create_topic") {
-      const clashesExisting = existingTitles.some((existing) =>
-        titlesAreNearDuplicate(title, existing),
+      const match = existingTopics.find((existing) =>
+        titlesAreNearDuplicate(title, existing.title),
       );
-      if (clashesExisting) return false;
+      if (match) return [];
     }
 
     const dismissedSimilar = ctx.dismissedTitles.some(
@@ -76,15 +87,15 @@ export function filterTopicSuggestionsByGovernance(
         titlesAreNearDuplicate(entry.title, title) &&
         Date.now() - +new Date(entry.dismissedAt) < TOPIC_SUGGESTION_TITLE_COOLDOWN_MS,
     );
-    if (dismissedSimilar) return false;
+    if (dismissedSimilar) return [];
 
     const recentSame = ctx.recentSuggestedTitles.some(
       (entry) =>
         titlesAreNearDuplicate(entry.title, title) &&
         Date.now() - +new Date(entry.suggestedAt) < TOPIC_SUGGESTION_TITLE_COOLDOWN_MS,
     );
-    if (recentSame) return false;
+    if (recentSame) return [];
 
-    return true;
+    return [suggestion];
   });
 }

@@ -34,7 +34,9 @@ async function dismissPicker(page) {
   await page.waitForTimeout(800);
 }
 
-const uniq = `Harborline Guarantor Shield ${Date.now().toString(36).slice(-4)}`;
+// Distinct product stem each run so near-duplicate governance does not redirect
+// into a prior Harborline/Landlord topic from earlier playbook sessions.
+const uniq = `Cedarvale RentGuard ${Date.now().toString(36).slice(-5)}`;
 const HEADLESS = process.env.E2E_HEADLESS === "1";
 const browser = await chromium.launch({
   headless: HEADLESS,
@@ -122,16 +124,21 @@ try {
         await page.waitForTimeout(7000);
         await shot(page, "after-accept");
         const body = await page.locator("main").innerText();
-        const movedCue = /Moved \d+ message/i.test(body);
-        const hasProductChat = new RegExp(uniq.split(" ").slice(0, 2).join("|"), "i").test(body);
+        const movedCue = /Moved \d+ message|Continuing the reply here/i.test(body);
+        const emptyShell = /Start this workstream by asking an employee/i.test(body);
+        // Require the original user turn text, not just the topic title in chrome.
+        const hasProductChat =
+          new RegExp(uniq.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i").test(body) &&
+          /New product idea|paid add-on|Follow-up on|Lock a draft/i.test(body);
         const importedCard = /Imported context/i.test(body);
         const aiActive = !/0 employees active/i.test(body);
         report.results.push({
           id: "accept-migrate",
-          pass: (movedCue || hasProductChat) && !importedCard,
+          pass: (movedCue || hasProductChat) && !importedCard && !emptyShell,
           movedCue,
           hasProductChat,
           importedCard,
+          emptyShell,
           aiActive,
           url: page.url(),
         });
@@ -142,10 +149,10 @@ try {
             msg: "Imported context card still shown after chat migration — should show moved messages only",
           });
         }
-        if (!hasProductChat) {
+        if (emptyShell || !hasProductChat) {
           report.bugs.push({
             severity: "P1",
-            msg: "New topic missing the original product chat messages after accept",
+            msg: "New topic missing the original product chat messages after accept (empty shell or no migrated turn)",
           });
         }
         if (!aiActive) {

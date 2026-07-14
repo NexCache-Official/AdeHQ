@@ -1402,50 +1402,74 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 
       addLocalMessage: (roomId, msg) => {
         const messageId = msg.id ?? uid("msg");
-        const currentRoom = stateRef.current.rooms.find((room) => room.id === roomId);
         const clientId =
           msg.clientMessageId ?? (msg.senderType === "human" ? messageId : undefined);
-        const existing =
-          currentRoom?.messages.find((m) => m.id === messageId) ??
-          (clientId
-            ? currentRoom?.messages.find((m) => m.clientMessageId === clientId)
-            : undefined);
-        if (existing) return existing;
+        let created: RoomMessage | null = null;
 
-        const created: RoomMessage = {
-          id: messageId,
-          roomId,
-          topicId: msg.topicId,
-          senderType: msg.senderType,
-          senderId: msg.senderId,
-          senderName: msg.senderName,
-          content: msg.content,
-          mentions: msg.mentions,
-          mentionsJson: msg.mentionsJson,
-          artifacts: msg.artifacts,
-          agentRunId: msg.agentRunId,
-          triggerMessageId: msg.triggerMessageId,
-          pending: msg.pending,
-          failed: msg.failed,
-          deliveryStatus: msg.deliveryStatus,
-          deliveredAt: msg.deliveredAt,
-          clientMessageId: msg.clientMessageId ?? (msg.senderType === "human" ? messageId : undefined),
-          createdAt: msg.createdAt ?? nowISO(),
-        };
-        const updatedRoom = currentRoom
-          ? {
-              ...currentRoom,
-              messages: [...currentRoom.messages, created],
-              updatedAt: nowISO(),
-            }
-          : undefined;
+        // Must derive from the updater's `s` — stateRef can be stale across rapid calls
+        // (topic migrate hydrates many messages back-to-back).
+        set((s) => {
+          const currentRoom = s.rooms.find((room) => room.id === roomId);
+          const existing =
+            currentRoom?.messages.find((m) => m.id === messageId) ??
+            (clientId
+              ? currentRoom?.messages.find((m) => m.clientMessageId === clientId)
+              : undefined);
+          if (existing) {
+            created = existing;
+            return s;
+          }
 
-        set((s) => ({
-          ...s,
-          rooms: s.rooms.map((r) => (r.id === roomId && updatedRoom ? updatedRoom : r)),
-        }));
+          created = {
+            id: messageId,
+            roomId,
+            topicId: msg.topicId,
+            senderType: msg.senderType,
+            senderId: msg.senderId,
+            senderName: msg.senderName,
+            content: msg.content,
+            mentions: msg.mentions,
+            mentionsJson: msg.mentionsJson,
+            artifacts: msg.artifacts,
+            agentRunId: msg.agentRunId,
+            triggerMessageId: msg.triggerMessageId,
+            pending: msg.pending,
+            failed: msg.failed,
+            deliveryStatus: msg.deliveryStatus,
+            deliveredAt: msg.deliveredAt,
+            clientMessageId:
+              msg.clientMessageId ?? (msg.senderType === "human" ? messageId : undefined),
+            createdAt: msg.createdAt ?? nowISO(),
+          };
 
-        return created;
+          if (!currentRoom) return s;
+          return {
+            ...s,
+            rooms: s.rooms.map((r) =>
+              r.id === roomId
+                ? {
+                    ...r,
+                    messages: [...r.messages, created!],
+                    updatedAt: nowISO(),
+                  }
+                : r,
+            ),
+          };
+        });
+
+        return (
+          created ?? {
+            id: messageId,
+            roomId,
+            topicId: msg.topicId,
+            senderType: msg.senderType,
+            senderId: msg.senderId,
+            senderName: msg.senderName,
+            content: msg.content,
+            mentions: msg.mentions ?? [],
+            createdAt: msg.createdAt ?? nowISO(),
+          }
+        );
       },
 
       removeLocalMessage: (roomId, messageId) => {
