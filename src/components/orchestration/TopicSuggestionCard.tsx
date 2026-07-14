@@ -9,6 +9,7 @@ export type TopicSuggestionPayload = {
   id: string;
   type: string;
   title?: string | null;
+  topic_id?: string | null;
   target_topic_id?: string | null;
   reason?: string | null;
   confidence?: number;

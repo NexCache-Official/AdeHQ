@@ -390,6 +390,35 @@ export async function POST(
       }
     }
 
+    // Return full moved rows so the client can render the original chat timeline
+    // even when those messages were not already in the in-memory room cache.
+    let migratedMessages: Array<Record<string, unknown>> = [];
+    if (migratedMessageIds.length) {
+      const { data: movedRows } = await client
+        .from("messages")
+        .select("*")
+        .eq("workspace_id", workspaceId)
+        .in("id", migratedMessageIds)
+        .order("created_at", { ascending: true });
+      migratedMessages = (movedRows ?? []).map((row) => ({
+        id: String(row.id),
+        roomId: params.roomId,
+        topicId: topic.id,
+        senderType: row.sender_type,
+        senderId: String(row.sender_id ?? ""),
+        senderName: String(row.sender_name ?? "Unknown"),
+        content: String(row.content ?? ""),
+        mentions: Array.isArray(row.mentions) ? row.mentions : [],
+        mentionsJson: row.mentions_json ?? undefined,
+        artifacts: row.artifacts ?? undefined,
+        agentRunId: row.agent_run_id ? String(row.agent_run_id) : undefined,
+        triggerMessageId: row.trigger_message_id ? String(row.trigger_message_id) : undefined,
+        pending: row.pending === true,
+        clientMessageId: row.client_message_id ? String(row.client_message_id) : undefined,
+        createdAt: String(row.created_at ?? systemCreatedAt),
+      }));
+    }
+
     return NextResponse.json({
       topic: refreshed ? topicFromRow(refreshed) : topic,
       systemMessageId,
@@ -408,6 +437,7 @@ export async function POST(
       contextImportId,
       contextImportWarning: contextImportWarning ?? migrateWarning,
       migratedMessageIds,
+      migratedMessages,
     });
   } catch (error) {
     if (createdTopicId) {

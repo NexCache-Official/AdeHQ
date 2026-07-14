@@ -3,7 +3,7 @@ import { AuthError, requireAuthUser, requireWorkspaceMembership } from "@/lib/su
 import { assertCanAccessRoom } from "@/lib/server/room-access";
 import { getWorkspaceIdForRoom } from "@/lib/server/room-messages";
 import { fetchPendingTopicSuggestions } from "@/lib/orchestration/persistence";
-import { cleanTopicTitle } from "@/lib/orchestration/topic-title";
+import { cleanTopicDescription, cleanTopicTitle } from "@/lib/orchestration/topic-title";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -54,15 +54,27 @@ export async function GET(
           .eq("id", String(row.id));
         continue;
       }
-      if (title && cleanTopicTitle(title) && title !== cleanTopicTitle(title)) {
-        // Heal truncated titles in-place for display.
-        const healed = cleanTopicTitle(title)!;
+      const healedTitle = title ? cleanTopicTitle(title) : null;
+      const meta =
+        typeof row.metadata === "object" && row.metadata && !Array.isArray(row.metadata)
+          ? ({ ...(row.metadata as Record<string, unknown>) } as Record<string, unknown>)
+          : {};
+      const rawDescription = meta.description ? String(meta.description) : "";
+      const healedDescription = healedTitle
+        ? cleanTopicDescription(rawDescription || undefined, healedTitle)
+        : rawDescription;
+      const needsHeal =
+        Boolean(healedTitle && title !== healedTitle) ||
+        Boolean(healedTitle && rawDescription && rawDescription !== healedDescription);
+      if (needsHeal && healedTitle) {
+        meta.description = healedDescription;
         await client
           .from("topic_suggestions")
-          .update({ title: healed })
+          .update({ title: healedTitle, metadata: meta })
           .eq("workspace_id", workspaceId)
           .eq("id", String(row.id));
-        row.title = healed;
+        row.title = healedTitle;
+        row.metadata = meta;
       }
       usable.push(row);
     }

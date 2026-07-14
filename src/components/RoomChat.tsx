@@ -551,7 +551,10 @@ export function RoomChat({
         const incoming = Array.isArray(payload.suggestions)
           ? (payload.suggestions as TopicSuggestionPayload[])
           : [];
-        setTopicSuggestions(incoming);
+        // Only show suggestions that belong to the currently open topic.
+        setTopicSuggestions(
+          incoming.filter((s) => !s.topic_id || s.topic_id === topic.id),
+        );
       } catch {
         // non-blocking
       }
@@ -1430,7 +1433,9 @@ export function RoomChat({
       }
       if (payload.topicSuggestions?.length) {
         setTopicSuggestions((prev) => {
-          const incoming = payload.topicSuggestions as TopicSuggestionPayload[];
+          const incoming = (payload.topicSuggestions as TopicSuggestionPayload[]).filter(
+            (s) => !s.topic_id || s.topic_id === topic?.id,
+          );
           const ids = new Set(prev.map((s) => s.id));
           return [...prev, ...incoming.filter((s) => !ids.has(s.id))];
         });
@@ -1548,8 +1553,33 @@ export function RoomChat({
       ? (payload.migratedMessageIds as string[])
       : suggestion.message_ids ?? [];
     if (payload.topic?.id && migratedIds.length) {
-      for (const messageId of migratedIds) {
-        actions.updateLocalMessage(room.id, messageId, { topicId: payload.topic.id });
+      const migratedMessages = Array.isArray(payload.migratedMessages)
+        ? (payload.migratedMessages as Array<Record<string, unknown>>)
+        : [];
+      if (migratedMessages.length) {
+        for (const message of migratedMessages) {
+          const existing = room.messages.find((m) => m.id === String(message.id));
+          if (existing) {
+            actions.updateLocalMessage(room.id, String(message.id), {
+              topicId: payload.topic.id,
+            });
+          } else {
+            actions.addLocalMessage(room.id, {
+              id: String(message.id),
+              topicId: payload.topic.id,
+              senderType: message.senderType as "human" | "ai" | "system",
+              senderId: String(message.senderId ?? ""),
+              senderName: String(message.senderName ?? "Unknown"),
+              content: String(message.content ?? ""),
+              mentions: Array.isArray(message.mentions) ? (message.mentions as string[]) : [],
+              createdAt: String(message.createdAt ?? new Date().toISOString()),
+            });
+          }
+        }
+      } else {
+        for (const messageId of migratedIds) {
+          actions.updateLocalMessage(room.id, messageId, { topicId: payload.topic.id });
+        }
       }
       // No imported-context card when chats were actually moved.
       setContextImports([]);
@@ -2046,7 +2076,9 @@ export function RoomChat({
               {contextImportWarning}
             </div>
           ) : null}
-          {topicSuggestions.map((suggestion) => (
+          {topicSuggestions
+            .filter((suggestion) => !suggestion.topic_id || suggestion.topic_id === topic?.id)
+            .map((suggestion) => (
             <TopicSuggestionCard
               key={suggestion.id}
               suggestion={suggestion}

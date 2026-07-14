@@ -85,22 +85,47 @@ try {
             sample: cardText.match(/Suggested topic:[^\n]+/)?.[0],
           });
         }
-        if (/\.\.\.|mid-\s*$/i.test(cardText)) {
-          report.bugs.push({ severity: "P2", msg: "Suggested topic title truncated in UI" });
+        if (/\(\s*$|\(\d+\s*$|mid-\s*$/i.test(cardText) || /landlord \(6/i.test(cardText)) {
+          report.bugs.push({ severity: "P1", msg: "Suggested topic title truncated mid-phrase in UI" });
         }
 
         const btn = page.getByRole("button", { name: /Create topic & continue there/i }).first();
         await btn.click();
         note("ok", "accepted topic suggestion");
-        await page.waitForTimeout(6000);
+        await page.waitForTimeout(7000);
         await shot(page, "after-accept");
         const body = await page.locator("main").innerText();
-        const moved = /Moved \d+ related message/i.test(body);
-        const created = /Topic created/i.test(body);
-        report.results.push({ id: "accept-migrate", pass: moved || created, moved, created, url: page.url() });
+        const movedCue = /Moved \d+ message/i.test(body);
+        const hasProductChat = new RegExp(uniq.split(" ").slice(0, 2).join("|"), "i").test(body);
+        const importedCard = /Imported context/i.test(body);
+        const aiActive = !/0 employees active/i.test(body);
+        report.results.push({
+          id: "accept-migrate",
+          pass: (movedCue || hasProductChat) && !importedCard,
+          movedCue,
+          hasProductChat,
+          importedCard,
+          aiActive,
+          url: page.url(),
+        });
         note(report.results.at(-1).pass ? "PASS" : "FAIL", "accept-migrate", report.results.at(-1));
-        if (!moved) {
-          report.bugs.push({ severity: "P1", msg: "Accepted suggestion but no Moved-N-messages cue" });
+        if (importedCard) {
+          report.bugs.push({
+            severity: "P1",
+            msg: "Imported context card still shown after chat migration — should show moved messages only",
+          });
+        }
+        if (!hasProductChat) {
+          report.bugs.push({
+            severity: "P1",
+            msg: "New topic missing the original product chat messages after accept",
+          });
+        }
+        if (!aiActive) {
+          report.bugs.push({
+            severity: "P1",
+            msg: "New topic shows 0 employees active after migrate accept",
+          });
         }
 
         // Continue in new topic
@@ -110,14 +135,22 @@ try {
             `@Wren Hart @Adrian Edwards we're in the ${uniq} topic now — confirm price band and one compliance risk in 5 lines.`,
           );
           await page.keyboard.press("Enter");
-          await page.waitForTimeout(28000);
+          await page.waitForTimeout(35000);
           await shot(page, "continued");
           const cont = await page.locator("main").innerText();
+          const falseMemory = /saved (that |this )?as durable context|I've saved that/i.test(cont) &&
+            /0 saved memor/i.test(cont);
           report.results.push({
             id: "continue",
             pass: /risk|£|GBP|compliance|Wren|Adrian/i.test(cont),
           });
           note(report.results.at(-1).pass ? "PASS" : "FAIL", "continue");
+          if (falseMemory) {
+            report.bugs.push({
+              severity: "P1",
+              msg: "AI claimed durable context saved while panel still shows 0 saved memories",
+            });
+          }
         }
 
         // Memory chip hunt
