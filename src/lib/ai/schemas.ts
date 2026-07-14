@@ -140,6 +140,8 @@ export const EmployeeEffectsSchema = z.object({
   statusChange: z.enum(["idle", "working", "waiting_approval", "on_call", "blocked"]).optional(),
   handoffTo: z.array(z.string()).optional(),
   currentTask: z.string().optional(),
+  /** When true, the assigned AI (not the steward) should ask if anything else is needed. */
+  askNextSteps: z.boolean().optional(),
 });
 
 export const ModelResponseSchema = z.object({

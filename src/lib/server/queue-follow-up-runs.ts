@@ -229,7 +229,34 @@ export async function queueFollowUpRuns(
     content: params.aiReply,
     parentRunId: params.parentRunId,
     handoffDepth: params.handoffDepth + 1,
+    skipAdmission: true,
+    createdByType: "ai_employee",
+    createdById: params.sourceEmployee.id,
   });
+
+  // Task-book transfers for AI→AI handoffs (visible as Wren → Emily).
+  try {
+    const { logAssignmentTask } = await import("@/lib/tasks/task-book");
+    for (const run of queued) {
+      await logAssignmentTask({
+        client,
+        workspaceId: params.workspaceId,
+        roomId: params.roomId,
+        topicId: params.topic.id,
+        title: `${params.sourceEmployee.name} → ${run.employeeName}`,
+        description: params.aiReply.slice(0, 240),
+        assigneeEmployeeId: run.employeeId,
+        createdByType: "ai_employee",
+        createdById: params.sourceEmployee.id,
+        sourceMessageId: params.aiMessageId,
+        agentRunId: run.runId,
+        workClass: "interactive",
+        status: "in_progress",
+      });
+    }
+  } catch (err) {
+    console.warn("[queue-follow-up] task book transfer log failed", err);
+  }
 
   return { followUpRuns: queued, skipped };
 }
@@ -366,6 +393,9 @@ export async function queueCollaboratorRuns(
     content: isPanelFollowUp
       ? `${params.leadReply}\n\n(Adding your panel perspective after ${params.leadEmployee.name}.)`
       : `${params.leadReply}\n\n(Collaborating after ${params.leadEmployee.name}'s analysis.)`,
+    skipAdmission: true,
+    createdByType: "steward",
+    createdById: "steward",
   });
 
   return { activatedRuns: queued, skipped };

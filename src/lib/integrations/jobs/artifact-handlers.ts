@@ -30,6 +30,7 @@ import type {
 } from "@/lib/integrations/registry/tool-definitions";
 import { applySpreadsheetTemplate } from "@/lib/artifacts/templates/spreadsheets/index";
 import { applyPdfTemplate } from "@/lib/artifacts/templates/pdf/index";
+import { applyDocxTemplate } from "@/lib/artifacts/templates/docx/index";
 
 type JobPayload = {
   tool?: string;
@@ -523,19 +524,20 @@ async function handleDocxJob(
   if (!employeeId) throw new Error("Missing employee for DOCX job.");
   const generatedBy = await resolveGeneratedByLabel(client, job.workspaceId, ctx, employeeId);
 
-  const title = args.title.trim();
+  const spec = applyDocxTemplate(args);
+  const title = spec.title.trim();
   const generatedAt = formatGeneratedAt(new Date().toISOString());
   const buffer = await buildDocxBuffer({
     title,
-    summary: args.summary,
-    sections: args.sections,
+    summary: spec.summary,
+    sections: spec.sections,
     generatedBy,
     generatedAt,
   });
   const contentMarkdown = buildReportMarkdown({
     title,
-    summary: args.summary,
-    sections: args.sections,
+    summary: spec.summary,
+    sections: spec.sections,
     generatedBy,
     generatedAt,
   });
@@ -552,8 +554,8 @@ async function handleDocxJob(
     contentJson: {
       kind: "docx",
       template: args.template ?? null,
-      sectionCount: args.sections.length,
-      summary: args.summary ?? null,
+      sectionCount: spec.sections.length,
+      summary: spec.summary ?? null,
     },
   });
 

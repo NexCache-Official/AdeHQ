@@ -2061,6 +2061,43 @@ export async function processQueuedAgentRun(
       });
     }
 
+    // Complete linked task-book row for this run (if any).
+    const taskBookTaskId =
+      typeof runMetadata.taskBookTaskId === "string" ? runMetadata.taskBookTaskId : null;
+    if (taskBookTaskId && !failed && aiMode !== "error") {
+      try {
+        await client
+          .from("tasks")
+          .update({
+            status: "done",
+            blocked_reason: null,
+            queue_position: null,
+            updated_at: nowISO(),
+          })
+          .eq("workspace_id", workspaceId)
+          .eq("id", taskBookTaskId);
+      } catch {
+        // best-effort
+      }
+    }
+
+    // Silent steward leftover pass — never posts; may promote queued work or
+    // schedule an AI to ask a human for input.
+    if (!isGreetingRun) {
+      try {
+        const { sweepTopicLeftoverTasks } = await import("@/lib/tasks/leftover-sweep");
+        await sweepTopicLeftoverTasks(client, {
+          workspaceId,
+          roomId,
+          topicId,
+          employees: ctx.employees,
+          preferredAskerEmployeeId: employeeId,
+        });
+      } catch (sweepErr) {
+        console.warn("[AdeHQ leftover-sweep]", sweepErr);
+      }
+    }
+
     return {
       reply: response.reply,
       aiMessageId: aiMessage.id,

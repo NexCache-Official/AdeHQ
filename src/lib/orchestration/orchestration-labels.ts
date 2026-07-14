@@ -27,6 +27,7 @@ const INTENT_MODE_LABEL: Record<OrchestrationIntent, string> = {
   employee_followup_needed: "Follow-up needed",
   offer_help: "Offer help",
   multi_employee_collaboration: "Multi-employee collaboration",
+  brainstorm: "Brainstorm",
   topic_shift: "Topic shift",
   correction_or_clarification: "Clarification",
 };
@@ -142,6 +143,10 @@ export function formatOrchestrationChipLabel(
     case "employee_followup_needed":
     case "correction_or_clarification":
       return names[0] ? `${names[0]} following up` : "Following up";
+    case "brainstorm":
+      return names.length
+        ? `Brainstorm · ${names.slice(0, 2).join(" + ")}`
+        : "Brainstorm";
     case "task_request":
     case "direct_question":
     case "ask_for_opinion":

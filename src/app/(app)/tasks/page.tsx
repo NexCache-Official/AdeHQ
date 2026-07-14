@@ -46,11 +46,19 @@ import {
   Trash2,
 } from "lucide-react";
 
-const STATUS_ORDER: TaskStatus[] = ["open", "in_progress", "waiting_approval", "blocked", "done"];
+const STATUS_ORDER: TaskStatus[] = [
+  "open",
+  "in_progress",
+  "waiting_on_human",
+  "waiting_approval",
+  "blocked",
+  "done",
+];
 
 const STATUS_META: Record<TaskStatus, { label: string; tone: Tone }> = {
   open: { label: "Open", tone: "slate" },
   in_progress: { label: "In progress", tone: "sky" },
+  waiting_on_human: { label: "Waiting on human", tone: "amber" },
   waiting_approval: { label: "Waiting approval", tone: "amber" },
   blocked: { label: "Blocked", tone: "rose" },
   done: { label: "Done", tone: "emerald" },

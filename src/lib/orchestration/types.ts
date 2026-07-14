@@ -22,6 +22,7 @@ export type RoomStewardIntent =
   | "employee_followup_needed"
   | "offer_help"
   | "multi_employee_collaboration"
+  | "brainstorm"
   | "topic_shift"
   | "correction_or_clarification";
 

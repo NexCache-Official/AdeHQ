@@ -32,6 +32,8 @@ function mapIntentToMode(intent: OrchestrationPlan["intent"]): ConversationMode 
     case "correction_or_clarification":
     case "offer_help":
       return "lead_collaborator";
+    case "brainstorm":
+      return "panel_response";
     case "handoff":
       return "handoff";
     case "ambient_smart_assist":
@@ -51,7 +53,13 @@ function mapRoleToReason(
   intent: OrchestrationPlan["intent"],
 ): ResponseReason {
   if (intent === "social_broadcast") return "group_greeting";
-  if (intent === "panel_response" || intent === "multi_employee_collaboration") return "panel_response";
+  if (
+    intent === "panel_response" ||
+    intent === "multi_employee_collaboration" ||
+    intent === "brainstorm"
+  ) {
+    return "panel_response";
+  }
   if (
     intent === "lead_collaborator" ||
     intent === "answer_to_pending_question" ||

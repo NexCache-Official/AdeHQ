@@ -21,11 +21,13 @@ import { getToolDefinition } from "./registry/tool-definitions";
 import { mergeToolOutcomeArtifacts } from "./tool-outcome-artifacts";
 import { coerceToolCall } from "./coerce-tool-args";
 import { drainQueuedToolResult } from "./jobs/drain-queued-result";
+import { processIntegrationJob } from "./jobs/worker";
 import {
   createToolHydrationState,
   hydrateToolCallArgs,
   observeToolCallResult,
 } from "./hydrate-tool-args";
+import { isHeavyArtifactTool } from "@/lib/tasks/work-classes";
 
 /** Cap per response — mirrors workspace max_tool_runs_per_task guardrails. */
 export const MAX_TOOL_CALLS_PER_RESPONSE = 6;
@@ -159,6 +161,19 @@ export async function executeEmployeeToolCalls(
       { employee },
     );
     observeToolCallResult(coerced.tool, args, result, hydrationState);
+    // Heavy Drive artifacts: detach from the chat turn so the interactive lane
+    // stays free (chip reconciles when the integration job completes).
+    if (
+      result.status === "queued" &&
+      result.jobId &&
+      isHeavyArtifactTool(coerced.tool)
+    ) {
+      void processIntegrationJob(client, params.workspaceId, result.jobId).catch((err) => {
+        console.warn("[AdeHQ integrations] detached artifact job failed", err);
+      });
+      results.push(result);
+      continue;
+    }
     const drained = await drainQueuedToolResult(client, params.workspaceId, result);
     results.push(drained);
   }

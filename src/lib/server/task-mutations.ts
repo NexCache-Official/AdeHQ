@@ -1,25 +1,12 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Task, TaskPriority, TaskStatus } from "@/lib/types";
+import { taskFromDbRow } from "@/lib/tasks/task-book";
 import { nowISO } from "@/lib/utils";
 
 type DbRow = Record<string, unknown>;
 
 function taskFromRow(row: DbRow): Task {
-  return {
-    id: String(row.id),
-    roomId: String(row.room_id),
-    topicId: row.topic_id ? String(row.topic_id) : undefined,
-    title: String(row.title ?? ""),
-    description: row.description ? String(row.description) : undefined,
-    status: row.status as TaskStatus,
-    priority: row.priority as TaskPriority,
-    assigneeType: row.assignee_type as Task["assigneeType"],
-    assigneeId: String(row.assignee_id),
-    createdFrom: row.created_from ? String(row.created_from) : undefined,
-    dueDate: row.due_date ? String(row.due_date) : undefined,
-    createdAt: String(row.created_at ?? nowISO()),
-    updatedAt: String(row.updated_at ?? row.created_at ?? nowISO()),
-  };
+  return taskFromDbRow(row);
 }
 
 export async function updateTaskRecord(

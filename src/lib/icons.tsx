@@ -115,6 +115,7 @@ export const TASK_STATUS_META: Record<
 > = {
   open: { label: "Open", color: "text-slate-600", bg: "bg-slate-500/15" },
   in_progress: { label: "In progress", color: "text-sky-700", bg: "bg-sky-50" },
+  waiting_on_human: { label: "Waiting on human", color: "text-amber-700", bg: "bg-amber-500/15" },
   waiting_approval: { label: "Waiting for approval", color: "text-amber-700", bg: "bg-amber-500/15" },
   blocked: { label: "Blocked", color: "text-rose-600", bg: "bg-rose-500/15" },
   done: { label: "Done", color: "text-emerald-700", bg: "bg-emerald-500/15" },

@@ -89,6 +89,7 @@ const ROOM_STEWARD_INTENTS = [
   "employee_followup_needed",
   "offer_help",
   "multi_employee_collaboration",
+  "brainstorm",
   "topic_shift",
   "correction_or_clarification",
 ] as const satisfies readonly RoomStewardIntent[];
@@ -864,6 +865,22 @@ function classifyRoomMessageDeterministic(input: RoomStewardInput): RoomStewardD
     return baseDecision(input, "social_ack", "Social acknowledgement - no AI response needed.", {
       confidence: 0.9,
     });
+  }
+
+  // Brainstorm: steward orchestrates 1–2 AIs then a lead synthesizes — never speaks.
+  if (/\b(brainstorm|ideate|riff on|spitball|blue-?sky|workshop ideas)\b/i.test(text)) {
+    const selected = selectRelevantEmployees(input, Math.min(2, input.roster.length));
+    if (selected.length) {
+      return finalizeDecision(
+        input,
+        baseDecision(input, "brainstorm", "Brainstorm mode — capped multi-perspective, lead synthesizes.", {
+          confidence: 0.88,
+          shouldRespond: true,
+          selectedEmployeeIds: selected,
+          responseStyle: selected.length > 1 ? "panel" : "answer",
+        }),
+      );
+    }
   }
 
   if (

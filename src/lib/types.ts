@@ -326,7 +326,8 @@ export type ResponseReason =
   | "ambient_collaboration_lead"
   | "ambient_collaboration_collaborator"
   | "manual_retry"
-  | "capability_grant_continue";
+  | "capability_grant_continue"
+  | "task_follow_up";
 
 export type ConversationMode =
   | "direct_reply"
@@ -647,9 +648,13 @@ export type TaskStatus =
   | "open"
   | "in_progress"
   | "waiting_approval"
+  | "waiting_on_human"
   | "blocked"
   | "done";
 export type TaskPriority = "low" | "medium" | "high";
+export type TaskWorkClass = "interactive" | "light_parallel" | "heavy_artifact";
+export type TaskBlockedReason = "needs_human_input" | "capacity" | "depends_on_task";
+export type TaskCreatedByType = "human" | "ai_employee" | "steward";
 
 export type Task = {
   id: string;
@@ -663,6 +668,16 @@ export type Task = {
   assigneeId: string;
   createdFrom?: string;
   createdByRunId?: string;
+  createdByType?: TaskCreatedByType;
+  createdById?: string;
+  sourceMessageId?: string;
+  agentRunId?: string;
+  integrationJobId?: string;
+  workClass?: TaskWorkClass;
+  queuePosition?: number;
+  blockedReason?: TaskBlockedReason;
+  transferredFromEmployeeId?: string;
+  transferredToEmployeeId?: string;
   dueDate?: string;
   createdAt: string;
   updatedAt: string;

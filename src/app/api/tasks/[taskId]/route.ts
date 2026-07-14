@@ -23,7 +23,9 @@ async function loadTaskRow(
 const PatchSchema = z.object({
   title: z.string().min(1).optional(),
   description: z.string().nullable().optional(),
-  status: z.enum(["open", "in_progress", "waiting_approval", "blocked", "done"]).optional(),
+  status: z
+    .enum(["open", "in_progress", "waiting_approval", "waiting_on_human", "blocked", "done"])
+    .optional(),
   priority: z.enum(["low", "medium", "high"]).optional(),
   assigneeType: z.enum(["human", "ai"]).optional(),
   assigneeId: z.string().min(1).optional(),

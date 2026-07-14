@@ -11,6 +11,9 @@ import { getOutputTokenCap, type ModelMode } from "@/lib/ai/model-catalog";
 import type { ResponderDecision } from "@/lib/server/conversation-orchestrator";
 import { GREETING_MAX_OUTPUT_TOKENS } from "@/lib/server/room-governance";
 import { createSupabaseSecretClient } from "@/lib/supabase/server";
+import { classifyWorkClass } from "@/lib/tasks/work-classes";
+import { evaluateEmployeeAdmission } from "@/lib/tasks/admission";
+import { logAssignmentTask } from "@/lib/tasks/task-book";
 
 export type QueuedRun = {
   runId: string;
@@ -22,6 +25,7 @@ export type QueuedRun = {
   collaborationId?: string;
   collaborationRole?: string;
   staggerIndex?: number;
+  taskBookTaskId?: string;
 };
 
 export async function queueAgentRuns(
@@ -37,6 +41,11 @@ export async function queueAgentRuns(
     handoffDepth?: number;
     responders: ResponderDecision[];
     content: string;
+    /** Skip capacity gate (collaborators, leftover promotion, human-ask). */
+    skipAdmission?: boolean;
+    /** Who created this assignment for the task book. */
+    createdByType?: "human" | "ai_employee" | "steward";
+    createdById?: string;
   },
 ): Promise<{ queued: QueuedRun[]; blocked: { employeeId: string; reason: string }[] }> {
   const settings = await loadWorkspaceAiSettings(client, params.workspaceId);
@@ -65,6 +74,49 @@ export async function queueAgentRuns(
 
   for (const decision of params.responders) {
     const { employee, reason, isGreetingRun } = decision;
+    const workClass = classifyWorkClass({
+      message: params.content,
+      intent:
+        typeof decision.runMetadata?.intent === "string"
+          ? decision.runMetadata.intent
+          : undefined,
+    });
+
+    if (!params.skipAdmission && !isGreetingRun && !params.dependsOnRunId) {
+      const admission = await evaluateEmployeeAdmission(aiClient, {
+        workspaceId: params.workspaceId,
+        employeeId: employee.id,
+        workClass,
+      });
+      if (!admission.admit) {
+        const title =
+          params.content.trim().slice(0, 120) || `Work for ${employee.name}`;
+        const task = await logAssignmentTask({
+          client: aiClient,
+          workspaceId: params.workspaceId,
+          roomId: params.roomId,
+          topicId: params.topicId,
+          title,
+          description: `Queued — ${employee.name} is at capacity (${admission.reason}).`,
+          assigneeEmployeeId: employee.id,
+          createdByType: params.createdByType ?? "steward",
+          createdById: params.createdById ?? "steward",
+          sourceMessageId: params.triggerMessageId,
+          workClass,
+          status: "open",
+          blockedReason: "capacity",
+          queuePosition: admission.queuePosition,
+        });
+        blocked.push({
+          employeeId: employee.id,
+          reason: task
+            ? `At capacity — logged in task book (#${admission.queuePosition} in queue).`
+            : "Employee is at capacity.",
+        });
+        continue;
+      }
+    }
+
     const modelMode: ModelMode = employee.modelMode ?? "balanced";
     const provider = employee.provider.toLowerCase();
     const modeCap = getOutputTokenCap(modelMode);
@@ -83,6 +135,7 @@ export async function queueAgentRuns(
     const runMetadata: Record<string, unknown> = {
       ...(isGreetingRun ? { isGreetingRun: true } : {}),
       ...(decision.runMetadata ?? {}),
+      workClass,
     };
 
     try {
@@ -122,6 +175,29 @@ export async function queueAgentRuns(
         estimatedCostUsd: estimate.cost,
       });
 
+      let taskBookTaskId: string | undefined;
+      if (!isGreetingRun) {
+        const task = await logAssignmentTask({
+          client: aiClient,
+          workspaceId: params.workspaceId,
+          roomId: params.roomId,
+          topicId: params.topicId,
+          title: params.content.trim().slice(0, 120) || `Work for ${employee.name}`,
+          description: `Assigned to ${employee.name} (${reason}).`,
+          assigneeEmployeeId: employee.id,
+          createdByType: params.createdByType ?? "steward",
+          createdById: params.createdById,
+          sourceMessageId: params.triggerMessageId,
+          agentRunId: runId,
+          workClass,
+          status: "in_progress",
+        });
+        taskBookTaskId = task?.id;
+        if (taskBookTaskId) {
+          runMetadata.taskBookTaskId = taskBookTaskId;
+        }
+      }
+
       queued.push({
         runId,
         usageId,
@@ -142,6 +218,7 @@ export async function queueAgentRuns(
             : undefined,
         staggerIndex:
           typeof runMetadata.staggerIndex === "number" ? runMetadata.staggerIndex : undefined,
+        taskBookTaskId,
       });
     } catch (err) {
       blocked.push({

@@ -48,11 +48,34 @@ export async function buildEnhancedSpreadsheetBuffer(spec: EnhancedSpreadsheetSp
 
   const header = sheet.addRow(spec.columns);
   header.font = { bold: true, color: { argb: "FFFFFFFF" } };
-  header.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF111827" } };
+  header.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF0F766E" } };
   header.alignment = { vertical: "middle", wrapText: true };
 
   for (const row of spec.rows) {
-    sheet.addRow(row.map((cell) => (cell == null ? "" : cell)));
+    const excelRow = sheet.addRow(
+      row.map((cell, colIndex) => {
+        if (cell == null) return "";
+        const col = String(spec.columns[colIndex] ?? "").toLowerCase();
+        if (
+          typeof cell === "number" ||
+          (/score|count|hrs|amount|price|%|qty|quantity/.test(col) &&
+            typeof cell === "string" &&
+            /^-?\d+(\.\d+)?$/.test(cell.trim()))
+        ) {
+          const n = typeof cell === "number" ? cell : Number(cell);
+          return Number.isFinite(n) ? n : cell;
+        }
+        return cell;
+      }),
+    );
+    excelRow.eachCell((cell, colNumber) => {
+      const col = String(spec.columns[colNumber - 1] ?? "").toLowerCase();
+      if (typeof cell.value === "number") {
+        if (/%|score/.test(col)) cell.numFmt = "0.0";
+        else if (/amount|price|cost|usd|gbp|£|\$/.test(col)) cell.numFmt = "#,##0.00";
+        else cell.numFmt = "#,##0.##";
+      }
+    });
   }
 
   const widths = colWidths(spec.columns, spec.rows);
