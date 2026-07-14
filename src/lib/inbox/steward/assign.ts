@@ -1,6 +1,9 @@
 /**
  * Employee eligibility + suggest vs auto-assign (never fans email body to roster).
  * Assignment never starts a model.
+ *
+ * Maya and other system / DM-only employees are never inbox-eligible — they do not
+ * own email work. See isWorkAssignableEmployee / workAssignableEmployees.
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -26,8 +29,35 @@ const CATEGORY_ROLE_HINTS: Record<EmailCategory, string[]> = {
   automated: [],
   newsletter: [],
   security: ["security", "compliance", "legal"],
-  general: ["assistant", "ops", "general", "maya"],
+  // Never hint "maya" — Maya is recruiting/workspace-guide only, not an inbox owner.
+  general: ["assistant", "ops", "general"],
 };
+
+type EmployeeRow = {
+  id: string;
+  name: string | null;
+  role: string | null;
+  role_key: string | null;
+  instructions: string | null;
+  status: string | null;
+  is_system_employee: boolean | null;
+  system_employee_key: string | null;
+  metadata: unknown;
+};
+
+function isInboxAssignableRow(row: EmployeeRow): boolean {
+  // Maya + any other system employee (system_employee_key / is_system_employee).
+  if (row.is_system_employee) return false;
+  if (row.system_employee_key) return false;
+
+  const meta =
+    row.metadata && typeof row.metadata === "object"
+      ? (row.metadata as { dmOnly?: boolean; canBeAssignedToRooms?: boolean })
+      : null;
+  if (meta?.dmOnly === true) return false;
+  if (meta?.canBeAssignedToRooms === false) return false;
+  return true;
+}
 
 export async function loadEligibleEmployees(
   client: SupabaseClient,
@@ -35,18 +65,22 @@ export async function loadEligibleEmployees(
 ): Promise<StewardEmployee[]> {
   const { data, error } = await client
     .from("ai_employees")
-    .select("id, name, role, role_key, instructions, status")
+    .select(
+      "id, name, role, role_key, instructions, status, is_system_employee, system_employee_key, metadata",
+    )
     .eq("workspace_id", workspaceId)
     .eq("status", "active");
   if (error) throw error;
 
-  return (data ?? []).map((row) => ({
-    id: String(row.id),
-    name: String(row.name ?? "Employee"),
-    roleTitle: String(row.role ?? ""),
-    roleKey: String(row.role_key ?? ""),
-    expertiseSummary: String(row.instructions ?? "").slice(0, 500),
-  }));
+  return ((data ?? []) as EmployeeRow[])
+    .filter(isInboxAssignableRow)
+    .map((row) => ({
+      id: String(row.id),
+      name: String(row.name ?? "Employee"),
+      roleTitle: String(row.role ?? ""),
+      roleKey: String(row.role_key ?? ""),
+      expertiseSummary: String(row.instructions ?? "").slice(0, 500),
+    }));
 }
 
 /** Score employees from role metadata only — never send email body. */
@@ -149,7 +183,9 @@ export async function assertEmployeeEligible(
   const list = await loadEligibleEmployees(client, params.workspaceId);
   const found = list.find((e) => e.id === params.employeeId);
   if (!found) {
-    throw new Error("Employee is not active or cannot access this mailbox.");
+    throw new Error(
+      "Employee is not active or cannot own inbox work (Maya and system employees are excluded).",
+    );
   }
   return found;
 }

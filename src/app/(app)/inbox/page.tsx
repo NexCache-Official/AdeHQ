@@ -57,6 +57,7 @@ import type {
   ThreadSummaryDTO,
 } from "@/lib/inbox/types";
 import { motion } from "framer-motion";
+import { workAssignableEmployees } from "@/lib/maya-employee";
 
 const FOLDERS: { key: InboxFolder; label: string; icon: typeof InboxIcon }[] = [
   { key: "inbox", label: "Inbox", icon: InboxIcon },
@@ -989,7 +990,7 @@ export default function InboxPage() {
             loading={loadingThread}
             access={mailbox.access}
             workspaceMembers={workspaceMembers}
-            aiEmployees={state.employees.map((e) => ({
+            aiEmployees={workAssignableEmployees(state.employees).map((e) => ({
               id: e.id,
               name: e.name,
               role: e.role,

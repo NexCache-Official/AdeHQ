@@ -97,7 +97,9 @@ export default function EmployeeProfilePage() {
 
       {isMayaEmployee(employee) && (
         <div className="mb-4 rounded-xl border border-accent-200 bg-accent-50 px-4 py-3 text-sm text-accent-900">
-          {MAYA_EMPLOYEE_NAME} is your permanent workspace guide — DM-only, always available, and not counted toward hire limits.
+          {MAYA_EMPLOYEE_NAME} is your permanent AI Workforce Manager — recruiting
+          and workspace guidance only. DM-only, always available, not counted toward
+          hire limits, and never assignable to rooms or inbox email.
         </div>
       )}
 

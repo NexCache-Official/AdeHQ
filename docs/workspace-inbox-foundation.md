@@ -44,6 +44,7 @@ Inbound store → email_jobs triage (idempotent)
 → best-effort drain + Vercel Cron recovery (*/2)
 → rules/heuristics; cheap classifier only when ambiguous
 → suggest vs auto-assign (≥0.90 deterministic / continuity)
+  (Maya / system / DM-only employees are never inbox-eligible)
 → user Draft with AI → draft job → approval envelope → send gate
 ```
 

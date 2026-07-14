@@ -77,6 +77,7 @@ Create 3 distinct personas for tiers:
 - recommended = Balanced Partner (collaborative, reliable, organized)
 - premium = Senior Strategist (thoughtful, precise, strategic)
 Each name must be a unique realistic full name (first + last). Never reuse names across tiers.
+Never use the name Maya, and never use any first or last name that contains "Maya" — that name is reserved for AdeHQ's system AI Workforce Manager.
 Match the job brief domain and role.
 Keep copy scannable: candidatePitch max 22 words; bestFor one short sentence; strengths max 3 items; watchOuts max 2; howIWork max 3 short bullets.`,
     prompt: JSON.stringify(brief),
@@ -154,6 +155,8 @@ export async function generateCandidateCopiesRuntime(
   const systemPrompt = `Generate ONLY applicant copy (names, titles, personality tags, strengths, watch-outs, bestFor, whyThisCandidate, candidatePitch, howIWork).
 Do NOT change model modes, hours, quality, speed, or cost — those are set by the system.
 Create 3 distinct personas for tiers: high_capacity (fast/cheap), recommended (balanced), premium (senior/deep).
+Each name must be a unique realistic full name (first + last). Never reuse names across tiers.
+Never use the name Maya, and never use any first or last name that contains "Maya" — that name is reserved for AdeHQ's system AI Workforce Manager.
 Match the job brief domain and role.
 Keep copy scannable: candidatePitch max 18 words; bestFor one short sentence; strengths max 3 items; watchOuts max 2; howIWork max 3 short bullets; whyThisCandidate max 14 words.`;
 

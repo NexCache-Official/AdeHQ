@@ -34,6 +34,12 @@ const MAYA_PERMISSIONS: EmployeePermissions = {
   approvalBeforeBilling: true,
 };
 
+/**
+ * Maya is the default workspace AI Workforce Manager.
+ * Scope: recruiting / hire journey + questions about how AdeHQ works.
+ * Out of scope: owning rooms, inbox/email, CRM work, or any "do the job" execution.
+ * Prefer this helper over ad-hoc `emp-maya` / name string checks.
+ */
 export function isMayaEmployee(employee: Pick<AIEmployee, "id" | "systemEmployeeKey">): boolean {
   return (
     employee.id === MAYA_EMPLOYEE_ID ||
@@ -65,14 +71,31 @@ function cannotAssignToRooms(metadata?: SystemEmployeeMetadata): boolean {
   return false;
 }
 
+/**
+ * Whether an AI employee may own real workspace work (rooms, inbox, tasks, etc.).
+ * Maya and other system / DM-only employees are never work-assignable.
+ */
+export function isWorkAssignableEmployee(
+  employee: Pick<
+    AIEmployee,
+    "id" | "systemEmployeeKey" | "isSystemEmployee" | "metadata"
+  >,
+): boolean {
+  if (isMayaEmployee(employee)) return false;
+  if (isSystemEmployee(employee)) return false;
+  if (cannotAssignToRooms(employee.metadata)) return false;
+  if (employee.metadata?.dmOnly) return false;
+  return true;
+}
+
+/** Hired AI employees that can be assigned to rooms, inbox threads, and similar work. */
+export function workAssignableEmployees(employees: AIEmployee[]): AIEmployee[] {
+  return employees.filter(isWorkAssignableEmployee);
+}
+
+/** Alias of workAssignableEmployees — room membership uses the same policy. */
 export function roomAssignableEmployees(employees: AIEmployee[]): AIEmployee[] {
-  return employees.filter((employee) => {
-    if (isMayaEmployee(employee)) return false;
-    if (isSystemEmployee(employee)) return false;
-    if (cannotAssignToRooms(employee.metadata)) return false;
-    if (employee.metadata?.dmOnly) return false;
-    return true;
-  });
+  return workAssignableEmployees(employees);
 }
 
 export function mergeEmployeesById(local: AIEmployee[], remote: AIEmployee[]): AIEmployee[] {
@@ -203,6 +226,7 @@ export function buildMayaEmployee(timestamp = nowISO()): AIEmployee {
       canBeArchived: false,
       canBeAssignedToRooms: false,
       isDefaultWorkspaceEmployee: true,
+      // Recruiting + workspace guide only — never inbox/email/CRM/task execution owner.
       purpose: "hire_and_manage_ai_employees,workspace_guide",
     },
   };

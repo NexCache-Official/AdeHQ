@@ -1,3 +1,27 @@
+/**
+ * Deterministic candidate names for the hire shortlist.
+ *
+ * "Maya" is reserved for AdeHQ's system AI Workforce Manager — never use it
+ * (or any first/last/full name containing "maya") for generated candidates.
+ */
+
+/** True if any part of the name contains the reserved "Maya" token. */
+export function candidateNameContainsMaya(name: string): boolean {
+  return /maya/i.test(name.trim());
+}
+
+/**
+ * Replace banned names (containing Maya) with a safe fallback.
+ * Prefer `fallback` when it is also clean; otherwise use a generic label.
+ */
+export function sanitizeCandidateName(name: string, fallback?: string | null): string {
+  const trimmed = name.trim();
+  if (trimmed && !candidateNameContainsMaya(trimmed)) return trimmed;
+  const fb = fallback?.trim();
+  if (fb && !candidateNameContainsMaya(fb)) return fb;
+  return "AI Candidate";
+}
+
 const FIRST_NAMES = [
   "Riley",
   "Jordan",
@@ -49,7 +73,7 @@ const FIRST_NAMES = [
   "Rafael",
   "Sofia",
   "Theo",
-];
+].filter((n) => !candidateNameContainsMaya(n));
 
 const LAST_NAMES = [
   "Carter",
@@ -102,7 +126,7 @@ const LAST_NAMES = [
   "Norris",
   "Owens",
   "Porter",
-];
+].filter((n) => !candidateNameContainsMaya(n));
 
 function hashSeed(seed: string): number {
   let hash = 0;
@@ -112,18 +136,18 @@ function hashSeed(seed: string): number {
   return hash;
 }
 
-/** Deterministic unique full names for a hiring session (always 3 distinct). */
+/** Deterministic unique full names for a hiring session (always `count` distinct). */
 export function generateUniqueCandidateNames(seed: string, count = 3): string[] {
   const names = new Set<string>();
   let attempt = 0;
   const base = hashSeed(seed);
 
-  while (names.size < count && attempt < 200) {
+  while (names.size < count && attempt < 400) {
     const h = (base + attempt * 9973) >>> 0;
     const first = FIRST_NAMES[h % FIRST_NAMES.length];
     const last = LAST_NAMES[(h >>> 8) % LAST_NAMES.length];
     const full = `${first} ${last}`;
-    if (!names.has(full)) names.add(full);
+    if (!candidateNameContainsMaya(full) && !names.has(full)) names.add(full);
     attempt += 1;
   }
 

@@ -20,11 +20,11 @@ builder, not an MCP client, not a Slack clone — see
   or reuse a password from memory/docs. It has never been logged in any
   report and should not be committed to any file.
 - This account's workspace already has AI employees hired (as of last audit:
-  3 employees, 1 room). **Maya is the default AI Recruiting Manager — she is
-  NOT to be used as a general-purpose "do the work" employee.** Use the other
-  hired employees (sales/ops/research-type roles) for actual task-execution
-  testing. If you're unsure who's hired, check the dashboard or the
-  employees list before assuming.
+  3 employees, 1 room). **Maya is the default AI Workforce Manager — recruiting
+  + workspace-guide only.** She must not be assigned rooms, inbox/email threads,
+  CRM work, or other execution jobs. Use hired (non-system) employees for that.
+  Candidate shortlist names must never include "Maya". If you're unsure who's
+  hired, check Workforce before assuming.
 - Never create a second real account, never touch billing/payment fields,
   never invite real external humans — this is a sandbox but treat any
   outbound-looking action (email send, invite, publish) as needing

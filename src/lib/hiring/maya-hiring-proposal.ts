@@ -1,4 +1,8 @@
-import { generateUniqueCandidateNames } from "./candidate-names";
+import {
+  candidateNameContainsMaya,
+  generateUniqueCandidateNames,
+  sanitizeCandidateName,
+} from "./candidate-names";
 import type { CandidateTier } from "./types";
 
 export type MayaHiringProposal = {
@@ -47,9 +51,13 @@ export function stampCandidatesForSession<T extends { id: string; tier: Candidat
   const usedNames = new Set<string>();
 
   return candidates.map((c, index) => {
-    let name = c.name;
-    if (usedNames.has(name) || candidates.filter((x) => x.name === name).length > 1) {
-      name = uniqueNames[index] ?? name;
+    let name = sanitizeCandidateName(c.name, uniqueNames[index]);
+    if (
+      candidateNameContainsMaya(name) ||
+      usedNames.has(name) ||
+      candidates.filter((x) => x.name === name).length > 1
+    ) {
+      name = sanitizeCandidateName(uniqueNames[index] ?? name);
     }
     usedNames.add(name);
     return {

@@ -14,7 +14,7 @@ import {
   CANDIDATE_ARCHETYPES,
 } from "./candidate-archetypes";
 import { tierBadgeLabel } from "./candidate-display";
-import { generateUniqueCandidateNames } from "./candidate-names";
+import { generateUniqueCandidateNames, sanitizeCandidateName } from "./candidate-names";
 import type { AiEmployeeApplicant, AiEmployeeJobBrief, CandidateTier } from "./types";
 import { getRoleByKey } from "./role-library";
 import { hiringRoleToEmployeeRoleKey } from "./map-candidate";
@@ -79,7 +79,8 @@ export function buildDeterministicApplicant(
   const resolvedModelId = resolveModel("siliconflow", modelMode);
   const personaDefaults = personaCopy(tier, roleKey);
   const title = copy?.title ?? personaDefaults?.title ?? brief.roleTitle;
-  const name = copy?.name ?? nameOverride ?? "AI Candidate";
+  // "Maya" is reserved for the system Workforce Manager — never a hire candidate.
+  const name = sanitizeCandidateName(copy?.name ?? nameOverride ?? "AI Candidate", nameOverride);
   const first = name.split(" ")[0] ?? name;
   const routingPreference = archetype.routingPreference;
 
