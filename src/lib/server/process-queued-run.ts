@@ -54,6 +54,7 @@ import {
 } from "@/lib/ai/runtime/hot-path-shadow";
 import { canEmployeeUseBrowserResearch } from "@/lib/ai/browser-research/permissions";
 import { resolveEmployeePromptTier } from "@/lib/ai/employee-prompt-tier";
+import { messageLikelyNeedsStructuredEffects } from "@/lib/ai/message-intent";
 import {
   executePlannedResearch,
   getResearchCapabilities,
@@ -1677,7 +1678,7 @@ export async function processQueuedAgentRun(
       },
     };
 
-    const {
+    let {
       response,
       aiMode,
       metrics,
@@ -1690,6 +1691,39 @@ export async function processQueuedAgentRun(
       queuedMeta,
       options.onReplyDelta ? { onReplyDelta: options.onReplyDelta } : undefined,
     );
+
+    // If the user clearly asked for CRM/Drive/task work but the model returned
+    // zero toolCalls (often narrating success or inventing prose instead), retry
+    // once on the blocking structured path with an explicit tool reminder.
+    const needsTools = messageLikelyNeedsStructuredEffects(content);
+    const gotTools = (response.effect?.toolCalls?.length ?? 0) > 0;
+    if (needsTools && !gotTools && !failed && aiMode !== "error") {
+      console.warn("[AdeHQ process-queued-run] retrying employee reply — missing toolCalls", {
+        runId,
+        employeeId: employee.id,
+        aiMode,
+      });
+      const retry = await dispatchEmployeeQueuedResponse(
+        {
+          ...routeInput,
+          message: `${content}
+
+[System reminder: This request requires real effects.toolCalls in your JSON response (e.g. artifact.createSpreadsheet, crm.createContact, tasks.createTask). Do not only describe the action in reply — emit the tool call(s) now with complete args.]`,
+        },
+        routeOptions,
+        queuedMeta,
+        // Never stream the retry — streaming cannot carry toolCalls.
+        undefined,
+      );
+      if ((retry.response.effect?.toolCalls?.length ?? 0) > 0 && !retry.failed) {
+        response = retry.response;
+        aiMode = retry.aiMode;
+        metrics = retry.metrics;
+        failed = retry.failed;
+        errorMessage = retry.errorMessage;
+        usedRuntime = retry.usedRuntime;
+      }
+    }
 
     await recordEmployeeReplyShadowResult({
       client,
