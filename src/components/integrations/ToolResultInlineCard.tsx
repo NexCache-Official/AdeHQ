@@ -403,11 +403,15 @@ export function ToolResultInlineCard({
       display.meta?.fileName ??
       cleanChatFileTitle(display.label.replace(/^(Spreadsheet|Report|Document|Presentation|File) ready — /i, ""));
 
-    // Only pull markdown twin text for spreadsheets (table fallback). Never for
-    // pptx/pdf/docx — that made Drive/chat open the .md sales deck instead.
+    // Markdown twin for in-chat preview fallback (sheets + PDFs). Never for
+    // pptx — that made Drive/chat look like a .md sales deck.
     const useMarkdownTwin =
       Boolean(exportId) &&
-      (previewKind === "spreadsheet" || fileExtension === "xlsx" || fileExtension === "csv");
+      (previewKind === "spreadsheet" ||
+        previewKind === "pdf" ||
+        fileExtension === "xlsx" ||
+        fileExtension === "csv" ||
+        fileExtension === "pdf");
 
     return (
       <ChatFileMiniViewer

@@ -59,6 +59,7 @@ export function DrivePreviewModal({
   const [loadingLocal, setLoadingLocal] = useState(false);
   const [sheet, setSheet] = useState<SheetPreview | null>(null);
   const [docxHtml, setDocxHtml] = useState<string | null>(null);
+  const [pdfObjectUrl, setPdfObjectUrl] = useState<string | null>(null);
   const [officeEmbedFailed, setOfficeEmbedFailed] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
 
@@ -115,16 +116,19 @@ export function DrivePreviewModal({
   useEffect(() => {
     setSheet(null);
     setDocxHtml(null);
+    setPdfObjectUrl(null);
     setOfficeEmbedFailed(false);
     setLocalError(null);
     if (!preview?.signedUrl || !meta) return;
 
     // Prefer Office Online for Word/PPTX; always load local sheet table as primary for Excel.
+    // PDFs: fetch to a blob URL so cross-origin signed URLs still preview in-iframe.
     const kind = meta.presentation.kind;
-    if (kind !== "spreadsheet" && kind !== "document") return;
+    if (kind !== "spreadsheet" && kind !== "document" && kind !== "pdf") return;
     if (kind === "document" && canOfficeEmbed) return;
 
     let cancelled = false;
+    let objectUrl: string | null = null;
     const run = async () => {
       setLoadingLocal(true);
       try {
@@ -133,7 +137,10 @@ export function DrivePreviewModal({
         const buffer = await res.arrayBuffer();
         if (cancelled) return;
         if (kind === "spreadsheet") setSheet(await parseSpreadsheet(buffer));
-        else setDocxHtml(await parseDocxHtml(buffer));
+        else if (kind === "pdf") {
+          objectUrl = URL.createObjectURL(new Blob([buffer], { type: "application/pdf" }));
+          setPdfObjectUrl(objectUrl);
+        } else setDocxHtml(await parseDocxHtml(buffer));
       } catch (err) {
         if (!cancelled) {
           setLocalError(err instanceof Error ? err.message : "Preview failed.");
@@ -145,6 +152,7 @@ export function DrivePreviewModal({
     void run();
     return () => {
       cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
   }, [preview, meta, canOfficeEmbed]);
 
@@ -179,12 +187,19 @@ export function DrivePreviewModal({
               className="max-h-[65vh] rounded-xl border border-border bg-white shadow-sm"
             />
           </div>
-        ) : presentation.kind === "pdf" && preview.signedUrl ? (
-          <iframe
-            title={presentation.displayTitle}
-            src={`${preview.signedUrl}#toolbar=1&navpanes=0`}
-            className="h-[70vh] w-full bg-white"
-          />
+        ) : presentation.kind === "pdf" && (pdfObjectUrl || preview.signedUrl) ? (
+          loadingLocal && !pdfObjectUrl ? (
+            <div className="flex h-[40vh] items-center justify-center gap-2 text-sm text-ink-3">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Loading PDF…
+            </div>
+          ) : (
+            <iframe
+              title={presentation.displayTitle}
+              src={`${pdfObjectUrl ?? preview.signedUrl}#toolbar=1&navpanes=0`}
+              className="h-[70vh] w-full bg-white"
+            />
+          )
         ) : presentation.kind === "spreadsheet" && sheet ? (
           <div className="max-h-[70vh] overflow-auto bg-white">
             <table className="min-w-full border-collapse text-left text-xs">

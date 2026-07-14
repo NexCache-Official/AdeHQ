@@ -478,18 +478,29 @@ export function RoomChat({
     const switched = scrollTopicKeyRef.current !== key;
     scrollTopicKeyRef.current = key;
     const scroller = messagesScrollRef.current;
-    if (!scroller) {
-      bottomRef.current?.scrollIntoView({
+    const jumpToBottom = () => {
+      if (!scroller) {
+        bottomRef.current?.scrollIntoView({
+          behavior: switched ? "auto" : "smooth",
+          block: "end",
+        });
+        return;
+      }
+      // Instant jump on chat switch; smooth only for new messages in the same thread.
+      scroller.scrollTo({
+        top: scroller.scrollHeight,
         behavior: switched ? "auto" : "smooth",
-        block: "end",
       });
-      return;
+    };
+    jumpToBottom();
+    // After DM/room switches, layout (file viewers, chips) often settles a frame
+    // later — re-jump so we don't leave a large empty gap above the composer.
+    if (switched) {
+      requestAnimationFrame(() => {
+        jumpToBottom();
+        requestAnimationFrame(jumpToBottom);
+      });
     }
-    // Instant jump on chat switch; smooth only for new messages in the same thread.
-    scroller.scrollTo({
-      top: scroller.scrollHeight,
-      behavior: switched ? "auto" : "smooth",
-    });
   }, [
     room.id,
     topic?.id,
@@ -1747,7 +1758,7 @@ export function RoomChat({
         </div>
       )}
 
-      <div ref={messagesScrollRef} className="flex-1 overflow-y-auto px-[26px] pb-2 pt-[18px]">
+      <div ref={messagesScrollRef} className="flex-1 overflow-y-auto px-[26px] pb-4 pt-[18px]">
         {isMayaHiringMode && !mayaHiring ? (
           <div className="flex h-full min-h-[200px] items-center justify-center gap-2 text-sm text-ink-3">
             <Loader2 className="h-4 w-4 animate-spin" />

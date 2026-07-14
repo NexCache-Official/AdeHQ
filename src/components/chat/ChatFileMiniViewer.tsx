@@ -122,17 +122,20 @@ export function ChatFileMiniViewer({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [signedUrl, setSignedUrl] = useState<string | null>(null);
+  const [pdfObjectUrl, setPdfObjectUrl] = useState<string | null>(null);
   const [previewText, setPreviewText] = useState<string | null>(null);
   const [sheet, setSheet] = useState<SheetPreview | null>(null);
   const [docxHtml, setDocxHtml] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
+    let objectUrl: string | null = null;
 
     const run = async () => {
       setLoading(true);
       setError(null);
       setSignedUrl(null);
+      setPdfObjectUrl(null);
       setPreviewText(null);
       setSheet(null);
       setDocxHtml(null);
@@ -164,12 +167,17 @@ export function ChatFileMiniViewer({
         setSignedUrl(url);
         setPreviewText(text);
 
-        if (url && (kind === "spreadsheet" || kind === "document")) {
+        if (url && (kind === "spreadsheet" || kind === "document" || kind === "pdf")) {
           try {
             const buffer = await arrayBufferFromUrl(url);
             if (cancelled) return;
             if (kind === "spreadsheet") {
               setSheet(await parseSpreadsheet(buffer));
+            } else if (kind === "pdf") {
+              // Blob URLs render more reliably than cross-origin signed URLs in iframes.
+              const blob = new Blob([buffer], { type: "application/pdf" });
+              objectUrl = URL.createObjectURL(blob);
+              setPdfObjectUrl(objectUrl);
             } else if (extension?.toLowerCase() === "docx" || mimeType?.includes("word")) {
               setDocxHtml(await parseDocxHtml(buffer));
             }
@@ -189,6 +197,7 @@ export function ChatFileMiniViewer({
     void run();
     return () => {
       cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
   }, [workspaceId, source.type, source.id, previewSource?.type, previewSource?.id, kind, extension, mimeType]);
 
@@ -246,11 +255,11 @@ export function ChatFileMiniViewer({
       );
     }
 
-    if (kind === "pdf" && signedUrl) {
+    if (kind === "pdf" && pdfObjectUrl) {
       return (
         <iframe
           title={displayTitle}
-          src={`${signedUrl}#toolbar=0&navpanes=0`}
+          src={`${pdfObjectUrl}#toolbar=0&navpanes=0`}
           className="h-56 w-full bg-white"
         />
       );
@@ -279,10 +288,15 @@ export function ChatFileMiniViewer({
       );
     }
 
-    // Markdown preview is only for sheets/docs when the binary parse failed.
-    if (previewText && (kind === "spreadsheet" || kind === "document" || kind === "other")) {
+    // Markdown twin for sheets/docs/PDFs when binary preview is unavailable.
+    if (previewText && (kind === "spreadsheet" || kind === "document" || kind === "pdf" || kind === "other")) {
       return (
         <div className="max-h-56 overflow-y-auto px-3 py-2">
+          {kind === "pdf" ? (
+            <p className="mb-2 text-[10px] font-medium uppercase tracking-wide text-ink-3">
+              Report outline
+            </p>
+          ) : null}
           <MessageMarkdown content={previewText.slice(0, 6000)} />
         </div>
       );
