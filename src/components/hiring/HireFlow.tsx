@@ -288,7 +288,7 @@ export function HireFlow({ onboarding = false, entrySource = "hire_route" }: Hir
     setBriefCompose({ active: true, section });
     composeTimerRef.current = setTimeout(() => {
       setBriefCompose({ active: false, section: null });
-    }, 2800);
+    }, 800);
   }, []);
 
   const goBack = useCallback(() => {
@@ -429,7 +429,14 @@ export function HireFlow({ onboarding = false, entrySource = "hire_route" }: Hir
     setBriefCompose({ active: true, section: "title" });
     composeTimerRef.current = setTimeout(() => {
       setBriefCompose({ active: false, section: null });
-    }, 2600);
+    }, 700);
+
+    // Local opening + chips are already on screen. Skip the redundant empty
+    // conversation network round-trip for known roles so Maya feels instant.
+    if (roleKey && roleKey !== "custom" && opts?.openingMessage) {
+      dispatch({ type: "SET_BUSY", busy: false });
+      return;
+    }
 
     dispatch({ type: "SET_BUSY", busy: true });
     try {
@@ -604,7 +611,7 @@ export function HireFlow({ onboarding = false, entrySource = "hire_route" }: Hir
       if (composeTimerRef.current) clearTimeout(composeTimerRef.current);
       composeTimerRef.current = setTimeout(() => {
         setBriefCompose({ active: false, section: null });
-      }, 3200);
+      }, 800);
     } else {
       setMayaState(userIntent === "generate_candidates" ? "ready_to_review" : "thinking");
     }
@@ -663,7 +670,7 @@ export function HireFlow({ onboarding = false, entrySource = "hire_route" }: Hir
         });
         setTimeout(() => {
           setBriefUpdateState(INITIAL_BRIEF_UPDATE_STATE);
-        }, 2400);
+        }, 600);
       }
       if (userIntent === "generate_candidates") {
         generateApplicants(true);
@@ -819,21 +826,23 @@ export function HireFlow({ onboarding = false, entrySource = "hire_route" }: Hir
     if (session.step !== "generating_applicants") return;
     genStepRef.current = 0;
     dispatch({ type: "SET_GEN_STEP", genStep: 0 });
+    // Faster progress animation — does not gate shortlist once candidates exist.
     const timer = setInterval(() => {
       genStepRef.current = Math.min(genStepRef.current + 1, 6);
       dispatch({ type: "SET_GEN_STEP", genStep: genStepRef.current });
-    }, 620);
+    }, 280);
     return () => clearInterval(timer);
   }, [session.step]);
 
   useEffect(() => {
-    if (
-      session.step === "generating_applicants" &&
-      session.genStep >= 6 &&
-      visibleCandidates.length > 0
-    ) {
-      dispatch({ type: "SET_STEP", step: "shortlist" });
+    if (session.step !== "generating_applicants") return;
+    if (visibleCandidates.length === 0) return;
+    // Jump ahead as soon as the API returns — don't wait out the animation.
+    if (session.genStep < 6) {
+      genStepRef.current = 6;
+      dispatch({ type: "SET_GEN_STEP", genStep: 6 });
     }
+    dispatch({ type: "SET_STEP", step: "shortlist" });
   }, [session.step, session.genStep, visibleCandidates.length]);
 
   const confirmHire = async () => {
@@ -1268,10 +1277,10 @@ function RecruiterChat({
 
   const thinkingLabel =
     mayaState === "acknowledging"
-      ? `${MAYA_EMPLOYEE_NAME} is updating the brief…`
+      ? `${MAYA_EMPLOYEE_NAME} is reading that…`
       : mayaState === "updating_brief"
-        ? `${MAYA_EMPLOYEE_NAME} is refining the brief…`
-        : `${MAYA_EMPLOYEE_NAME} is thinking…`;
+        ? `${MAYA_EMPLOYEE_NAME} is updating the brief…`
+        : `${MAYA_EMPLOYEE_NAME} is writing a reply…`;
 
   return (
     <div className="flex h-[min(720px,calc(100vh-11rem))] flex-col overflow-hidden rounded-[18px] border border-border bg-surface shadow-md lg:sticky lg:top-24">

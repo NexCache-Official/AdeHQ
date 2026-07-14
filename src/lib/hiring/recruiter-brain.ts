@@ -68,7 +68,10 @@ export function assessRecruiterReadiness(
   let score = 0;
   const missing: RecruiterMissingField[] = [];
   const userTurns = meaningfulUserTurns(conversation);
-  const minTurns = 3;
+  // Known library roles already carry structure — 2 solid answers is enough.
+  // Custom roles still need a third turn so domain/focus aren't guesswork.
+  const knownLibraryRole = Boolean(roleKey && roleKey !== "custom");
+  const minTurns = knownLibraryRole ? 2 : 3;
 
   const roleKnown = hasRealValue(currentBrief.roleTitle);
   const focusKnown = hasRoleFocusFromContext(currentBrief, conversation);
@@ -116,7 +119,7 @@ export function assessRecruiterReadiness(
   const ready =
     userTurns >= minTurns &&
     coreComplete &&
-    (seniorityKnown || userTurns >= 3);
+    (seniorityKnown || userTurns >= minTurns);
 
   const confidence: RecruiterReadiness["confidence"] =
     score >= 78 ? "high" : score >= 45 ? "medium" : "low";

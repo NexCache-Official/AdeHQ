@@ -284,8 +284,16 @@ function buildResponse(input: {
     }
   }
 
+  // Keep Review available once the brief is actually ready — Maya often ends
+  // with a soft follow-up question ("Want me to tweak anything?") which used
+  // to hide the CTA even when core fields were complete.
   const messageStillAsksQuestion = /\?\s*$/.test(message ?? "");
-  if (messageStillAsksQuestion && !input.forceCanReview && !explicitReviewIntent) {
+  if (
+    messageStillAsksQuestion &&
+    !input.forceCanReview &&
+    !explicitReviewIntent &&
+    !baseReadiness.ready
+  ) {
     canReviewBrief = false;
     readiness = finalizeReadinessScore(baseReadiness, brief, false);
   }

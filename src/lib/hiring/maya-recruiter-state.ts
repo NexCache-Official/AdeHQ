@@ -48,10 +48,10 @@ export function isHiringSmallTalk(text: string): boolean {
 }
 
 const OPTIMISTIC_ACKS = [
-  "Got it — updating the brief with that.",
-  "Makes sense — folding this in now.",
-  "Helpful — I'll reflect that in the role brief.",
-  "Clear — shaping the brief around that.",
+  "Got it — one moment while I update the brief.",
+  "Yep, that helps. Locking it into the role now.",
+  "Makes sense — shaping the brief around that.",
+  "Clear. I'll reflect that and come back with the next question.",
 ];
 
 export function pickOptimisticAck(seed?: string): string {

@@ -172,7 +172,8 @@ export function inferenceOpeningMessage(text: string, result: RoleInferenceResul
     return "That could mean Sales, Marketing, or Customer Success. Are you trying to find new leads, convert leads, or retain existing customers?";
   }
   if (result.matchType === "custom") {
-    return `I can create this as a custom role, or we can start from a similar hire. What fits best?`;
+    const title = result.customSuggestion?.trim() || "a custom hire";
+    return `Got it — I'll treat this as ${/^[aeiou]/i.test(title) ? "an" : "a"} ${title}. What should they own day to day?`;
   }
   return "What outcome are you trying to achieve? I can help narrow down the right role.";
 }

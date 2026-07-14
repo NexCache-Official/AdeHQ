@@ -25,6 +25,10 @@ function conversationForChipGeneration(
   return [...conversation, { role: "ade", text: trimmed }];
 }
 
+/**
+ * Prefer local chip parsing / fallbacks before burning a second LLM call.
+ * Chip planner only runs when we cannot extract at least two valid options.
+ */
 export async function resolveRecruiterSuggestionChips(input: {
   readiness: RecruiterReadiness;
   brief: AiEmployeeJobBrief;
@@ -43,6 +47,16 @@ export async function resolveRecruiterSuggestionChips(input: {
   const lastAde = input.lastAdeMessage.trim();
 
   if (mode === "ready_to_review") {
+    const generated = generateSuggestionChips(
+      input.readiness,
+      input.brief,
+      chipConversation,
+      input.roleKey,
+      true,
+    );
+    if (generated.length >= 2 && areValidUserResponseChips(generated, lastAde)) {
+      return generated;
+    }
     const planned = await planRecruiterSuggestionChips({
       lastAdeMessage: input.lastAdeMessage,
       roleTitle: input.brief.roleTitle,
@@ -59,13 +73,30 @@ export async function resolveRecruiterSuggestionChips(input: {
     if (planned?.length && areValidUserResponseChips(planned, lastAde)) {
       return planned;
     }
-    return generateSuggestionChips(
-      input.readiness,
-      input.brief,
-      chipConversation,
-      input.roleKey,
-      true,
-    );
+    return generated.length ? generated : fallbackRecruiterSuggestionChips({
+      conversation: chipConversation,
+      roleKey: input.roleKey,
+      readiness: input.readiness,
+      brief: input.brief,
+      canReviewBrief: input.canReviewBrief,
+    });
+  }
+
+  // Gathering: parse options from Maya's question first (no LLM).
+  const parsed = parseRecruiterSuggestionChips(chipConversation, input.roleKey);
+  if (parsed.length >= 2 && areValidUserResponseChips(parsed, lastAde)) {
+    return parsed;
+  }
+
+  const fallback = fallbackRecruiterSuggestionChips({
+    conversation: chipConversation,
+    roleKey: input.roleKey,
+    readiness: input.readiness,
+    brief: input.brief,
+    canReviewBrief: input.canReviewBrief,
+  });
+  if (fallback.length >= 2 && areValidUserResponseChips(fallback, lastAde)) {
+    return fallback;
   }
 
   const planned = await planRecruiterSuggestionChips({
@@ -85,16 +116,5 @@ export async function resolveRecruiterSuggestionChips(input: {
     return planned;
   }
 
-  const parsed = parseRecruiterSuggestionChips(chipConversation, input.roleKey);
-  if (parsed.length >= 2 && areValidUserResponseChips(parsed, lastAde)) {
-    return parsed;
-  }
-
-  return fallbackRecruiterSuggestionChips({
-    conversation: chipConversation,
-    roleKey: input.roleKey,
-    readiness: input.readiness,
-    brief: input.brief,
-    canReviewBrief: input.canReviewBrief,
-  });
+  return fallback.length ? fallback : parsed;
 }

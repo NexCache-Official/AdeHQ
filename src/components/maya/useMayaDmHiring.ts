@@ -320,7 +320,7 @@ export function useMayaDmHiring({
           setBriefCompose({ active: true, section });
           composeTimerRef.current = setTimeout(() => {
             setBriefCompose({ active: false, section: null });
-          }, 2800);
+          }, 700);
         }
         prevBriefRef.current = { ...nextBrief };
       }
@@ -844,7 +844,7 @@ export function useMayaDmHiring({
         setBriefCompose({ active: true, section: composeSection });
         composeTimerRef.current = setTimeout(() => {
           setBriefCompose({ active: false, section: null });
-        }, 3200);
+        }, 800);
       } else {
         setMayaState(userIntent === "generate_candidates" ? "ready_to_review" : "thinking");
       }
@@ -890,7 +890,7 @@ export function useMayaDmHiring({
             sectionsUpdating,
             lastUpdatedAt: new Date().toISOString(),
           });
-          setTimeout(() => setBriefUpdateState(INITIAL_BRIEF_UPDATE_STATE), 2400);
+          setTimeout(() => setBriefUpdateState(INITIAL_BRIEF_UPDATE_STATE), 600);
         }
         if (userIntent === "generate_candidates") {
           await generateCandidates(true);

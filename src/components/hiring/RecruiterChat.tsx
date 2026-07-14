@@ -98,12 +98,12 @@ export function RecruiterChat({
 
   const thinkingLabel =
     mayaState === "acknowledging"
-      ? `${MAYA_EMPLOYEE_NAME} is reviewing the role…`
+      ? `${MAYA_EMPLOYEE_NAME} is reading that…`
       : mayaState === "updating_brief"
         ? `${MAYA_EMPLOYEE_NAME} is updating the brief…`
         : mayaState === "thinking"
-          ? `${MAYA_EMPLOYEE_NAME} is thinking…`
-          : `${MAYA_EMPLOYEE_NAME} is preparing candidates…`;
+          ? `${MAYA_EMPLOYEE_NAME} is writing a reply…`
+          : `${MAYA_EMPLOYEE_NAME} is finding candidates…`;
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-canvas">
@@ -321,8 +321,8 @@ function RecruiterMessageRow({
           message.isOptimistic && !isUser && "border-accent/30 bg-accent-soft/25 italic",
         )}
       >
-        {typeOut && !hasChatMarkdown(message.text) ? (
-          <TypewriterText text={message.text} active speed={3} />
+        {typeOut && !hasChatMarkdown(message.text) && message.text.length < 220 ? (
+          <TypewriterText text={message.text} active speed={1} />
         ) : (
           <ChatMarkdown text={message.text} />
         )}
