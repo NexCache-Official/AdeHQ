@@ -535,6 +535,32 @@ export function RoomChat({
     };
   }, [backend, room.id, state.workspace?.id, topic?.id]);
 
+  // Pending topic suggestions must survive refresh — they live in DB, not only
+  // in the send-message response payload.
+  useEffect(() => {
+    if (!topic || backend !== "supabase" || !state.workspace?.id || isDm) {
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const headers = await authHeaders();
+        const res = await fetch(`/api/rooms/${room.id}/topic-suggestions`, { headers });
+        const payload = await res.json().catch(() => ({}));
+        if (cancelled || !res.ok) return;
+        const incoming = Array.isArray(payload.suggestions)
+          ? (payload.suggestions as TopicSuggestionPayload[])
+          : [];
+        setTopicSuggestions(incoming);
+      } catch {
+        // non-blocking
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [backend, room.id, state.workspace?.id, topic?.id, isDm]);
+
   useEffect(() => {
     if (!topic || backend !== "supabase" || isDm) return;
     orchestrationUi.clearSession();
@@ -1492,6 +1518,7 @@ export function RoomChat({
         title: suggestion.title,
         description: suggestion.metadata?.description?.trim() || "",
         priority: "normal",
+        aiEmployeeIds: roomEmployees.map((employee) => employee.id),
         contextImport: {
           suggestionId: suggestion.id,
           sourceRoomId: room.id,

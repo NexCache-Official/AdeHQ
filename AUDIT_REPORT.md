@@ -4,6 +4,46 @@ Evaluator: Claude acting as Principal QA + Product Designer + CEO
 Started: 2026-07-10
 Scope of this pass: Phase 1 (partial), Phase 2/3 (partial via Maya/Elena/David), Phase 5 (collaboration, via pre-seeded room), Hire flow (Phase 8-adjacent). Real estate only, per user direction. Other 11 phases and 6 additional industries not yet covered — continuing in next pass.
 
+## Session 2026-07-15 — Hybrid workforce + topic/memory suggestion retest
+
+**Persona:** Owner, RealEstatePros Ltd (Canterbury lettings/sales). Production `https://app.adehq.com`. Screenshots under `/tmp/adehq-hybrid-e2e`, `/tmp/adehq-topic-session`.
+
+### What worked
+
+- Multi-employee collaboration on a real product/sales problem (**Landlord Care Plus**, then **Harborline Guarantor Shield**): Wren (SDR), Adrian (Ops), Emily (negotiation) all responded with distinct angles, price bands, and ownership splits.
+- Topic steward **did** fire an LLM suggestion with “Will move N messages” + **Create topic & continue there**.
+- Accepting navigated into a new topic; DB confirms system message + message `topic_id` updates (`Moved 7 related messages…`).
+- Tasks board reflected an in-progress “lock a working draft…” card from the chat.
+- Workforce page capacity/hiring pipeline looks credible for a hybrid-ops product.
+
+### Major bugs found this session
+
+| Sev | Bug | Evidence | Likely cause | Fix direction | Status |
+|---|---|---|---|---|---|
+| **P1** | **Pending topic suggestions vanish after navigation/refresh** | Landlord Care Plus suggestions stayed `pending` in DB but UI showed no banner on reopen | No client fetch on room mount | `GET /api/rooms/[roomId]/topic-suggestions` + RoomChat hydrate | **Fixed 2026-07-15** |
+| **P1** | **Suggested topic titles truncated mid-phrase** | Title stored as `…Whitstable landlord (6` | Hard cut without rewrite | `cleanTopicTitle` / `cleanTopicDescription` in steward + topics POST | **Fixed 2026-07-15** |
+| **P1** | **Migration pulls the wrong adjacent workstream** | Harborline topic mixed Landlord Care Plus messages | Broad message-id window | Title-token filter in steward + `filterMessageIdsForTopicMigration` | **Fixed 2026-07-15** |
+| **P1** | **New topic has no AI members** | Only human owner after accept | Suggestion create omitted `aiEmployeeIds` | Default room AI members on topics POST + client pass-through | **Fixed 2026-07-15** |
+| **P1** | **AI claims memory saved; none exists** | “saved … durable context” with 0 memories | Narrated save without insert | `scrubFalseMemoryClaims` + prompt honesty | **Fixed 2026-07-15** |
+| **P1** | **Right-rail Brief Summary is stale** | Zone 2 summary while chat moved on | Cooldown ignored new messages | Bypass cooldown when latest msg not in `sourceMessageIds`; stale UI cue | **Fixed 2026-07-15** |
+| **P2** | **Description duplicates truncated title** | Template echo | Fallback description | Cleaner description helper | **Fixed 2026-07-15** |
+| **P2** | **Junk historical pending suggestions** | `Emily`, `Team`, etc. | Old heuristics | Migration + GET auto-dismiss junk titles | **Fixed 2026-07-15** |
+
+### UX / hybrid-workforce notes
+
+- Layout (sidebar / topics / chat / summary) is dense but readable; Collaboration mode chip is clear.
+- Topic banner CTA **Create topic & continue there** is the right owner language; truncation undermines trust.
+- Manual chips under composer (`Summarize topic` / `Create task` / `Save memory`) insert slash-style actions — easy to confuse with AI “suggested memory” banners.
+- Inbox badge `2` and DM unread `5` create ambient urgency; fine if accurate.
+- Console: intermittent `Failed to fetch RSC payload for /rooms/... Falling back to browser navigation` on first navigation after login.
+
+### Not fully validated
+
+- Chat **memory suggestion chip** workflow (accept/save) — never surfaced; only manual Save memory path exercised.
+- Accepting a **pending** Landlord Care suggestion after reload (blocked by hydration bug above).
+
+---
+
 ## Remaining work / open items (as of 2026-07-11)
 
 Everything below is **not yet fixed**. Ordered roughly by severity/impact. Each item names the exact symptom, root-cause hypothesis (or confirmed cause where I dug in), and suggested fix direction, so this is directly actionable by whoever picks it up next.

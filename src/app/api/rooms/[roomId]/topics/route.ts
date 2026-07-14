@@ -17,8 +17,10 @@ import { scheduleTopicSummaryRefresh } from "@/lib/topic-summary/refresh";
 import {
   createTopicContextImport,
   fetchMessagesForImportSelection,
+  filterMessageIdsForTopicMigration,
   selectMessagesForTopicImport,
 } from "@/lib/topics/context-imports";
+import { cleanTopicDescription, cleanTopicTitle } from "@/lib/orchestration/topic-title";
 import { nowISO, uid } from "@/lib/utils";
 import type { TopicPriority } from "@/lib/types";
 
@@ -113,11 +115,24 @@ export async function POST(
     const { role } = await requireWorkspaceMembership(client, workspaceId, user.id);
     await assertCanAccessRoom(client, workspaceId, params.roomId, user.id, role);
 
-    const aiEmployeeIds = [...new Set((body.aiEmployeeIds ?? []).filter(Boolean))];
+    let aiEmployeeIds = [...new Set((body.aiEmployeeIds ?? []).filter(Boolean))];
+    // Suggestion accepts often omit members — default to the room's AI employees
+    // so the new topic is a usable hybrid workstream, not an empty shell.
+    if (!aiEmployeeIds.length) {
+      const { data: roomAi } = await client
+        .from("room_members")
+        .select("member_id")
+        .eq("workspace_id", workspaceId)
+        .eq("room_id", params.roomId)
+        .eq("member_type", "ai");
+      aiEmployeeIds = [...new Set((roomAi ?? []).map((row) => String(row.member_id)).filter(Boolean))];
+    }
     await ensureRoomAiMembers(client, workspaceId, params.roomId, aiEmployeeIds);
 
-    const title = body.title.trim();
+    const cleanedTitle = cleanTopicTitle(body.title) ?? body.title.trim();
+    const title = cleanedTitle;
     const slug = slugifyTopicTitle(title);
+    const description = cleanTopicDescription(body.description, title);
 
     const { data: topicRow, error: topicError } = await client
       .from("topics")
@@ -126,7 +141,7 @@ export async function POST(
         room_id: params.roomId,
         title,
         slug,
-        description: body.description?.trim() || null,
+        description: description || null,
         priority: body.priority ?? "normal",
         created_by_type: "human",
         created_by_id: user.id,
@@ -177,12 +192,22 @@ export async function POST(
       try {
         const { data: movable, error: movableError } = await client
           .from("messages")
-          .select("id")
+          .select("id, content, sender_type")
           .eq("workspace_id", workspaceId)
           .eq("room_id", params.roomId)
           .in("id", candidateIds);
         if (movableError) throw movableError;
-        migratedMessageIds = (movable ?? []).map((row) => String(row.id));
+        const scopedIds = filterMessageIdsForTopicMigration({
+          messages: (movable ?? []).map((row) => ({
+            id: String(row.id),
+            content: String(row.content ?? ""),
+            senderType: row.sender_type ? String(row.sender_type) : undefined,
+          })),
+          candidateIds,
+          suggestedTopicTitle: body.contextImport.suggestedTitle ?? title,
+          triggerMessageId: body.contextImport.triggerMessageId,
+        });
+        migratedMessageIds = scopedIds;
         if (migratedMessageIds.length) {
           const { error: migrateError } = await client
             .from("messages")
@@ -274,7 +299,7 @@ export async function POST(
       roomId: params.roomId,
       topicId: topic.id,
       topicTitle: title,
-      topicDescription: body.description?.trim() || null,
+      topicDescription: description || null,
       trigger: "topic_created",
       employeeId: user.id,
     });

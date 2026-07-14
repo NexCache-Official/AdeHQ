@@ -191,3 +191,36 @@ export function reconcileClaimedActions(
 
   return { reply: HONEST_REPLY, notice, falseClaim: true };
 }
+
+const MEMORY_SAVE_CLAIM =
+  /\b(i'?ve\s+saved|i\s+saved|saved\s+that|saved\s+this|saved\s+as\s+durable|locked\s+(?:that|it|this)\s+in|noted\s+in\s+memory|added\s+to\s+memory|stored\s+in\s+memory|saved\s+to\s+memory)\b/i;
+
+/**
+ * Strip or rewrite claims that memory / "durable context" was saved when nothing
+ * was actually written to memory_entries this turn.
+ */
+export function scrubFalseMemoryClaims(reply: string, memoryCount: number): string {
+  if (memoryCount > 0) return reply;
+  if (!MEMORY_SAVE_CLAIM.test(reply) && !/durable context/i.test(reply)) {
+    return reply;
+  }
+
+  const cleaned = reply
+    .replace(
+      /[^.!?\n]{0,40}(?:saved|locked in|stored)[^.!?\n]{0,80}(?:memory|durable context)[^.!?\n]*[.!?]?\s*/gi,
+      "",
+    )
+    .replace(/\bdurable context\b/gi, "context")
+    .replace(/\n{3,}/g, "\n\n")
+    .replace(/[ \t]{2,}/g, " ")
+    .trim();
+
+  if (!cleaned) {
+    return "Noted — I can suggest this for memory if you want it saved for later.";
+  }
+
+  if (!/suggest(?:ion)? for memory|save (?:this )?to memory|memory suggestion/i.test(cleaned)) {
+    return `${cleaned}${/[.!?]$/.test(cleaned) ? "" : "."} (Not saved to memory yet — use Save memory if you want it kept.)`;
+  }
+  return cleaned;
+}

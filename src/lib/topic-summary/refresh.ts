@@ -108,20 +108,28 @@ export async function refreshTopicSummary(
 
   const existing = await fetchTopicSummary(client, params.workspaceId, params.topicId);
 
-  if (
-    !manual &&
-    existing?.lastRefreshedAt &&
-    Date.now() - +new Date(existing.lastRefreshedAt) < TOPIC_SUMMARY_AUTO_COOLDOWN_MS
-  ) {
-    return { summary: existing, refreshed: false, skippedReason: "cooldown" };
-  }
-
   const ctx = await loadTopicSummaryGenerationContext(
     client,
     params.workspaceId,
     params.topicId,
     params.roomId,
   );
+
+  // Bypass cooldown when new messages arrived that the summary has not covered.
+  const latestMessageId = ctx.messages.at(-1)?.id;
+  const summaryCoversLatest =
+    !latestMessageId ||
+    Boolean(existing?.sourceMessageIds?.includes(latestMessageId));
+
+  if (
+    !manual &&
+    !force &&
+    summaryCoversLatest &&
+    existing?.lastRefreshedAt &&
+    Date.now() - +new Date(existing.lastRefreshedAt) < TOPIC_SUMMARY_AUTO_COOLDOWN_MS
+  ) {
+    return { summary: existing, refreshed: false, skippedReason: "cooldown" };
+  }
 
   const chatClearedAt = await fetchTopicChatClearedAtColumn(client, params.workspaceId, params.topicId);
   if (chatClearedAt && ctx.messages.length === 0) {

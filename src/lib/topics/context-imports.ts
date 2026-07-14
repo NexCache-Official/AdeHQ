@@ -155,6 +155,76 @@ export function buildContextSummaryFromMessages(
   };
 }
 
+function titleTokensFromSuggested(title?: string): string[] {
+  if (!title?.trim()) return [];
+  const stop = new Set([
+    "the",
+    "and",
+    "for",
+    "with",
+    "from",
+    "into",
+    "a",
+    "an",
+    "of",
+    "to",
+    "in",
+    "on",
+    "at",
+    "plus",
+    "package",
+    "launch",
+    "pricing",
+    "ops",
+    "sales",
+    "limits",
+  ]);
+  return title
+    .toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, " ")
+    .split(/[\s-]+/)
+    .map((t) => t.trim())
+    .filter((t) => t.length >= 4 && !stop.has(t))
+    .slice(0, 8);
+}
+
+function matchesTitleTokens(content: string, tokens: string[]): boolean {
+  if (!tokens.length) return true;
+  const lower = content.toLowerCase();
+  const hits = tokens.filter((t) => lower.includes(t)).length;
+  return tokens.length <= 2 ? hits >= 1 : hits >= Math.min(2, tokens.length);
+}
+
+/**
+ * Re-filter candidate message ids against a topic title before migrating.
+ * Keeps the trigger id always; drops clearly unrelated prior workstreams.
+ */
+export function filterMessageIdsForTopicMigration(params: {
+  messages: Array<{ id: string; content: string; senderType?: string }>;
+  candidateIds: string[];
+  suggestedTopicTitle: string;
+  triggerMessageId?: string;
+}): string[] {
+  const tokens = titleTokensFromSuggested(params.suggestedTopicTitle);
+  const byId = new Map(params.messages.map((m) => [m.id, m]));
+  const kept: string[] = [];
+  for (const id of params.candidateIds) {
+    const message = byId.get(id);
+    if (!message) continue;
+    if (params.triggerMessageId && id === params.triggerMessageId) {
+      kept.push(id);
+      continue;
+    }
+    if (!tokens.length || matchesTitleTokens(message.content, tokens)) {
+      kept.push(id);
+    }
+  }
+  if (params.triggerMessageId && !kept.includes(params.triggerMessageId)) {
+    kept.push(params.triggerMessageId);
+  }
+  return [...new Set(kept)];
+}
+
 export function selectMessagesForTopicImport(params: {
   messages: TopicImportMessage[];
   triggerMessageId: string;
@@ -172,17 +242,42 @@ export function selectMessagesForTopicImport(params: {
   const triggerIndex = ordered.findIndex((message) => message.id === params.triggerMessageId);
   if (triggerIndex < 0) return [trigger];
 
-  const activeEntities = extractProjectEntities(trigger.content);
+  const titleTokens = titleTokensFromSuggested(params.suggestedTopicTitle);
+  const activeEntities = [
+    ...extractProjectEntities(trigger.content),
+    ...extractProjectEntities(params.suggestedTopicTitle ?? ""),
+    ...titleTokens,
+  ];
   const windowStart = Math.max(0, triggerIndex - maxMessages + 1);
   let candidates = ordered.slice(windowStart, triggerIndex + 1);
 
-  const firstWorkIndex = candidates.findIndex(
-    (message) => !isGreetingOnly(message.content) && WORKSTREAM_KEYWORDS.test(message.content),
-  );
-  if (firstWorkIndex >= 0) {
-    candidates = candidates.slice(firstWorkIndex);
+  // Prefer the contiguous recent cluster that matches the suggested title.
+  if (titleTokens.length) {
+    let clusterStart = triggerIndex;
+    for (let i = triggerIndex; i >= windowStart; i -= 1) {
+      const message = ordered[i];
+      if (isGreetingOnly(message.content)) break;
+      if (
+        message.id === params.triggerMessageId ||
+        matchesTitleTokens(message.content, titleTokens) ||
+        messageMatchesEntity(message.content, activeEntities)
+      ) {
+        clusterStart = i;
+        continue;
+      }
+      // Stop when we hit a human message about a different workstream.
+      if (message.senderType === "human" && message.content.length > 40) break;
+    }
+    candidates = ordered.slice(clusterStart, triggerIndex + 1);
   } else {
-    candidates = candidates.filter((message) => !isGreetingOnly(message.content));
+    const firstWorkIndex = candidates.findIndex(
+      (message) => !isGreetingOnly(message.content) && WORKSTREAM_KEYWORDS.test(message.content),
+    );
+    if (firstWorkIndex >= 0) {
+      candidates = candidates.slice(firstWorkIndex);
+    } else {
+      candidates = candidates.filter((message) => !isGreetingOnly(message.content));
+    }
   }
 
   candidates = candidates.filter(
@@ -191,12 +286,17 @@ export function selectMessagesForTopicImport(params: {
       !isStaleForEntities(message.content, activeEntities),
   );
 
-  candidates = candidates.filter(
-    (message) =>
-      message.id === params.triggerMessageId ||
-      messageMatchesEntity(message.content, activeEntities) ||
-      message.senderType === "ai",
-  );
+  candidates = candidates.filter((message) => {
+    if (message.id === params.triggerMessageId) return true;
+    if (titleTokens.length) {
+      // AI replies after a matching human turn stay if nearby; otherwise require tokens.
+      if (message.senderType === "ai") {
+        return matchesTitleTokens(message.content, titleTokens) || message.content.length < 280;
+      }
+      return matchesTitleTokens(message.content, titleTokens);
+    }
+    return messageMatchesEntity(message.content, activeEntities) || message.senderType === "ai";
+  });
 
   const selected: TopicImportMessage[] = [];
   const seen = new Set<string>();
@@ -213,6 +313,10 @@ export function selectMessagesForTopicImport(params: {
   const aiFollowUps = ordered.slice(triggerIndex + 1, triggerIndex + 3).filter((message) => {
     if (message.senderType !== "ai") return false;
     if (isStaleForEntities(message.content, activeEntities)) return false;
+    if (titleTokens.length && !matchesTitleTokens(message.content, titleTokens)) {
+      // Keep short acknowledgements that immediately follow the trigger.
+      return message.content.length < 220;
+    }
     return true;
   });
   for (const message of aiFollowUps) {

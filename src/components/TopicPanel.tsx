@@ -468,6 +468,9 @@ export function TopicPanel({
     : topic.updatedAt
       ? timeAgo(topic.updatedAt)
       : null;
+  const summaryStale =
+    Boolean(topicSummary?.lastRefreshedAt) &&
+    Date.now() - +new Date(topicSummary!.lastRefreshedAt!) > 15 * 60 * 1000;
 
   const handleMemorySaved = (saved?: MemoryEntry, duplicate?: boolean) => {
     if (saved) actions.mergeMemoryEntry(saved);
@@ -528,8 +531,18 @@ export function TopicPanel({
             <span>
               {topicMemory.length} saved memor{topicMemory.length === 1 ? "y" : "ies"}
             </span>
-            {lastUpdatedLabel && <span>Updated {lastUpdatedLabel}</span>}
+            {lastUpdatedLabel && (
+              <span className={summaryStale ? "text-amber-700" : undefined}>
+                {summaryStale ? "May be outdated · " : ""}
+                Updated {lastUpdatedLabel}
+              </span>
+            )}
           </div>
+          {summaryStale ? (
+            <p className="mt-1.5 text-[10.5px] text-amber-800">
+              Summary may not reflect the latest chat — regenerate to refresh.
+            </p>
+          ) : null}
           <div className="mt-2.5 flex flex-wrap gap-1.5">
             <Button
               variant="secondary"
@@ -542,7 +555,7 @@ export function TopicPanel({
               ) : (
                 <Sparkles className="h-3.5 w-3.5" />
               )}
-              Summarize
+              {summaryStale ? "Refresh summary" : "Summarize"}
             </Button>
             <Button
               variant="ghost"

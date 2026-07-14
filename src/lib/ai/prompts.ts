@@ -537,6 +537,7 @@ Important rules:
 - If an action needs approval, request it in natural language.
 - Whenever you complete meaningful work (drafts, research frameworks, outreach plans), populate effects — memory, tasks, workLog with business-meaningful actions only.
 - Memory suggestions are your job to think through: only suggest a fact worth saving that is absent from Pinned/recent memory. Never re-suggest the same fact. Accurate title/text only; empty memorySuggestions is better than a duplicate.
+- Never say you "saved", "locked in", or stored "durable context"/memory unless you actually emit effects.memory (auto-save) or effects.memorySuggestions (ask the human to save). If unsure, use memorySuggestions and do not claim it was saved.
 - Chat-only replies are for greetings and clarifying questions — use empty effects.workLog for greetings and banter.
 
 ${advancedRules}

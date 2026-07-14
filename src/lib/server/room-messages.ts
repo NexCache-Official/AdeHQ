@@ -47,6 +47,7 @@ import { resolveParticipantReferences } from "@/lib/orchestration/participant-re
 import { executeEmployeeToolCalls } from "@/lib/integrations/manager";
 import {
   reconcileClaimedActions,
+  scrubFalseMemoryClaims,
   TOOL_BACKED_WORK_LOG_ACTIONS,
 } from "@/lib/integrations/reconcile-claimed-actions";
 import { handleAutopilotEffect, resolveAutopilotEmployee } from "@/lib/server/autopilot-effect";
@@ -1310,6 +1311,18 @@ export async function persistEmployeeEffects(
     });
     reply = reconciled.reply;
     if (reconciled.notice) artifacts.push(reconciled.notice);
+  }
+
+  const memoryHonestReply = scrubFalseMemoryClaims(reply, createdMemoryIds.length);
+  if (memoryHonestReply !== reply) {
+    console.warn("[AdeHQ room-messages] false memory-save claim scrubbed", {
+      workspaceId,
+      roomId,
+      topicId,
+      employeeId: employee.id,
+      triggerMessageId,
+    });
+    reply = memoryHonestReply;
   }
 
   // Whole-turn model failure (see model-router.ts's errorResponse): the reply

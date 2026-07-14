@@ -10,6 +10,12 @@ import {
   type TopicImportMessage,
 } from "@/lib/topics/context-imports";
 import type { RoomTopic } from "@/lib/types";
+import {
+  cleanTopicDescription,
+  cleanTopicTitle,
+  messageMatchesTitleTokens,
+  titleRelevanceTokens,
+} from "./topic-title";
 import type { OrchestrationIntent, OrchestratorInput, TopicStewardSuggestion } from "./types";
 
 const SKIP_INTENTS: OrchestrationIntent[] = [
@@ -45,12 +51,12 @@ Do NOT suggest when:
 - You would only be guessing a vague title like "Project Discussion" or "Follow Up"
 
 When deservesSeparateTopic is true:
-- title: specific, accurate, 2–6 words reflecting the ACTUAL subject (never keyword spam or generic labels)
-- description: one clear sentence of what this topic is for
+- title: specific, accurate, 2–6 words reflecting the ACTUAL subject (never keyword spam, never person names alone, never truncated mid-phrase or open parentheses)
+- description: one clear sentence of what this topic is for — different from the title, not "Focused workstream for {title}"
 - reason: short human explanation of why a separate topic helps
 - contextSummary: 1–2 sentences of what to carry over
 - previewBullets: 1–3 short labels of what will move (e.g. "pricing options", "open questions")
-- relevantMessageIds: only message ids from the provided list that are relevant to this workstream (include the latest user message when relevant)
+- relevantMessageIds: ONLY message ids from the provided list that clearly belong to THIS workstream (same product/offer/decision). Exclude earlier unrelated threads in General. Always include the latest user message when it belongs.
 - existingTopicId: set when an existing non-General topic already covers this work (then deservesSeparateTopic must be false)
 
 When deservesSeparateTopic is false, leave title/description empty and set confidence to how sure you are that no new topic is needed.`;
@@ -110,10 +116,22 @@ function resolveMessageIds(
   const recentInTopic = input.recentMessages.filter(
     (m) => !input.topicId || m.topicId === input.topicId,
   );
-  const known = new Set(recentInTopic.map((m) => m.id));
-  known.add(input.messageId);
+  const known = new Map(recentInTopic.map((m) => [m.id, m]));
+  known.set(input.messageId, {
+    id: input.messageId,
+    senderType: "human",
+    text: input.messageText,
+    createdAt: new Date().toISOString(),
+    topicId: input.topicId ?? undefined,
+  });
 
-  const fromLlm = (llmIds ?? []).filter((id) => known.has(id));
+  const tokens = titleRelevanceTokens(title);
+  const fromLlm = (llmIds ?? []).filter((id) => {
+    const message = known.get(id);
+    if (!message) return false;
+    if (id === input.messageId) return true;
+    return messageMatchesTitleTokens(message.text, tokens);
+  });
   if (fromLlm.length >= 2) {
     if (!fromLlm.includes(input.messageId)) fromLlm.push(input.messageId);
     return [...new Set(fromLlm)].slice(-12);
@@ -202,12 +220,10 @@ export async function suggestTopics(
     if (!decision.deservesSeparateTopic) return [];
     if (decision.confidence < 0.72) return [];
 
-    const title = decision.title?.trim();
-    if (!title || title.length < 3) return [];
-    if (/^(project|follow.?up|discussion|general|workstream|misc)\b/i.test(title)) {
-      return [];
-    }
+    const title = cleanTopicTitle(decision.title ?? "");
+    if (!title) return [];
 
+    const description = cleanTopicDescription(decision.description, title);
     const messageIds = resolveMessageIds(input, decision.relevantMessageIds, title);
     const selected = toImportMessages(recentInTopic).filter((m) => messageIds.includes(m.id));
     const { summary } = buildContextSummaryFromMessages(selected, title);
@@ -216,9 +232,7 @@ export async function suggestTopics(
       {
         type: "create_topic",
         title,
-        description:
-          decision.description?.trim() ||
-          `Focused workstream for ${title}.`,
+        description,
         reason:
           decision.reason?.trim() ||
           (onGeneral

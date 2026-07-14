@@ -32,6 +32,9 @@ builder, not an MCP client, not a Slack clone — see
 
 ## 3. How to run a testing session
 
+Reusable Playwright scripts live in `scripts/e2e-playbook/` (see that folder’s
+README). Prefer extending those over creating new one-off `tmp-*.mjs` files.
+
 1. Log in via the Browser tool (not Bash) — `preview_start`/`navigate` to
    localhost, or the deployed URL if the user specifies one.
 2. Pick a realistic business scenario (e.g. "run a real-estate brokerage") and
