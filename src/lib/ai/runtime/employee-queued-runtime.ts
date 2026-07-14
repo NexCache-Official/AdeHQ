@@ -19,6 +19,7 @@ import {
   replyLeakedToolCallSyntax,
   sanitizeReplyForChat,
 } from "@/lib/ai/normalize-model-response";
+import { recoverToolCallsFromLeakedReply } from "@/lib/ai/recover-tool-call-leak";
 import { isEmployeeReplyStreamingEnabled } from "@/lib/config/features";
 import { recordAiRuntime } from "@/lib/ai/runtime-log";
 import { generateObject as runtimeGenerateObject } from "@/lib/ai/runtime";
@@ -394,16 +395,20 @@ async function streamEmployeeQueuedResponse(
     streaming.onReplyDelta,
   );
 
-  // Streaming has no effects.toolCalls channel. If the model still invents
-  // [TOOL_CALL] / effects DSL, abort so the dispatcher retries structured path
-  // (which can actually create spreadsheets / CRM rows).
-  if (replyLeakedToolCallSyntax(result.text)) {
+  // Streaming has no effects channel — recover executable calls from faux
+  // [TOOL_CALL] DSL when present; otherwise abort so structured path retries.
+  const recovered = recoverToolCallsFromLeakedReply(result.text);
+  if (!recovered.length && replyLeakedToolCallSyntax(result.text)) {
     throw new Error(
       "Streaming reply leaked tool-call syntax; retrying structured path.",
     );
   }
 
-  const reply = sanitizeReplyForChat(result.text);
+  const reply =
+    sanitizeReplyForChat(result.text) ||
+    (recovered.length
+      ? "On it — I'm putting that together now."
+      : "");
   if (!reply.trim()) {
     throw new Error("Streaming produced an empty reply.");
   }
@@ -412,7 +417,13 @@ async function streamEmployeeQueuedResponse(
     input.employee.id,
     input.employee.name,
     reply,
-    { workLog: [], tasks: [], memory: [], approvals: [] },
+    {
+      workLog: [],
+      tasks: [],
+      memory: [],
+      approvals: [],
+      toolCalls: recovered,
+    },
   );
 
   const inputTokens = result.inputTokens ?? 0;

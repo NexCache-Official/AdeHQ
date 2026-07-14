@@ -9,6 +9,7 @@ import {
   inferTemperature,
   sanitizeReplyForChat,
 } from "@/lib/ai/normalize-model-response";
+import { recoverToolCallsFromLeakedReply } from "@/lib/ai/recover-tool-call-leak";
 import { buildEmployeeSystemPrompt, buildEmployeeUserPrompt } from "@/lib/ai/prompts";
 import type { EmployeePromptTier } from "@/lib/ai/prompts";
 import { getResearchCapabilities } from "@/lib/ai/research/research-planner";
@@ -122,6 +123,9 @@ export function mapModelSchemaToEmployeeResponse(
   employeeName: string,
   object: z.infer<typeof ModelResponseSchema>,
 ): EmployeeResponse {
+  const existing = object.effects.toolCalls ?? [];
+  const recovered =
+    existing.length > 0 ? [] : recoverToolCallsFromLeakedReply(object.reply);
   return {
     employeeId,
     employeeName,
@@ -135,7 +139,7 @@ export function mapModelSchemaToEmployeeResponse(
       citations: object.effects.citations ?? [],
       artifacts: object.effects.artifacts ?? [],
       memorySuggestions: object.effects.memorySuggestions ?? [],
-      toolCalls: object.effects.toolCalls ?? [],
+      toolCalls: existing.length ? existing : recovered,
       autopilot: object.effects.autopilot,
       statusChange: object.effects.statusChange,
       handoffTo: object.effects.handoffTo,
@@ -151,10 +155,12 @@ export function toEmployeeResponseFromReplyAndEffect(
   reply: string,
   effects: EmployeeResponse["effect"],
 ): EmployeeResponse {
+  const existing = effects.toolCalls ?? [];
+  const recovered = existing.length > 0 ? [] : recoverToolCallsFromLeakedReply(reply);
   return {
     employeeId,
     employeeName,
-    reply,
+    reply: sanitizeReplyForChat(reply),
     effect: {
       workLog: effects.workLog ?? [],
       tasks: effects.tasks ?? [],
@@ -167,7 +173,7 @@ export function toEmployeeResponseFromReplyAndEffect(
       citations: effects.citations ?? [],
       artifacts: effects.artifacts ?? [],
       memorySuggestions: effects.memorySuggestions ?? [],
-      toolCalls: effects.toolCalls ?? [],
+      toolCalls: existing.length ? existing : recovered,
       autopilot: effects.autopilot,
     },
   };
