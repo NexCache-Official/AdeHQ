@@ -98,21 +98,89 @@ function pushUnique(list: string[], item: string): boolean {
   return true;
 }
 
+/** Fuzzy synonyms so freeform answers map to role chips without an LLM round-trip. */
+const FOCUS_SYNONYMS: Array<{ pattern: RegExp; chip: string }> = [
+  { pattern: /\b(cold outreach|cold email|outbound|prospect(?:ing)?|landlord leads?)\b/i, chip: "Cold outreach" },
+  { pattern: /\b(inbound|qualify|qualification)\b/i, chip: "Inbound qualification" },
+  { pattern: /\b(follow[-\s]?ups?|nurture)\b/i, chip: "Follow-ups" },
+  { pattern: /\b(account research|research accounts?|territory research)\b/i, chip: "Account research" },
+  { pattern: /\b(list building|build(?:ing)? lists?)\b/i, chip: "List building" },
+  { pattern: /\b(outbound campaigns?|sequences?)\b/i, chip: "Outbound campaigns" },
+  { pattern: /\b(inbound capture|inbound leads?)\b/i, chip: "Inbound capture" },
+  { pattern: /\b(competitors?|competitive)\b/i, chip: "competitors" },
+  { pattern: /\b(market size|tam|sam)\b/i, chip: "market size" },
+  { pattern: /\b(customer segments?|icp|segmentation)\b/i, chip: "customer segments" },
+  { pattern: /\b(pricing|packaging)\b/i, chip: "pricing" },
+];
+
+function inferDomainFromFreeform(text: string, existingDomain: string): string | null {
+  if (isSpecificLookingDomain(existingDomain)) return null;
+  const lower = text.toLowerCase();
+  const parts: string[] = [];
+  if (/\blondon\b/.test(lower)) parts.push("London");
+  else if (/\buk\b|united kingdom|england\b/.test(lower)) parts.push("UK");
+  if (/\b(real estate|property|landlord|brokerage|estate agent)\b/.test(lower)) {
+    parts.push("real estate brokerage");
+  } else if (/\b(saas|b2b|fintech|healthcare|ecommerce|e-commerce)\b/.test(lower)) {
+    const m = lower.match(/\b(saas|b2b|fintech|healthcare|ecommerce|e-commerce)\b/);
+    if (m) parts.push(m[1].replace("e-commerce", "ecommerce"));
+  }
+  if (!parts.length) return null;
+  return parts.join(" ");
+}
+
+function isSpecificLookingDomain(domain?: string): boolean {
+  if (!domain?.trim()) return false;
+  const trimmed = domain.trim();
+  // Long / sentence-like values are usually pasted user answers, not domains.
+  if (trimmed.length > 48 || /[.?!]/.test(trimmed)) return false;
+  const lower = trimmed.toLowerCase();
+  return ![
+    "general business",
+    "ai employee",
+    "custom",
+    "sales & revenue",
+    "sales",
+    "marketing",
+    "research",
+    "operations",
+  ].includes(lower);
+}
+
+function interpretFreeformFocus(text: string): { businessFocus: string; responsibility: string } | null {
+  const cleaned = text.replace(/\s+/g, " ").trim();
+  if (cleaned.length < 12 || cleaned.length > 240) return null;
+  // Prefer a short interpreted phrase — never paste a long user dump into the brief.
+  const clause = cleaned.split(/[.—]| for our | so we | because /i)[0]?.trim() ?? cleaned;
+  const phrase = clause.length > 72 ? `${clause.slice(0, 69).trim()}…` : clause;
+  if (phrase.length < 8) return null;
+  const label = phrase.charAt(0).toUpperCase() + phrase.slice(1);
+  return {
+    businessFocus: label,
+    responsibility: `Own ${label.charAt(0).toLowerCase()}${label.slice(1)} work for the team`,
+  };
+}
+
 export function applyRoleFocusAnswer(
   answer: string,
   brief: AiEmployeeJobBrief,
   roleKey?: string | null,
 ): { brief: AiEmployeeJobBrief; focusLabel: string | null } | null {
   const trimmed = normalizeRecruiterAnswer(answer);
-  if (!trimmed || trimmed.length > 120) return null;
+  if (!trimmed || trimmed.length > 240) return null;
   if (shouldSkipBriefMutationForMessage(trimmed)) return null;
 
   const role = getRoleByKey(roleKey ?? undefined);
   const chips = role?.questionTemplates.coreWorkChips ?? [];
+  const synonymChip = FOCUS_SYNONYMS.find((entry) => entry.pattern.test(trimmed))?.chip;
   const matchedChip =
     chips.find((chip) => matchesChip(trimmed, chip)) ??
+    (synonymChip && (chips.some((chip) => matchesChip(synonymChip, chip)) || FOCUS_MAP[normalizeChip(synonymChip)])
+      ? synonymChip
+      : undefined) ??
     Object.keys(FOCUS_MAP).find((key) => matchesChip(trimmed, key)) ??
-    Object.keys(FOCUS_MAP).find((key) => normalizeChip(trimmed).includes(key));
+    Object.keys(FOCUS_MAP).find((key) => normalizeChip(trimmed).includes(key)) ??
+    synonymChip;
 
   if (!matchedChip) {
     const stackMatch =
@@ -137,12 +205,24 @@ export function applyRoleFocusAnswer(
           "Own pragmatic implementation work across the product as priorities shift",
         );
       }
+      const inferredDomain = inferDomainFromFreeform(trimmed, next.domain);
+      if (inferredDomain) next.domain = inferredDomain;
       return { brief: next, focusLabel: label };
     }
 
-    // Unmatched free text is not copied verbatim into the brief — the recruiter LLM
-    // interprets semantics; rule-based fallback only maps known chips/keywords above.
-    return null;
+    // Interpret freeform locally so library-role hiring stays fast without LLM.
+    const interpreted = interpretFreeformFocus(trimmed);
+    if (!interpreted) return null;
+    const next = cloneBrief(brief);
+    pushUnique(next.businessFocus, interpreted.businessFocus);
+    pushUnique(next.coreResponsibilities, interpreted.responsibility);
+    pushUnique(next.assumptions, `Primary focus: ${interpreted.businessFocus.toLowerCase()}.`);
+    const inferredDomain = inferDomainFromFreeform(trimmed, next.domain);
+    if (inferredDomain) next.domain = inferredDomain;
+    next.openQuestions = next.openQuestions.filter(
+      (q) => !/focus areas matter most|what should this employee own|sales motion/i.test(q),
+    );
+    return { brief: next, focusLabel: interpreted.businessFocus };
   }
 
   const mapping = FOCUS_MAP[normalizeChip(matchedChip)] ?? {
@@ -155,8 +235,10 @@ export function applyRoleFocusAnswer(
   if (mapping.technicalFocus) pushUnique(next.technicalFocus, mapping.technicalFocus);
   pushUnique(next.coreResponsibilities, mapping.responsibility);
   pushUnique(next.assumptions, `Primary focus: ${mapping.businessFocus.toLowerCase()}.`);
+  const inferredDomain = inferDomainFromFreeform(trimmed, next.domain);
+  if (inferredDomain) next.domain = inferredDomain;
   next.openQuestions = next.openQuestions.filter(
-    (q) => !/focus areas matter most|what should this employee own/i.test(q),
+    (q) => !/focus areas matter most|what should this employee own|sales motion/i.test(q),
   );
 
   return { brief: next, focusLabel: mapping.businessFocus };
@@ -169,6 +251,10 @@ export function acknowledgeUserAnswer(
 ): string {
   const focus = applyRoleFocusAnswer(answer, brief, roleKey);
   if (focus?.focusLabel) {
+    const domain = focus.brief.domain.trim();
+    if (domain && isSpecificLookingDomain(domain)) {
+      return `Got it — ${focus.focusLabel.toLowerCase()} for ${domain}.`;
+    }
     return `Got it — ${focus.focusLabel.toLowerCase()}.`;
   }
 

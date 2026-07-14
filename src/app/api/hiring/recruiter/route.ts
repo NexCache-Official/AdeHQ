@@ -214,6 +214,15 @@ function useRecruiterLlm(
   const mode = body.mode ?? "chat";
   if (mode === "refine" || mode === "brief_refine" || mode === "regenerate") return true;
   if (action === "refine_section") return true;
+
+  const roleKey = body.roleKey ?? null;
+  const knownLibraryRole = Boolean(roleKey && roleKey !== "custom");
+  // Popular / library roles already carry structure — keep Maya snappy with the
+  // rule-based recruiter brain so intake feels like a sharp human, not a stalled bot.
+  if (knownLibraryRole && mode === "chat" && action === "message") {
+    return false;
+  }
+
   const lastUser = [...conversation].reverse().find((m) => m.role === "user")?.text ?? "";
   const userTurns = conversation.filter((m) => m.role === "user").length;
   if (userTurns >= 1 && lastUser.trim().length > 2 && !isHiringSmallTalk(lastUser)) return true;

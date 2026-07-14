@@ -360,11 +360,11 @@ export function synthesizeBriefFromConversation(
         ? "SaaS products, AI systems, and data workflows"
       : allUserText.includes("fintech") || allUserText.includes("finance")
         ? "Finance & fintech"
+        : /\b(real estate|property|landlord|brokerage)\b/.test(allUserText)
+          ? (/\blondon\b/.test(allUserText) ? "London real estate brokerage" : "Real estate brokerage")
         : allUserText.includes("saas") || allUserText.includes("tech")
           ? "SaaS & technology"
-          : isDeptNameOnly(roleSeed, departmentId) || !userLines[0]?.trim()
-            ? DEPT_DOMAIN[dept] ?? "General business"
-            : userLines[0]?.trim() || DEPT_DOMAIN[dept] || "General business");
+          : DEPT_DOMAIN[dept] ?? "General business");
 
   const technicalFocus =
     existing?.technicalFocus?.length

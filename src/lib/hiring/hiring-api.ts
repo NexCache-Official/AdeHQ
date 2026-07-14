@@ -12,7 +12,10 @@ export type HiringApiContext = {
   mayaRoomId?: string | null;
 };
 
-const HIRING_REQUEST_TIMEOUT_MS = 15_000;
+// Custom / refine turns can legitimately take longer; library-role chat should
+// usually finish via the rule path well under this. Keep a human-scale ceiling
+// so Maya never flashes a timeout while a draft is already ready.
+const HIRING_REQUEST_TIMEOUT_MS = 45_000;
 
 async function fetchHiringApi(path: string, init: RequestInit): Promise<Response> {
   const controller = new AbortController();

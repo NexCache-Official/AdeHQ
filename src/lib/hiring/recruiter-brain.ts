@@ -68,10 +68,10 @@ export function assessRecruiterReadiness(
   let score = 0;
   const missing: RecruiterMissingField[] = [];
   const userTurns = meaningfulUserTurns(conversation);
-  // Known library roles already carry structure — 2 solid answers is enough.
-  // Custom roles still need a third turn so domain/focus aren't guesswork.
+  // Library roles already carry title/defaults — one concrete answer that fills
+  // focus + domain is enough to review. Custom roles still need more turns.
   const knownLibraryRole = Boolean(roleKey && roleKey !== "custom");
-  const minTurns = knownLibraryRole ? 2 : 3;
+  const minTurns = knownLibraryRole ? 1 : 3;
 
   const roleKnown = hasRealValue(currentBrief.roleTitle);
   const focusKnown = hasRoleFocusFromContext(currentBrief, conversation);
@@ -269,11 +269,11 @@ export function buildRecruiterTurnMessage(
     return nextQuestion;
   }
 
-  if (readiness.ready) {
-    return nextQuestion;
-  }
-
   const ack = acknowledgeUserAnswer(lastUser, currentBrief, roleKey);
+
+  if (readiness.ready) {
+    return `${ack} ${nextQuestion}`;
+  }
   if (normalizeQuestion(lastAde) === normalizeQuestion(nextQuestion)) {
     const alternate = chooseNextRecruiterQuestion(
       {

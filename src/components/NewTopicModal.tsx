@@ -170,7 +170,7 @@ export function NewTopicModal({
             className="input-field"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            placeholder={isDm ? "e.g. Q3 pipeline research" : "Browser Agent v0"}
+            placeholder={isDm ? "e.g. Q3 pipeline research" : "e.g. Canary Wharf counter"}
             autoFocus
           />
         </label>

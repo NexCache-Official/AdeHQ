@@ -43,6 +43,7 @@ import {
   type EmailDraftJson,
 } from "@/lib/artifacts/intelligence";
 import { recordAiMessageInTopicOrchestrationState } from "@/lib/orchestration/room-steward";
+import { resolveParticipantReferences } from "@/lib/orchestration/participant-reference-resolver";
 import { executeEmployeeToolCalls } from "@/lib/integrations/manager";
 import {
   reconcileClaimedActions,
@@ -259,6 +260,62 @@ export async function loadRespondersContext(
     },
     employees,
   };
+}
+
+/**
+ * If the user @mentions workspace AIs who aren't room members yet, add them.
+ * Typing @Emily in an empty project room should start collaboration, not silently no-op.
+ */
+export async function ensureMentionedEmployeesInRoom(
+  client: SupabaseClient,
+  workspaceId: string,
+  roomId: string,
+  content: string,
+  mentionsJson: MentionRef[] | undefined,
+  current: RespondersContext,
+): Promise<RespondersContext> {
+  if (current.room.kind === "dm") return current;
+  if (!content.includes("@") && !mentionsJson?.length) return current;
+
+  const [employeesResult, toolsResult] = await Promise.all([
+    client.from("ai_employees").select("*").eq("workspace_id", workspaceId),
+    client.from("employee_tools").select("*").eq("workspace_id", workspaceId),
+  ]);
+  if (employeesResult.error) throw employeesResult.error;
+  if (toolsResult.error) throw toolsResult.error;
+
+  const employeeRows = (employeesResult.data as DbRow[] | null) ?? [];
+  const toolsByEmployee = buildToolsByEmployee((toolsResult.data as DbRow[] | null) ?? []);
+  const assignable = employeeRows
+    .filter((row) => {
+      const metadata = (row.metadata ?? {}) as { canBeAssignedToRooms?: boolean; dmOnly?: boolean };
+      return metadata.canBeAssignedToRooms !== false && !metadata.dmOnly;
+    })
+    .map((row) => employeeFromRow(row, toolsByEmployee.get(String(row.id)) ?? []));
+
+  const mentioned = parseEmployeeMentions(content, assignable, mentionsJson);
+  const nameRefs = resolveParticipantReferences(content, assignable, {
+    excludeEmployeeIds: mentioned.map((employee) => employee.id),
+  });
+  const mentionedByName = assignable.filter((employee) =>
+    nameRefs.actionableEmployeeIds.includes(employee.id),
+  );
+  const targets = [...new Map([...mentioned, ...mentionedByName].map((e) => [e.id, e])).values()];
+  const missing = targets.filter((employee) => !current.employees.some((e) => e.id === employee.id));
+  if (!missing.length) return current;
+
+  const { error } = await client.from("room_members").upsert(
+    missing.map((employee) => ({
+      workspace_id: workspaceId,
+      room_id: roomId,
+      member_type: "ai",
+      member_id: employee.id,
+    })),
+    { onConflict: "workspace_id,room_id,member_type,member_id", ignoreDuplicates: true },
+  );
+  if (error) throw error;
+
+  return loadRespondersContext(client, workspaceId, roomId);
 }
 
 export type LoadTopicContextOptions = {

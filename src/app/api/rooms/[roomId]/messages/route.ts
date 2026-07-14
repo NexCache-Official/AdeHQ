@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { AuthError, requireAuthUser, requireWorkspaceMembership } from "@/lib/supabase/auth-server";
 import { assertCanSendRoomMessage } from "@/lib/server/room-access";
 import {
+  ensureMentionedEmployeesInRoom,
   getWorkspaceIdForRoom,
   insertHumanMessage,
   loadRespondersContext,
@@ -155,10 +156,18 @@ export async function POST(
       return message;
     });
 
-    const [respondersCtx, humanMessage] = await Promise.all([
+    const [respondersLoaded, humanMessage] = await Promise.all([
       loadRespondersContext(client, workspaceId, params.roomId),
       insertPromise,
     ]);
+    const respondersCtx = await ensureMentionedEmployeesInRoom(
+      client,
+      workspaceId,
+      params.roomId,
+      trimmed,
+      mentionsJson,
+      respondersLoaded,
+    );
 
     const orchestrationEmployees = filterOrchestrationEmployees(respondersCtx.employees);
     const mentioned = parseEmployeeMentions(trimmed, respondersCtx.employees, mentionsJson);
@@ -651,6 +660,12 @@ export async function POST(
         participationMode === "talent_observation"
       ) {
         hint = "Mention an employee with @ to get a response";
+      } else if (
+        (isSmartAssistMode(participationMode) || participationMode === "active_team") &&
+        /@/.test(trimmed) &&
+        respondersCtx.employees.length === 0
+      ) {
+        hint = "No AI employees are in this room yet. Add someone with + Add employee, or @mention them to pull them in.";
       } else if (isSmartAssistMode(participationMode) || participationMode === "active_team") {
         hint = "No AI response needed - saved as context.";
       }
