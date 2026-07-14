@@ -15,7 +15,10 @@ import {
 } from "@/lib/ai/model-router";
 import { estimateCost, resolveModel } from "@/lib/ai/model-catalog";
 import { streamSiliconFlowText } from "@/lib/ai/siliconflow-call";
-import { sanitizeReplyForChat } from "@/lib/ai/normalize-model-response";
+import {
+  replyLeakedToolCallSyntax,
+  sanitizeReplyForChat,
+} from "@/lib/ai/normalize-model-response";
 import { isEmployeeReplyStreamingEnabled } from "@/lib/config/features";
 import { recordAiRuntime } from "@/lib/ai/runtime-log";
 import { generateObject as runtimeGenerateObject } from "@/lib/ai/runtime";
@@ -390,6 +393,15 @@ async function streamEmployeeQueuedResponse(
     temperature,
     streaming.onReplyDelta,
   );
+
+  // Streaming has no effects.toolCalls channel. If the model still invents
+  // [TOOL_CALL] / effects DSL, abort so the dispatcher retries structured path
+  // (which can actually create spreadsheets / CRM rows).
+  if (replyLeakedToolCallSyntax(result.text)) {
+    throw new Error(
+      "Streaming reply leaked tool-call syntax; retrying structured path.",
+    );
+  }
 
   const reply = sanitizeReplyForChat(result.text);
   if (!reply.trim()) {

@@ -214,10 +214,27 @@ export function parseModelResponseText(
 const SCHEMA_LEAK_MARKER =
   /\beffects\s*\.\s*\w+\s*:|\beffects\s*:\s*\{|(?:^|[\s.])tool\s*:\s*[a-zA-Z][\w-]*\.[a-zA-Z][\w-]*\b[\s\S]{0,40}?\bmode\s*:\s*["']?(?:execute|preview)\b/i;
 
+/** Model-invented DSL when streaming has no effects channel. */
+const TOOL_CALL_BLOCK =
+  /\[TOOL_CALL\][\s\S]*?\[\/TOOL_CALL\]/gi;
+
+const TOOL_CALL_LEAK_MARKER =
+  /\[TOOL_CALL\]|\{\s*tool\s*=>\s*["'][a-zA-Z][\w.-]*["']|--(?:title|template|columns|rows)\s+/i;
+
+export function replyLeakedToolCallSyntax(text: string): boolean {
+  return TOOL_CALL_LEAK_MARKER.test(text) || SCHEMA_LEAK_MARKER.test(text);
+}
+
 function stripSchemaLeak(text: string): string {
-  const match = SCHEMA_LEAK_MARKER.exec(text);
-  if (!match) return text;
-  return text.slice(0, match.index).trim();
+  let cleaned = text.replace(TOOL_CALL_BLOCK, "").trim();
+  // Truncate dangling open blocks / narrated DSL
+  const openBlock = cleaned.search(/\[TOOL_CALL\]/i);
+  if (openBlock >= 0) cleaned = cleaned.slice(0, openBlock).trim();
+  const match = SCHEMA_LEAK_MARKER.exec(cleaned);
+  if (match) cleaned = cleaned.slice(0, match.index).trim();
+  const arrowTool = cleaned.search(/\{\s*tool\s*=>/i);
+  if (arrowTool >= 0) cleaned = cleaned.slice(0, arrowTool).trim();
+  return cleaned;
 }
 
 function finalizeReply(text: string): string {

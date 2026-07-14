@@ -17,11 +17,28 @@
  * blocking path — so this must err toward over-matching, not under-matching.
  */
 const TOOL_WORK_VERB =
-  /\b(?:add|create|creating|make|making|draft|drafting|write|writing|send|sending|log|logging|schedule|scheduling|set ?up|setting ?up|build|building|generate|generating|update|updating|put)\b/i;
+  /\b(?:add|create|creating|make|making|draft|drafting|write|writing|send|sending|log|logging|schedule|scheduling|set ?up|setting ?up|build|building|generate|generating|update|updating|put|find|prepare|compile|produce|export)\b/i;
 
 const TOOL_WORK_NOUN =
-  /\b(?:crm|contacts?|leads?|deals?|pipelines?|emails?|outreach|tasks?|to-?dos?|follow[- ]ups?|reminders?|campaigns?|posts?|calendar|meetings?|invoices?|spreadsheets?|workbooks?|tables?|xlsx|csv|trackers?|decks?|presentations?|slides?|reports?|docs?|documents?|pdfs?|memos?|prds?|specs?|specifications?|proposals?|briefs?)\b/i;
+  /\b(?:crm|contacts?|leads?|deals?|pipelines?|emails?|outreach|tasks?|to-?dos?|follow[- ]ups?|reminders?|campaigns?|posts?|calendar|meetings?|invoices?|spreadsheets?|workbooks?|tables?|xlsx|csv|trackers?|decks?|presentations?|slides?|reports?|docs?|documents?|pdfs?|memos?|prds?|specs?|specifications?|proposals?|briefs?|artifacts?)\b/i;
+
+/**
+ * Verb-less delivery asks still need tools — e.g. "Lead list spreadsheet in Drive
+ * — columns: …" has spreadsheet/leads/Drive but no create/make verb. Without this
+ * the plain-prose stream path runs, the model invents [TOOL_CALL] text, and
+ * nothing is saved.
+ */
+const ARTIFACT_DELIVERY_INTENT =
+  /\b(?:spreadsheets?|workbooks?|xlsx|csv|lead[- ]?lists?|trackers?|artifacts?|tables?)\b[\s\S]{0,120}\b(?:drive|columns?|rows?|sheet|open from|saved? to)\b|\b(?:drive|columns?|rows?)\b[\s\S]{0,120}\b(?:spreadsheets?|workbooks?|xlsx|csv|lead[- ]?lists?|trackers?|tables?|artifacts?)\b/i;
+
+const CRM_OR_TASK_DELIVERY_INTENT =
+  /\b(?:crm|contacts?|deals?|companies|tasks?|follow[- ]ups?)\b[\s\S]{0,100}\b(?:add|create|log|save|update|new)\b|\b(?:add|create|log|save|update|new)\b[\s\S]{0,100}\b(?:crm|contacts?|deals?|companies|tasks?|follow[- ]ups?)\b/i;
 
 export function messageLikelyNeedsStructuredEffects(message: string): boolean {
-  return TOOL_WORK_VERB.test(message) && TOOL_WORK_NOUN.test(message);
+  const text = message.trim();
+  if (!text) return false;
+  if (TOOL_WORK_VERB.test(text) && TOOL_WORK_NOUN.test(text)) return true;
+  if (ARTIFACT_DELIVERY_INTENT.test(text)) return true;
+  if (CRM_OR_TASK_DELIVERY_INTENT.test(text)) return true;
+  return false;
 }

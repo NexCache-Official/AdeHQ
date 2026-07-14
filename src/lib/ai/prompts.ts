@@ -472,7 +472,7 @@ ${permissionList || "- Default employee permissions"}`
     includeWorkRules && !plainProse ? roleWorkflowRules(ctx.employee.roleKey) : "",
     includeWorkRules && !plainProse ? toolClaimHonestyRule() : "",
     plainProse
-      ? `Quick-reply mode: you cannot create CRM records, tasks, artifacts, or any other tool-backed action in this reply — there is no tool-call channel here, and nothing you write will execute anything. If the user's request needs one of those actions, say so plainly and ask them to send it again (or confirm) so it runs on a turn that can actually do it — do not claim or imply the action happened or will happen automatically. Never write out a tool name, JSON, or effects syntax in your reply.`
+      ? `Quick-reply mode: you cannot create CRM records, tasks, artifacts, or any other tool-backed action in this reply — there is no tool-call channel here, and nothing you write will execute anything. If the user's request needs one of those actions, say so plainly and ask them to send it again (or confirm) so it runs on a turn that can actually do it — do not claim or imply the action happened or will happen automatically. Never write tool names, JSON, effects syntax, or fake blocks like [TOOL_CALL]…[/TOOL_CALL] in your reply.`
       : "",
   ]
     .filter(Boolean)
