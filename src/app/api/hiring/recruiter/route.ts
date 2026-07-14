@@ -31,7 +31,7 @@ import {
   inferDepartmentId,
   isEngineeringBrief,
 } from "@/lib/hiring/recruiter-brain";
-import { isAssistantVoiceChip } from "@/lib/hiring/suggestion-chips";
+import { generateSuggestionChips, isAssistantVoiceChip } from "@/lib/hiring/suggestion-chips";
 import { resolveRecruiterSuggestionChips } from "@/lib/hiring/resolve-suggestion-chips";
 import { normalizeRecruiterAnswer } from "@/lib/hiring/normalize-recruiter-answer";
 import {
@@ -308,6 +308,14 @@ function buildResponse(input: {
   }
 
   const checklist = checklistFromBrief(brief, input.body.roleSeed, input.conversation);
+  const suggestionChips =
+    sanitizeSuggestionChips(input.suggestionChips).length >= 2
+      ? sanitizeSuggestionChips(input.suggestionChips)
+      : canReviewBrief
+        ? sanitizeSuggestionChips(
+            generateSuggestionChips(readiness, brief, input.conversation, roleKey, true),
+          )
+        : sanitizeSuggestionChips(input.suggestionChips);
 
   return {
     recruiterMessage: message,
@@ -315,10 +323,10 @@ function buildResponse(input: {
     brief,
     briefPartial: brief,
     readiness,
-    suggestionChips: sanitizeSuggestionChips(input.suggestionChips),
+    suggestionChips,
     canReviewBrief,
     briefReady: canReviewBrief,
-    chips: [] as string[],
+    chips: suggestionChips.map((chip) => chip.label),
     checklist,
     usedFallback: input.usedFallback,
     roleKey,

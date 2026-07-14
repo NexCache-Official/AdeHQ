@@ -46,7 +46,11 @@ export async function resolveRecruiterSuggestionChips(input: {
     input.canReviewBrief || input.readiness.ready ? "ready_to_review" : "gathering";
   const lastAde = input.lastAdeMessage.trim();
 
+  const knownLibraryRole = Boolean(input.roleKey && input.roleKey !== "custom");
+
   if (mode === "ready_to_review") {
+    // Ready CTAs are fixed product chips — never burn a planner LLM here
+    // (closing-message validation would reject them anyway).
     const generated = generateSuggestionChips(
       input.readiness,
       input.brief,
@@ -54,26 +58,8 @@ export async function resolveRecruiterSuggestionChips(input: {
       input.roleKey,
       true,
     );
-    if (generated.length >= 2 && areValidUserResponseChips(generated, lastAde)) {
-      return generated;
-    }
-    const planned = await planRecruiterSuggestionChips({
-      lastAdeMessage: input.lastAdeMessage,
-      roleTitle: input.brief.roleTitle,
-      department: input.brief.department,
-      domain: input.brief.domain,
-      mission: input.brief.mission,
-      businessFocus: input.brief.businessFocus,
-      technicalFocus: input.brief.technicalFocus,
-      lastUserMessage: input.lastUserMessage,
-      recentConversation: chipConversation,
-      roleKey: input.roleKey,
-      mode,
-    });
-    if (planned?.length && areValidUserResponseChips(planned, lastAde)) {
-      return planned;
-    }
-    return generated.length ? generated : fallbackRecruiterSuggestionChips({
+    if (generated.length >= 2) return generated;
+    return fallbackRecruiterSuggestionChips({
       conversation: chipConversation,
       roleKey: input.roleKey,
       readiness: input.readiness,
@@ -97,6 +83,11 @@ export async function resolveRecruiterSuggestionChips(input: {
   });
   if (fallback.length >= 2 && areValidUserResponseChips(fallback, lastAde)) {
     return fallback;
+  }
+
+  // Library roles already ship role-specific fallback chips — skip planner.
+  if (knownLibraryRole) {
+    return fallback.length ? fallback : parsed;
   }
 
   const planned = await planRecruiterSuggestionChips({

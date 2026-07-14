@@ -33,9 +33,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "brief is required." }, { status: 400 });
     }
 
+    const roleKey = body.roleKey ?? null;
+    // Library roles already have strong deterministic shortlists — skip the
+    // candidate-copy LLM + workspace work-unit path so hire→review stays fast.
+    const useDeterministicOnly =
+      Boolean(roleKey && roleKey !== "custom") ||
+      (!isSiliconFlowConfigured() && getCandidatesRuntimeDispatch() === "old");
+
     let copies: Awaited<ReturnType<typeof generateCandidateCopies>>;
 
-    if (!isSiliconFlowConfigured() && getCandidatesRuntimeDispatch() === "old") {
+    if (useDeterministicOnly) {
       copies = undefined;
     } else {
       const hiringContext = await resolveHiringWorkspaceContext(client, user.id, {
@@ -50,7 +57,7 @@ export async function POST(request: NextRequest) {
         userId: user.id,
         workspaceId: hiringContext.workspaceId,
         hiringSessionId: hiringContext.hiringSessionId,
-        roleKey: body.roleKey ?? null,
+        roleKey,
         departmentId: body.departmentId ?? null,
       });
     }
@@ -58,7 +65,7 @@ export async function POST(request: NextRequest) {
     const candidates = generateDeterministicCandidates(
       body.brief,
       body.departmentId ?? null,
-      body.roleKey ?? null,
+      roleKey,
       copies,
     );
 
