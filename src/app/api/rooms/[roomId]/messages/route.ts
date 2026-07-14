@@ -463,8 +463,13 @@ export async function POST(
             workspaceId,
             params.roomId,
           );
+          const rawStewardSuggestions = await suggestTopics(
+            orchestratorInput,
+            orchestrationPlan.intent,
+            topic,
+          );
           const stewardSuggestions = filterTopicSuggestionsByGovernance(
-            suggestTopics(orchestratorInput, orchestrationPlan.intent, topic),
+            rawStewardSuggestions,
             suggestionGovernance,
             orchestratorInput,
           );

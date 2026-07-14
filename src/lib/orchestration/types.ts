@@ -281,6 +281,7 @@ export type TopicStewardSuggestion =
   | {
       type: "create_topic";
       title: string;
+      description?: string;
       reason: string;
       confidence: number;
       messageIds: string[];
@@ -288,6 +289,8 @@ export type TopicStewardSuggestion =
       sourceScope?: "room" | "topic" | "dm";
       previewBullets?: string[];
       triggerMessageId?: string;
+      /** When true, accepting should move relevant messages into the new topic. */
+      migrateMessages?: boolean;
     }
   | {
       type: "move_to_existing_topic";

@@ -1,3 +1,8 @@
+import { generateObject } from "ai";
+import { z } from "zod";
+import { SILICONFLOW_CHEAP_MODEL, isSiliconFlowConfigured } from "@/lib/config/features";
+import { getOutputTokenCap, getTimeoutMs, resolveModel } from "@/lib/ai/model-catalog";
+import { siliconFlowChatModel, siliconFlowProviderOptions } from "@/lib/ai/siliconflow-client";
 import { isGeneralTopic } from "@/lib/topics";
 import {
   buildContextSummaryFromMessages,
@@ -7,22 +12,6 @@ import {
 import type { RoomTopic } from "@/lib/types";
 import type { OrchestrationIntent, OrchestratorInput, TopicStewardSuggestion } from "./types";
 
-const WORKSTREAM_KEYWORDS = [
-  /\bpricing\b/i,
-  /\bpro plus\b/i,
-  /\blaunch\b/i,
-  /\bcampaign\b/i,
-  /\bclient\b/i,
-  /\bfeature\b/i,
-  /\bbug\b/i,
-  /\bmarket\b/i,
-  /\bcompetitor\b/i,
-  /\broadmap\b/i,
-  /\bdecision\b/i,
-  /\bstrategy\b/i,
-  /\bonboarding\b/i,
-];
-
 const SKIP_INTENTS: OrchestrationIntent[] = [
   "silent_note",
   "social_broadcast",
@@ -30,90 +19,46 @@ const SKIP_INTENTS: OrchestrationIntent[] = [
   "answer_to_pending_question",
 ];
 
-function titleCase(seed: string): string {
-  return seed
-    .replace(/[^\w\s-]/g, " ")
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 5)
-    .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
-    .join(" ");
-}
+const TopicStewardLlmSchema = z.object({
+  deservesSeparateTopic: z.boolean(),
+  confidence: z.number().min(0).max(1),
+  title: z.string().max(80).optional(),
+  description: z.string().max(280).optional(),
+  reason: z.string().max(320).optional(),
+  contextSummary: z.string().max(420).optional(),
+  previewBullets: z.array(z.string().max(80)).max(4).optional(),
+  relevantMessageIds: z.array(z.string()).max(12).optional(),
+  existingTopicId: z.string().nullable().optional(),
+});
 
-function inferTopicTitle(messages: OrchestratorInput["recentMessages"]): string | null {
-  const blob = messages
-    .slice(-6)
-    .map((m) => m.text)
-    .join(" ");
-  if (/\bpricing\b/i.test(blob)) return "Pricing Strategy";
-  if (/\bpro plus\b/i.test(blob)) return "Pro Plus Pricing";
-  if (/\bwashing machine\b/i.test(blob)) return "Washing Machine Launch";
-  if (/\blawnmower\b/i.test(blob)) return "Lawnmower Market Research";
-  if (/\bcompetitor\b/i.test(blob)) return "Competitive Positioning";
-  if (/\blaunch\b/i.test(blob)) return "Launch Planning";
-  if (/\boutreach\b/i.test(blob)) return "Outreach Planning";
-  const match = blob.match(/\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,2})\b/);
-  return match ? titleCase(match[1]) : null;
-}
+const TOPIC_STEWARD_SYSTEM = `You are AdeHQ's topic steward. Decide whether the latest conversation deserves its own dedicated topic (workstream), and if so write an accurate title and description.
 
-function topicSimilarity(title: string, messageText: string): number {
-  const words = title.toLowerCase().split(/\s+/).filter((w) => w.length > 3);
-  const lower = messageText.toLowerCase();
-  if (!words.length) return 0;
-  const hits = words.filter((w) => lower.includes(w)).length;
-  return hits / words.length;
-}
+Only suggest a separate topic when ALL of these are true:
+1. There is a focused workstream with enough substance (decisions, research, planning, deliverables) — not greetings, tiny clarifications, or one-off questions.
+2. The current topic is too broad (often "General") OR the thread has clearly drifted into a different subject that should be tracked separately.
+3. Creating a topic will help the team continue that work without cluttering the parent conversation.
 
-export function suggestTopics(
-  input: OrchestratorInput,
-  intent: OrchestrationIntent,
-  topic?: Pick<RoomTopic, "title" | "metadata">,
-): TopicStewardSuggestion[] {
-  if (input.isDm || input.isMayaHiringSession) return [];
-  if (SKIP_INTENTS.includes(intent)) return [];
+Do NOT suggest when:
+- The chat is casual / social / acknowledgment-only
+- The work already lives in a well-scoped existing topic that matches
+- There is not enough detail yet to name the workstream honestly
+- You would only be guessing a vague title like "Project Discussion" or "Follow Up"
 
-  const text = input.messageText.trim();
-  if (!text || text.length < 12) return [];
+When deservesSeparateTopic is true:
+- title: specific, accurate, 2–6 words reflecting the ACTUAL subject (never keyword spam or generic labels)
+- description: one clear sentence of what this topic is for
+- reason: short human explanation of why a separate topic helps
+- contextSummary: 1–2 sentences of what to carry over
+- previewBullets: 1–3 short labels of what will move (e.g. "pricing options", "open questions")
+- relevantMessageIds: only message ids from the provided list that are relevant to this workstream (include the latest user message when relevant)
+- existingTopicId: set when an existing non-General topic already covers this work (then deservesSeparateTopic must be false)
 
-  const recentInTopic = input.recentMessages.filter(
-    (m) => !input.topicId || m.topicId === input.topicId,
-  );
-  const relatedCount = recentInTopic.filter((m) => m.senderType === "human").length;
-  const hasWorkstreamSignal = WORKSTREAM_KEYWORDS.some((p) => p.test(text));
-  const onGeneral = topic ? isGeneralTopic(topic as RoomTopic) : true;
+When deservesSeparateTopic is false, leave title/description empty and set confidence to how sure you are that no new topic is needed.`;
 
-  for (const existing of input.existingTopics) {
-    if (existing.title.toLowerCase() === "general") continue;
-    const similarity = Math.max(
-      topicSimilarity(existing.title, text),
-      existing.summary ? topicSimilarity(existing.title, existing.summary) : 0,
-    );
-    if (similarity >= 0.55) {
-      return [
-        {
-          type: "move_to_existing_topic",
-          topicId: existing.id,
-          topicTitle: existing.title,
-          reason: `This seems related to "${existing.title}".`,
-          confidence: Math.min(0.92, 0.7 + similarity * 0.2),
-          messageIds: [input.messageId],
-        },
-      ];
-    }
-  }
-
-  const inferredTitle = inferTopicTitle([...recentInTopic, { id: input.messageId, senderType: "human", text, createdAt: new Date().toISOString() }]);
-  if (!inferredTitle) return [];
-
-  const confidence =
-    0.55 +
-    (hasWorkstreamSignal ? 0.2 : 0) +
-    (relatedCount >= 3 ? 0.15 : relatedCount >= 2 ? 0.08 : 0) +
-    (onGeneral ? 0.08 : 0);
-
-  if (confidence < 0.78) return [];
-
-  const importMessages: TopicImportMessage[] = recentInTopic.map((message) => ({
+function toImportMessages(
+  messages: OrchestratorInput["recentMessages"],
+): TopicImportMessage[] {
+  return messages.map((message) => ({
     id: message.id,
     senderType: message.senderType,
     senderId: message.senderId ?? undefined,
@@ -127,45 +72,179 @@ export function suggestTopics(
     createdAt: message.createdAt,
     topicId: message.topicId ?? undefined,
   }));
+}
 
-  const selectedMessages = selectMessagesForTopicImport({
-    messages: importMessages,
+function shouldEvaluate(
+  input: OrchestratorInput,
+  intent: OrchestrationIntent,
+): boolean {
+  if (input.isDm || input.isMayaHiringSession) return false;
+  if (SKIP_INTENTS.includes(intent)) return false;
+  const text = input.messageText.trim();
+  if (!text || text.length < 24) return false;
+
+  const recentInTopic = input.recentMessages.filter(
+    (m) => !input.topicId || m.topicId === input.topicId,
+  );
+  const humanTurns = recentInTopic.filter((m) => m.senderType === "human").length;
+  // Need some back-and-forth or a substantive ask before suggesting a split.
+  if (humanTurns < 2 && text.length < 80) return false;
+  return true;
+}
+
+function buildFallbackSuggestion(
+  input: OrchestratorInput,
+  topic?: Pick<RoomTopic, "title" | "metadata">,
+): TopicStewardSuggestion[] {
+  // Without an LLM we refuse to invent inaccurate titles.
+  void input;
+  void topic;
+  return [];
+}
+
+function resolveMessageIds(
+  input: OrchestratorInput,
+  llmIds: string[] | undefined,
+  title: string,
+): string[] {
+  const recentInTopic = input.recentMessages.filter(
+    (m) => !input.topicId || m.topicId === input.topicId,
+  );
+  const known = new Set(recentInTopic.map((m) => m.id));
+  known.add(input.messageId);
+
+  const fromLlm = (llmIds ?? []).filter((id) => known.has(id));
+  if (fromLlm.length >= 2) {
+    if (!fromLlm.includes(input.messageId)) fromLlm.push(input.messageId);
+    return [...new Set(fromLlm)].slice(-12);
+  }
+
+  const selected = selectMessagesForTopicImport({
+    messages: toImportMessages(recentInTopic),
     triggerMessageId: input.messageId,
-    suggestedTopicTitle: inferredTitle,
+    suggestedTopicTitle: title,
     maxMessages: 8,
   });
-  const messageIds = selectedMessages.map((message) => message.id);
-  if (!messageIds.includes(input.messageId)) messageIds.push(input.messageId);
+  const ids = selected.map((m) => m.id);
+  if (!ids.includes(input.messageId)) ids.push(input.messageId);
+  return [...new Set(ids)];
+}
 
-  const { summary } = buildContextSummaryFromMessages(
-    selectedMessages,
-    inferredTitle,
-  );
-  const previewBullets = [
-    selectedMessages.some((message) => message.senderType === "human" && /product|launch|idea/i.test(message.content))
-      ? "product idea"
-      : null,
-    selectedMessages.some((message) => message.senderType === "ai" && /\?|clarif|need/i.test(message.content))
-      ? "clarification questions"
-      : null,
-    selectedMessages.some((message) => message.senderType === "ai" && /research|market|compet/i.test(message.content))
-      ? "research follow-up"
-      : null,
-  ].filter(Boolean) as string[];
+export async function suggestTopics(
+  input: OrchestratorInput,
+  intent: OrchestrationIntent,
+  topic?: Pick<RoomTopic, "title" | "metadata">,
+): Promise<TopicStewardSuggestion[]> {
+  if (!shouldEvaluate(input, intent)) return [];
 
-  return [
-    {
-      type: "create_topic",
-      title: inferredTitle,
-      reason: onGeneral
-        ? "This looks like a focused workstream. AdeHQ can copy the relevant context into a new topic so the team can continue there."
-        : "A scoped topic would help organize this workstream with imported context.",
-      confidence: Math.min(0.95, confidence),
-      messageIds,
-      contextSummary: summary,
-      sourceScope: onGeneral ? "room" : "topic",
-      previewBullets,
-      triggerMessageId: input.messageId,
-    },
-  ];
+  const onGeneral = topic ? isGeneralTopic(topic as RoomTopic) : true;
+  const recentInTopic = input.recentMessages
+    .filter((m) => !input.topicId || m.topicId === input.topicId)
+    .slice(-16);
+
+  if (!isSiliconFlowConfigured()) {
+    return buildFallbackSuggestion(input, topic);
+  }
+
+  const existingTopics = input.existingTopics
+    .filter((t) => t.title.toLowerCase() !== "general")
+    .slice(0, 12)
+    .map((t) => `- ${t.id}: ${t.title}${t.summary ? ` — ${t.summary.slice(0, 120)}` : ""}`)
+    .join("\n");
+
+  const transcript = recentInTopic
+    .map((m) => `[${m.id}] ${m.senderType}: ${m.text.slice(0, 400)}`)
+    .join("\n");
+
+  const model = resolveModel("siliconflow", "cheap", SILICONFLOW_CHEAP_MODEL);
+
+  try {
+    const { object } = await generateObject({
+      model: siliconFlowChatModel(model),
+      schema: TopicStewardLlmSchema,
+      system: TOPIC_STEWARD_SYSTEM,
+      prompt: [
+        `Current topic: ${topic?.title ?? "General"}${onGeneral ? " (broad / General)" : ""}`,
+        `Latest user message id: ${input.messageId}`,
+        `Latest user message: ${input.messageText.trim().slice(0, 800)}`,
+        "",
+        "Existing topics in this room:",
+        existingTopics || "(none besides General)",
+        "",
+        "Recent messages in the current topic (use these ids only):",
+        transcript || "(none)",
+      ].join("\n"),
+      maxOutputTokens: getOutputTokenCap("cheap"),
+      abortSignal: AbortSignal.timeout(getTimeoutMs("cheap")),
+      providerOptions: siliconFlowProviderOptions(model),
+    });
+
+    const decision = TopicStewardLlmSchema.parse(object);
+
+    if (decision.existingTopicId) {
+      const match = input.existingTopics.find((t) => t.id === decision.existingTopicId);
+      if (match && match.title.toLowerCase() !== "general") {
+        return [
+          {
+            type: "move_to_existing_topic",
+            topicId: match.id,
+            topicTitle: match.title,
+            reason:
+              decision.reason?.trim() ||
+              `This continues the work already tracked in "${match.title}".`,
+            confidence: Math.min(0.95, Math.max(0.55, decision.confidence)),
+            messageIds: resolveMessageIds(input, decision.relevantMessageIds, match.title),
+          },
+        ];
+      }
+    }
+
+    if (!decision.deservesSeparateTopic) return [];
+    if (decision.confidence < 0.72) return [];
+
+    const title = decision.title?.trim();
+    if (!title || title.length < 3) return [];
+    if (/^(project|follow.?up|discussion|general|workstream|misc)\b/i.test(title)) {
+      return [];
+    }
+
+    const messageIds = resolveMessageIds(input, decision.relevantMessageIds, title);
+    const selected = toImportMessages(recentInTopic).filter((m) => messageIds.includes(m.id));
+    const { summary } = buildContextSummaryFromMessages(selected, title);
+
+    return [
+      {
+        type: "create_topic",
+        title,
+        description:
+          decision.description?.trim() ||
+          `Focused workstream for ${title}.`,
+        reason:
+          decision.reason?.trim() ||
+          (onGeneral
+            ? "This looks like a focused workstream that deserves its own topic so the team can continue it cleanly."
+            : "This thread has enough detail to split into its own topic."),
+        confidence: Math.min(0.96, Math.max(0.72, decision.confidence)),
+        messageIds,
+        contextSummary: decision.contextSummary?.trim() || summary,
+        sourceScope: onGeneral ? "room" : "topic",
+        previewBullets: (decision.previewBullets ?? []).map((b) => b.trim()).filter(Boolean).slice(0, 4),
+        triggerMessageId: input.messageId,
+        migrateMessages: true,
+      },
+    ];
+  } catch (error) {
+    console.warn("[AdeHQ topic-steward] LLM evaluation failed", error);
+    return buildFallbackSuggestion(input, topic);
+  }
+}
+
+/** @deprecated Prefer async suggestTopics — kept for sync callers/tests. */
+export function suggestTopicsSync(
+  input: OrchestratorInput,
+  intent: OrchestrationIntent,
+  topic?: Pick<RoomTopic, "title" | "metadata">,
+): TopicStewardSuggestion[] {
+  if (!shouldEvaluate(input, intent)) return [];
+  return buildFallbackSuggestion(input, topic);
 }

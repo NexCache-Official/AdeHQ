@@ -18,6 +18,8 @@ export type TopicSuggestionPayload = {
     sourceScope?: "room" | "topic" | "dm" | null;
     previewBullets?: string[];
     triggerMessageId?: string | null;
+    description?: string | null;
+    migrateMessages?: boolean | null;
   } | null;
 };
 
@@ -37,14 +39,16 @@ export function TopicSuggestionCard({
     suggestion.type === "move_to_existing_topic"
       ? `Move to existing topic`
       : suggestion.title ?? "New topic";
+  const description = suggestion.metadata?.description?.trim();
   const subtitle =
     suggestion.type === "move_to_existing_topic"
       ? suggestion.reason ?? "This conversation may fit better in an existing topic."
       : suggestion.reason ??
-        "This looks like a focused workstream. AdeHQ can copy the relevant context into a new topic so the team can continue there.";
+        "This looks like a focused workstream. AdeHQ can move the relevant messages into a new topic so the team can continue there.";
   const preview = suggestion.metadata?.contextSummary?.trim();
   const previewBullets = suggestion.metadata?.previewBullets ?? [];
   const messageCount = suggestion.message_ids?.length ?? 0;
+  const willMigrate = suggestion.metadata?.migrateMessages !== false;
 
   const handleCreate = async () => {
     if (!suggestion.title || busy) return;
@@ -75,10 +79,14 @@ export function TopicSuggestionCard({
         </span>
         <div className="min-w-0 flex-1">
           <p className="text-sm font-semibold text-slate-900">Suggested topic: {title}</p>
+          {description ? (
+            <p className="mt-1 text-xs leading-relaxed text-slate-700">{description}</p>
+          ) : null}
           <p className="mt-1 text-xs leading-relaxed text-slate-600">{subtitle}</p>
           {messageCount ? (
             <p className="mt-1 text-[11px] text-slate-500">
-              Based on {messageCount} relevant message{messageCount === 1 ? "" : "s"}
+              {willMigrate ? "Will move" : "Based on"} {messageCount} relevant message
+              {messageCount === 1 ? "" : "s"}
               {previewBullets.length ? `: ${previewBullets.join(", ")}` : ""}
             </p>
           ) : null}
@@ -90,7 +98,11 @@ export function TopicSuggestionCard({
           <div className="mt-3 flex flex-wrap gap-2">
             {suggestion.type === "create_topic" && suggestion.title ? (
               <Button size="sm" onClick={handleCreate} disabled={busy}>
-                {busy ? "Creating…" : "Create topic with context"}
+                {busy
+                  ? "Creating…"
+                  : willMigrate
+                    ? "Create topic & continue there"
+                    : "Create topic with context"}
               </Button>
             ) : null}
             {suggestion.type === "move_to_existing_topic" ? (

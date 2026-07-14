@@ -51,6 +51,7 @@ import {
 } from "@/lib/integrations/reconcile-claimed-actions";
 import { handleAutopilotEffect, resolveAutopilotEmployee } from "@/lib/server/autopilot-effect";
 import { filterMemorySuggestions } from "@/lib/memory/curator";
+import { findExistingMemoryForSuggestion } from "@/lib/memory/find-existing";
 import type { ToolCallEffectItem } from "@/lib/types";
 import { extractMentions, nowISO, uid } from "@/lib/utils";
 
@@ -858,7 +859,25 @@ export async function persistEmployeeEffects(
     if (artifactLogError) throw artifactLogError;
   }
 
-  for (const [index, suggestion] of filterMemorySuggestions(effect.memorySuggestions ?? []).entries()) {
+  const durableMemorySuggestions = filterMemorySuggestions(effect.memorySuggestions ?? []);
+  const novelMemorySuggestions: typeof durableMemorySuggestions = [];
+  for (const suggestion of durableMemorySuggestions) {
+    try {
+      const existing = await findExistingMemoryForSuggestion(client, {
+        workspaceId,
+        roomId,
+        topicId,
+        title: suggestion.text.slice(0, 72),
+        content: suggestion.text,
+        scope: "topic",
+      });
+      if (existing) continue;
+    } catch (dedupeError) {
+      console.warn("[AdeHQ] memory suggestion dedupe check failed", dedupeError);
+    }
+    novelMemorySuggestions.push(suggestion);
+  }
+  for (const [index, suggestion] of novelMemorySuggestions.entries()) {
     const suggestionKey = uid("mem-sug");
     artifacts.push({
       type: "memory_suggestion",

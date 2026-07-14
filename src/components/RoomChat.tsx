@@ -1490,7 +1490,7 @@ export function RoomChat({
       headers: { ...headers, "Content-Type": "application/json" },
       body: JSON.stringify({
         title: suggestion.title,
-        description: "",
+        description: suggestion.metadata?.description?.trim() || "",
         priority: "normal",
         contextImport: {
           suggestionId: suggestion.id,
@@ -1505,6 +1505,7 @@ export function RoomChat({
           sourceScope:
             suggestion.metadata?.sourceScope ??
             (isGeneralTopic(topic) ? "room" : "topic"),
+          migrateMessages: suggestion.metadata?.migrateMessages !== false,
         },
       }),
     });
@@ -1516,7 +1517,16 @@ export function RoomChat({
     } else {
       setContextImportWarning(null);
     }
+    const migratedIds = Array.isArray(payload.migratedMessageIds)
+      ? (payload.migratedMessageIds as string[])
+      : suggestion.message_ids ?? [];
+    if (payload.topic?.id && migratedIds.length) {
+      for (const messageId of migratedIds) {
+        actions.updateLocalMessage(room.id, messageId, { topicId: payload.topic.id });
+      }
+    }
     if (payload.topic?.id) {
+      void actions.refreshTopics(room.id);
       onSelectTopic?.(payload.topic.id);
     }
   };

@@ -105,8 +105,33 @@ export function isDurableMemorySuggestion(item: MemorySuggestionLike): boolean {
   return true;
 }
 
+function normalizeSuggestionFinger(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .replace(/[^\w\s.-]/g, "")
+    .trim()
+    .slice(0, 220);
+}
+
+/** Drop weak suggestions and near-duplicates within the same suggestion batch. */
 export function filterMemorySuggestions<T extends MemorySuggestionLike>(items: T[]): T[] {
-  return items.filter(isDurableMemorySuggestion);
+  const kept: T[] = [];
+  const seen = new Set<string>();
+  for (const item of items) {
+    if (!isDurableMemorySuggestion(item)) continue;
+    const finger = normalizeSuggestionFinger(suggestionText(item));
+    if (!finger || seen.has(finger)) continue;
+    const nearDup = [...seen].some(
+      (existing) =>
+        existing.startsWith(finger.slice(0, 48)) ||
+        finger.startsWith(existing.slice(0, 48)),
+    );
+    if (nearDup) continue;
+    seen.add(finger);
+    kept.push(item);
+  }
+  return kept;
 }
 
 function summarizeRawContent(title: string, raw: string): string {

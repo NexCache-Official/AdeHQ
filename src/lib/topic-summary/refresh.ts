@@ -1,5 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { filterMemorySuggestions } from "@/lib/memory/curator";
+import { suggestionKeyForTopicSummary } from "@/lib/memory/fingerprint";
+import { isTerminalSuggestionState } from "@/lib/memory/suggestion-lifecycle";
 import { logOrchestrationWorkLog } from "@/lib/orchestration/persistence";
 import { nowISO } from "@/lib/utils";
 import {
@@ -196,7 +198,22 @@ export async function refreshTopicSummary(
     summary: nextSummary,
   });
 
-  const changed = summariesMeaningfullyChanged(existing, reconciledSummary);
+  // Drop suggestions that already exist in memory so duplicates never surface.
+  const novelSuggestedMemory = reconciledSummary.suggestedMemory.filter((suggestion) => {
+    const key = suggestionKeyForTopicSummary(params.topicId, {
+      title: suggestion.title,
+      content: suggestion.content,
+      text: suggestion.text,
+      sourceMessageId: suggestion.sourceMessageId,
+    });
+    return !isTerminalSuggestionState(reconciledSummary.memorySuggestionLifecycle?.[key]);
+  });
+  const dedupedSummary: TopicSummary = {
+    ...reconciledSummary,
+    suggestedMemory: novelSuggestedMemory,
+  };
+
+  const changed = summariesMeaningfullyChanged(existing, dedupedSummary);
   if (!manual && !changed) {
     return { summary: existingForContext, refreshed: false, skippedReason: "no_meaningful_change" };
   }
@@ -210,7 +227,7 @@ export async function refreshTopicSummary(
     return { summary: null, refreshed: false, skippedReason: "chat_cleared" };
   }
 
-  const saved = await upsertTopicSummary(client, reconciledSummary);
+  const saved = await upsertTopicSummary(client, dedupedSummary);
 
   const employeeId = params.employeeId ?? "system";
 

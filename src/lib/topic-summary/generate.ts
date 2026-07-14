@@ -92,6 +92,7 @@ Rules:
 - suggestedMemory is a suggestion only — never imply it was saved.
 - Do NOT suggest memory for transactional tool activity already captured elsewhere: "created contact/deal/company/task", "CRM setup started", "email draft created", "spreadsheet generated", or summaries of recent tool execution. Those belong in CRM, Tasks, Drive, or Work Log.
 - Suggest memory only for durable business context: target accounts, primary contacts, preferences, positioning, compliance notes, ICP — not activity logs.
+- NEVER suggest memory that duplicates or restates anything under "Topic memory:" — even with different wording. Prefer an empty suggestedMemory list over weak or duplicate suggestions. Titles and content must accurately reflect the durable fact.
 - For suggestedMemory: provide a short clean title (max ~8 words), 1–2 sentence content, category from: Company Context, Product / Service, Market Research, Sales, Customer / Client, Marketing, Operations, Decision, Preference, People / Workforce, Process / Playbook, File Finding, Topic Summary, Employee-Specific Context, Other.
 - Include 2–6 lowercase tags for retrieval. Prefer topic or room scope unless truly workspace-wide.
 - suggestedByEmployeeId: employee id when an AI message inspired the suggestion.
@@ -163,7 +164,7 @@ export function buildTopicSummaryContextBlock(params: BuildContextParams): strin
     "Open tasks:",
     ...params.tasks.map((t) => `- [${t.status}] ${t.title} (${t.priority})`),
     "",
-    "Topic memory:",
+    "Topic memory (already saved — do not suggest duplicates):",
     ...params.memory.map((m) => `- [${m.status}] ${m.title}: ${m.content.slice(0, 240)}`),
     "",
     "Pending approvals:",

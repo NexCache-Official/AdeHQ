@@ -473,6 +473,8 @@ export async function persistTopicSuggestions(
             sourceScope: suggestion.sourceScope ?? null,
             previewBullets: suggestion.previewBullets ?? [],
             triggerMessageId: suggestion.triggerMessageId ?? params.triggerMessageId,
+            description: suggestion.description ?? null,
+            migrateMessages: suggestion.migrateMessages !== false,
           }
         : {},
     status: "pending",

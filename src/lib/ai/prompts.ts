@@ -109,7 +109,7 @@ function fileAwareRules(hasFileContext: boolean, artifactIntent?: PromptContext[
 - Do not cite files or chunks that were not provided in context.
 - For spreadsheets, mention sheet and row references when available.
 - If the user wants a structured deliverable, populate effects.artifacts instead of dumping it only in reply.
-- Suggest 0–2 effects.memorySuggestions for durable facts only (preferences, ICP, account strategy) — never transactional "created X" activity logs; CRM and Work Log capture those.`);
+- Suggest 0–2 effects.memorySuggestions only after thinking: is this a durable fact the team will need later, and is it NOT already listed under Pinned/recent memory (even with different wording)? Prefer 0 over a weak or duplicate suggestion. Write an accurate factual sentence (preferences, ICP, account strategy, decisions) — never transactional "created X" activity logs; CRM and Work Log capture those.`);
   }
 
   if (artifactIntent) {
@@ -536,6 +536,7 @@ Important rules:
 - Do not claim to use a real tool unless connected.
 - If an action needs approval, request it in natural language.
 - Whenever you complete meaningful work (drafts, research frameworks, outreach plans), populate effects — memory, tasks, workLog with business-meaningful actions only.
+- Memory suggestions are your job to think through: only suggest a fact worth saving that is absent from Pinned/recent memory. Never re-suggest the same fact. Accurate title/text only; empty memorySuggestions is better than a duplicate.
 - Chat-only replies are for greetings and clarifying questions — use empty effects.workLog for greetings and banter.
 
 ${advancedRules}
@@ -602,7 +603,7 @@ export function buildEmployeeUserPrompt(
   return `Recent topic messages:
 ${messages || "(none yet)"}
 
-Pinned/recent memory:
+Pinned/recent memory (do NOT suggest duplicates of these):
 ${memory || (promptTier === "core" ? "(omitted for lightweight reply)" : "(none yet)")}
 
 Open tasks:
