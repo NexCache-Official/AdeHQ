@@ -182,7 +182,12 @@ const prompts = {
   deepen: `Lock a working draft: name the package, 3 bullet benefits, monthly price band in GBP, and who owns the landlord conversation vs who owns delivery. If you disagree with each other, say so. (${stamp}-c)`,
 };
 
-const browser = await chromium.launch({ headless: true, slowMo: 20 });
+const HEADLESS = process.env.E2E_HEADLESS === "1";
+const browser = await chromium.launch({
+  headless: HEADLESS,
+  channel: process.env.E2E_CHANNEL || "chrome",
+  slowMo: HEADLESS ? 0 : 40,
+});
 const page = await (
   await browser.newContext({
     viewport: { width: 1440, height: 900 },

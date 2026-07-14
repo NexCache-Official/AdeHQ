@@ -10,6 +10,7 @@ import {
   type TopicImportMessage,
 } from "@/lib/topics/context-imports";
 import type { RoomTopic } from "@/lib/types";
+import { titlesAreNearDuplicate } from "./topic-governance";
 import {
   cleanTopicDescription,
   cleanTopicTitle,
@@ -37,21 +38,22 @@ const TopicStewardLlmSchema = z.object({
   existingTopicId: z.string().nullable().optional(),
 });
 
-const TOPIC_STEWARD_SYSTEM = `You are AdeHQ's topic steward. Decide whether the latest conversation deserves its own dedicated topic (workstream), and if so write an accurate title and description.
+const TOPIC_STEWARD_SYSTEM = `You are AdeHQ's topic steward. You only evaluate whether work in the broad General chat should become its own topic (workstream).
 
 Only suggest a separate topic when ALL of these are true:
-1. There is a focused workstream with enough substance (decisions, research, planning, deliverables) — not greetings, tiny clarifications, or one-off questions.
-2. The current topic is too broad (often "General") OR the thread has clearly drifted into a different subject that should be tracked separately.
-3. Creating a topic will help the team continue that work without cluttering the parent conversation.
+1. The current topic is General (broad room chat) — never suggest creating a topic from inside an already-focused topic.
+2. There is a focused workstream with enough substance (decisions, research, planning, deliverables) — not greetings, tiny clarifications, or one-off questions.
+3. Creating a topic will help the team continue that workflow without cluttering General.
 
 Do NOT suggest when:
+- The user is already inside a focused (non-General) topic
 - The chat is casual / social / acknowledgment-only
-- The work already lives in a well-scoped existing topic that matches
+- An existing non-General topic already covers the same or nearly the same work — set existingTopicId instead (never invent a near-duplicate title)
 - There is not enough detail yet to name the workstream honestly
 - You would only be guessing a vague title like "Project Discussion" or "Follow Up"
 
 When deservesSeparateTopic is true:
-- title: specific, accurate, 2–6 words reflecting the ACTUAL subject (never keyword spam, never person names alone, never truncated mid-phrase or open parentheses)
+- title: specific, accurate, 2–6 words reflecting the ACTUAL subject (never keyword spam, never person names alone, never truncated mid-phrase or open parentheses, never a slight rephrase of an existing topic title)
 - description: one clear sentence of what this topic is for — different from the title, not "Focused workstream for {title}"
 - reason: short human explanation of why a separate topic helps
 - contextSummary: 1–2 sentences of what to carry over
@@ -155,7 +157,11 @@ export async function suggestTopics(
 ): Promise<TopicStewardSuggestion[]> {
   if (!shouldEvaluate(input, intent)) return [];
 
+  // Topics exist to peel focused workflows out of General — never suggest a
+  // create/split while the user is already inside a dedicated topic.
   const onGeneral = topic ? isGeneralTopic(topic as RoomTopic) : true;
+  if (!onGeneral) return [];
+
   const recentInTopic = input.recentMessages
     .filter((m) => !input.topicId || m.topicId === input.topicId)
     .slice(-16);
@@ -164,8 +170,10 @@ export async function suggestTopics(
     return buildFallbackSuggestion(input, topic);
   }
 
-  const existingTopics = input.existingTopics
-    .filter((t) => t.title.toLowerCase() !== "general")
+  const nonGeneralTopics = input.existingTopics.filter(
+    (t) => t.title.toLowerCase() !== "general",
+  );
+  const existingTopics = nonGeneralTopics
     .slice(0, 12)
     .map((t) => `- ${t.id}: ${t.title}${t.summary ? ` — ${t.summary.slice(0, 120)}` : ""}`)
     .join("\n");
@@ -182,11 +190,11 @@ export async function suggestTopics(
       schema: TopicStewardLlmSchema,
       system: TOPIC_STEWARD_SYSTEM,
       prompt: [
-        `Current topic: ${topic?.title ?? "General"}${onGeneral ? " (broad / General)" : ""}`,
+        `Current topic: ${topic?.title ?? "General"} (broad / General)`,
         `Latest user message id: ${input.messageId}`,
         `Latest user message: ${input.messageText.trim().slice(0, 800)}`,
         "",
-        "Existing topics in this room:",
+        "Existing topics in this room (prefer existingTopicId over a near-duplicate title):",
         existingTopics || "(none besides General)",
         "",
         "Recent messages in the current topic (use these ids only):",
@@ -199,22 +207,23 @@ export async function suggestTopics(
 
     const decision = TopicStewardLlmSchema.parse(object);
 
+    const asMoveToExisting = (match: { id: string; title: string }, reason?: string) =>
+      [
+        {
+          type: "move_to_existing_topic" as const,
+          topicId: match.id,
+          topicTitle: match.title,
+          reason:
+            reason?.trim() ||
+            `This continues the work already tracked in "${match.title}".`,
+          confidence: Math.min(0.95, Math.max(0.55, decision.confidence)),
+          messageIds: resolveMessageIds(input, decision.relevantMessageIds, match.title),
+        },
+      ];
+
     if (decision.existingTopicId) {
-      const match = input.existingTopics.find((t) => t.id === decision.existingTopicId);
-      if (match && match.title.toLowerCase() !== "general") {
-        return [
-          {
-            type: "move_to_existing_topic",
-            topicId: match.id,
-            topicTitle: match.title,
-            reason:
-              decision.reason?.trim() ||
-              `This continues the work already tracked in "${match.title}".`,
-            confidence: Math.min(0.95, Math.max(0.55, decision.confidence)),
-            messageIds: resolveMessageIds(input, decision.relevantMessageIds, match.title),
-          },
-        ];
-      }
+      const match = nonGeneralTopics.find((t) => t.id === decision.existingTopicId);
+      if (match) return asMoveToExisting(match, decision.reason);
     }
 
     if (!decision.deservesSeparateTopic) return [];
@@ -222,6 +231,15 @@ export async function suggestTopics(
 
     const title = cleanTopicTitle(decision.title ?? "");
     if (!title) return [];
+
+    const nearExisting = nonGeneralTopics.find((t) => titlesAreNearDuplicate(title, t.title));
+    if (nearExisting) {
+      return asMoveToExisting(
+        nearExisting,
+        decision.reason?.trim() ||
+          `"${title}" is already covered by "${nearExisting.title}".`,
+      );
+    }
 
     const description = cleanTopicDescription(decision.description, title);
     const messageIds = resolveMessageIds(input, decision.relevantMessageIds, title);
@@ -235,13 +253,11 @@ export async function suggestTopics(
         description,
         reason:
           decision.reason?.trim() ||
-          (onGeneral
-            ? "This looks like a focused workstream. AdeHQ can move the relevant chats into a new topic so you can continue there."
-            : "This thread has enough detail to split into its own topic with the relevant chats moved over."),
+          "This looks like a focused workstream. AdeHQ can move the relevant chats into a new topic so you can continue there.",
         confidence: Math.min(0.96, Math.max(0.72, decision.confidence)),
         messageIds,
         contextSummary: decision.contextSummary?.trim() || summary,
-        sourceScope: onGeneral ? "room" : "topic",
+        sourceScope: "room",
         previewBullets: (decision.previewBullets ?? []).map((b) => b.trim()).filter(Boolean).slice(0, 4),
         triggerMessageId: input.messageId,
         migrateMessages: true,
@@ -260,5 +276,6 @@ export function suggestTopicsSync(
   topic?: Pick<RoomTopic, "title" | "metadata">,
 ): TopicStewardSuggestion[] {
   if (!shouldEvaluate(input, intent)) return [];
+  if (topic && !isGeneralTopic(topic as RoomTopic)) return [];
   return buildFallbackSuggestion(input, topic);
 }

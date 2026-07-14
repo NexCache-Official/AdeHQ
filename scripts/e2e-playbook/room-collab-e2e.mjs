@@ -112,7 +112,12 @@ const stamp = new Date().toISOString().slice(11, 19).replace(/:/g, "");
 const results = [];
 let stoppedOnBug = null;
 
-const browser = await chromium.launch({ headless: false, slowMo: 30 });
+const HEADLESS = process.env.E2E_HEADLESS === "1";
+const browser = await chromium.launch({
+  headless: HEADLESS,
+  channel: process.env.E2E_CHANNEL || "chrome",
+  slowMo: HEADLESS ? 0 : 40,
+});
 const page = await (await browser.newContext({ viewport: { width: 1440, height: 900 } })).newPage();
 
 try {

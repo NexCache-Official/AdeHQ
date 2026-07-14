@@ -1515,6 +1515,11 @@ export function RoomChat({
 
   const handleCreateTopicFromSuggestion = async (suggestion: TopicSuggestionPayload) => {
     if (!topic || !suggestion.title) return;
+    // Stop showing source-topic typing UI immediately — server cancels those runs.
+    setActiveRuns([]);
+    const triggerMessageId =
+      suggestion.metadata?.triggerMessageId ??
+      suggestion.message_ids?.[suggestion.message_ids.length - 1];
     const headers = await authHeaders();
     const res = await fetch(`/api/rooms/${room.id}/topics`, {
       method: "POST",
@@ -1529,9 +1534,7 @@ export function RoomChat({
           sourceRoomId: room.id,
           sourceTopicId: topic.id,
           sourceDmId: isDm ? room.id : undefined,
-          triggerMessageId:
-            suggestion.metadata?.triggerMessageId ??
-            suggestion.message_ids?.[suggestion.message_ids.length - 1],
+          triggerMessageId,
           sourceMessageIds: suggestion.message_ids ?? [],
           suggestedTitle: suggestion.title,
           sourceScope:
@@ -1599,6 +1602,18 @@ export function RoomChat({
     if (payload.topic?.id) {
       void actions.refreshTopics(room.id);
       onSelectTopic?.(payload.topic.id);
+      const continuedTrigger =
+        (payload.continuedWork?.triggerMessageId as string | undefined) ??
+        (typeof triggerMessageId === "string" ? triggerMessageId : undefined);
+      if (continuedTrigger) {
+        triggerMessageIdRef.current = continuedTrigger;
+      }
+      const queuedRuns = Array.isArray(payload.queuedRuns)
+        ? (payload.queuedRuns as QueuedRunClient[])
+        : [];
+      if (queuedRuns.length) {
+        void processQueuedRuns(queuedRuns);
+      }
     }
   };
 

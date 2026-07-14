@@ -375,7 +375,7 @@ export async function fetchTopicSuggestionGovernance(
     Date.now() - 24 * 60 * 60 * 1000,
   ).toISOString();
 
-  const [dismissedResult, recentResult] = await Promise.all([
+  const [dismissedResult, recentResult, existingTopicsResult] = await Promise.all([
     client
       .from("topic_suggestions")
       .select("title, target_topic_id, trigger_message_id, resolved_at, type")
@@ -388,6 +388,12 @@ export async function fetchTopicSuggestionGovernance(
       .eq("workspace_id", workspaceId)
       .eq("room_id", roomId)
       .gte("created_at", since24h),
+    client
+      .from("topics")
+      .select("title, metadata")
+      .eq("workspace_id", workspaceId)
+      .eq("room_id", roomId)
+      .neq("status", "archived"),
   ]);
 
   const topicIds = new Set<string>();
@@ -436,7 +442,16 @@ export async function fetchTopicSuggestionGovernance(
     ),
   );
 
-  return { dismissedTitles, recentSuggestedTitles, dismissedTriggerMessageIds };
+  const existingTopicTitles = ((existingTopicsResult.data ?? []) as Record<string, unknown>[])
+    .map((row) => String(row.title ?? "").trim())
+    .filter((title) => title && title.toLowerCase() !== "general");
+
+  return {
+    dismissedTitles,
+    recentSuggestedTitles,
+    dismissedTriggerMessageIds,
+    existingTopicTitles,
+  };
 }
 
 export async function persistTopicSuggestions(

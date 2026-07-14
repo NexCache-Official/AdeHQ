@@ -13,7 +13,13 @@ export E2E_PASSWORD='…'
 export E2E_BASE_URL='https://app.adehq.com'
 ```
 
-Playwright must be installed (`npx playwright install chromium` once).
+Install Playwright browsers once:
+
+```bash
+npx playwright install chrome
+```
+
+**Default run mode is headed Google Chrome** (visible window, `slowMo`) so you can watch authentic owner flows. Set `E2E_HEADLESS=1` only for CI. Override browser with `E2E_CHANNEL=chromium` if Chrome is not installed.
 
 ## Scripts
 

@@ -103,7 +103,12 @@ async function mainText(page) {
 let stoppedOnBug = null;
 const stamp = Date.now().toString(36).slice(-5);
 
-const browser = await chromium.launch({ headless: true });
+const HEADLESS = process.env.E2E_HEADLESS === "1";
+const browser = await chromium.launch({
+  headless: HEADLESS,
+  channel: process.env.E2E_CHANNEL || "chrome",
+  slowMo: HEADLESS ? 0 : 40,
+});
 const page = await (
   await browser.newContext({ viewport: { width: 1440, height: 900 } })
 ).newPage();

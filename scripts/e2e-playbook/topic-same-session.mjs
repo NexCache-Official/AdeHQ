@@ -35,8 +35,15 @@ async function dismissPicker(page) {
 }
 
 const uniq = `Harborline Guarantor Shield ${Date.now().toString(36).slice(-4)}`;
-const browser = await chromium.launch({ headless: true });
-const page = await (await browser.newContext({ viewport: { width: 1440, height: 900 } })).newPage();
+const HEADLESS = process.env.E2E_HEADLESS === "1";
+const browser = await chromium.launch({
+  headless: HEADLESS,
+  channel: process.env.E2E_CHANNEL || "chrome",
+  slowMo: HEADLESS ? 0 : 40,
+});
+const page = await (
+  await browser.newContext({ viewport: { width: 1440, height: 900 } })
+).newPage();
 
 try {
   await page.goto(`${BASE}/login`, { waitUntil: "domcontentloaded", timeout: 60000 });
@@ -51,6 +58,18 @@ try {
   if (await general.isVisible().catch(() => false)) await general.click();
   await page.waitForTimeout(800);
   await shot(page, "room");
+
+  // Clear stale pending banners so we exercise a fresh unique workstream.
+  for (let d = 0; d < 5; d++) {
+    const stale = page.getByText(/Suggested topic:/i).first();
+    if (!(await stale.isVisible({ timeout: 800 }).catch(() => false))) break;
+    const dismiss = page.getByRole("button", { name: /^Dismiss$/i }).first();
+    if (await dismiss.isVisible().catch(() => false)) {
+      await dismiss.click();
+      await page.waitForTimeout(800);
+      note("ok", "dismissed stale topic suggestion");
+    } else break;
+  }
 
   // Seed a short multi-turn workstream with a UNIQUE product name
   const turns = [
@@ -78,12 +97,20 @@ try {
         report.ux.push(cardText.slice(0, 450).replace(/\s+/g, " "));
         note("ux", report.ux.at(-1));
 
-        if (/Harborline|Guarantor|Shield/i.test(cardText) === false && cardText.length > 40) {
-          report.bugs.push({
-            severity: "P2",
-            msg: "Topic suggestion title/description may not match the unique product discussed",
-            sample: cardText.match(/Suggested topic:[^\n]+/)?.[0],
-          });
+        // Only accept if the banner is about THIS unique product.
+        const matchesUniq = uniq
+          .split(/\s+/)
+          .filter((w) => w.length >= 5)
+          .some((w) => new RegExp(w, "i").test(cardText));
+        if (!matchesUniq) {
+          const dismiss = page.getByRole("button", { name: /^Dismiss$/i }).first();
+          if (await dismiss.isVisible().catch(() => false)) {
+            await dismiss.click();
+            note("ok", "dismissed unrelated topic suggestion; keep waiting");
+            await page.waitForTimeout(1000);
+          }
+          await page.waitForTimeout(2500);
+          continue;
         }
         if (/\(\s*$|\(\d+\s*$|mid-\s*$/i.test(cardText) || /landlord \(6/i.test(cardText)) {
           report.bugs.push({ severity: "P1", msg: "Suggested topic title truncated mid-phrase in UI" });

@@ -31,7 +31,12 @@ async function dismissPicker(page) {
   await page.waitForTimeout(800);
 }
 
-const browser = await chromium.launch({ headless: true });
+const HEADLESS = process.env.E2E_HEADLESS === "1";
+const browser = await chromium.launch({
+  headless: HEADLESS,
+  channel: process.env.E2E_CHANNEL || "chrome",
+  slowMo: HEADLESS ? 0 : 40,
+});
 const page = await (await browser.newContext({ viewport: { width: 1440, height: 900 } })).newPage();
 const report = { bugs: [], results: [], ux: [], stoppedOnBug: null };
 

@@ -21,6 +21,7 @@ import {
   selectMessagesForTopicImport,
 } from "@/lib/topics/context-imports";
 import { cleanTopicDescription, cleanTopicTitle } from "@/lib/orchestration/topic-title";
+import { continueWorkAfterTopicMigration } from "@/lib/server/continue-topic-migration-work";
 import { nowISO, uid } from "@/lib/utils";
 import type { TopicPriority } from "@/lib/types";
 
@@ -225,6 +226,41 @@ export async function POST(
       }
     }
 
+    // Stop in-flight AI work on the source topic and continue it here when the
+    // human accepted a suggestion mid-reply.
+    let continuedRuns: Awaited<
+      ReturnType<typeof continueWorkAfterTopicMigration>
+    >["continuedRuns"] = [];
+    let continueMeta: {
+      cancelledAgentRunIds: string[];
+      cancelledBrowserResearchCount: number;
+      triggerMessageId: string | null;
+    } | null = null;
+    if (
+      migratedMessageIds.length &&
+      body.contextImport?.sourceTopicId &&
+      body.contextImport.sourceTopicId !== topic.id
+    ) {
+      try {
+        const continued = await continueWorkAfterTopicMigration(client, {
+          workspaceId,
+          roomId: params.roomId,
+          sourceTopicId: body.contextImport.sourceTopicId,
+          targetTopicId: topic.id,
+          migratedMessageIds,
+          triggerMessageId: body.contextImport.triggerMessageId,
+        });
+        continuedRuns = continued.continuedRuns;
+        continueMeta = {
+          cancelledAgentRunIds: continued.cancelledAgentRunIds,
+          cancelledBrowserResearchCount: continued.cancelledBrowserResearchCount,
+          triggerMessageId: continued.triggerMessageId,
+        };
+      } catch (continueError) {
+        console.warn("[AdeHQ topics POST] continue after migrate failed", continueError);
+      }
+    }
+
     // When messages were moved, stamp the system note just after the last moved
     // message so the timeline reads as the original chat, then a short continue cue.
     let systemCreatedAt = nowISO();
@@ -246,9 +282,13 @@ export async function POST(
     const systemMessageId = uid("msg");
     const systemContent =
       migratedMessageIds.length > 0
-        ? `Moved ${migratedMessageIds.length} message${
-            migratedMessageIds.length === 1 ? "" : "s"
-          } into “${title}”. Continue here.`
+        ? continuedRuns.length > 0
+          ? `Moved ${migratedMessageIds.length} message${
+              migratedMessageIds.length === 1 ? "" : "s"
+            } into “${title}”. Continuing the reply here.`
+          : `Moved ${migratedMessageIds.length} message${
+              migratedMessageIds.length === 1 ? "" : "s"
+            } into “${title}”. Continue here.`
         : `Topic created: ${title}`;
     const { error: messageError } = await client.from("messages").insert({
       workspace_id: workspaceId,
@@ -438,6 +478,15 @@ export async function POST(
       contextImportWarning: contextImportWarning ?? migrateWarning,
       migratedMessageIds,
       migratedMessages,
+      queuedRuns: continuedRuns,
+      continuedWork: continueMeta
+        ? {
+            cancelledAgentRunCount: continueMeta.cancelledAgentRunIds.length,
+            cancelledBrowserResearchCount: continueMeta.cancelledBrowserResearchCount,
+            triggerMessageId: continueMeta.triggerMessageId,
+            continuedRunCount: continuedRuns.length,
+          }
+        : undefined,
     });
   } catch (error) {
     if (createdTopicId) {
