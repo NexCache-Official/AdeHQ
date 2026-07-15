@@ -32,7 +32,7 @@ async function waitShell(page) {
   const t0 = Date.now();
   while (Date.now() - t0 < SHELL_MS) {
     const loading = await page
-      .getByText(/Loading inbox|Loading…|Loading\.\.\.|Redirecting/i)
+      .getByText(/Loading workspace|Loading inbox|Loading…|Loading\.\.\.|Redirecting/i)
       .first()
       .isVisible()
       .catch(() => false);
@@ -176,11 +176,41 @@ try {
     }
   }
   if (!approved) {
+    // Draft card "Open →" often deep-links into inbox draft / approval
+    const openDraft = page.getByRole("link", { name: /Open/i }).filter({ hasText: /Open/i }).first()
+      .or(page.locator("a").filter({ hasText: /^Open/i }).first());
+    if (await openDraft.isVisible({ timeout: 2000 }).catch(() => false)) {
+      note("flow", "Opening email draft card");
+      await openDraft.click();
+      await page.waitForTimeout(2500);
+      await waitShell(page);
+      await shot(page, "draft-open");
+      for (const name of [/Allow once|^Approve$/i, /Approve & send/i, /^Send$/i]) {
+        const btn = page.getByRole("button", { name }).first();
+        if (await btn.isVisible({ timeout: 2000 }).catch(() => false)) {
+          note("flow", `Click ${name}`);
+          await btn.click();
+          await page.waitForTimeout(4000);
+          await shot(page, "approved-draft");
+          approved = true;
+          break;
+        }
+      }
+    }
+  }
+
+  if (!approved) {
     // Chat may only show a chip — finish on Approvals page (Allow once / Approve).
     note("flow", "Opening /approvals to finish send");
     await page.goto(`${BASE}/approvals`, { waitUntil: "domcontentloaded", timeout: SHELL_MS });
     await waitShell(page);
+    await page.waitForTimeout(2000);
     await shot(page, "approvals-page");
+    // Wait past empty/loading states
+    await page.getByText(/You're all caught up|Allow once|Approve|pending/i).first()
+      .waitFor({ state: "visible", timeout: SHELL_MS })
+      .catch(() => {});
+    await shot(page, "approvals-ready");
     const allow = page.getByRole("button", { name: /Allow once|^Approve$/i }).first();
     if (await allow.isVisible({ timeout: 8000 }).catch(() => false)) {
       note("flow", "Approving on Approvals page");
@@ -190,6 +220,7 @@ try {
       approved = true;
     } else {
       bug("P1", "No approve button in chat or on Approvals page");
+      await shot(page, "approvals-empty");
     }
   }
 
