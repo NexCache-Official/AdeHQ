@@ -1,5 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getWorkMinuteUsdRate, isWorkHoursShadowEnabled } from "@/lib/ai/work-hours/constants";
+import { getCurrentUsagePeriodRange } from "@/lib/ai/work-hours/periods";
+import { displayWorkHours } from "@/lib/billing/costing/work-hours";
 import {
   AGGREGATION_ROW_LIMIT,
   groupSum,
@@ -13,6 +15,15 @@ export type WorkHoursSummary = {
   shadowEnabled: boolean;
   configuredUsdPerMinute: number;
   impliedUsdPerMinute: number | null;
+  /** Current Mon 00:00 UTC week clipped by calendar month (commercial ledger). */
+  currentPeriod: {
+    startIso: string;
+    endExclusiveIso: string;
+    weekStart: string;
+    totalWorkHours: number;
+    byEmployee: { key: string; label?: string; workHours: number }[];
+    byWorkspace: { key: string; label: string; workHours: number }[];
+  };
   totals: {
     workMinutes: number;
     workHours: number;
@@ -30,8 +41,9 @@ export async function getWorkHoursSummary(
   range: AdminRange,
 ): Promise<WorkHoursSummary> {
   const since = rangeStart(range);
+  const period = getCurrentUsagePeriodRange(new Date());
 
-  const [ledgerRes, workspacesRes] = await Promise.all([
+  const [ledgerRes, commercialRes, workspacesRes, employeesRes] = await Promise.all([
     client
       .from("ai_work_minutes_ledger")
       .select(
@@ -39,14 +51,30 @@ export async function getWorkHoursSummary(
       )
       .gte("created_at", since)
       .limit(AGGREGATION_ROW_LIMIT),
+    client
+      .from("ai_cost_ledger_entries")
+      .select(
+        "workspace_id, employee_id, work_hours_charged, billable_to_workspace, created_at",
+      )
+      .gte("created_at", period.startIso)
+      .lt("created_at", period.endExclusiveIso)
+      .limit(AGGREGATION_ROW_LIMIT),
     client.from("workspaces").select("id, name, plan").limit(AGGREGATION_ROW_LIMIT),
+    client.from("ai_employees").select("id, name").limit(AGGREGATION_ROW_LIMIT),
   ]);
 
   if (ledgerRes.error) throw ledgerRes.error;
   if (workspacesRes.error) throw workspacesRes.error;
-
+  // Commercial ledger may be missing on older envs.
+  const commercial = commercialRes.error ? [] : (commercialRes.data ?? []);
   const ledger = ledgerRes.data ?? [];
   const workspaceById = new Map((workspacesRes.data ?? []).map((w) => [w.id, w]));
+  const employeeById = new Map(
+    ((employeesRes.data ?? []) as Array<{ id: string; name: string }>).map((e) => [
+      e.id,
+      e.name,
+    ]),
+  );
 
   const minutesOf = (r: (typeof ledger)[number]) => Number(r.work_minutes_estimated ?? 0);
   const costOf = (r: (typeof ledger)[number]) =>
@@ -57,12 +85,37 @@ export async function getWorkHoursSummary(
 
   const round2 = (v: number) => Math.round(v * 100) / 100;
 
+  const billableCommercial = commercial.filter((r) => r.billable_to_workspace !== false);
+  const commercialHoursOf = (r: (typeof billableCommercial)[number]) =>
+    Number(r.work_hours_charged ?? 0);
+  const commercialTotal = sumBy(billableCommercial, commercialHoursOf);
+
   return {
     range,
     shadowEnabled: isWorkHoursShadowEnabled(),
     configuredUsdPerMinute: getWorkMinuteUsdRate(),
     impliedUsdPerMinute:
       totalMinutes > 0 ? Math.round((totalCost / totalMinutes) * 10000) / 10000 : null,
+    currentPeriod: {
+      startIso: period.startIso,
+      endExclusiveIso: period.endExclusiveIso,
+      weekStart: period.weekStart,
+      totalWorkHours: displayWorkHours(commercialTotal),
+      byEmployee: groupSum(billableCommercial, (r) => r.employee_id ?? "unassigned", commercialHoursOf)
+        .slice(0, 20)
+        .map(({ key, value }) => ({
+          key,
+          label: employeeById.get(key) ?? key,
+          workHours: displayWorkHours(value),
+        })),
+      byWorkspace: groupSum(billableCommercial, (r) => r.workspace_id, commercialHoursOf)
+        .slice(0, 20)
+        .map(({ key, value }) => ({
+          key,
+          label: workspaceById.get(key)?.name ?? key,
+          workHours: displayWorkHours(value),
+        })),
+    },
     totals: {
       workMinutes: round2(totalMinutes),
       workHours: round2(totalMinutes / 60),

@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useStore } from "@/lib/demo-store";
+import { authHeaders } from "@/lib/api/auth-client";
 import { PageContainer } from "@/components/Page";
 import { EmployeeAvatar } from "@/components/EmployeeAvatar";
 import { EmployeeStatusBadge } from "@/components/EmployeeStatusBadge";
@@ -32,6 +33,11 @@ import {
   Target,
 } from "lucide-react";
 
+type EmployeeUsageStats = {
+  weekWorkHours: number;
+  lifetimeWorkHours: number;
+};
+
 export default function EmployeeProfilePage() {
   const params = useParams();
   const router = useRouter();
@@ -39,6 +45,7 @@ export default function EmployeeProfilePage() {
   const { state, actions, backend } = useStore();
   const [editOpen, setEditOpen] = useState(false);
   const [taskOpen, setTaskOpen] = useState(false);
+  const [usageStats, setUsageStats] = useState<EmployeeUsageStats | null>(null);
 
   const employee = state.employees.find((e) => e.id === employeeId);
   const maya = state.employees.find(isMayaEmployee);
@@ -60,6 +67,34 @@ export default function EmployeeProfilePage() {
         : [],
     [employee, state.workLog],
   );
+
+  useEffect(() => {
+    if (!employeeId || !state.workspace?.id || backend !== "supabase") {
+      setUsageStats(null);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const headers = await authHeaders();
+        const res = await fetch(
+          `/api/employees/${employeeId}/usage?workspaceId=${encodeURIComponent(state.workspace.id)}`,
+          { headers },
+        );
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok || cancelled) return;
+        setUsageStats({
+          weekWorkHours: Number(body.weekWorkHours ?? 0),
+          lifetimeWorkHours: Number(body.lifetimeWorkHours ?? 0),
+        });
+      } catch {
+        if (!cancelled) setUsageStats(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [backend, employeeId, state.workspace?.id]);
 
   if (!employee) {
     return (
@@ -131,6 +166,18 @@ export default function EmployeeProfilePage() {
               <span>Active {timeAgo(employee.lastActiveAt)}</span>
             </div>
             <dl className="mt-4 flex flex-wrap gap-x-5 gap-y-1 text-xs text-ink-3">
+              <div>
+                <dt className="inline text-ink-3">This week </dt>
+                <dd className="inline font-medium tabular-nums text-ink">
+                  {(usageStats?.weekWorkHours ?? 0).toFixed(2)} hrs
+                </dd>
+              </div>
+              <div>
+                <dt className="inline text-ink-3">Since hire </dt>
+                <dd className="inline font-medium tabular-nums text-ink">
+                  {(usageStats?.lifetimeWorkHours ?? 0).toFixed(2)} hrs
+                </dd>
+              </div>
               <div>
                 <dt className="inline text-ink-3">Messages </dt>
                 <dd className="inline font-medium text-ink">{employee.messagesSent}</dd>

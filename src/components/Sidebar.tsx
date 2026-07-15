@@ -17,6 +17,7 @@ import { ENABLE_DEMO_MODE, WORKFORCE_CALLS_ENABLED } from "@/lib/config/features
 import { useShellUI } from "./AppShell";
 import { useDebugTrace } from "./DebugProvider";
 import { WorkspaceSwitcher } from "./WorkspaceSwitcher";
+import { SidebarWorkHoursMeter } from "./SidebarWorkHoursMeter";
 import { Toggle } from "./ui";
 import { EmployeeAvatar } from "./EmployeeAvatar";
 import {
@@ -135,6 +136,7 @@ export function Sidebar() {
     <aside className="hidden w-[240px] shrink-0 flex-col border-r border-[var(--rail-edge)] bg-rail lg:flex">
       <div className="flex min-h-0 flex-1 flex-col gap-[3px] overflow-y-auto px-3 py-3.5">
         <WorkspaceSwitcher variant="rail" />
+        <SidebarWorkHoursMeter />
 
         <div className="relative mb-2 mt-1">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-[15px] w-[15px] -translate-y-1/2 text-[var(--rail-ink-3)]" />

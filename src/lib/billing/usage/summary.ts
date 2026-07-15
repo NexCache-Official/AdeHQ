@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { getBillingWeekRangeIso, getBillingWeekStart } from "@/lib/ai/work-hours/periods";
+import { getCurrentUsagePeriodRange } from "@/lib/ai/work-hours/periods";
 import { displayWorkHours } from "@/lib/billing/costing/work-hours";
 import { getWorkspaceCapacity, type WorkspaceCapacity } from "./periods";
 
@@ -44,7 +44,8 @@ function humanizeWorkType(workType: string): string {
 }
 
 /**
- * Aggregate the current week's billable cost ledger for a workspace.
+ * Aggregate the current period's billable cost ledger for a workspace
+ * (Mon 00:00 UTC week, clipped by calendar month).
  * `includeCost` controls whether raw USD figures are populated (admin only);
  * customer surfaces should pass false and read Work Hours.
  */
@@ -54,8 +55,7 @@ export async function summarizeWorkspaceUsage(
   options: { includeCost?: boolean } = {},
 ): Promise<WorkspaceUsageSummary> {
   const includeCost = options.includeCost ?? false;
-  const weekStart = getBillingWeekStart(new Date());
-  const { startIso, endExclusiveIso } = getBillingWeekRangeIso(weekStart);
+  const { weekStart, startIso, endExclusiveIso } = getCurrentUsagePeriodRange(new Date());
 
   const [capacity, ledgerRes] = await Promise.all([
     getWorkspaceCapacity(client, workspaceId),

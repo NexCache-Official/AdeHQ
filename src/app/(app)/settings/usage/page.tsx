@@ -11,7 +11,7 @@ function BreakdownCard({ title, rows }: { title: string; rows: UsageBreakdownRow
     <Card className="p-6">
       <h2 className="mb-3 text-sm font-semibold text-ink">{title}</h2>
       {rows.length === 0 ? (
-        <p className="text-sm text-ink-3">No AI activity yet this week.</p>
+        <p className="text-sm text-ink-3">No AI activity yet this period.</p>
       ) : (
         <div className="space-y-2">
           {rows.map((row) => (
@@ -21,7 +21,7 @@ function BreakdownCard({ title, rows }: { title: string; rows: UsageBreakdownRow
             >
               <span className="truncate text-sm text-ink-2">{row.label}</span>
               <span className="ml-3 shrink-0 text-sm font-medium tabular-nums text-ink">
-                {row.workHours.toFixed(1)} hrs
+                {row.workHours.toFixed(2)} hrs
               </span>
             </div>
           ))}
@@ -39,7 +39,7 @@ export default function SettingsUsagePage() {
     <>
       <PageHeader
         title="Usage"
-        subtitle="Where your AI Work Hours went this week, by employee and work type."
+        subtitle="Where your AI Work Hours went this period, by employee and work type. Week resets Mon 00:00 UTC · also resets at month end."
         icon={<Gauge className="h-5 w-5" />}
       />
 
@@ -51,10 +51,17 @@ export default function SettingsUsagePage() {
         <>
           <Card className="mb-4 p-6">
             <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-3">
-              Total this week
+              Total this period
             </p>
             <p className="mt-1 text-2xl font-semibold tabular-nums text-ink">
-              {(data?.totalWorkHours ?? 0).toFixed(1)} AI Work Hours
+              {(data?.totalWorkHours ?? 0).toFixed(2)} AI Work Hours
+            </p>
+            <p className="mt-1 text-xs text-ink-3">
+              {(data?.capacity.used ?? 0).toFixed(2)} of{" "}
+              {data?.capacity.unlimited
+                ? "unlimited"
+                : `${(data?.capacity.allowance ?? 0).toFixed(2)}`}{" "}
+              pooled workspace hours used
             </p>
           </Card>
           <div className="grid gap-4 md:grid-cols-2">

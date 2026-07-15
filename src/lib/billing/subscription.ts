@@ -107,8 +107,8 @@ export async function getWorkspaceBillingSummary(
     cancelAtPeriodEnd: Boolean(subscription?.cancel_at_period_end),
     capacity: {
       allowance: capacity.unlimited ? null : capacity.allowance,
-      used: Math.round(capacity.used * 10) / 10,
-      remaining: capacity.unlimited ? null : Math.round(capacity.remaining * 10) / 10,
+      used: Math.round(capacity.used * 100) / 100,
+      remaining: capacity.unlimited ? null : Math.round(capacity.remaining * 100) / 100,
       unlimited: capacity.unlimited,
       resetsAt: capacity.resetsAt,
       warningLevel: capacity.warningLevel,

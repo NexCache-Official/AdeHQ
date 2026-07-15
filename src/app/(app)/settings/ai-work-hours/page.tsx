@@ -100,7 +100,7 @@ export default function SettingsWorkHoursPage() {
     <>
       <PageHeader
         title="AI Work Hours"
-        subtitle="Your weekly AI capacity. Human messaging is always unlimited."
+        subtitle="Pooled workspace AI capacity. Week resets Mon 00:00 UTC · also resets at month end. Human messaging is always unlimited."
         icon={<Timer className="h-5 w-5" />}
       />
 
@@ -114,20 +114,20 @@ export default function SettingsWorkHoursPage() {
             <div className="flex flex-wrap items-end justify-between gap-4">
               <div>
                 <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-3">
-                  This week
+                  This period
                 </p>
                 <p className="mt-1 text-3xl font-semibold tabular-nums text-ink">
-                  {unlimited ? "Unlimited" : `${remaining.toFixed(1)} left`}
+                  {unlimited ? "Unlimited" : `${remaining.toFixed(2)} left`}
                 </p>
                 {!unlimited && (
                   <p className="mt-0.5 text-sm text-ink-3">
-                    {used.toFixed(1)} of {allowance.toFixed(0)} AI Work Hours used
+                    {used.toFixed(2)} of {allowance.toFixed(2)} AI Work Hours used
                   </p>
                 )}
               </div>
               <div className="text-right text-sm text-ink-3">
                 <p className="capitalize">{cap?.planSlug ?? "free"} plan</p>
-                <p>Resets {cap ? formatResetDate(cap.resetsAt) : "next Monday"}</p>
+                <p>Resets {cap ? formatResetDate(cap.resetsAt) : "next Monday 00:00 UTC"}</p>
               </div>
             </div>
 
@@ -139,13 +139,13 @@ export default function SettingsWorkHoursPage() {
 
             {cap?.warningLevel === "exhausted" && !unlimited && (
               <div className="mt-4 rounded-xl bg-amber-500/10 px-4 py-3 text-sm text-amber-700">
-                Your AI employees are paused because this workspace has used its weekly AI Work Hours.
-                Human messaging still works. They resume next week{canViewBilling(myRole) ? ", or you can upgrade for more capacity." : ". Ask a workspace admin to upgrade for more capacity."}
+                Your AI employees are paused because this workspace has used its AI Work Hours for this period.
+                Human messaging still works. They resume when the period resets{canViewBilling(myRole) ? ", or you can upgrade for more capacity." : ". Ask a workspace admin to upgrade for more capacity."}
               </div>
             )}
             {cap?.warningLevel === "low" && !unlimited && (
               <div className="mt-4 rounded-xl bg-amber-500/10 px-4 py-3 text-sm text-amber-700">
-                Your workspace is running low on weekly AI Work Hours.
+                Your workspace is running low on AI Work Hours for this period.
               </div>
             )}
 

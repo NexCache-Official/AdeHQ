@@ -1,4 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { getCurrentUsagePeriodRange } from "@/lib/ai/work-hours/periods";
+import { displayWorkHours } from "@/lib/billing/costing/work-hours";
 import {
   AGGREGATION_ROW_LIMIT,
   countRows,
@@ -25,7 +27,11 @@ export type OverviewSummary = {
     fallbackCount: number;
     byProvider: { key: string; value: number; count: number }[];
   };
-  workHours: { totalMinutes: number; totalHours: number };
+  workHours: {
+    totalMinutes: number;
+    totalHours: number;
+    commercialPeriodHours?: number;
+  };
   recentAdminActions: {
     id: string;
     action: string;
@@ -41,6 +47,7 @@ export async function getOverviewSummary(
   range: AdminRange,
 ): Promise<OverviewSummary> {
   const since = rangeStart(range);
+  const period = getCurrentUsagePeriodRange(new Date());
 
   const [
     signupsToday,
@@ -55,6 +62,7 @@ export async function getOverviewSummary(
     artifactsInRange,
     usageEventsRes,
     ledgerRes,
+    commercialRes,
     auditRes,
   ] = await Promise.all([
     countRows(client, "profiles", (q) => q.gte("created_at", daysAgoIso(1))),
@@ -78,6 +86,12 @@ export async function getOverviewSummary(
       .gte("created_at", since)
       .limit(AGGREGATION_ROW_LIMIT),
     client
+      .from("ai_cost_ledger_entries")
+      .select("work_hours_charged, billable_to_workspace")
+      .gte("created_at", period.startIso)
+      .lt("created_at", period.endExclusiveIso)
+      .limit(AGGREGATION_ROW_LIMIT),
+    client
       .from("platform_admin_audit_logs")
       .select("id, action, target_type, target_id, created_at")
       .order("created_at", { ascending: false })
@@ -91,6 +105,13 @@ export async function getOverviewSummary(
   const events = usageEventsRes.data ?? [];
   const activeWorkspaceIds = new Set(events.map((e) => e.workspace_id));
   const totalMinutes = sumBy(ledgerRes.data ?? [], (r) => Number(r.work_minutes_estimated));
+  const commercialRows = commercialRes.error ? [] : (commercialRes.data ?? []);
+  const commercialPeriodHours = displayWorkHours(
+    sumBy(
+      commercialRows.filter((r) => r.billable_to_workspace !== false),
+      (r) => Number(r.work_hours_charged ?? 0),
+    ),
+  );
 
   return {
     range,
@@ -119,6 +140,7 @@ export async function getOverviewSummary(
     workHours: {
       totalMinutes: Math.round(totalMinutes * 100) / 100,
       totalHours: Math.round((totalMinutes / 60) * 100) / 100,
+      commercialPeriodHours,
     },
     recentAdminActions: (auditRes.data ?? []).map((row) => ({
       id: row.id,

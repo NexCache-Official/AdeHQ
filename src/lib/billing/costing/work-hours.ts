@@ -22,8 +22,8 @@ export function workHoursFromCost(costUsd: number, rate = getWorkHourUsdRate()):
   return Math.round((costUsd / rate) * 10000) / 10000;
 }
 
-/** Round Work Hours to one decimal for customer-facing display. */
+/** Round Work Hours to two decimals for customer-facing display (0.00). */
 export function displayWorkHours(workHours: number): number {
   if (!Number.isFinite(workHours) || workHours <= 0) return 0;
-  return Math.round(workHours * 10) / 10;
+  return Math.round(workHours * 100) / 100;
 }

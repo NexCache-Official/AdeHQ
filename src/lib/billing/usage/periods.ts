@@ -1,8 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import {
-  getBillingWeekRangeIso,
-  getBillingWeekStart,
-} from "@/lib/ai/work-hours/periods";
+import { getCurrentUsagePeriodRange } from "@/lib/ai/work-hours/periods";
 import { resolveWorkspacePlan } from "@/lib/billing/plans/resolve-workspace-plan";
 
 /** Sentinel allowance for plans with unlimited weekly Work Hours (enterprise/custom). */
@@ -129,13 +126,12 @@ function rowToPeriod(row: Record<string, unknown>, unlimited: boolean): Workspac
   };
 }
 
-/** Get or lazily create the current weekly usage period for a workspace. */
+/** Get or lazily create the current usage period (Mon 00:00 UTC week, month-clipped). */
 export async function getOrCreateCurrentPeriod(
   client: SupabaseClient,
   workspaceId: string,
 ): Promise<WorkspaceUsagePeriod> {
-  const weekStart = getBillingWeekStart(new Date());
-  const { startIso, endExclusiveIso } = getBillingWeekRangeIso(weekStart);
+  const { startIso, endExclusiveIso } = getCurrentUsagePeriodRange(new Date());
   const { planSlug, allowance, unlimited } = await getWorkspaceAllowance(client, workspaceId);
 
   const existing = await client
@@ -148,7 +144,7 @@ export async function getOrCreateCurrentPeriod(
 
   if (existing.error) throw existing.error;
   if (existing.data) {
-    // Keep allowance in sync if the plan/credits changed mid-week.
+    // Keep allowance in sync if the plan/credits changed mid-period.
     const current = rowToPeriod(existing.data, unlimited);
     if (Math.abs(current.allowance - allowance) > 0.0001 || current.planSlug !== planSlug) {
       const { data: updated, error: updateError } = await client
@@ -221,10 +217,10 @@ export type CapacityCheck = {
 };
 
 const AI_PAUSED_MESSAGE =
-  "This workspace has used its weekly AI Work Hours, so AI employees are paused. Human messaging still works — they resume next week, or upgrade for more capacity.";
+  "This workspace has used its AI Work Hours for this period, so AI employees are paused. Human messaging still works — they resume when the period resets (Mon 00:00 UTC, or month end), or upgrade for more capacity.";
 
 /**
- * Enforcement gate for user-visible AI work. Blocks when weekly Work Hours are exhausted.
+ * Enforcement gate for user-visible AI work. Blocks when period Work Hours are exhausted.
  * Human messaging and low-cost internal maintenance are never routed through this.
  */
 export async function checkWorkspaceAiCapacity(

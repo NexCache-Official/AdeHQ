@@ -69,9 +69,9 @@ export function formatEstimatedMinutes(minutes: number): string {
   return String(Math.round(minutes));
 }
 
-/** Round to one decimal place for display. */
+/** Round to two decimal places for display. */
 export function formatEstimatedHours(hours: number): string {
-  return (Math.round(hours * 10) / 10).toFixed(1);
+  return (Math.round(hours * 100) / 100).toFixed(2);
 }
 
 export function formatBillingWeekRange(weekStart: string): string {

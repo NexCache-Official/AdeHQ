@@ -8,11 +8,6 @@ import { EmployeeAvatar } from "./EmployeeAvatar";
 import { EmployeeStatusBadge } from "./EmployeeStatusBadge";
 import { MessageSquare, Sparkles } from "lucide-react";
 
-function capacityPercent(employee: AIEmployee) {
-  const base = employee.status === "working" ? 72 : employee.status === "idle" ? 28 : 45;
-  return Math.min(95, base + (employee.tasksCompleted % 20));
-}
-
 export function EmployeeCard({
   employee,
   onMessage,
@@ -24,7 +19,6 @@ export function EmployeeCard({
   compact?: boolean;
   badge?: string;
 }) {
-  const capacity = capacityPercent(employee);
   const systemGuide = isSystemEmployee(employee);
   const badgeLabel = badge ?? (systemGuide ? "Guide" : "AI");
 
@@ -99,18 +93,6 @@ export function EmployeeCard({
               +{employee.tools.length - 4}
             </span>
           )}
-        </div>
-      )}
-
-      {!systemGuide && (
-        <div className="mt-3 flex items-center gap-2">
-          <div className="h-[5px] flex-1 overflow-hidden rounded bg-muted">
-            <div
-              className="h-full rounded bg-accent transition-all"
-              style={{ width: `${capacity}%` }}
-            />
-          </div>
-          <span className="shrink-0 font-mono text-[10.5px] text-ink-3">{capacity}% capacity</span>
         </div>
       )}
 

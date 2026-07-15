@@ -4,6 +4,7 @@ import { useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useStore } from "@/lib/demo-store";
 import { useShellUI } from "@/components/AppShell";
+import { useWorkspaceUsage } from "@/hooks/useWorkspaceUsage";
 import { partitionWorkforce } from "@/lib/maya-employee";
 import { MAYA_EMPLOYEE_NAME, MAYA_WORKFORCE_BADGE } from "@/lib/hiring/maya";
 import { EmployeeCard } from "@/components/EmployeeCard";
@@ -28,8 +29,8 @@ const RECOMMENDATIONS = [
     why: "Your Research room has 3 open topics with no dedicated analyst assigned.",
   },
   {
-    title: "Upgrade Sales capacity",
-    why: "Sales employee is at 78% capacity — consider a second SDR for outbound.",
+    title: "Review pooled Work Hours",
+    why: "AI Work Hours are shared across the whole workforce — check Usage if replies slow near period limits.",
   },
 ];
 
@@ -37,6 +38,7 @@ export default function WorkforcePage() {
   const { state, actions } = useStore();
   const ui = useShellUI();
   const router = useRouter();
+  const { data: usage } = useWorkspaceUsage(state.workspace.id);
 
   const openEmployeeDm = (employeeId: string) => {
     const dm = actions.openOrCreateDM(employeeId);
@@ -69,7 +71,12 @@ export default function WorkforcePage() {
             <h1 className="text-2xl font-bold tracking-tight text-ink">AI Workforce</h1>
             <p className="mt-1 text-sm text-ink-2">
               {hired.length} hired employee{hired.length === 1 ? "" : "s"}
-              {maya.length > 0 ? ` · ${MAYA_EMPLOYEE_NAME} included` : ""} · 118 of 200 AI work-hours used this week
+              {maya.length > 0 ? ` · ${MAYA_EMPLOYEE_NAME} included` : ""}
+              {usage?.capacity
+                ? usage.capacity.unlimited
+                  ? " · Unlimited AI Work Hours"
+                  : ` · ${(usage.capacity.used ?? 0).toFixed(2)} of ${(usage.capacity.allowance ?? 0).toFixed(2)} AI Work Hours used`
+                : ""}
             </p>
           </div>
           <button

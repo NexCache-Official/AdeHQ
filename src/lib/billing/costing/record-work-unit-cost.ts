@@ -61,6 +61,7 @@ export async function recordCostFromWorkUnit(
   const { costUsd, costSource } = calculateModelCost({
     modelId: workUnit.modelId,
     inputTokens,
+    cachedInputTokens,
     outputTokens,
     actualCostUsd: result?.actualCostUsd ?? workUnit.actualCostUsd,
     estimatedCostUsd: workUnit.estimatedCostUsd,

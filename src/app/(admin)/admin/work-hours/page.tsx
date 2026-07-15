@@ -34,7 +34,35 @@ function MinutesList({
             <div key={entry.key} className="flex items-center justify-between text-sm">
               <span className="truncate text-ink-2">{entry.label ?? entry.key}</span>
               <span className="ml-3 shrink-0 tabular-nums text-ink">
-                {entry.minutes.toFixed(1)}m
+                {entry.minutes.toFixed(2)}m
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function HoursList({
+  title,
+  entries,
+}: {
+  title: string;
+  entries: { key: string; label?: string; workHours: number }[];
+}) {
+  return (
+    <Card className="p-5">
+      <h2 className="mb-3 text-sm font-semibold text-ink">{title}</h2>
+      {entries.length === 0 ? (
+        <p className="text-sm text-ink-3">No commercial hours this period.</p>
+      ) : (
+        <div className="space-y-2">
+          {entries.map((entry) => (
+            <div key={entry.key} className="flex items-center justify-between text-sm">
+              <span className="truncate text-ink-2">{entry.label ?? entry.key}</span>
+              <span className="ml-3 shrink-0 tabular-nums text-ink">
+                {entry.workHours.toFixed(2)} hrs
               </span>
             </div>
           ))}
@@ -54,7 +82,7 @@ export default function AdminWorkHoursPage() {
     <div>
       <AdminPageHeader
         title="Work Hours"
-        subtitle="Global shadow Work Hours metering across all workspaces."
+        subtitle="Commercial AI Work Hours (Mon 00:00 UTC week, month-clipped) plus legacy shadow minutes."
         icon={<Clock className="h-5 w-5" />}
         actions={
           <div className="flex gap-1 rounded-xl border border-border bg-surface p-1">
@@ -76,6 +104,21 @@ export default function AdminWorkHoursPage() {
       <AdminAsync loading={loading} error={error}>
         {data && (
           <div className="space-y-6">
+            <Card className="p-5">
+              <h2 className="mb-1 text-sm font-semibold text-ink">Current commercial period</h2>
+              <p className="mb-3 text-xs text-ink-3">
+                {data.currentPeriod.startIso} → {data.currentPeriod.endExclusiveIso} (Mon 00:00 UTC
+                week · month-end hard reset)
+              </p>
+              <p className="text-2xl font-semibold tabular-nums text-ink">
+                {data.currentPeriod.totalWorkHours.toFixed(2)} AI Work Hours
+              </p>
+              <div className="mt-4 grid gap-4 lg:grid-cols-2">
+                <HoursList title="By workspace (period)" entries={data.currentPeriod.byWorkspace} />
+                <HoursList title="By employee (period)" entries={data.currentPeriod.byEmployee} />
+              </div>
+            </Card>
+
             <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-6">
               <AdminMetricCard
                 label="Shadow metering"
@@ -87,9 +130,9 @@ export default function AdminWorkHoursPage() {
                 }
               />
               <AdminMetricCard
-                label="Work Hours"
-                value={data.totals.workHours.toFixed(1)}
-                hint={`${data.totals.workMinutes.toFixed(0)} minutes`}
+                label="Shadow Work Hours"
+                value={data.totals.workHours.toFixed(2)}
+                hint={`${data.totals.workMinutes.toFixed(2)} minutes`}
               />
               <AdminMetricCard label="Cost" value={formatUsd(data.totals.costUsd)} />
               <AdminMetricCard label="Ledger entries" value={formatCount(data.totals.entryCount)} />
@@ -109,10 +152,10 @@ export default function AdminWorkHoursPage() {
             </div>
 
             <div className="grid gap-4 lg:grid-cols-2">
-              <MinutesList title="By workspace" entries={data.byWorkspace} />
-              <MinutesList title="By work type" entries={data.byWorkType} />
-              <MinutesList title="By plan" entries={data.byPlan} />
-              <MinutesList title="By employee" entries={data.byEmployee} />
+              <MinutesList title="Shadow by workspace" entries={data.byWorkspace} />
+              <MinutesList title="Shadow by work type" entries={data.byWorkType} />
+              <MinutesList title="Shadow by plan" entries={data.byPlan} />
+              <MinutesList title="Shadow by employee" entries={data.byEmployee} />
             </div>
           </div>
         )}

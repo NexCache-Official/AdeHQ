@@ -41,3 +41,40 @@ export function getBillingWeekRangeIso(weekStart: string): {
     endExclusiveIso: `${getBillingWeekEndExclusive(weekStart)}T00:00:00.000Z`,
   };
 }
+
+/**
+ * Current usage period: Mon 00:00 UTC week clipped by calendar month (UTC).
+ * Plans bill monthly, so unused hours do not roll across month boundaries.
+ *
+ * periodStart = max(weekMon00UTC, monthStartUTC)
+ * periodEnd   = min(nextWeekMon00UTC, nextMonthStartUTC)
+ */
+export function getCurrentUsagePeriodRange(date: Date = new Date()): {
+  weekStart: string;
+  monthStart: string;
+  startIso: string;
+  endExclusiveIso: string;
+  periodStartDate: string;
+  periodEndDate: string;
+} {
+  const weekStart = getBillingWeekStart(date);
+  const weekEndExclusive = getBillingWeekEndExclusive(weekStart);
+  const monthStart = getBillingMonthStart(date);
+  const nextMonth = parseUtcDate(monthStart);
+  nextMonth.setUTCMonth(nextMonth.getUTCMonth() + 1);
+  const nextMonthStart = formatUtcDate(nextMonth);
+
+  const periodStartDate =
+    weekStart > monthStart ? weekStart : monthStart;
+  const periodEndDate =
+    weekEndExclusive < nextMonthStart ? weekEndExclusive : nextMonthStart;
+
+  return {
+    weekStart,
+    monthStart,
+    periodStartDate,
+    periodEndDate,
+    startIso: `${periodStartDate}T00:00:00.000Z`,
+    endExclusiveIso: `${periodEndDate}T00:00:00.000Z`,
+  };
+}

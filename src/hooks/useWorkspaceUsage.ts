@@ -10,6 +10,8 @@ export type WorkspaceUsageCapacity = {
   unlimited: boolean;
   warningLevel: "ok" | "low" | "exhausted";
   resetsAt: string;
+  periodStart?: string;
+  periodEnd?: string;
   planSlug: string;
 };
 

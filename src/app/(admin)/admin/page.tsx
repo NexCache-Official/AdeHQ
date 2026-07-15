@@ -140,9 +140,13 @@ export default function AdminOverviewPage() {
               <AdminMetricCard label={`Messages (${range})`} value={formatCount(data.messagesInRange)} />
               <AdminMetricCard label={`Browser runs (${range})`} value={formatCount(data.browserRunsInRange)} />
               <AdminMetricCard
-                label="Work Hours (shadow)"
-                value={data.workHours.totalHours.toFixed(1)}
-                hint={`${data.workHours.totalMinutes.toFixed(0)} minutes`}
+                label="Work Hours (period)"
+                value={(data.workHours.commercialPeriodHours ?? data.workHours.totalHours).toFixed(2)}
+                hint={
+                  data.workHours.commercialPeriodHours != null
+                    ? "Commercial ledger · Mon 00:00 UTC week, month-clipped"
+                    : `${data.workHours.totalMinutes.toFixed(2)} shadow minutes`
+                }
               />
             </div>
 

@@ -24,16 +24,17 @@ export async function GET(
       includeCost: false,
     });
 
+    const round2 = (n: number) => Math.round(n * 100) / 100;
     return NextResponse.json({
       capacity: {
-        allowance: summary.capacity.unlimited ? null : summary.capacity.allowance,
-        used: Math.round(summary.capacity.used * 10) / 10,
-        remaining: summary.capacity.unlimited
-          ? null
-          : Math.round(summary.capacity.remaining * 10) / 10,
+        allowance: summary.capacity.unlimited ? null : round2(summary.capacity.allowance),
+        used: round2(summary.capacity.used),
+        remaining: summary.capacity.unlimited ? null : round2(summary.capacity.remaining),
         unlimited: summary.capacity.unlimited,
         warningLevel: summary.capacity.warningLevel,
         resetsAt: summary.capacity.resetsAt,
+        periodStart: summary.capacity.periodStart,
+        periodEnd: summary.capacity.periodEnd,
         planSlug: summary.capacity.planSlug,
       },
       weekStart: summary.weekStart,

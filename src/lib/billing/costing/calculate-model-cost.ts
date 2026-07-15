@@ -16,24 +16,28 @@ export type ModelCostResult = {
 };
 
 /**
- * Resolve the USD cost of an LLM/embedding call. Prefers a provider-reported cost,
- * then a caller estimate, then token-based estimation from the model catalog.
+ * Resolve the USD cost of an LLM/embedding call.
+ * Prefer provider actual → token×catalog rates → queue-time estimate.
  */
 export function calculateModelCost(input: ModelCostInput): ModelCostResult {
   if (input.actualCostUsd != null && input.actualCostUsd > 0) {
     return { costUsd: input.actualCostUsd, costSource: "provider_usage" };
   }
-  if (input.estimatedCostUsd != null && input.estimatedCostUsd > 0) {
-    return { costUsd: input.estimatedCostUsd, costSource: "estimated" };
-  }
+
   const modelId = input.modelId?.trim();
   if (modelId) {
-    const inputTokens = Math.max(0, input.inputTokens ?? 0);
+    const billedInput =
+      Math.max(0, input.inputTokens ?? 0) + Math.max(0, input.cachedInputTokens ?? 0);
     const outputTokens = Math.max(0, input.outputTokens ?? 0);
-    if (inputTokens > 0 || outputTokens > 0) {
-      const cost = estimateCost(modelId, inputTokens, outputTokens);
+    if (billedInput > 0 || outputTokens > 0) {
+      const cost = estimateCost(modelId, billedInput, outputTokens);
       if (cost > 0) return { costUsd: cost, costSource: "estimated" };
     }
   }
+
+  if (input.estimatedCostUsd != null && input.estimatedCostUsd > 0) {
+    return { costUsd: input.estimatedCostUsd, costSource: "estimated" };
+  }
+
   return { costUsd: 0, costSource: "estimated" };
 }
