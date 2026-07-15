@@ -91,22 +91,45 @@ try {
   await page.keyboard.press("Enter");
   await shot(page, "ask-sent");
 
-  // Wait up to 60s for reply / draft card
+  // Wait up to 60s for Casey's reply / draft card / approve CTA.
+  // Do NOT match skumar@nexcache in our own outgoing bubble — that exited early.
+  const beforeCount = await page.locator("[data-message-id]").count().catch(() => 0);
   const t0 = Date.now();
   let sawRefuse = false;
   while (Date.now() - t0 < SHELL_MS) {
-    await page.waitForTimeout(2000);
+    await page.waitForTimeout(2500);
     await shot(page, "wait");
-    if (await page.getByText(/don'?t have the ability|cannot send|can'?t send email|outside what i can/i).first().isVisible().catch(() => false)) {
+    if (
+      await page
+        .getByText(/don'?t have the ability|cannot send|can'?t send email|outside what i can/i)
+        .first()
+        .isVisible()
+        .catch(() => false)
+    ) {
       sawRefuse = true;
       break;
     }
-    if (await page.getByRole("button", { name: /Approve|Confirm send|Yes, send/i }).first().isVisible().catch(() => false)) break;
-    if (await page.getByText(/email draft|Draft ready|approval|skumar@nexcache/i).first().isVisible().catch(() => false)) {
-      // keep waiting a bit for approve button
-      await page.waitForTimeout(3000);
+    if (
+      await page
+        .getByRole("button", { name: /Approve|Confirm send|Yes, send/i })
+        .first()
+        .isVisible()
+        .catch(() => false)
+    ) {
       break;
     }
+    const afterCount = await page.locator("[data-message-id]").count().catch(() => 0);
+    const draftUi = await page
+      .getByText(/Email draft|Draft ready|Awaiting approval|Needs approval/i)
+      .first()
+      .isVisible()
+      .catch(() => false);
+    const busy = await page
+      .getByText(/is (thinking|working|typing)|Reading|Generating/i)
+      .first()
+      .isVisible()
+      .catch(() => false);
+    if ((afterCount > beforeCount || draftUi) && !busy && Date.now() - t0 > 12_000) break;
   }
   await shot(page, "after-wait");
 
