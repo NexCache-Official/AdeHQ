@@ -135,6 +135,22 @@ export async function summarizeWorkspaceUsage(
       .eq("workspace_id", workspaceId),
   ]);
 
+  // If the wide select fails (often jsonb metadata / schema-cache), retry a
+  // leaner projection so the hire-team breakdown cannot go dark.
+  let ledgerRows = ledgerRes;
+  if (ledgerRows.error) {
+    console.error("[AdeHQ usage] ledger wide select failed, retrying lean", ledgerRows.error);
+    ledgerRows = await client
+      .from("ai_cost_ledger_entries")
+      .select(
+        "employee_id, work_type, provider_route, provider_name, model_id, work_hours_charged, actual_cost_usd, estimated_cost_usd, total_tokens, status, billable_to_workspace",
+      )
+      .eq("workspace_id", workspaceId)
+      .gte("created_at", startIso)
+      .lt("created_at", endExclusiveIso)
+      .limit(5000);
+  }
+
   const empty: WorkspaceUsageSummary = {
     capacity,
     weekStart,
@@ -151,8 +167,8 @@ export async function summarizeWorkspaceUsage(
     failedRunWasteUsd: 0,
   };
 
-  if (ledgerRes.error) {
-    console.error("[AdeHQ usage] ledger query failed", ledgerRes.error);
+  if (ledgerRows.error) {
+    console.error("[AdeHQ usage] ledger query failed", ledgerRows.error);
     // Period counter is still authoritative for the rail meter — never blank
     // the UI to 0.00 when applyCostToPeriod has already recorded usage.
     const fallbackUsed = floorDisplayHours(capacity.used);
@@ -164,7 +180,15 @@ export async function summarizeWorkspaceUsage(
     };
   }
 
-  const rows = (ledgerRes.data as LedgerRow[] | null) ?? [];
+  const rows = (ledgerRows.data as LedgerRow[] | null) ?? [];
+  if (rows.length === 0 && capacity.used > 0) {
+    console.warn("[AdeHQ usage] ledger empty but period has usage", {
+      workspaceId,
+      periodUsed: capacity.used,
+      startIso,
+      endExclusiveIso,
+    });
+  }
   const employees = (employeesRes.data ?? []) as Array<{
     id: string;
     name: string;
@@ -310,6 +334,19 @@ export async function summarizeWorkspaceUsage(
     })
     .filter((row) => row.workHours > 0)
     .sort((a, b) => b.workHours - a.workHours || a.label.localeCompare(b.label));
+
+  if (rows.length > 0 && totalWorkHours <= 0) {
+    console.warn("[AdeHQ usage] ledger rows present but no billable hours aggregated", {
+      workspaceId,
+      rowCount: rows.length,
+      sample: rows.slice(0, 3).map((row) => ({
+        employee_id: row.employee_id,
+        work_hours_charged: row.work_hours_charged,
+        billable_to_workspace: row.billable_to_workspace,
+        status: row.status,
+      })),
+    });
+  }
 
   const teamWorkHoursRaw = [...employeeAgg.values()].reduce((sum, row) => sum + row.workHours, 0);
   const guideWorkHoursRaw = Math.max(0, totalWorkHours - teamWorkHoursRaw);
