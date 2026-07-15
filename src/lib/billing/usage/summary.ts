@@ -152,7 +152,16 @@ export async function summarizeWorkspaceUsage(
   };
 
   if (ledgerRes.error) {
-    return empty;
+    console.error("[AdeHQ usage] ledger query failed", ledgerRes.error);
+    // Period counter is still authoritative for the rail meter — never blank
+    // the UI to 0.00 when applyCostToPeriod has already recorded usage.
+    const fallbackUsed = floorDisplayHours(capacity.used);
+    return {
+      ...empty,
+      totalWorkHours: fallbackUsed,
+      teamWorkHours: fallbackUsed,
+      capacity: syncCapacityToDisplayedUsed(capacity, fallbackUsed),
+    };
   }
 
   const rows = (ledgerRes.data as LedgerRow[] | null) ?? [];
@@ -306,10 +315,21 @@ export async function summarizeWorkspaceUsage(
   const guideWorkHoursRaw = Math.max(0, totalWorkHours - teamWorkHoursRaw);
   // Floor the period total from raw ledger hours first — leaf-first flooring can
   // zero many sub-cent shards and leave the rail meter stuck at 0.00.
-  const totalDisplay = floorDisplayHours(totalWorkHours);
+  // If the ledger select returns no billable rows but the period counter moved
+  // (writes succeeded), prefer the period total so Usage cannot stay at 0.00.
+  const totalDisplay = floorDisplayHours(
+    totalWorkHours > 0 ? totalWorkHours : Math.max(totalWorkHours, capacity.used),
+  );
   const teamDisplay = Math.min(
     totalDisplay,
-    floorDisplayHours(teamWorkHoursRaw),
+    floorDisplayHours(
+      teamWorkHoursRaw > 0
+        ? teamWorkHoursRaw
+        : // Ledger empty but period moved — attribute the fallback to hire team
+          totalWorkHours <= 0 && totalDisplay > 0
+          ? totalDisplay
+          : teamWorkHoursRaw,
+    ),
   );
   const guideDisplay = Math.max(
     0,

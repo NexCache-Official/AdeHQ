@@ -3,6 +3,7 @@ import { artifactFromRow } from "@/lib/files/records";
 import { syncArtifactToStorage } from "@/lib/drive/storage-sync";
 import { artifactWorkLogAction } from "@/lib/server/file-context";
 import type { MessageArtifact } from "@/lib/types";
+import { randomUUID } from "node:crypto";
 import { nowISO, uid } from "@/lib/utils";
 
 export type GatewaySearchReportInput = {
@@ -77,7 +78,7 @@ export async function createGatewaySearchResearchReport(
       url: source.url ?? null,
     })) ?? [];
 
-  const artifactId = uid("art");
+  const artifactId = randomUUID();
   const { data: artifactRow, error } = await client
     .from("artifacts")
     .insert({

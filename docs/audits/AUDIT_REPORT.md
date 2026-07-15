@@ -25,7 +25,8 @@ Scope of this pass: Phase 1 (partial), Phase 2/3 (partial via Maya/Elena/David),
 | P1 | Approval chips in chat were non-clickable (no Approve UI) | **Fixed** — inline `ApprovalCard` + Review link (`RoomMessageItem.tsx`) |
 | — | Casey → draft → Approvals → Approve for `skumar@nexcache.com` | **Verified** Casey E2E `bugs: []`; bulk-approve script clearing stacked cards |
 | P2 | Duplicate SaaS Company 1 switcher rows / incomplete onboarding clone | Known; marathon skips onboarding rows |
-| P1 | AI Work Hours rail stuck at `0.00 / 10.00` despite active AI work | **Fixed** — (1) floor raw period total (2) `finalizeAiRun` mirrors into `ai_cost_ledger_entries` (3) min 0.01h per finalized reply so high `AI_WORK_HOUR_USD` cannot zero the 2dp meter |
+| P1 | AI Work Hours rail stuck at `0.00 / 10.00` despite active AI work | **Fixed** — (1) floor raw period total (2) `finalizeAiRun` mirrors into `ai_cost_ledger_entries` (3) min 0.01h per finalized reply (4) Usage summary falls back to `workspace_usage_periods.ai_work_hours_used` when ledger select is empty/errors so the meter cannot go dark |
+| P1 | Email/DOCX artifact insert used `art_*` ids but `artifacts.id` is uuid → storage sync `22P02` | **Fixed** — `randomUUID()` for artifact PKs; storage events ignore non-uuid `user_id` (emp_*) |
 | P1 | "At capacity" on Casey DMs (abandoned interactive slot) | **Fixed** — skip admission for `dm_*` rooms + 60s stale interactive reap |
 | P1 | Marathon/E2E `waitAi` treated leftover draft cards as success → room collab looked “done” while AI silent | **Fixed** — require new `[data-message-id]` growth; ignore stale draft cards |
 | P1 | Lane CRM ask became a Tasks card; `/crm` stayed empty (false-pass in CRM wave) | **Verified** Casey DM creates Contact + Deal + Task; CRM shows $18k Qualified (duplicate deal cards noted as P2) |

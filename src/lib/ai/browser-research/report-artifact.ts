@@ -5,6 +5,7 @@ import { artifactWorkLogAction } from "@/lib/server/file-context";
 import { artifactFromRow } from "@/lib/files/records";
 import { syncArtifactToStorage } from "@/lib/drive/storage-sync";
 import { estimateWorkMinutesFromCost } from "@/lib/ai/work-hours/estimate";
+import { randomUUID } from "node:crypto";
 import { nowISO, uid } from "@/lib/utils";
 import type { BrowserResearchRun } from "./types";
 
@@ -164,7 +165,7 @@ export async function createResearchReportArtifactFromRun(
     evidenceId: source.evidenceId ?? null,
   }));
 
-  const artifactId = uid("art");
+  const artifactId = randomUUID();
   const { data: artifactRow, error } = await client
     .from("artifacts")
     .insert({

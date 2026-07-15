@@ -115,10 +115,24 @@ export async function recordStorageUsage(
   const quota = await ensureWorkspaceQuota(client, payload.workspaceId);
   const nextUsed = Math.max(0, quota.usedBytes + payload.deltaBytes);
 
+  // user_id is uuid; AI employees use emp_* ids — never coerce those into user_id.
+  const uuidLike = (value: string | null | undefined) =>
+    Boolean(
+      value &&
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+          value,
+        ),
+    );
+  const userId = uuidLike(payload.userId) ? payload.userId! : null;
+  const metadata = {
+    ...(payload.metadata ?? {}),
+    ...(!userId && payload.userId ? { actorId: payload.userId } : {}),
+  };
+
   const [{ error: eventError }, { error: quotaError }] = await Promise.all([
     client.from("storage_usage_events").insert({
       workspace_id: payload.workspaceId,
-      user_id: payload.userId ?? null,
+      user_id: userId,
       event_type: payload.eventType,
       bucket: payload.bucket,
       object_path: payload.objectPath ?? null,
@@ -126,7 +140,7 @@ export async function recordStorageUsage(
       delta_bytes: payload.deltaBytes,
       entity_type: payload.entityType ?? null,
       entity_id: payload.entityId ?? null,
-      metadata: payload.metadata ?? {},
+      metadata,
     }),
     client
       .from("workspace_storage_quotas")

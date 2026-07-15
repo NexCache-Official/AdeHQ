@@ -52,6 +52,7 @@ import {
 } from "@/lib/integrations/reconcile-claimed-actions";
 import { handleAutopilotEffect, resolveAutopilotEmployee } from "@/lib/server/autopilot-effect";
 import type { ToolCallEffectItem } from "@/lib/types";
+import { randomUUID } from "node:crypto";
 import { extractMentions, nowISO, uid } from "@/lib/utils";
 
 type DbRow = Record<string, unknown>;
@@ -748,7 +749,8 @@ export async function persistEmployeeEffects(
   }
 
   for (const draft of effect.artifacts ?? []) {
-    const artifactId = uid("art");
+    // artifacts.id is uuid in Postgres — never use art_* string ids here.
+    const artifactId = randomUUID();
     const sourceFileIds = [...new Set(draft.sourceFileIds ?? [])];
     const sourceChunkIds = [...new Set(draft.sourceChunkIds ?? [])];
     const sourceCitations = (draft.sourceCitations ?? validatedCitations).map((item) => ({
@@ -987,7 +989,7 @@ export async function persistEmployeeEffects(
         contentJson: buildEmailDraftJson(raw) as unknown as Record<string, unknown>,
       });
     const json = extracted.contentJson as unknown as EmailDraftJson;
-    const artifactId = uid("art");
+    const artifactId = randomUUID();
     await client.from("artifacts").insert({
       workspace_id: workspaceId,
       id: artifactId,
