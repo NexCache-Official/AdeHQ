@@ -27,10 +27,8 @@ type ResizablePaneProps = {
 
 /**
  * Horizontally resizable side pane with optional collapse.
- * Persists width + collapsed state in localStorage. Main work columns should
- * stay as `flex-1` siblings and never use this with collapsible=false omitted
- * only when they must remain open — pass collapsible={false} (default) for
- * non-collapsible side chrome if needed; shell side panes use collapsible.
+ * Content fills the pane edge-to-edge; the drag handle overlays the seam
+ * so it never creates a gap between chrome and the work view.
  */
 export function ResizablePane({
   id,
@@ -142,7 +140,7 @@ export function ResizablePane({
           type="button"
           onClick={toggleCollapsed}
           className={cn(
-            "flex h-full w-full flex-col items-center gap-2 border-border bg-surface/80 py-3 text-ink-3 transition-colors hover:bg-muted hover:text-ink",
+            "flex h-full w-full flex-col items-center gap-2 border-border bg-surface py-3 text-ink-3 transition-colors hover:bg-muted hover:text-ink",
             side === "left" ? "border-r" : "border-l",
           )}
           aria-label={collapsedLabel}
@@ -157,65 +155,61 @@ export function ResizablePane({
           </span>
         </button>
       ) : (
-        <div
-          className={cn(
-            "flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden",
-            collapsible && (side === "left" ? "md:pr-7" : "md:pl-7"),
-          )}
-        >
+        <div className="flex h-full min-h-0 min-w-0 w-full flex-1 flex-col overflow-hidden">
           {children}
         </div>
       )}
 
       {!prefs.collapsed && (
-        <div
-          role="separator"
-          aria-orientation="vertical"
-          aria-controls={reactId}
-          aria-valuenow={Math.round(prefs.width)}
-          aria-valuemin={limits.minWidth}
-          aria-valuemax={limits.maxWidth}
-          tabIndex={0}
-          onPointerDown={onPointerDown}
-          onPointerMove={onPointerMove}
-          onPointerUp={endDrag}
-          onPointerCancel={endDrag}
-          onDoubleClick={resetWidth}
-          onKeyDown={(e) => {
-            if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
-              e.preventDefault();
-              const dir =
-                (e.key === "ArrowRight" ? 1 : -1) * (side === "left" ? 1 : -1);
-              const next = clamp(prefs.width + dir * 12, limits.minWidth, limits.maxWidth);
-              persist({ width: next, collapsed: false });
-            }
-          }}
-          className={cn(
-            "absolute top-0 z-30 hidden h-full w-3 cursor-col-resize touch-none md:block",
-            "before:absolute before:inset-y-0 before:w-px before:bg-transparent before:transition-colors",
-            "hover:before:bg-accent/40 active:before:bg-accent/60",
-            side === "left"
-              ? "right-0 translate-x-1/2 before:left-1/2 before:-translate-x-1/2"
-              : "left-0 -translate-x-1/2 before:left-1/2 before:-translate-x-1/2",
-          )}
-          title="Drag to resize · double-click to reset"
-        />
-      )}
+        <>
+          {/* Drag seam sits on the pane edge — no content inset, no gap. */}
+          <div
+            role="separator"
+            aria-orientation="vertical"
+            aria-controls={reactId}
+            aria-valuenow={Math.round(prefs.width)}
+            aria-valuemin={limits.minWidth}
+            aria-valuemax={limits.maxWidth}
+            tabIndex={0}
+            onPointerDown={onPointerDown}
+            onPointerMove={onPointerMove}
+            onPointerUp={endDrag}
+            onPointerCancel={endDrag}
+            onDoubleClick={resetWidth}
+            onKeyDown={(e) => {
+              if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+                e.preventDefault();
+                const dir =
+                  (e.key === "ArrowRight" ? 1 : -1) * (side === "left" ? 1 : -1);
+                const next = clamp(prefs.width + dir * 12, limits.minWidth, limits.maxWidth);
+                persist({ width: next, collapsed: false });
+              }
+            }}
+            className={cn(
+              "absolute top-0 z-30 hidden h-full w-2 cursor-col-resize touch-none md:block",
+              "after:absolute after:inset-y-0 after:left-1/2 after:w-px after:-translate-x-1/2 after:bg-transparent after:transition-colors",
+              "hover:after:bg-accent/50 active:after:bg-accent/70",
+              side === "left" ? "-right-1" : "-left-1",
+            )}
+            title="Drag to resize · double-click to reset"
+          />
 
-      {collapsible && !prefs.collapsed && (
-        <button
-          type="button"
-          onClick={toggleCollapsed}
-          className={cn(
-            "absolute top-2 z-40 hidden h-6 w-6 items-center justify-center rounded-md border border-border/80 bg-surface/95 text-ink-3 opacity-0 shadow-sm transition",
-            "hover:border-accent/30 hover:text-ink group-hover/pane:opacity-100 focus-visible:opacity-100 md:flex",
-            side === "left" ? "right-1.5" : "left-1.5",
+          {collapsible && (
+            <button
+              type="button"
+              onClick={toggleCollapsed}
+              className={cn(
+                "absolute top-3 z-40 hidden h-6 w-6 items-center justify-center rounded-full border border-border/80 bg-surface text-ink-3 opacity-0 shadow-sm transition",
+                "hover:border-accent/40 hover:text-ink group-hover/pane:opacity-100 focus-visible:opacity-100 md:flex",
+                side === "left" ? "-right-3" : "-left-3",
+              )}
+              aria-label={`Collapse ${collapsedLabel}`}
+              title="Collapse panel"
+            >
+              <CollapseIcon className="h-3.5 w-3.5" strokeWidth={1.9} />
+            </button>
           )}
-          aria-label={`Collapse ${collapsedLabel}`}
-          title="Collapse panel"
-        >
-          <CollapseIcon className="h-3.5 w-3.5" strokeWidth={1.9} />
-        </button>
+        </>
       )}
     </div>
   );
