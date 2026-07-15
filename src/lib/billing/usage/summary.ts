@@ -118,12 +118,15 @@ export async function summarizeWorkspaceUsage(
   const includeCost = options.includeCost ?? false;
   const { weekStart, startIso, endExclusiveIso } = getCurrentUsagePeriodRange(new Date());
 
+  // Lean projection only — selecting `metadata` jsonb has returned empty
+  // `data: []` with count>0 for some SaaS workspaces (payload/serialize),
+  // which blanked hire breakdowns while the period counter still moved.
   const [capacity, ledgerRes, employeesRes] = await Promise.all([
     getWorkspaceCapacity(client, workspaceId),
     client
       .from("ai_cost_ledger_entries")
       .select(
-        "employee_id, work_type, provider_route, provider_name, model_id, work_hours_charged, actual_cost_usd, estimated_cost_usd, total_tokens, status, billable_to_workspace, metadata",
+        "employee_id, work_type, provider_route, provider_name, model_id, work_hours_charged, actual_cost_usd, estimated_cost_usd, total_tokens, status, billable_to_workspace",
       )
       .eq("workspace_id", workspaceId)
       .gte("created_at", startIso)
@@ -135,28 +138,10 @@ export async function summarizeWorkspaceUsage(
       .eq("workspace_id", workspaceId),
   ]);
 
-  // If the wide select fails (often jsonb metadata / schema-cache), retry a
-  // leaner projection so the hire-team breakdown cannot go dark.
-  let ledgerRows: {
+  const ledgerRows: {
     data: LedgerRow[] | null;
     error: { message?: string } | null;
   } = ledgerRes as { data: LedgerRow[] | null; error: { message?: string } | null };
-  if (ledgerRows.error) {
-    console.error("[AdeHQ usage] ledger wide select failed, retrying lean", ledgerRows.error);
-    const lean = await client
-      .from("ai_cost_ledger_entries")
-      .select(
-        "employee_id, work_type, provider_route, provider_name, model_id, work_hours_charged, actual_cost_usd, estimated_cost_usd, total_tokens, status, billable_to_workspace",
-      )
-      .eq("workspace_id", workspaceId)
-      .gte("created_at", startIso)
-      .lt("created_at", endExclusiveIso)
-      .limit(5000);
-    ledgerRows = {
-      data: (lean.data as LedgerRow[] | null) ?? null,
-      error: lean.error,
-    };
-  }
 
   const empty: WorkspaceUsageSummary = {
     capacity,
