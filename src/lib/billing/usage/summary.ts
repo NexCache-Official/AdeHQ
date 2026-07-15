@@ -139,13 +139,23 @@ export async function summarizeWorkspaceUsage(
   ]);
   // If intelligence_policy projection fails, retry names-only so hire rows
   // do not collapse to the generic "AI employee" label.
-  let employeesPayload = employeesRes;
-  if (employeesRes.error || !employeesRes.data?.length) {
+  type EmployeeRow = {
+    id: string;
+    name: string;
+    system_employee_key?: string | null;
+    is_system_employee?: boolean | null;
+    model_mode?: string | null;
+    intelligence_policy?: { defaultMode?: string } | null;
+  };
+  let employeeRows = (employeesRes.data ?? []) as EmployeeRow[];
+  if (employeesRes.error || employeeRows.length === 0) {
     const retry = await client
       .from("ai_employees")
       .select("id, name, system_employee_key, is_system_employee, model_mode")
       .eq("workspace_id", workspaceId);
-    if (!retry.error && retry.data?.length) employeesPayload = retry;
+    if (!retry.error && retry.data?.length) {
+      employeeRows = retry.data as EmployeeRow[];
+    }
   }
 
   const ledgerRows: {
@@ -191,14 +201,7 @@ export async function summarizeWorkspaceUsage(
       endExclusiveIso,
     });
   }
-  const employees = (employeesPayload.data ?? []) as Array<{
-    id: string;
-    name: string;
-    system_employee_key?: string | null;
-    is_system_employee?: boolean | null;
-    model_mode?: string | null;
-    intelligence_policy?: { defaultMode?: string } | null;
-  }>;
+  const employees = employeeRows;
 
   const nameById = new Map(employees.map((e) => [String(e.id), String(e.name)]));
   const isMaya = (e: {
