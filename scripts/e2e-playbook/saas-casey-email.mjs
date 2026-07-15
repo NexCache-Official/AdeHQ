@@ -90,10 +90,11 @@ try {
   );
   await page.keyboard.press("Enter");
   await shot(page, "ask-sent");
+  // Count after our optimistic human bubble is in the DOM.
+  await page.waitForTimeout(1500);
+  const afterHumanCount = await page.locator("[data-message-id]").count().catch(() => 0);
 
-  // Wait up to 60s for Casey's reply / draft card / approve CTA.
-  // Do NOT match skumar@nexcache in our own outgoing bubble — that exited early.
-  const beforeCount = await page.locator("[data-message-id]").count().catch(() => 0);
+  // Wait the full shell budget for Casey's reply / draft card / approve CTA.
   const t0 = Date.now();
   let sawRefuse = false;
   while (Date.now() - t0 < SHELL_MS) {
@@ -120,16 +121,19 @@ try {
     }
     const afterCount = await page.locator("[data-message-id]").count().catch(() => 0);
     const draftUi = await page
-      .getByText(/Email draft|Draft ready|Awaiting approval|Needs approval/i)
+      .getByText(/Email draft|Draft ready|Awaiting approval|Needs approval|Approval:\s*Send email/i)
       .first()
       .isVisible()
       .catch(() => false);
-    const busy = await page
-      .getByText(/is (thinking|working|typing)|Reading|Generating/i)
-      .first()
-      .isVisible()
-      .catch(() => false);
-    if ((afterCount > beforeCount || draftUi) && !busy && Date.now() - t0 > 12_000) break;
+    const typingDots = await page.locator(".typing-dot").first().isVisible().catch(() => false);
+    const busy = typingDots ||
+      (await page
+        .getByText(/is (thinking|working|typing)|Reading|Generating/i)
+        .first()
+        .isVisible()
+        .catch(() => false));
+    // AI reply = message count grew past the human bubble we already counted.
+    if ((afterCount > afterHumanCount || draftUi) && !busy) break;
   }
   await shot(page, "after-wait");
 
@@ -141,15 +145,37 @@ try {
     await shot(page, "after-retry");
   }
 
-  const approve = page.getByRole("button", { name: /Approve|Confirm send|Yes, send|Send email/i }).first();
-  if (await approve.isVisible({ timeout: 5000 }).catch(() => false)) {
-    note("flow", "Approving send");
-    await approve.click();
-    await page.waitForTimeout(5000);
-    await shot(page, "approved");
-  } else {
-    bug("P1", "No approve button after Casey email ask");
+  // Approval card may say "Approve", "Approve & send", or sit next to
+  // "Approval: Send email …" copy — try several locators.
+  let approved = false;
+  const approveCandidates = [
+    page.getByRole("button", { name: /^Approve$/i }).first(),
+    page.getByRole("button", { name: /Approve & send|Approve and send|Confirm send|Yes, send/i }).first(),
+    page.locator("div").filter({ hasText: /Approval:\s*Send email/i }).getByRole("button", { name: /Approve/i }).first(),
+    page.locator("button").filter({ hasText: /^Approve$/i }).first(),
+  ];
+  for (const approve of approveCandidates) {
+    if (await approve.isVisible({ timeout: 2000 }).catch(() => false)) {
+      note("flow", "Approving send");
+      await approve.click();
+      await page.waitForTimeout(5000);
+      await shot(page, "approved");
+      approved = true;
+      break;
+    }
   }
+  if (!approved) {
+    // Last resort: any visible Approve near the draft card
+    const near = page.getByText(/Email draft|Approval:\s*Send email/i).locator("..").getByRole("button").filter({ hasText: /Approve/i }).first();
+    if (await near.isVisible({ timeout: 2000 }).catch(() => false)) {
+      note("flow", "Approving send (near draft)");
+      await near.click();
+      await page.waitForTimeout(5000);
+      await shot(page, "approved");
+      approved = true;
+    }
+  }
+  if (!approved) bug("P1", "No approve button after Casey email ask");
 
   // Check inbox sent
   await page.goto(`${BASE}/inbox`, { waitUntil: "domcontentloaded", timeout: SHELL_MS });
