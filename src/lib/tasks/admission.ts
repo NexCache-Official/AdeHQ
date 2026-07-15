@@ -17,7 +17,7 @@ type DbRow = Record<string, unknown>;
 
 /** Interactive runs abandoned after client navigate-away / Failed to fetch. */
 const STALE_INTERACTIVE_RUN_MS = Number(
-  process.env.ADEHQ_STALE_INTERACTIVE_RUN_MS ?? 2 * 60 * 1000,
+  process.env.ADEHQ_STALE_INTERACTIVE_RUN_MS ?? 60_000,
 );
 
 /**

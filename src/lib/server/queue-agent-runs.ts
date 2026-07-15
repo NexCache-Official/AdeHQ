@@ -82,7 +82,10 @@ export async function queueAgentRuns(
           : undefined,
     });
 
-    if (!params.skipAdmission && !isGreetingRun && !params.dependsOnRunId) {
+    // DMs are 1:1 human→employee work — never soft-queue them behind abandoned
+    // interactive capacity (maxInteractiveRunning defaults to 1).
+    const isDmRoom = params.roomId.startsWith("dm_");
+    if (!params.skipAdmission && !isGreetingRun && !params.dependsOnRunId && !isDmRoom) {
       const admission = await evaluateEmployeeAdmission(aiClient, {
         workspaceId: params.workspaceId,
         employeeId: employee.id,
