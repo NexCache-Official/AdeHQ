@@ -315,13 +315,15 @@ export async function completeAiWorkUnit(
   }).catch((error) => {
     console.warn("[AdeHQ work hours shadow]", error);
   });
-  // Commercial cost ledger — primary billable capture hook.
-  void recordCostFromWorkUnit(client, completed, {
-    actualCostUsd: result?.actualCostUsd,
-    metadata: result?.metadata,
-  }).catch((error) => {
+  // Commercial cost ledger — await so Usage/period totals are current when the reply lands.
+  try {
+    await recordCostFromWorkUnit(client, completed, {
+      actualCostUsd: result?.actualCostUsd,
+      metadata: result?.metadata,
+    });
+  } catch (error) {
     console.warn("[AdeHQ cost ledger]", error);
-  });
+  }
   return completed;
 }
 
