@@ -29,6 +29,8 @@ Scope of this pass: Phase 1 (partial), Phase 2/3 (partial via Maya/Elena/David),
 | P1 | Marathon/E2E `waitAi` treated leftover draft cards as success → room collab looked “done” while AI silent | **Fixed** — require new `[data-message-id]` growth; ignore stale draft cards |
 | P1 | Lane CRM ask became a Tasks card; `/crm` stayed empty (false-pass in CRM wave) | **Verified** Casey DM creates Contact + Deal + Task; CRM shows $18k Qualified (duplicate deal cards noted as P2) |
 | P1 | Room collab silent after AI tool cards (ambient governance) | **Fixed** — work intents (`task_request`, `direct_question`, collab, etc.) bypass after-AI skip (`ambient-governance.ts`); marathon now `@mentions` team |
+| P1 | Drive stuck on "Loading Drive…" (no Retry) | **Fixed** — 25s list timeout + Retry (`drive/page.tsx`)
+| — | Jules DOCX + email draft to skumar@nexcache.com | **Verified** `saas-jules-drive-wave.mjs` bugs: [] |
 | P2 | Duplicate identical CRM deals from repeated Casey asks | Observed; defer de-dupe |
 
 ### Scripts
