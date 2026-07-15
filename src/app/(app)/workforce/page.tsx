@@ -75,7 +75,7 @@ export default function WorkforcePage() {
               {usage?.capacity
                 ? usage.capacity.unlimited
                   ? " · Unlimited AI Work Hours"
-                  : ` · ${(usage.capacity.used ?? 0).toFixed(2)} of ${(usage.capacity.allowance ?? 0).toFixed(2)} AI Work Hours used`
+                  : ` · ${(usage.totalWorkHours ?? usage.capacity.used ?? 0).toFixed(2)} of ${(usage.capacity.allowance ?? 0).toFixed(2)} AI Work Hours used`
                 : ""}
             </p>
           </div>

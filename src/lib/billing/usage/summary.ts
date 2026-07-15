@@ -6,6 +6,7 @@ import {
   type IntelligenceMode,
 } from "@/lib/ai/intelligence-policy";
 import { displayWorkHours } from "@/lib/billing/costing/work-hours";
+import { formatWorkTypeLabel } from "@/lib/work-hours/labels";
 import { getWorkspaceCapacity, type WorkspaceCapacity } from "./periods";
 
 export type UsageBreakdownRow = {
@@ -66,16 +67,10 @@ type LedgerRow = {
   metadata: Record<string, unknown> | null;
 };
 
-function humanizeWorkType(workType: string): string {
-  return workType
-    .replace(/[_-]+/g, " ")
-    .replace(/\b\w/g, (c) => c.toUpperCase());
-}
-
 function intelligenceLabel(key: string): string {
   if (key === "unspecified") return "Unspecified intelligence";
   const mode = key as IntelligenceMode;
-  const base = INTELLIGENCE_MODE_LABELS[mode] ?? humanizeWorkType(key);
+  const base = INTELLIGENCE_MODE_LABELS[mode] ?? formatWorkTypeLabel(key);
   return `${base} intelligence`;
 }
 
@@ -270,7 +265,7 @@ export async function summarizeWorkspaceUsage(
             byWorkType: [...byType.entries()]
               .map(([key, hours]) => ({
                 key,
-                label: humanizeWorkType(key),
+                label: formatWorkTypeLabel(key),
                 workHours: Math.round(hours * 10000) / 10000,
               }))
               .sort((a, b) => b.workHours - a.workHours),
@@ -295,7 +290,7 @@ export async function summarizeWorkspaceUsage(
         byWorkType: [...workTypeRollup.entries()]
           .map(([key, hours]) => ({
             key,
-            label: humanizeWorkType(key),
+            label: formatWorkTypeLabel(key),
             workHours: Math.round(hours * 10000) / 10000,
           }))
           .sort((a, b) => b.workHours - a.workHours),
@@ -304,16 +299,24 @@ export async function summarizeWorkspaceUsage(
     .sort((a, b) => b.workHours - a.workHours || a.label.localeCompare(b.label));
 
   const teamWorkHoursRaw = byEmployeeWorkType.reduce((sum, row) => sum + row.workHours, 0);
-  const guideWorkHours = Math.max(0, totalWorkHours - teamWorkHoursRaw);
+  const guideWorkHoursRaw = Math.max(0, totalWorkHours - teamWorkHoursRaw);
+  const totalDisplay = displayWorkHours(totalWorkHours);
+  const teamDisplay = displayWorkHours(teamWorkHoursRaw);
+  const guideDisplay = displayWorkHours(guideWorkHoursRaw);
+
+  // Ledger is the commercial source of truth for customer-facing meters.
+  // Period counters can drift if a ledger write landed without applyCostToPeriod —
+  // never show that drift in the UI (do not write period back here; that races increments).
+  const capacitySynced = syncCapacityToLedgerUsed(capacity, totalWorkHours);
 
   return {
-    capacity,
+    capacity: capacitySynced,
     weekStart,
-    totalWorkHours: displayWorkHours(totalWorkHours),
-    teamWorkHours: displayWorkHours(teamWorkHoursRaw),
-    guideWorkHours: displayWorkHours(guideWorkHours),
+    totalWorkHours: totalDisplay,
+    teamWorkHours: teamDisplay,
+    guideWorkHours: guideDisplay,
     byEmployee: toRows(employeeAgg, employeeLabel),
-    byWorkType: toRows(workTypeAgg, humanizeWorkType),
+    byWorkType: toRows(workTypeAgg, formatWorkTypeLabel),
     byEmployeeWorkType,
     byProvider: toRows(providerAgg, (p) => p),
     byModel: toRows(modelAgg, (m) => m),
@@ -322,3 +325,27 @@ export async function summarizeWorkspaceUsage(
     failedRunWasteUsd: includeCost ? Math.round(failedRunWasteUsd * 10000) / 10000 : 0,
   };
 }
+
+function syncCapacityToLedgerUsed(
+  capacity: WorkspaceCapacity,
+  ledgerUsedRaw: number,
+): WorkspaceCapacity {
+  const used = displayWorkHours(ledgerUsedRaw);
+  if (capacity.unlimited) {
+    return { ...capacity, used, warningLevel: "ok" };
+  }
+  const remaining = Math.max(0, Math.round((capacity.allowance - ledgerUsedRaw) * 10000) / 10000);
+  const remainingDisplay = displayWorkHours(remaining);
+  let warningLevel: WorkspaceCapacity["warningLevel"] = "ok";
+  if (remaining <= 0) warningLevel = "exhausted";
+  else if (capacity.allowance > 0 && remaining <= capacity.allowance * 0.15) {
+    warningLevel = "low";
+  }
+  return {
+    ...capacity,
+    used,
+    remaining: remainingDisplay,
+    warningLevel,
+  };
+}
+

@@ -23,6 +23,11 @@ export const WORK_TYPE_LABELS: Record<string, string> = {
   hiring_candidates: "Hiring candidates",
   file_embedding: "File embeddings",
   browser_research: "Browser research",
+  // Customer-facing: Exa (primary) + Vercel AI Gateway (secondary) share one label.
+  // Provider is still recorded on the ledger as exa / vercel_gateway.
+  gateway_search_answer: "Real-time Search",
+  realtime_search: "Real-time Search",
+  quick_web_search: "Real-time Search",
   employee_direct_response_shadow: "Direct replies shadow",
   employee_queued_response_shadow: "Queued replies shadow",
   employee_direct_response: "Direct replies",
@@ -61,7 +66,10 @@ export function formatCapabilityLabel(capability: string): string {
 }
 
 export function formatWorkTypeLabel(workType: string): string {
-  return WORK_TYPE_LABELS[workType] ?? workType.replace(/_/g, " ");
+  if (WORK_TYPE_LABELS[workType]) return WORK_TYPE_LABELS[workType];
+  return workType
+    .replace(/[_-]+/g, " ")
+    .replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
 /** Round to nearest whole minute for display. */

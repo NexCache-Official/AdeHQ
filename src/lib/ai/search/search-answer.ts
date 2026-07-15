@@ -216,16 +216,17 @@ export async function executeSearchAnswer(
       roomId: params.roomId,
       topicId: params.topicId,
       employeeId: params.employeeId,
-      workType:
-        decision.route === "gateway_exa" && isExaSearchConfigured()
-          ? "gateway_search_answer"
-          : isGatewaySearchRoute(decision.route)
-            ? "gateway_search_answer"
-            : "quick_web_search",
+      // Customer Usage shows "Real-time Search"; providerName keeps Exa vs Gateway distinct.
+      workType: "realtime_search",
       capability: "research_planning",
-      providerRoute: isGatewaySearchRoute(decision.route)
-        ? "vercel_gateway"
-        : undefined,
+      // ProviderRoute is the AI runtime enum (vercel_gateway | siliconflow_direct | mock).
+      // Search engines are recorded on providerName + metadata.searchRoute instead.
+      providerRoute:
+        decision.route === "gateway_exa" && isExaSearchConfigured()
+          ? undefined
+          : isGatewaySearchRoute(decision.route)
+            ? "vercel_gateway"
+            : undefined,
       providerName:
         decision.route === "gateway_exa" && isExaSearchConfigured()
           ? "exa"

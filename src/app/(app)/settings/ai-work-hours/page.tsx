@@ -91,8 +91,11 @@ export default function SettingsWorkHoursPage() {
 
   const cap = data?.capacity;
   const allowance = cap?.allowance ?? 0;
-  const used = cap?.used ?? 0;
-  const remaining = cap?.remaining ?? 0;
+  const used = data?.totalWorkHours ?? cap?.used ?? 0;
+  const remaining =
+    cap?.unlimited || allowance <= 0
+      ? (cap?.remaining ?? 0)
+      : Math.max(0, Math.round((allowance - used) * 100) / 100);
   const unlimited = cap?.unlimited ?? false;
   const pct = unlimited || !allowance ? 0 : Math.min(100, (used / allowance) * 100);
 

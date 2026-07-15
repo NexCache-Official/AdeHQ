@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { getWorkspaceCapacity } from "@/lib/billing/usage/periods";
+import { summarizeWorkspaceUsage } from "@/lib/billing/usage/summary";
 import {
   listActivePlanConfigs,
   resolveWorkspacePlan,
@@ -63,9 +63,9 @@ export async function getWorkspaceBillingSummary(
   client: SupabaseClient,
   workspaceId: string,
 ): Promise<WorkspaceBillingSummary> {
-  const [resolved, capacity, plans, subscriptionRes, invoicesRes] = await Promise.all([
+  const [resolved, usage, plans, subscriptionRes, invoicesRes] = await Promise.all([
     resolveWorkspacePlan(client, workspaceId),
-    getWorkspaceCapacity(client, workspaceId),
+    summarizeWorkspaceUsage(client, workspaceId, { includeCost: false }),
     listActivePlanConfigs(client),
     client
       .from("billing_subscriptions")
@@ -81,6 +81,7 @@ export async function getWorkspaceBillingSummary(
       .order("created_at", { ascending: false })
       .limit(24),
   ]);
+  const capacity = usage.capacity;
 
   const subscription = subscriptionRes.error ? null : subscriptionRes.data;
   const metadata = (subscription?.metadata as Record<string, unknown> | undefined) ?? {};

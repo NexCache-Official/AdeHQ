@@ -44,7 +44,7 @@ export default function SettingsUsagePage() {
               {formatHrs(periodTotal)} AI Work Hours
             </p>
             <p className="mt-1 text-xs text-ink-3">
-              {(data?.capacity.used ?? 0).toFixed(2)} of{" "}
+              {formatHrs(periodTotal)} of{" "}
               {data?.capacity.unlimited
                 ? "unlimited"
                 : `${(data?.capacity.allowance ?? 0).toFixed(2)}`}{" "}
