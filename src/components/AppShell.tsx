@@ -46,7 +46,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
 function AppShellInner({ children }: { children: React.ReactNode }) {
   useDebugTraceListener();
-  const { state, hydrated } = useStore();
+  const { state, hydrated, workspaceTransitioning } = useStore();
   const router = useRouter();
   const pathname = usePathname();
 
@@ -83,10 +83,14 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
     }
     if (!state.user) {
       router.replace("/login");
-    } else if (!state.onboardingComplete) {
+      return;
+    }
+    // Never bounce mid-switch — a transient false flag was sending completed HQs to /onboarding.
+    if (workspaceTransitioning) return;
+    if (!state.onboardingComplete) {
       router.replace("/onboarding");
     }
-  }, [hydrated, state.user, state.onboardingComplete, router]);
+  }, [hydrated, state.user, state.onboardingComplete, workspaceTransitioning, router]);
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -128,6 +132,7 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
     pathname.startsWith("/inbox");
 
   if (!hydrated) return <LoadingState full />;
+  if (workspaceTransitioning) return <LoadingState full label="Switching workspace…" />;
   if (!state.user || !state.onboardingComplete) return <LoadingState full label="Redirecting…" />;
 
   return (

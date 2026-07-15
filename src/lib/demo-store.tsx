@@ -17,6 +17,7 @@ import {
   getActiveWorkspaceId,
   setActiveWorkspaceId,
 } from "@/lib/active-workspace";
+import { clearOnboardingLaunchPending } from "@/lib/hiring/data";
 import {
   AIEmployee,
   Approval,
@@ -242,6 +243,8 @@ type StoreValue = {
   backend: BackendMode;
   error: string | null;
   userWorkspaces: UserWorkspaceSummary[];
+  /** True while switching HQs — AppShell must not bounce to /onboarding on a transient false flag. */
+  workspaceTransitioning: boolean;
   actions: StoreActions;
 };
 
@@ -253,10 +256,12 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const [backend, setBackend] = useState<BackendMode>("demo");
   const [error, setError] = useState<string | null>(null);
   const [userWorkspaces, setUserWorkspaces] = useState<UserWorkspaceSummary[]>([]);
+  const [workspaceTransitioning, setWorkspaceTransitioning] = useState(false);
   const stateRef = useRef(state);
   const backendRef = useRef<BackendMode>(backend);
   const authUserRef = useRef<User | null>(null);
   const authBusyRef = useRef(false);
+  const userWorkspacesRef = useRef<UserWorkspaceSummary[]>([]);
   /** Workspaces sealed complete locally — realtime reloads must not regress the flag. */
   const onboardingSealedRef = useRef<Set<string>>(new Set());
   const setupOnboardingInFlightRef = useRef<Promise<{
@@ -271,6 +276,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 
   stateRef.current = state;
   backendRef.current = backend;
+  userWorkspacesRef.current = userWorkspaces;
 
   const setRemoteState = useCallback((loaded: DemoState) => {
     setState((previous) => {
@@ -377,13 +383,18 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           hasWorkspace: Boolean(stateRef.current.workspace.id),
         };
       }
-      setUserWorkspaces(
-        workspaces.map((ws) =>
-          onboardingSealedRef.current.has(ws.id)
-            ? { ...ws, onboardingComplete: true }
-            : ws,
-        ),
+      const sealedList = workspaces.map((ws) =>
+        onboardingSealedRef.current.has(ws.id)
+          ? { ...ws, onboardingComplete: true }
+          : ws,
       );
+      setUserWorkspaces(sealedList);
+      userWorkspacesRef.current = sealedList;
+
+      if (loaded.onboardingComplete && loaded.workspace.id) {
+        onboardingSealedRef.current.add(loaded.workspace.id);
+      }
+
       setRemoteState(loaded);
       setBackend("supabase");
       setHydrated(true);
@@ -2244,28 +2255,43 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         if (!user || backendRef.current !== "supabase") return;
         if (workspaceId === stateRef.current.workspace.id) return;
 
+        const summary = userWorkspacesRef.current.find((ws) => ws.id === workspaceId);
+        const knownComplete =
+          onboardingSealedRef.current.has(workspaceId) ||
+          Boolean(summary?.onboardingComplete);
+
+        // Leaving an unfinished Launch screen must not trap the next HQ on /onboarding.
+        clearOnboardingLaunchPending();
+
         // Invalidate in-flight loads and clear cross-HQ ghosts immediately.
         loadSeqRef.current += 1;
         setActiveWorkspaceId(workspaceId);
+        setWorkspaceTransitioning(true);
         setState((current) => {
           if (!current.user) return current;
           // Wipe roster/rooms immediately so HQ A never paints on HQ B during load.
+          // Preserve known onboardingComplete so AppShell does not bounce to /onboarding.
           const cleared = buildFreshWorkspaceState(
             current.user,
             {
               id: workspaceId,
-              name: "…",
+              name: summary?.name ?? "…",
               plan: "Free",
-              workspaceMode: "real",
+              workspaceMode: summary?.workspaceMode ?? "real",
+              onboardingComplete: knownComplete,
             },
-            false,
+            knownComplete,
             [],
             [],
           );
           stateRef.current = cleared;
           return cleared;
         });
-        await loadRemote(user, workspaceId);
+        try {
+          await loadRemote(user, workspaceId);
+        } finally {
+          setWorkspaceTransitioning(false);
+        }
       },
 
       cancelIncompleteWorkspace: async (workspaceId: string) => {
@@ -2316,8 +2342,16 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   }, [loadRemote, runRemote, setRemoteState]);
 
   const value = useMemo<StoreValue>(
-    () => ({ state, hydrated, backend, error, userWorkspaces, actions }),
-    [state, hydrated, backend, error, userWorkspaces, actions],
+    () => ({
+      state,
+      hydrated,
+      backend,
+      error,
+      userWorkspaces,
+      workspaceTransitioning,
+      actions,
+    }),
+    [state, hydrated, backend, error, userWorkspaces, workspaceTransitioning, actions],
   );
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;

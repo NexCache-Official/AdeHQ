@@ -237,9 +237,11 @@ export function storeOnboardingContext(context: import("./types").OnboardingCont
   sessionStorage.setItem(ONBOARDING_CONTEXT_KEY, JSON.stringify(context));
 }
 
+const LAUNCH_PENDING_MAX_MS = 10 * 60 * 1000;
+
 export function markOnboardingLaunchPending() {
   if (typeof window === "undefined") return;
-  sessionStorage.setItem(ONBOARDING_LAUNCH_PENDING_KEY, "1");
+  sessionStorage.setItem(ONBOARDING_LAUNCH_PENDING_KEY, String(Date.now()));
 }
 
 export function clearOnboardingLaunchPending() {
@@ -249,7 +251,20 @@ export function clearOnboardingLaunchPending() {
 
 export function isOnboardingLaunchPending(): boolean {
   if (typeof window === "undefined") return false;
-  return sessionStorage.getItem(ONBOARDING_LAUNCH_PENDING_KEY) === "1";
+  const raw = sessionStorage.getItem(ONBOARDING_LAUNCH_PENDING_KEY);
+  if (!raw) return false;
+  // Legacy boolean flag
+  if (raw === "1") return true;
+  const started = Number(raw);
+  if (!Number.isFinite(started)) {
+    sessionStorage.removeItem(ONBOARDING_LAUNCH_PENDING_KEY);
+    return false;
+  }
+  if (Date.now() - started > LAUNCH_PENDING_MAX_MS) {
+    sessionStorage.removeItem(ONBOARDING_LAUNCH_PENDING_KEY);
+    return false;
+  }
+  return true;
 }
 
 export function clearOnboardingDrafts() {

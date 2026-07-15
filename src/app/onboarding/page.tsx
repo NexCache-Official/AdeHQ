@@ -13,10 +13,20 @@ import {
 } from "@/lib/hiring/data";
 
 export default function OnboardingPage() {
-  const { state, actions, hydrated, userWorkspaces } = useStore();
+  const { state, actions, hydrated, userWorkspaces, workspaceTransitioning } = useStore();
   const router = useRouter();
   const emailGate = useConfirmedEmailGate();
   const [launchPending, setLaunchPending] = useState(false);
+
+  const activeSummary = useMemo(
+    () => userWorkspaces.find((ws) => ws.id === state.workspace.id) ?? null,
+    [userWorkspaces, state.workspace.id],
+  );
+
+  const workspaceIsComplete =
+    Boolean(state.onboardingComplete) ||
+    Boolean(state.workspace.onboardingComplete) ||
+    Boolean(activeSummary?.onboardingComplete);
 
   const completedOther = useMemo(
     () =>
@@ -40,16 +50,25 @@ export default function OnboardingPage() {
       router.replace("/login");
       return;
     }
+    if (workspaceTransitioning) return;
+
+    // Already finished in DB/list — leave wizard. Only keep Launch handoff while
+    // sessionStorage says this tab is mid step-5 transition.
+    if (workspaceIsComplete) {
+      if (isOnboardingLaunchPending()) {
+        setLaunchPending(true);
+        return;
+      }
+      clearOnboardingLaunchPending();
+      setLaunchPending(false);
+      router.replace("/");
+      return;
+    }
 
     // Recovery: workspace + first room already exist but flag was never persisted
     // (older clients left users looping Welcome). Seal onboarding and leave.
     const hasProjectRoom = state.rooms.some((r) => r.kind === "room");
-    if (
-      state.workspace.id &&
-      hasProjectRoom &&
-      !state.onboardingComplete &&
-      !isOnboardingLaunchPending()
-    ) {
+    if (state.workspace.id && hasProjectRoom && !isOnboardingLaunchPending()) {
       void (async () => {
         try {
           await actions.completeOnboarding();
@@ -62,34 +81,32 @@ export default function OnboardingPage() {
       return;
     }
 
-    // Completed onboarding: never show the wizard again, unless this tab is
-    // still on the one-shot Launch handoff after workspace provisioning.
-    if (state.onboardingComplete && !isOnboardingLaunchPending()) {
-      clearOnboardingLaunchPending();
-      router.replace("/");
-      return;
-    }
-
     setLaunchPending(isOnboardingLaunchPending());
   }, [
     hydrated,
     state.user,
     state.onboardingComplete,
     state.workspace.id,
+    state.workspace.onboardingComplete,
     state.rooms,
+    workspaceIsComplete,
+    workspaceTransitioning,
     emailGate,
     router,
     actions,
   ]);
 
-  // Never render the flow (even for a frame) for signed-out users or users who
-  // have already completed onboarding — unless Launch handoff is in progress.
   if (emailGate !== "allowed" || !hydrated || !state.user) {
     return <LoadingState full label="Loading…" />;
   }
 
-  if (state.onboardingComplete && !launchPending) {
-    return <LoadingState full label="Loading…" />;
+  if (workspaceTransitioning) {
+    return <LoadingState full label="Switching workspace…" />;
+  }
+
+  // Completed HQ: never render the wizard except the intentional Launch handoff frame.
+  if (workspaceIsComplete && !launchPending) {
+    return <LoadingState full label="Opening workspace…" />;
   }
 
   return (
@@ -100,6 +117,7 @@ export default function OnboardingPage() {
             ? { id: completedOther.id, name: completedOther.name }
             : null
         }
+        allowCancel={!workspaceIsComplete}
       />
     </div>
   );

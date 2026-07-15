@@ -18,6 +18,7 @@ import {
   ONBOARDING_CONTEXT_KEY,
   ONBOARDING_ROOM_KEY,
   clearOnboardingLaunchPending,
+  isOnboardingLaunchPending,
   markOnboardingLaunchPending,
   storeOnboardingContext,
 } from "@/lib/hiring/data";
@@ -62,12 +63,18 @@ function Confetti() {
 
 export function OnboardingFlow({
   escapeWorkspace = null,
+  allowCancel = true,
 }: {
   escapeWorkspace?: { id: string; name: string } | null;
+  /** False when this HQ is already complete — cancel would only error. */
+  allowCancel?: boolean;
 }) {
   const { state, actions } = useStore();
   const router = useRouter();
-  const [stage, setStage] = useState(0);
+  // If Launch handoff remounts after seal, land on Launch — not Welcome of a finished HQ.
+  const [stage, setStage] = useState(() =>
+    state.onboardingComplete && isOnboardingLaunchPending() ? 4 : 0,
+  );
   const [escaping, setEscaping] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [outcomeId, setOutcomeId] = useState<WorkforceOutcomeId | null>(null);
@@ -333,7 +340,7 @@ export function OnboardingFlow({
                 {escaping ? "Switching…" : `Back to ${escapeWorkspace.name}`}
               </button>
             ) : null}
-            {state.workspace.id ? (
+            {allowCancel && state.workspace.id ? (
               <button
                 type="button"
                 disabled={cancelling || busy || escaping}
@@ -351,11 +358,18 @@ export function OnboardingFlow({
                       await actions.cancelIncompleteWorkspace(state.workspace.id);
                       router.replace(escapeWorkspace ? "/" : "/workspaces/new");
                     } catch (err) {
-                      setError(
+                      const message =
                         err instanceof Error
                           ? err.message
-                          : "Could not cancel onboarding.",
-                      );
+                          : "Could not cancel onboarding.";
+                      // Already complete in DB — leave wizard instead of trapping the user.
+                      if (/already finished setup|onboarding_already_complete/i.test(message)) {
+                        clearOnboardingLaunchPending();
+                        await actions.completeOnboarding().catch(() => undefined);
+                        router.replace("/");
+                        return;
+                      }
+                      setError(message);
                     } finally {
                       setCancelling(false);
                     }

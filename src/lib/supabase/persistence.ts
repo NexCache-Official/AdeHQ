@@ -326,15 +326,29 @@ async function fetchWorkspaceIdForUser(
     if (data?.workspace_id) return data.workspace_id;
   }
 
+  // Prefer a completed HQ over the oldest incomplete shell (common after abandoned creates).
   const { data, error } = await supabase
     .from("workspace_members")
-    .select("workspace_id, created_at")
+    .select("workspace_id, created_at, workspaces ( id, onboarding_complete )")
     .eq("user_id", userId)
-    .order("created_at", { ascending: true })
-    .limit(1);
+    .eq("status", "active")
+    .order("created_at", { ascending: true });
 
   if (error) throw error;
-  return data?.[0]?.workspace_id ?? null;
+  const rows = data ?? [];
+  if (rows.length === 0) return null;
+
+  const completed = rows.find((row) => {
+    const joined = row.workspaces as
+      | { id: string; onboarding_complete?: boolean | null }
+      | { id: string; onboarding_complete?: boolean | null }[]
+      | null;
+    const ws = Array.isArray(joined) ? joined[0] : joined;
+    return Boolean(ws?.onboarding_complete);
+  });
+  if (completed?.workspace_id) return String(completed.workspace_id);
+
+  return rows[0]?.workspace_id ? String(rows[0].workspace_id) : null;
 }
 
 export type UserWorkspaceSummary = {
