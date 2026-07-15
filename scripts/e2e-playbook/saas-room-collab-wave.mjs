@@ -68,13 +68,22 @@ try {
   await waitShell(page);
   await shot(page, "room");
 
-  const before = await page.locator("[data-message-id]").count().catch(() => 0);
   const box = page.getByPlaceholder(/Message|Ask|Write/i).first().or(page.locator("textarea").last());
   await box.fill(
     `@Lane Lloyd @Casey Nguyen @Jules Drake — need help locking a one-liner for Approvals Inbox and who we demo first next week. Keep it short and opinionated. (${stamp})`,
   );
   await page.keyboard.press("Enter");
   await shot(page, "sent");
+  // Wait for the human bubble to land, THEN baseline — otherwise we false-pass
+  // on our own message count increasing.
+  const settleT0 = Date.now();
+  while (Date.now() - settleT0 < SHELL_MS) {
+    const stuck = await page.getByText(/^Sending…$|^Sending\.\.\.$/i).first().isVisible().catch(() => false);
+    if (!stuck) break;
+    await page.waitForTimeout(800);
+  }
+  await page.waitForTimeout(1200);
+  const before = await page.locator("[data-message-id]").count().catch(() => 0);
 
   const t0 = Date.now();
   let grew = false;
@@ -83,10 +92,13 @@ try {
     await shot(page, "wait");
     const after = await page.locator("[data-message-id]").count().catch(() => 0);
     const busy = await page.locator(".typing-dot").first().isVisible().catch(() => false);
+    const stampVisible = await page.getByText(stamp).first().isVisible().catch(() => false);
+    // Prefer detecting a reply that isn't just our stamp line (AI won't echo stamp alone).
     if (after > before && !busy) {
       grew = true;
       break;
     }
+    if (!busy && Date.now() - t0 > 45000 && stampVisible && after === before) break;
   }
   await shot(page, "done");
   if (!grew) bug("P0", "No AI reply in Engineering after @mentions within 60s");

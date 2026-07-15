@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { CAPACITY_LIMITS, type WorkClass } from "@/lib/tasks/work-classes";
+import { nowISO } from "@/lib/utils";
 
 export type AdmissionDecision =
   | { admit: true; runningInteractive: number; queuedInteractive: number; runningHeavy: number }
@@ -14,11 +15,69 @@ export type AdmissionDecision =
 
 type DbRow = Record<string, unknown>;
 
+/** Interactive runs abandoned after client navigate-away / Failed to fetch. */
+const STALE_INTERACTIVE_RUN_MS = Number(
+  process.env.ADEHQ_STALE_INTERACTIVE_RUN_MS ?? 2 * 60 * 1000,
+);
+
+/**
+ * Fail interactive agent runs stuck in queued/waiting/running past the stale
+ * window so a single abandoned process cannot permanently block the employee
+ * (maxInteractiveRunning defaults to 1).
+ */
+async function reapStaleInteractiveRuns(
+  client: SupabaseClient,
+  workspaceId: string,
+  employeeId: string,
+): Promise<void> {
+  const cutoffMs = Date.now() - STALE_INTERACTIVE_RUN_MS;
+  const { data, error } = await client
+    .from("agent_runs")
+    .select("id, status, run_metadata, created_at, started_at")
+    .eq("workspace_id", workspaceId)
+    .eq("employee_id", employeeId)
+    .in("status", ["queued", "waiting", "running"]);
+  if (error || !data?.length) return;
+
+  for (const row of data as DbRow[]) {
+    const meta = (row.run_metadata ?? {}) as Record<string, unknown>;
+    const workClass = String(meta.workClass ?? "interactive");
+    if (workClass === "heavy_artifact" || workClass === "light_parallel") continue;
+
+    const status = String(row.status);
+    const anchor =
+      status === "running" && row.started_at
+        ? String(row.started_at)
+        : String(row.created_at ?? "");
+    const when = Date.parse(anchor);
+    if (!Number.isFinite(when) || when > cutoffMs) continue;
+
+    const nextMeta = {
+      ...meta,
+      collaborationStatus: "cancelled",
+      cancelReason: "stale_interactive_run",
+    };
+    await client
+      .from("agent_runs")
+      .update({
+        status: "failed",
+        error_message: "Timed out — interactive run abandoned before completion.",
+        run_metadata: nextMeta,
+        completed_at: nowISO(),
+      })
+      .eq("workspace_id", workspaceId)
+      .eq("id", String(row.id))
+      .in("status", ["queued", "waiting", "running"]);
+  }
+}
+
 async function countEmployeeRuns(
   client: SupabaseClient,
   workspaceId: string,
   employeeId: string,
 ): Promise<{ runningInteractive: number; queuedInteractive: number }> {
+  await reapStaleInteractiveRuns(client, workspaceId, employeeId);
+
   const { data, error } = await client
     .from("agent_runs")
     .select("id, status, run_metadata")

@@ -31,6 +31,8 @@ Scope of this pass: Phase 1 (partial), Phase 2/3 (partial via Maya/Elena/David),
 | P1 | Room collab silent after AI tool cards (ambient governance) | **Fixed** — work intents (`task_request`, `direct_question`, collab, etc.) bypass after-AI skip (`ambient-governance.ts`); marathon now `@mentions` team |
 | P1 | Drive stuck on "Loading Drive…" (no Retry) | **Fixed** — 25s list timeout + Retry (`drive/page.tsx`)
 | — | Jules DOCX + email draft to skumar@nexcache.com | **Verified** `saas-jules-drive-wave.mjs` bugs: [] |
+| P1 | "At capacity — logged in task book" after abandoned agent runs | **Fixed** — reap stale interactive runs (2m) + skip admission on @mentions (`admission.ts`, `run-topic-burst.ts`)
+| — | Engineering @mention collab (Casey+Lane one-liner) | **Verified** after wait baseline fix |
 | P2 | Duplicate identical CRM deals from repeated Casey asks | Observed; defer de-dupe |
 
 ### Scripts

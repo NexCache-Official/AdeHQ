@@ -372,6 +372,7 @@ export async function runTopicBurstOrchestration(
       },
     }));
 
+    // Explicit @mentions are human-directed work — never soft-block on capacity.
     const { queued, blocked } = await queueAgentRuns(client, {
       workspaceId: params.workspaceId,
       roomId: params.roomId,
@@ -381,6 +382,7 @@ export async function runTopicBurstOrchestration(
       content: burst.combinedText,
       createdByType: "steward",
       createdById: params.userId,
+      skipAdmission: mentions.length > 0,
     });
 
     if (orchestrationId && queued.length) {
