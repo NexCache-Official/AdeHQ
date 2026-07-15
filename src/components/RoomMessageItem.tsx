@@ -471,6 +471,55 @@ function MessageActions({
   );
 }
 
+function ApprovalArtifactSlot({
+  artifactId,
+  label,
+}: {
+  artifactId: string;
+  label: string;
+}) {
+  const { state, actions } = useStore();
+  const approval = state.approvals.find((x) => x.id === artifactId);
+
+  useEffect(() => {
+    if (approval) return;
+    void actions.ensureApproval(artifactId);
+    const t = window.setTimeout(() => void actions.ensureApproval(artifactId), 600);
+    return () => window.clearTimeout(t);
+  }, [actions, approval, artifactId]);
+
+  // Keep pending email cards synced with inbox send/discard.
+  useEffect(() => {
+    if (!approval || approval.status !== "pending") return;
+    const tool =
+      typeof approval.actionPayload?.tool === "string" ? approval.actionPayload.tool : "";
+    if (tool !== "email.sendDraft") return;
+    const poll = window.setInterval(() => {
+      void actions.ensureApproval(artifactId);
+    }, 6000);
+    return () => window.clearInterval(poll);
+  }, [actions, approval, artifactId]);
+
+  if (approval) {
+    return (
+      <div className="mt-2.5 max-w-xl">
+        <ApprovalCard approval={approval} />
+      </div>
+    );
+  }
+
+  return (
+    <Link
+      href={`/approvals?id=${encodeURIComponent(artifactId)}`}
+      className="mt-2.5 inline-flex items-center gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-[11px] font-medium text-amber-800 hover:bg-amber-100"
+    >
+      <ShieldAlert className="h-3 w-3" />
+      {label}
+      <span className="text-amber-700/80">· Review</span>
+    </Link>
+  );
+}
+
 export function RoomMessageItem({
   message,
   isDm = false,
@@ -845,32 +894,12 @@ export function RoomMessageItem({
         })}
 
         {/* Pending email/tool approvals: render the real card with Approve/Reject
-            in-chat. A dead amber chip that only said "Approval: …" left CEOs
-            unable to finish inbox sends from the conversation where the ask
-            happened (SaaS Company 1 E2E). */}
+            in-chat. Eager-fetch missing rows so Review isn't needed after a race. */}
         {otherArtifacts
           .filter((a) => a.type === "approval")
-          .map((a) => {
-            const approval = state.approvals.find((x) => x.id === a.id);
-            if (approval) {
-              return (
-                <div key={a.id} className="mt-2.5 max-w-lg">
-                  <ApprovalCard approval={approval} />
-                </div>
-              );
-            }
-            return (
-              <Link
-                key={a.id + a.label}
-                href="/approvals"
-                className="mt-2.5 inline-flex items-center gap-1.5 rounded-lg bg-amber-50 px-2 py-1 text-[11px] font-medium text-amber-700 hover:bg-amber-100"
-              >
-                <ShieldAlert className="h-3 w-3" />
-                {a.label}
-                <span className="text-amber-600/80">· Review</span>
-              </Link>
-            );
-          })}
+          .map((a) => (
+            <ApprovalArtifactSlot key={a.id} artifactId={a.id} label={a.label} />
+          ))}
 
         {(otherArtifacts.some((a) => a.type !== "approval") || debugWorkLogArtifacts.length > 0) && (
           <div className="mt-2.5 flex flex-wrap gap-1.5">

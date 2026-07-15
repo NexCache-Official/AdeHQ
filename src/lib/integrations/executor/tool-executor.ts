@@ -114,6 +114,30 @@ async function createToolApproval(
   if (!ctx.roomId) {
     throw new Error(`${tool.name} needs approval, which requires a room context.`);
   }
+
+  // Email send cards should show the full inbox draft, not a truncated preview.
+  let enrichedArgs = { ...args };
+  let enrichedPreview = preview;
+  if (tool.name === "email.sendDraft" && typeof args.draftId === "string") {
+    const { loadEmailDraftForApproval } = await import(
+      "@/lib/integrations/sync-email-draft-approvals"
+    );
+    const draft = await loadEmailDraftForApproval(client, {
+      workspaceId: ctx.workspaceId,
+      draftId: args.draftId,
+    });
+    if (draft) {
+      enrichedArgs = {
+        ...enrichedArgs,
+        subject: draft.subject || enrichedArgs.subject,
+        recipientEmail: draft.recipientEmail || enrichedArgs.recipientEmail,
+        bodyPreview: draft.body || enrichedArgs.bodyPreview,
+        body: draft.body,
+      };
+      enrichedPreview = tool.buildPreview(enrichedArgs);
+    }
+  }
+
   const approvalId = uid("appr");
   const { error } = await client.from("approvals").insert({
     workspace_id: ctx.workspaceId,
@@ -121,20 +145,20 @@ async function createToolApproval(
     room_id: ctx.roomId,
     topic_id: ctx.topicId ?? null,
     requested_by: ctx.employeeId,
-    title: preview.title,
-    description: preview.summary,
-    risk: preview.risk,
+    title: enrichedPreview.title,
+    description: enrichedPreview.summary,
+    risk: enrichedPreview.risk,
     status: "pending",
     action_type: "tool_execution",
     action_payload: {
       tool: tool.name,
-      args,
+      args: enrichedArgs,
       employeeId: ctx.employeeId,
       requestedByUserId: ctx.requestedByUserId ?? null,
       roomId: ctx.roomId,
       topicId: ctx.topicId ?? null,
     },
-    preview_snapshot: { ...preview, toolName: tool.name },
+    preview_snapshot: { ...enrichedPreview, toolName: tool.name },
     created_by_run_id: ctx.agentRunId ?? null,
     created_at: nowISO(),
   });

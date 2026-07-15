@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { Approval } from "@/lib/types";
 import { useStore } from "@/lib/demo-store";
 import { authHeaders } from "@/lib/api/auth-client";
@@ -9,7 +10,16 @@ import { ActorChip } from "./ActorChip";
 import { RISK_META } from "@/lib/icons";
 import { cn, timeAgo } from "@/lib/utils";
 import { Button } from "./ui";
-import { Check, Loader2, MessageCircleWarning, Pencil, ShieldAlert, X } from "lucide-react";
+import {
+  Check,
+  ExternalLink,
+  Loader2,
+  Mail,
+  MessageCircleWarning,
+  Pencil,
+  ShieldAlert,
+  X,
+} from "lucide-react";
 import { motion } from "framer-motion";
 
 const ACTION_LABEL: Record<Approval["actionType"], string> = {
@@ -51,8 +61,21 @@ function StatusBadge({ status }: { status: Approval["status"] }) {
 /** Editable arg fields — primitive values become inputs, long text a textarea. */
 function editableArgEntries(args: Record<string, unknown>): Array<[string, string]> {
   return Object.entries(args)
-    .filter(([, value]) => ["string", "number", "boolean"].includes(typeof value))
+    .filter(([key, value]) => {
+      if (!["string", "number", "boolean"].includes(typeof value)) return false;
+      // Prefer full `body` over truncated preview for email edits.
+      if (key === "bodyPreview" && typeof args.body === "string") return false;
+      if (key === "draftId") return false;
+      return true;
+    })
     .map(([key, value]) => [key, String(value)] as [string, string]);
+}
+
+function fieldValue(
+  fields: Array<{ label: string; value: string }> | undefined,
+  label: string,
+): string {
+  return fields?.find((f) => f.label.toLowerCase() === label.toLowerCase())?.value ?? "";
 }
 
 export function ApprovalCard({ approval }: { approval: Approval }) {
@@ -62,6 +85,9 @@ export function ApprovalCard({ approval }: { approval: Approval }) {
   const resolved = approval.status !== "pending";
   const isDemoWorkspace = state.workspace.workspaceMode === "demo";
   const hasActionPayload = Boolean(approval.actionPayload?.tool);
+  const toolName =
+    typeof approval.actionPayload?.tool === "string" ? approval.actionPayload.tool : "";
+  const isEmailSend = toolName === "email.sendDraft";
   const isCapabilityGrant =
     approval.actionType === "tool_access" &&
     approval.actionPayload?.kind === "capability_grant";
@@ -79,6 +105,29 @@ export function ApprovalCard({ approval }: { approval: Approval }) {
     [approval.actionPayload],
   );
   const editEntries = useMemo(() => editableArgEntries(payloadArgs), [payloadArgs]);
+
+  const emailTo =
+    (typeof payloadArgs.recipientEmail === "string" && payloadArgs.recipientEmail) ||
+    fieldValue(previewFields, "To");
+  const emailSubject =
+    (typeof payloadArgs.subject === "string" && payloadArgs.subject) ||
+    fieldValue(previewFields, "Subject");
+  const emailBody =
+    (typeof payloadArgs.body === "string" && payloadArgs.body) ||
+    (typeof payloadArgs.bodyPreview === "string" && payloadArgs.bodyPreview) ||
+    fieldValue(previewFields, "Body") ||
+    fieldValue(previewFields, "Preview");
+  const draftId = typeof payloadArgs.draftId === "string" ? payloadArgs.draftId : null;
+
+  // Keep pending email cards fresh against inbox draft status / full body.
+  useEffect(() => {
+    if (!isEmailSend || resolved) return;
+    void actions.ensureApproval(approval.id);
+    const t = window.setInterval(() => {
+      void actions.ensureApproval(approval.id);
+    }, 8000);
+    return () => window.clearInterval(t);
+  }, [actions, approval.id, isEmailSend, resolved]);
 
   async function resolveOnServer(
     action: ResolveAction,
@@ -101,6 +150,10 @@ export function ApprovalCard({ approval }: { approval: Approval }) {
               : typeof original === "boolean"
                 ? raw === "true"
                 : raw;
+        }
+        // Map UI "body" onto both body + bodyPreview for schema + draft update.
+        if (typeof editedArgs.body === "string") {
+          editedArgs.bodyPreview = editedArgs.body;
         }
         body.editedArgs = editedArgs;
       }
@@ -131,6 +184,7 @@ export function ApprovalCard({ approval }: { approval: Approval }) {
       }
       if (data.revisionReplyFailed) setNotice(data.revisionReplyFailed);
       setPanel(null);
+      void actions.refreshWorkspace();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to resolve approval.");
     } finally {
@@ -148,13 +202,215 @@ export function ApprovalCard({ approval }: { approval: Approval }) {
   }
 
   const busy = busyAction !== null;
+  const nonBodyFields = previewFields.filter(
+    (f) => !["Body", "Preview"].includes(f.label),
+  );
+
+  if (isEmailSend) {
+    return (
+      <motion.div
+        layout
+        className={cn(
+          "overflow-hidden rounded-xl border border-border bg-surface shadow-sm",
+          resolved && "opacity-80",
+        )}
+      >
+        <div className="flex items-start justify-between gap-3 border-b border-border px-4 py-3">
+          <div className="flex min-w-0 items-center gap-2.5">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-accent-soft text-accent-d">
+              <Mail className="h-4 w-4" />
+            </span>
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="text-[10px] font-semibold uppercase tracking-wide text-ink-3">
+                  Email send
+                </span>
+                {!resolved && (
+                  <span className={cn("rounded-md px-1.5 py-0.5 text-[10px] font-medium", risk.bg, risk.color)}>
+                    Needs approval
+                  </span>
+                )}
+                <StatusBadge status={approval.status} />
+              </div>
+              <h4 className="mt-0.5 truncate text-sm font-semibold text-ink">
+                {emailSubject || approval.title}
+              </h4>
+            </div>
+          </div>
+          {draftId && (
+            <Link
+              href={`/inbox?folder=drafts`}
+              className="inline-flex shrink-0 items-center gap-1 text-[11px] font-medium text-accent-d hover:underline"
+            >
+              Inbox <ExternalLink className="h-3 w-3" />
+            </Link>
+          )}
+        </div>
+
+        <div className="space-y-0 border-b border-border px-4 py-3">
+          <div className="grid gap-2 text-xs">
+            <div className="flex gap-3 min-w-0">
+              <span className="w-14 shrink-0 font-medium text-ink-3">To</span>
+              <span className="min-w-0 break-all font-medium text-ink">{emailTo || "—"}</span>
+            </div>
+            <div className="flex gap-3 min-w-0">
+              <span className="w-14 shrink-0 font-medium text-ink-3">Subject</span>
+              <span className="min-w-0 text-ink">{emailSubject || "—"}</span>
+            </div>
+          </div>
+        </div>
+
+        {panel !== "edit" && (
+          <div className="max-h-64 overflow-y-auto px-4 py-3">
+            <p className="whitespace-pre-wrap text-[13px] leading-relaxed text-ink">
+              {emailBody || "No email body available."}
+            </p>
+          </div>
+        )}
+
+        {approval.resolutionNote && (
+          <p className="border-t border-border px-4 py-2 text-[11px] italic text-ink-3">
+            Note: {approval.resolutionNote}
+          </p>
+        )}
+
+        <div className="flex items-center justify-between border-t border-border px-4 py-2">
+          <div className="flex items-center gap-1.5 text-[11px] text-ink-3">
+            <ActorChip id={approval.requestedBy} />
+          </div>
+          <span className="text-[11px] text-ink-3">
+            {room?.name} · {timeAgo(approval.createdAt)}
+          </span>
+        </div>
+
+        {error && <p className="px-4 pb-2 text-[11px] font-medium text-rose-600">{error}</p>}
+        {notice && <p className="px-4 pb-2 text-[11px] font-medium text-emerald-700">{notice}</p>}
+
+        {!resolved && panel === "edit" && (
+          <div className="space-y-2 border-t border-border px-4 py-3">
+            <p className="text-[11px] font-medium text-ink-2">Edit email before approving</p>
+            <label className="block text-[11px] text-ink-3">
+              <span className="mb-0.5 block">To</span>
+              <input
+                value={editedValues.recipientEmail ?? emailTo}
+                onChange={(e) =>
+                  setEditedValues((v) => ({ ...v, recipientEmail: e.target.value }))
+                }
+                className="w-full rounded-lg border border-border bg-canvas px-2.5 py-2 text-xs text-ink"
+              />
+            </label>
+            <label className="block text-[11px] text-ink-3">
+              <span className="mb-0.5 block">Subject</span>
+              <input
+                value={editedValues.subject ?? emailSubject}
+                onChange={(e) => setEditedValues((v) => ({ ...v, subject: e.target.value }))}
+                className="w-full rounded-lg border border-border bg-canvas px-2.5 py-2 text-xs text-ink"
+              />
+            </label>
+            <label className="block text-[11px] text-ink-3">
+              <span className="mb-0.5 block">Body</span>
+              <textarea
+                value={editedValues.body ?? emailBody}
+                rows={12}
+                onChange={(e) => setEditedValues((v) => ({ ...v, body: e.target.value }))}
+                className="min-h-[220px] w-full resize-y rounded-lg border border-border bg-canvas px-2.5 py-2 text-xs leading-relaxed text-ink"
+              />
+            </label>
+            <div className="flex gap-2 pt-1">
+              <Button size="sm" className="flex-1" disabled={busy} onClick={() => resolve("edit")}>
+                {busyAction === "edit" ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Check className="h-4 w-4" />
+                )}
+                Approve & send
+              </Button>
+              <Button size="sm" variant="ghost" disabled={busy} onClick={() => setPanel(null)}>
+                Cancel
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {!resolved && panel === "revise" && (
+          <div className="space-y-2 border-t border-border px-4 py-3">
+            <p className="text-[11px] font-medium text-ink-2">What should change?</p>
+            <textarea
+              value={note}
+              rows={3}
+              placeholder="e.g. Soften the ask and mention the Friday deadline"
+              onChange={(e) => setNote(e.target.value)}
+              className="w-full rounded-lg border border-border bg-canvas px-2.5 py-2 text-xs text-ink"
+            />
+            <div className="flex gap-2 pt-1">
+              <Button
+                size="sm"
+                className="flex-1"
+                disabled={busy || !note.trim()}
+                onClick={() => resolve("revise")}
+              >
+                {busyAction === "revise" ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <MessageCircleWarning className="h-4 w-4" />
+                )}
+                Send back for revision
+              </Button>
+              <Button size="sm" variant="ghost" disabled={busy} onClick={() => setPanel(null)}>
+                Cancel
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {!resolved && panel === null && (
+          <div className="flex flex-wrap gap-2 border-t border-border px-4 py-3">
+            <Button size="sm" className="flex-1" disabled={busy} onClick={() => resolve("approve")}>
+              {busyAction === "approve" ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Check className="h-4 w-4" />
+              )}
+              Approve & send
+            </Button>
+            <Button
+              size="sm"
+              variant="secondary"
+              disabled={busy}
+              onClick={() => {
+                setEditedValues({
+                  recipientEmail: emailTo,
+                  subject: emailSubject,
+                  body: emailBody,
+                });
+                setPanel("edit");
+              }}
+            >
+              <Pencil className="h-4 w-4" /> Edit
+            </Button>
+            <Button size="sm" variant="secondary" disabled={busy} onClick={() => setPanel("revise")}>
+              <MessageCircleWarning className="h-4 w-4" /> Revise
+            </Button>
+            <Button size="sm" variant="secondary" disabled={busy} onClick={() => resolve("reject")}>
+              {busyAction === "reject" ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <X className="h-4 w-4" />
+              )}
+              Reject
+            </Button>
+          </div>
+        )}
+      </motion.div>
+    );
+  }
 
   return (
     <motion.div
       layout
       className={cn(
-        "rounded-2xl border bg-muted p-4",
-        resolved ? "border-border opacity-70" : risk.border,
+        "rounded-xl border border-border bg-surface p-4 shadow-sm",
+        resolved ? "opacity-70" : risk.border,
       )}
     >
       <div className="flex items-start justify-between gap-3">
@@ -177,9 +433,9 @@ export function ApprovalCard({ approval }: { approval: Approval }) {
       <h4 className="mt-2.5 text-sm font-semibold text-ink">{approval.title}</h4>
       <p className="mt-1 text-xs leading-relaxed text-ink-2">{approval.description}</p>
 
-      {previewFields.length > 0 && (
-        <dl className="mt-3 space-y-1 rounded-xl border border-border bg-surface px-3 py-2.5">
-          {previewFields.map((field) => (
+      {nonBodyFields.length > 0 && (
+        <dl className="mt-3 space-y-1 rounded-xl border border-border bg-canvas px-3 py-2.5">
+          {nonBodyFields.map((field) => (
             <div key={field.label} className="flex items-baseline justify-between gap-3 text-xs">
               <dt className="shrink-0 text-ink-3">{field.label}</dt>
               <dd className="text-right font-medium text-ink-2">{field.value}</dd>
@@ -206,18 +462,18 @@ export function ApprovalCard({ approval }: { approval: Approval }) {
       {notice && <p className="mt-2 text-[11px] font-medium text-emerald-700">{notice}</p>}
 
       {!resolved && panel === "edit" && (
-        <div className="mt-3 space-y-2 rounded-xl border border-border bg-surface p-3">
+        <div className="mt-3 space-y-2 rounded-xl border border-border bg-canvas p-3">
           <p className="text-[11px] font-medium text-ink-2">Edit before approving</p>
           {editEntries.map(([key, value]) => {
             const current = editedValues[key] ?? value;
-            const isLong = value.length > 64;
+            const isLong = value.length > 64 || key === "body" || key === "bodyPreview";
             return (
               <label key={key} className="block text-[11px] text-ink-3">
                 <span className="mb-0.5 block capitalize">{key.replace(/([A-Z])/g, " $1")}</span>
                 {isLong ? (
                   <textarea
                     value={current}
-                    rows={3}
+                    rows={key === "body" || key === "bodyPreview" ? 10 : 3}
                     onChange={(e) => setEditedValues((v) => ({ ...v, [key]: e.target.value }))}
                     className="w-full rounded-lg border border-border bg-surface px-2 py-1.5 text-xs text-ink"
                   />
@@ -244,7 +500,7 @@ export function ApprovalCard({ approval }: { approval: Approval }) {
       )}
 
       {!resolved && panel === "revise" && (
-        <div className="mt-3 space-y-2 rounded-xl border border-border bg-surface p-3">
+        <div className="mt-3 space-y-2 rounded-xl border border-border bg-canvas p-3">
           <p className="text-[11px] font-medium text-ink-2">What should change?</p>
           <textarea
             value={note}

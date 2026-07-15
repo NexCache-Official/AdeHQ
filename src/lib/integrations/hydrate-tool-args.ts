@@ -421,7 +421,7 @@ export function observeToolCallResult(
         state.recipientEmail = String(payload.recipientEmail).trim().toLowerCase();
       }
       if (hasText(payload.body)) {
-        state.emailBodyPreview = String(payload.body).trim().slice(0, 200);
+        state.emailBodyPreview = String(payload.body).trim().slice(0, 4000);
       }
     }
   }

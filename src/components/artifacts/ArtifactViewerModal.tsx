@@ -105,8 +105,8 @@ export function ArtifactViewerModal({
 
         {isEmail && email ? (
           <div className="space-y-4">
-            <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-900">
-              This is a draft. Connect Gmail later to send with approval.
+            <p className="rounded-lg border border-border bg-canvas px-3 py-2 text-[11px] text-ink-2">
+              Draft only — open Approvals or Inbox drafts to review and send from the workspace mailbox.
             </p>
             <label className="block space-y-1">
               <span className="text-[10px] font-semibold uppercase tracking-wide text-ink-3">Subject</span>
@@ -215,7 +215,6 @@ export function EmailArtifactInlineCard({
   className?: string;
 }) {
   const [copied, setCopied] = useState(false);
-  const preview = body?.split("\n").slice(0, 3).join("\n") ?? "";
 
   const copy = async () => {
     if (onCopy) {
@@ -230,55 +229,54 @@ export function EmailArtifactInlineCard({
   return (
     <div
       className={cn(
-        "mt-2 w-full max-w-lg overflow-hidden rounded-xl border border-emerald-200/80 bg-emerald-50/40",
+        "mt-2 w-full max-w-xl overflow-hidden rounded-xl border border-border bg-surface shadow-sm",
         className,
       )}
     >
-      <div className="flex items-start justify-between gap-2 border-b border-emerald-200/60 px-3.5 py-2.5">
+      <div className="flex items-start justify-between gap-2 border-b border-border px-3.5 py-2.5">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-1.5">
-            <span className="rounded-md bg-emerald-100 px-1.5 py-0.5 text-[10px] font-bold uppercase text-emerald-800">
-              Email draft
+            <span className="inline-flex items-center gap-1 rounded-md bg-accent-soft px-1.5 py-0.5 text-[10px] font-bold uppercase text-accent-d">
+              <Mail className="h-3 w-3" /> Email draft
             </span>
-            <span className="rounded-md bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800">
-              {status === "saved" ? "Saved" : "Draft"}
+            <span className="rounded-md bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800">
+              {status === "saved" ? "Saved" : "Not sent"}
             </span>
           </div>
-          <p className="mt-1 truncate text-sm font-semibold text-ink">{title}</p>
-          {subject && <p className="mt-0.5 truncate text-[12px] text-ink-2">Subject: {subject}</p>}
+          <p className="mt-1.5 truncate text-sm font-semibold text-ink">{subject || title}</p>
           {(recipient || company) && (
-            <p className="text-[10px] text-ink-3">
-              {[recipient, company].filter(Boolean).join(" · ")}
+            <p className="mt-0.5 truncate text-[12px] text-ink-2">
+              To {[recipient, company].filter(Boolean).join(" · ")}
             </p>
           )}
           {createdBy && <p className="mt-0.5 text-[10px] text-ink-3">Created by {createdBy}</p>}
         </div>
       </div>
-      {preview && (
-        <div className="px-3.5 py-2.5">
-          <p className="line-clamp-4 whitespace-pre-wrap text-[12px] leading-relaxed text-ink-2">{preview}</p>
+      {body && (
+        <div className="max-h-48 overflow-y-auto px-3.5 py-3">
+          <p className="whitespace-pre-wrap text-[12px] leading-relaxed text-ink">{body}</p>
         </div>
       )}
-      <p className="border-t border-emerald-200/50 px-3.5 py-1.5 text-[10px] text-emerald-800/80">
-        Draft only — not sent. Connect Gmail later to send with approval.
-      </p>
-      <div className="flex flex-wrap gap-1.5 border-t border-emerald-200/50 px-3.5 py-2">
-        {onOpen && (
+      <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border px-3.5 py-2">
+        <p className="text-[10px] text-ink-3">Review in Approvals or Inbox drafts to send.</p>
+        <div className="flex flex-wrap gap-1.5">
+          {onOpen && (
+            <button
+              type="button"
+              onClick={onOpen}
+              className="rounded-lg border border-border bg-canvas px-2.5 py-1 text-[11px] font-medium hover:bg-muted"
+            >
+              Open
+            </button>
+          )}
           <button
             type="button"
-            onClick={onOpen}
-            className="rounded-lg border border-border bg-surface px-2.5 py-1 text-[11px] font-medium hover:bg-muted"
+            onClick={() => void copy()}
+            className="rounded-lg border border-border bg-canvas px-2.5 py-1 text-[11px] font-medium hover:bg-muted"
           >
-            Open
+            {copied ? "Copied" : "Copy"}
           </button>
-        )}
-        <button
-          type="button"
-          onClick={() => void copy()}
-          className="rounded-lg border border-border bg-surface px-2.5 py-1 text-[11px] font-medium hover:bg-muted"
-        >
-          {copied ? "Copied" : "Copy email"}
-        </button>
+        </div>
       </div>
     </div>
   );

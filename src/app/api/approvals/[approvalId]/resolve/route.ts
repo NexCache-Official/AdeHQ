@@ -364,6 +364,56 @@ export async function POST(
       }
       effectiveArgs = parsed.data as Record<string, unknown>;
       updatedPreview = { ...tool.buildPreview(parsed.data), toolName: tool.name };
+
+      // Persist email edits onto the inbox draft before send executes.
+      if (toolName === "email.sendDraft") {
+        const draftId =
+          typeof effectiveArgs.draftId === "string" ? effectiveArgs.draftId.trim() : "";
+        if (draftId) {
+          const { data: draft } = await client
+            .from("email_drafts")
+            .select("id, current_version_id, status")
+            .eq("workspace_id", workspaceId)
+            .eq("id", draftId)
+            .maybeSingle();
+          if (draft?.current_version_id && draft.status === "draft") {
+            const bodyText =
+              (typeof effectiveArgs.body === "string" && effectiveArgs.body) ||
+              (typeof effectiveArgs.bodyPreview === "string" && effectiveArgs.bodyPreview) ||
+              "";
+            const toRaw =
+              typeof effectiveArgs.recipientEmail === "string"
+                ? effectiveArgs.recipientEmail
+                : "";
+            const to = toRaw
+              .split(/[,;]/)
+              .map((v) => v.trim().toLowerCase())
+              .filter(Boolean);
+            const patch: Record<string, unknown> = {};
+            if (typeof effectiveArgs.subject === "string") {
+              patch.subject = effectiveArgs.subject;
+            }
+            if (to.length > 0) patch.to_addresses = to;
+            if (bodyText) {
+              const escaped = bodyText
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;");
+              patch.text_body = bodyText;
+              patch.html_body = escaped
+                .split(/\n{2,}/)
+                .map((para) => `<p>${para.replace(/\n/g, "<br/>")}</p>`)
+                .join("");
+            }
+            if (Object.keys(patch).length > 0) {
+              await client
+                .from("email_draft_versions")
+                .update(patch)
+                .eq("id", draft.current_version_id);
+            }
+          }
+        }
+      }
     }
 
     // Atomic pending → approved flip is the idempotency gate for double-clicks.

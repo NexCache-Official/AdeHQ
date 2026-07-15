@@ -189,6 +189,20 @@ export async function POST(request: NextRequest) {
       attachments,
     });
 
+    // Close any pending chat email.sendDraft cards for this draft so DMs update live.
+    if (body.draftId) {
+      const { syncPendingEmailSendApprovals } = await import(
+        "@/lib/integrations/sync-email-draft-approvals"
+      );
+      await syncPendingEmailSendApprovals(ctx.secret, {
+        workspaceId: ctx.workspaceId,
+        draftId: body.draftId,
+        status: "approved",
+        resolvedBy: ctx.user.id,
+        note: "Sent from Inbox",
+      });
+    }
+
     const { data: outbox } = await ctx.secret
       .from("email_outbox")
       .select("status, message_id, thread_id")

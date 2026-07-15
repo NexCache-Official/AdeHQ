@@ -207,6 +207,10 @@ type StoreActions = {
   resolveApproval: (id: string, approved: boolean) => void;
   /** Merge a server-resolved approval into local state (real workspaces). */
   mergeApproval: (approval: Approval) => void;
+  /** Force a workspace reload (approvals, inbox-linked state) for live surfaces. */
+  refreshWorkspace: () => Promise<void>;
+  /** Fetch a single approval by id and merge into store (fixes Review race). */
+  ensureApproval: (approvalId: string) => Promise<Approval | null>;
 
   // work log
   addWorkLog: (e: Partial<WorkLogEvent> & { action: string; roomId: string; employeeId: string }) => WorkLogEvent;
@@ -537,7 +541,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         const user = authUserRef.current;
         // Always reload the subscribed workspace — never the (possibly switched) active id alone.
         if (user) void loadRemote(user, workspaceId);
-      }, 250);
+      }, 120);
     };
 
     let realtimeSubscription = supabase.channel(`workspace:${workspaceId}`);
@@ -1965,6 +1969,96 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         set((s) => ({ ...s, approvals: [created, ...s.approvals] }));
         runRemote((workspaceId) => persistApproval(workspaceId, created));
         return created;
+      },
+
+      refreshWorkspace: async () => {
+        const user = authUserRef.current;
+        const workspaceId = stateRef.current.workspace.id;
+        if (!user || !workspaceId || backendRef.current !== "supabase") return;
+        await loadRemote(user, workspaceId);
+      },
+
+      ensureApproval: async (approvalId) => {
+        const id = approvalId.trim();
+        if (!id) return null;
+        const existing = stateRef.current.approvals.find((a) => a.id === id);
+        if (existing && existing.status !== "pending") return existing;
+        try {
+          const { authHeaders } = await import("@/lib/api/auth-client");
+          const { parseJsonResponse } = await import("@/lib/api/parse-json-response");
+          const response = await fetch(`/api/approvals/${encodeURIComponent(id)}`, {
+            headers: await authHeaders(),
+            cache: "no-store",
+          });
+          const data = await parseJsonResponse<{
+            approval?: Approval;
+            draft?: {
+              subject: string;
+              recipientEmail: string;
+              body: string;
+              status: string;
+            } | null;
+            error?: string;
+          }>(response);
+          if (!response.ok || !data.approval) return existing ?? null;
+          let approval = data.approval;
+          if (
+            approval.status === "pending" &&
+            data.draft &&
+            ["sent", "approved", "discarded", "cancelled"].includes(data.draft.status)
+          ) {
+            approval = {
+              ...approval,
+              status:
+                data.draft.status === "discarded" || data.draft.status === "cancelled"
+                  ? "rejected"
+                  : "approved",
+              resolutionNote:
+                approval.resolutionNote ??
+                (data.draft.status === "discarded" || data.draft.status === "cancelled"
+                  ? "Draft no longer available"
+                  : "Already handled in Inbox"),
+            };
+          }
+          if (data.draft?.body && approval.actionPayload) {
+            const args = {
+              ...((approval.actionPayload.args as Record<string, unknown>) ?? {}),
+              subject: data.draft.subject || undefined,
+              recipientEmail: data.draft.recipientEmail || undefined,
+              body: data.draft.body,
+              bodyPreview: data.draft.body,
+            };
+            const fields = [
+              data.draft.recipientEmail
+                ? { label: "To", value: data.draft.recipientEmail }
+                : null,
+              data.draft.subject ? { label: "Subject", value: data.draft.subject } : null,
+              data.draft.body ? { label: "Body", value: data.draft.body } : null,
+            ].filter(Boolean) as Array<{ label: string; value: string }>;
+            approval = {
+              ...approval,
+              actionPayload: { ...approval.actionPayload, args },
+              previewSnapshot: {
+                title: approval.previewSnapshot?.title ?? approval.title,
+                summary: approval.previewSnapshot?.summary ?? approval.description,
+                risk: approval.previewSnapshot?.risk ?? approval.risk,
+                toolName: approval.previewSnapshot?.toolName,
+                fields:
+                  fields.length > 0 ? fields : (approval.previewSnapshot?.fields ?? []),
+              },
+            };
+          }
+          set((s) => {
+            const exists = s.approvals.some((a) => a.id === approval.id);
+            const approvals = exists
+              ? s.approvals.map((a) => (a.id === approval.id ? { ...a, ...approval } : a))
+              : [approval, ...s.approvals];
+            return { ...s, approvals };
+          });
+          return approval;
+        } catch {
+          return existing ?? null;
+        }
       },
 
       mergeApproval: (approval) => {

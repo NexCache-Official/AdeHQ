@@ -80,6 +80,8 @@ export const SendEmailDraftArgsSchema = z.object({
   subject: z.string().optional(),
   recipientEmail: z.string().optional(),
   bodyPreview: z.string().optional(),
+  /** Full body when available (approval edit / enriched preview). */
+  body: z.string().optional(),
 });
 export type SendEmailDraftArgs = z.infer<typeof SendEmailDraftArgsSchema>;
 
@@ -474,21 +476,23 @@ const sendEmailDraft: ToolDefinition<SendEmailDraftArgs> = {
   argsSchema: SendEmailDraftArgsSchema,
   promptUsage:
     'email.sendDraft — args: { "draftId": "<inboxDraftId from email.createDraft>" }. Always use mode "execute"; the system shows an approval card. Never claim the email was sent until this tool succeeds after approval.',
-  buildPreview: (args) => ({
-    title: args.subject
-      ? `Send email — ${args.subject}`
-      : "Send email from workspace inbox",
-    summary: args.recipientEmail
-      ? `Send to ${args.recipientEmail} from the workspace inbox after approval.`
-      : `Send inbox draft after human approval.`,
-    fields: fields([
-      ["To", args.recipientEmail],
-      ["Subject", args.subject],
-      ["Preview", args.bodyPreview?.slice(0, 160)],
-      ["Draft id", args.draftId],
-    ]),
-    risk: "high",
-  }),
+  buildPreview: (args) => {
+    const body = args.body?.trim() || args.bodyPreview?.trim() || "";
+    return {
+      title: args.subject
+        ? `Send email — ${args.subject}`
+        : "Send email from workspace inbox",
+      summary: args.recipientEmail
+        ? `Send to ${args.recipientEmail} from the workspace inbox after approval.`
+        : `Send inbox draft after human approval.`,
+      fields: fields([
+        ["To", args.recipientEmail],
+        ["Subject", args.subject],
+        ["Body", body || undefined],
+      ]),
+      risk: "high",
+    };
+  },
 };
 
 const listRecentEmails: ToolDefinition<ListRecentEmailsArgs> = {

@@ -88,7 +88,7 @@ function relativeTime(iso: string | null): string {
 }
 
 export default function InboxPage() {
-  const { state } = useStore();
+  const { state, actions } = useStore();
   const router = useRouter();
   const workspaceId = state.workspace.id;
 
@@ -542,6 +542,8 @@ export default function InboxPage() {
             setThreadDetail(detail);
           }
         }
+        // Sync chat ApprovalCards that pointed at this draft.
+        void actions.refreshWorkspace();
       } catch (err) {
         const reason = err instanceof Error ? err.message : "Send failed.";
         setThreadDetail((prev) =>
@@ -561,7 +563,7 @@ export default function InboxPage() {
         void loadFolder(folderRef.current, { silent: true });
       }
     },
-    [workspaceId, mailbox, selectedThreadId, loadFolder],
+    [workspaceId, mailbox, selectedThreadId, loadFolder, actions],
   );
 
   const startReply = useCallback(() => {
@@ -1141,22 +1143,24 @@ export default function InboxPage() {
           />
         </div>
         {composer.open && (
-          <Composer
-            workspaceId={workspaceId}
-            initial={{
-              ...composer.initial,
-              mailboxAddress: mailbox.mailbox.address,
-              canApprove: mailbox.access.canApprove,
-            }}
-            onSend={handleSend}
-            onClose={() => {
-              setComposer({ open: false, initial: {} });
-              if (folder === "drafts") void loadFolder("drafts", { silent: true });
-            }}
-            onDraftChange={() => {
-              if (folder === "drafts") void loadFolder("drafts", { silent: true });
-            }}
-          />
+          <div className="flex max-h-[52vh] min-h-[300px] shrink-0 flex-col overflow-hidden border-t border-border">
+            <Composer
+              workspaceId={workspaceId}
+              initial={{
+                ...composer.initial,
+                mailboxAddress: mailbox.mailbox.address,
+                canApprove: mailbox.access.canApprove,
+              }}
+              onSend={handleSend}
+              onClose={() => {
+                setComposer({ open: false, initial: {} });
+                if (folder === "drafts") void loadFolder("drafts", { silent: true });
+              }}
+              onDraftChange={() => {
+                if (folder === "drafts") void loadFolder("drafts", { silent: true });
+              }}
+            />
+          </div>
         )}
       </div>
 

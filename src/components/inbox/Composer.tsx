@@ -299,18 +299,8 @@ export function Composer({
     schedulePersist();
   };
 
-  const handleSend = () => {
+  const emitSend = () => {
     const data = snapshot();
-    if (data.to.length === 0) return;
-    setGateError(null);
-    if (isStale) {
-      setGateError("Draft is outdated. Regenerate before sending.");
-      return;
-    }
-    if (requiresApproval && approvalStatus !== "approved") {
-      setGateError("AI drafts require approval before send. Review recipients below first.");
-      return;
-    }
     onSend({
       clientSendId: crypto.randomUUID(),
       draftId: draftIdRef.current,
@@ -328,6 +318,76 @@ export function Composer({
       })),
     });
     onClose();
+  };
+
+  const handleSend = () => {
+    const data = snapshot();
+    if (data.to.length === 0) return;
+    setGateError(null);
+    if (isStale) {
+      setGateError("Draft is outdated. Regenerate before sending.");
+      return;
+    }
+    if (requiresApproval && approvalStatus !== "approved") {
+      if (initial.canApprove) {
+        void handleApproveAndSend();
+        return;
+      }
+      setGateError("This AI draft still needs approval before send.");
+      return;
+    }
+    emitSend();
+  };
+
+  /** Approvers: one click creates/locks approval, decides approve, and sends. */
+  const handleApproveAndSend = async () => {
+    const data = snapshot();
+    if (data.to.length === 0) return;
+    if (isStale) {
+      setGateError("Draft is outdated. Regenerate before sending.");
+      return;
+    }
+    setApprovalBusy(true);
+    setGateError(null);
+    try {
+      if (!draftIdRef.current) await persist();
+      if (!draftIdRef.current) {
+        setGateError("Save the draft before sending.");
+        return;
+      }
+
+      let nextApprovalId = approvalId;
+      if (approvalStatus !== "approved") {
+        if (approvalStatus !== "pending" || !nextApprovalId) {
+          const res = await requestApprovalReq({
+            workspaceId,
+            draftId: draftIdRef.current,
+          });
+          nextApprovalId = res.approvalId;
+          setApprovalId(res.approvalId);
+          setApprovalExpiresAt(res.expiresAt);
+          setApprovalEnvelope(res.envelope);
+          setApprovalStatus("pending");
+          setRequiresApproval(true);
+        }
+        if (!nextApprovalId) {
+          setGateError("Could not create approval.");
+          return;
+        }
+        await decideApprovalReq({
+          workspaceId,
+          approvalId: nextApprovalId,
+          decision: "approve",
+        });
+        setApprovalStatus("approved");
+      }
+
+      emitSend();
+    } catch (err) {
+      setGateError(err instanceof Error ? err.message : "Could not approve and send.");
+    } finally {
+      setApprovalBusy(false);
+    }
   };
 
   const handleRequestApproval = async () => {
@@ -409,18 +469,24 @@ export function Composer({
       return domain && mailboxDomain && domain !== mailboxDomain;
     });
 
+  const needsApproverGate =
+    requiresApproval && approvalStatus !== "approved" && !initial.canApprove;
   const sendBlocked =
-    parseAddresses(to).length === 0 ||
-    isStale ||
-    (requiresApproval && approvalStatus !== "approved");
+    parseAddresses(to).length === 0 || isStale || needsApproverGate || approvalBusy;
+  const showApproveAndSend =
+    Boolean(initial.canApprove) &&
+    (requiresApproval || originType === "ai_employee") &&
+    approvalStatus !== "approved";
 
   return (
-    <div className="flex min-h-0 flex-col border-t border-border bg-surface">
-      <div className="flex items-center justify-between border-b border-border-2 px-4 py-2">
+    <div className="flex h-full min-h-0 flex-col bg-surface">
+      <div className="flex shrink-0 items-center justify-between border-b border-border-2 px-4 py-2">
         <span className="text-sm font-medium text-ink">
           {threadId ? "Reply" : "New message"}
           {originType === "ai_employee" && (
-            <span className="ml-2 text-xs font-normal text-ink-3">AI draft · needs approval</span>
+            <span className="ml-2 text-xs font-normal text-ink-3">
+              {initial.canApprove ? "AI draft · review & send" : "AI draft · needs approval"}
+            </span>
           )}
         </span>
         <div className="flex items-center gap-3">
@@ -470,99 +536,57 @@ export function Composer({
       )}
 
       {(requiresApproval || originType === "ai_employee") && (
-        <div className="space-y-2 border-b border-border bg-muted/50 px-4 py-3">
-          <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-ink-3">
-            <Shield className="h-3.5 w-3.5" /> Approval envelope
-          </div>
-          <div className="grid gap-1.5 text-sm">
-            <div className="rounded-md border border-border bg-canvas px-3 py-2">
-              <span className="text-[11px] font-medium uppercase text-ink-3">From</span>
-              <p className="font-medium text-ink">
-                {(approvalEnvelope?.from || initial.mailboxAddress) ?? "Workspace mailbox"}
-              </p>
+        <div className="shrink-0 space-y-2 border-b border-border bg-canvas px-4 py-2.5">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-ink-3">
+              <Shield className="h-3.5 w-3.5" />
+              {initial.canApprove ? "Review before send" : "Approval required"}
             </div>
-            <div className="rounded-md border border-border bg-canvas px-3 py-2">
-              <span className="text-[11px] font-medium uppercase text-ink-3">To</span>
-              <p className="text-ink">{(approvalEnvelope?.to ?? parseAddresses(to)).join(", ") || "—"}</p>
-            </div>
-            {(showCc || (approvalEnvelope?.cc?.length ?? 0) > 0 || parseAddresses(cc).length > 0) && (
-              <div className="rounded-md border border-border bg-canvas px-3 py-2">
-                <span className="text-[11px] font-medium uppercase text-ink-3">Cc</span>
-                <p className="text-ink">
-                  {(approvalEnvelope?.cc ?? parseAddresses(cc)).join(", ") || "—"}
-                </p>
-              </div>
-            )}
-            {((approvalEnvelope?.bcc?.length ?? 0) > 0 || parseAddresses(bcc).length > 0) && (
-              <div className="rounded-md border border-border bg-canvas px-3 py-2">
-                <span className="text-[11px] font-medium uppercase text-ink-3">Bcc</span>
-                <p className="text-ink">
-                  {(approvalEnvelope?.bcc ?? parseAddresses(bcc)).join(", ") || "—"}
-                </p>
-              </div>
-            )}
-            <div className="rounded-md border border-border bg-canvas px-3 py-2">
-              <span className="text-[11px] font-medium uppercase text-ink-3">Subject</span>
-              <p className="text-ink">{approvalEnvelope?.subject || subject || "—"}</p>
-            </div>
-            {attachments.length > 0 && (
-              <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-amber-900">
-                <span className="text-[11px] font-medium uppercase">Attachments</span>
-                <p>{attachments.map((a) => a.filename).join(", ")}</p>
-              </div>
-            )}
             {externalRecipients.length > 0 && (
-              <p className="text-xs text-amber-800">
-                External recipients: {externalRecipients.join(", ")}
-              </p>
-            )}
-            {approvalExpiresAt && approvalStatus === "pending" && (
-              <p className="text-xs text-ink-3">
-                Expires {new Date(approvalExpiresAt).toLocaleString()}
+              <p className="text-[11px] text-amber-800">
+                External: {externalRecipients.join(", ")}
               </p>
             )}
           </div>
-          <div className="flex flex-wrap gap-2 pt-1">
-            {approvalStatus !== "approved" && approvalStatus !== "pending" && (
-              <button
-                type="button"
-                disabled={approvalBusy || isStale}
-                onClick={() => void handleRequestApproval()}
-                className="rounded-md bg-ink px-3 py-1.5 text-xs font-medium text-white disabled:opacity-40"
-              >
-                Request approval
-              </button>
-            )}
-            {approvalStatus === "pending" && initial.canApprove && (
-              <>
-                <button
-                  type="button"
-                  disabled={approvalBusy}
-                  onClick={() => void handleDecideApproval("approve")}
-                  className="inline-flex items-center gap-1 rounded-md bg-emerald-700 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-40"
-                >
-                  <CheckCircle2 className="h-3.5 w-3.5" /> Approve
-                </button>
-                <button
-                  type="button"
-                  disabled={approvalBusy}
-                  onClick={() => void handleDecideApproval("reject")}
-                  className="rounded-md border border-border px-3 py-1.5 text-xs disabled:opacity-40"
-                >
-                  Reject
-                </button>
-              </>
-            )}
+          <p className="text-xs text-ink-2">
+            From {(approvalEnvelope?.from || initial.mailboxAddress) ?? "workspace mailbox"}
             {approvalStatus === "approved" && (
-              <span className="inline-flex items-center gap-1 text-xs text-emerald-700">
-                <CheckCircle2 className="h-3.5 w-3.5" /> Approved — ready to send
+              <span className="ml-2 inline-flex items-center gap-1 text-emerald-700">
+                <CheckCircle2 className="h-3.5 w-3.5" /> Approved
               </span>
             )}
-          </div>
+          </p>
+          {!initial.canApprove && (
+            <div className="flex flex-wrap gap-2">
+              {approvalStatus !== "approved" && approvalStatus !== "pending" && (
+                <button
+                  type="button"
+                  disabled={approvalBusy || isStale}
+                  onClick={() => void handleRequestApproval()}
+                  className="rounded-md bg-ink px-3 py-1.5 text-xs font-medium text-white disabled:opacity-40"
+                >
+                  Request approval
+                </button>
+              )}
+              {approvalStatus === "pending" && (
+                <span className="text-xs text-ink-3">Waiting for an approver…</span>
+              )}
+            </div>
+          )}
+          {initial.canApprove && approvalStatus === "pending" && (
+            <button
+              type="button"
+              disabled={approvalBusy}
+              onClick={() => void handleDecideApproval("reject")}
+              className="rounded-md border border-border px-3 py-1.5 text-xs disabled:opacity-40"
+            >
+              Reject draft
+            </button>
+          )}
         </div>
       )}
 
-      <div className="flex flex-col gap-px overflow-y-auto">
+      <div className="flex shrink-0 flex-col gap-px">
         <Field label="To">
           <input
             value={to}
@@ -626,7 +650,7 @@ export function Composer({
       </div>
 
       {/* Formatting toolbar */}
-      <div className="flex flex-wrap items-center gap-0.5 border-b border-border-2 px-2 py-1.5">
+      <div className="flex shrink-0 flex-wrap items-center gap-0.5 border-b border-border-2 px-2 py-1.5">
         <ToolBtn label="Bold" onClick={() => exec("bold")}>
           <Bold className="h-3.5 w-3.5" />
         </ToolBtn>
@@ -723,7 +747,7 @@ export function Composer({
           }
         }}
         className={cn(
-          "min-h-[140px] flex-1 overflow-y-auto px-4 py-3 text-sm leading-relaxed text-ink outline-none",
+          "min-h-[200px] flex-1 overflow-y-auto px-4 py-3 text-sm leading-relaxed text-ink outline-none",
           "[&_a]:text-accent [&_a]:underline",
           "empty:before:pointer-events-none empty:before:text-ink-3 empty:before:content-[attr(data-placeholder)]",
         )}
@@ -731,7 +755,7 @@ export function Composer({
       />
 
       {attachments.length > 0 && (
-        <div className="flex flex-wrap gap-2 border-t border-border-2 px-4 py-2">
+        <div className="flex shrink-0 flex-wrap gap-2 border-t border-border-2 px-4 py-2">
           {attachments.map((a) => (
             <span
               key={a.id}
@@ -753,14 +777,18 @@ export function Composer({
       {attachError && <p className="px-4 pb-1 text-xs text-rose-600">{attachError}</p>}
       {gateError && <p className="px-4 pb-1 text-xs text-rose-600">{gateError}</p>}
 
-      <div className="flex items-center justify-between border-t border-border-2 px-4 py-2.5">
+      <div className="flex shrink-0 items-center justify-between border-t border-border-2 px-4 py-2.5">
         <button
           type="button"
-          onClick={handleSend}
+          onClick={() => {
+            if (showApproveAndSend) void handleApproveAndSend();
+            else handleSend();
+          }}
           disabled={sendBlocked}
           className="flex items-center gap-2 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white transition hover:opacity-90 disabled:opacity-40"
         >
-          <Send className="h-4 w-4" /> Send
+          <Send className="h-4 w-4" />
+          {approvalBusy ? "Working…" : showApproveAndSend ? "Approve & send" : "Send"}
         </button>
         <button type="button" onClick={handleDiscard} className="text-xs text-ink-3 hover:text-rose-600">
           Discard
