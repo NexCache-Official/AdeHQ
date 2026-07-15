@@ -32,6 +32,13 @@ npx playwright install chrome
 | `room-collab-e2e.mjs` | Silent steward routing + brainstorm + tasks page smoke |
 | `usage-ledger-e2e.mjs` | Employee AI reply → cost ledger + Usage API (+ intelligence breakdown) |
 | `saas-company1-marathon.mjs` | 60–70m SaaS Company 1 CEO marathon: hire gaps, room collab, AI inbox email to `skumar@nexcache.com`, DM tasks, nav smoke; screenshots + `report.json` under `/tmp/adehq-saas-marathon` |
+| `saas-casey-email.mjs` | Casey DM → inbox draft → Approvals Approve to `skumar@nexcache.com` |
+| `saas-approve-pending-emails.mjs` | Bulk-approve stacked send-email cards |
+| `saas-crm-tasks-wave.mjs` | Casey CRM contact + deal + task; assert `/crm` not empty |
+| `saas-jules-drive-wave.mjs` | Jules support DOCX + approval-gated email |
+| `saas-room-collab-wave.mjs` | Engineering `@mention` collab (post ambient-governance fix) |
+| `saas-nav-workforce-wave.mjs` | Home / workforce / calendar / usage / drive / inbox smoke |
+| `saas-investor-update-wave.mjs` | Lane investor DOCX + Casey email approve path |
 
 ## Run examples
 
