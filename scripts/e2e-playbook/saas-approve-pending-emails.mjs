@@ -54,12 +54,20 @@ try {
 
   let approved = 0;
   for (let n = 0; n < 12; n++) {
-    const btn = page.getByRole("button", { name: /^Approve$/i }).first();
-    if (!(await btn.isVisible({ timeout: 2500 }).catch(() => false))) break;
+    const btn = page.getByRole("button", { name: /^Approve$/i }).filter({ hasNot: page.locator("[disabled]") }).first()
+      .or(page.locator('button:not([disabled])').filter({ hasText: /^Approve$/i }).first());
+    if (!(await btn.isVisible({ timeout: 3000 }).catch(() => false))) break;
+    if (await btn.isDisabled().catch(() => true)) {
+      await page.waitForTimeout(2000);
+      continue;
+    }
     note("flow", `Approve #${n + 1}`);
-    await btn.click();
+    await btn.click({ timeout: 10_000 }).catch(async () => {
+      note("ux", "Approve click raced — waiting");
+      await page.waitForTimeout(3000);
+    });
     approved += 1;
-    await page.waitForTimeout(2500);
+    await page.waitForTimeout(3000);
     await shot(page, `approved-${n + 1}`);
   }
   note("flow", `Approved ${approved} pending email sends`);
