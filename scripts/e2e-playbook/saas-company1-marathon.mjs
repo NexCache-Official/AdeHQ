@@ -195,6 +195,8 @@ function messageBox(page) {
 
 async function waitAi(page, label, minMs = 8000) {
   const t0 = Date.now();
+  // Count after the human send settled. Do not treat leftover draft/approval
+  // cards from earlier waves as a successful AI reply for this turn.
   const before = await page.locator("[data-message-id]").count().catch(() => 0);
   await pace(Math.min(minMs, SHELL_MS), label);
   while (Date.now() - t0 < SHELL_MS) {
@@ -204,14 +206,11 @@ async function waitAi(page, label, minMs = 8000) {
       .first()
       .isVisible()
       .catch(() => false);
+    const typing = await page.locator(".typing-dot").first().isVisible().catch(() => false);
     const after = await page.locator("[data-message-id]").count().catch(() => 0);
-    const hasDraftCard = await page
-      .getByText(/email draft|Approve send|Draft ready|inbox draft/i)
-      .first()
-      .isVisible()
-      .catch(() => false);
-    if ((after > before || hasDraftCard) && !busy && Date.now() - t0 > minMs) break;
-    if (!busy && Date.now() - t0 > Math.max(minMs, 25000) && after === before) {
+    const grew = after > before;
+    if (grew && !busy && !typing && Date.now() - t0 > minMs) break;
+    if (!busy && !typing && Date.now() - t0 > Math.max(minMs, 45000) && !grew) {
       note("ux", `No new AI message after ${Date.now() - t0}ms (${label})`);
       break;
     }

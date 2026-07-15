@@ -304,10 +304,17 @@ export async function summarizeWorkspaceUsage(
 
   const teamWorkHoursRaw = [...employeeAgg.values()].reduce((sum, row) => sum + row.workHours, 0);
   const guideWorkHoursRaw = Math.max(0, totalWorkHours - teamWorkHoursRaw);
-  const teamDisplay = byEmployeeWorkType.reduce((sum, row) => sum + row.workHours, 0);
-  const guideDisplay = floorDisplayHours(guideWorkHoursRaw);
-  // One period number everywhere: floored hire rows + floored guide (never an inflated round-up).
-  const totalDisplay = Math.round((teamDisplay + guideDisplay) * 100) / 100;
+  // Floor the period total from raw ledger hours first — leaf-first flooring can
+  // zero many sub-cent shards and leave the rail meter stuck at 0.00.
+  const totalDisplay = floorDisplayHours(totalWorkHours);
+  const teamDisplay = Math.min(
+    totalDisplay,
+    floorDisplayHours(teamWorkHoursRaw),
+  );
+  const guideDisplay = Math.max(
+    0,
+    Math.round((totalDisplay - teamDisplay) * 100) / 100,
+  );
 
   const byEmployee = toRows(employeeAgg, employeeLabel).map((row) => ({
     ...row,
