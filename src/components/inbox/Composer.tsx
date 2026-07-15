@@ -618,7 +618,9 @@ export function Composer({
               if (requiresApproval && approvalStatus === "approved") setApprovalStatus("none");
             }}
             onBlur={() => void persist()}
-            className="w-full bg-transparent text-sm text-ink outline-none"
+            aria-label="Subject"
+            placeholder="Subject"
+            className="w-full bg-transparent text-sm text-ink outline-none placeholder:text-ink-3/50"
           />
         </Field>
       </div>

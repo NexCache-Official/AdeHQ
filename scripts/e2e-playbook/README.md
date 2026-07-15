@@ -31,6 +31,7 @@ npx playwright install chrome
 | `suggestion-followup-e2e.mjs` | Topic + memory suggestion follow-up after a prior session |
 | `room-collab-e2e.mjs` | Silent steward routing + brainstorm + tasks page smoke |
 | `usage-ledger-e2e.mjs` | Employee AI reply → cost ledger + Usage API (+ intelligence breakdown) |
+| `saas-company1-marathon.mjs` | 60–70m SaaS Company 1 CEO marathon: hire gaps, room collab, AI inbox email to `skumar@nexcache.com`, DM tasks, nav smoke; screenshots + `report.json` under `/tmp/adehq-saas-marathon` |
 
 ## Run examples
 
