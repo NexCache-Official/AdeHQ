@@ -8,6 +8,17 @@ export function floorDisplayHours(workHours: number): number {
 }
 
 /**
+ * Leaf rows in a breakdown: sub-0.01 shards still count as real work. Surface
+ * them as 0.01 so hire/type tables cannot go empty while the period total is
+ * non-zero (callers should align back down to the floored parent total).
+ */
+export function floorDisplayLeafHours(workHours: number): number {
+  if (!Number.isFinite(workHours) || workHours <= 0) return 0;
+  const floored = floorDisplayHours(workHours);
+  return floored > 0 ? floored : 0.01;
+}
+
+/**
  * Floor each leaf for the breakdown table, but derive `total` from the raw sum
  * first. Flooring leaves individually then summing drops sub-0.01 shards and can
  * zero the sidebar meter even when the period has real usage.
@@ -21,7 +32,7 @@ export function floorDisplayTree<T extends { workHours: number }>(
   }, 0);
   const total = floorDisplayHours(rawTotal);
   const rows = leaves
-    .map((row) => ({ ...row, workHours: floorDisplayHours(row.workHours) }))
+    .map((row) => ({ ...row, workHours: floorDisplayLeafHours(row.workHours) }))
     .filter((row) => row.workHours > 0);
   return { rows, total };
 }

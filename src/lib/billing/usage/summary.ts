@@ -6,7 +6,7 @@ import {
   type IntelligenceMode,
 } from "@/lib/ai/intelligence-policy";
 import { formatWorkTypeLabel } from "@/lib/work-hours/labels";
-import { floorDisplayHours, floorDisplayTree } from "./round-display";
+import { floorDisplayHours, floorDisplayLeafHours, floorDisplayTree } from "./round-display";
 import { getWorkspaceCapacity, type WorkspaceCapacity } from "./periods";
 
 export type UsageBreakdownRow = {
@@ -375,14 +375,14 @@ export async function summarizeWorkspaceUsage(
 
   const byEmployee = toRows(employeeAgg, employeeLabel).map((row) => ({
     ...row,
-    workHours: floorDisplayHours(row.workHours),
+    workHours: floorDisplayLeafHours(row.workHours),
   })).filter((row) => row.workHours > 0);
   // Reconcile flat employee list to the same hire total (sum of floored rows).
   const byEmployeeAligned = alignFlatRowsToTotal(byEmployee, teamDisplay);
 
   const byWorkType = toRows(workTypeAgg, formatWorkTypeLabel).map((row) => ({
     ...row,
-    workHours: floorDisplayHours(row.workHours),
+    workHours: floorDisplayLeafHours(row.workHours),
   })).filter((row) => row.workHours > 0);
   const byWorkTypeAligned = alignFlatRowsToTotal(byWorkType, totalDisplay);
 
