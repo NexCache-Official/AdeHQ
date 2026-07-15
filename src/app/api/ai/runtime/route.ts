@@ -18,7 +18,7 @@ export async function GET(request: NextRequest) {
     }
 
     const { role } = await requireWorkspaceMembership(client, workspaceId, user.id);
-    if (role !== "owner" && role !== "admin") {
+    if (!["admin","owner"].includes(role)) {
       return NextResponse.json({ error: "Only workspace owners and admins can view AI runtime status." }, { status: 403 });
     }
 

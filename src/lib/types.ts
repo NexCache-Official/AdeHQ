@@ -32,7 +32,7 @@ export type Workspace = {
   onboardingComplete?: boolean;
 };
 
-export type WorkspaceMemberRole = "owner" | "admin" | "manager" | "member" | "guest";
+export type WorkspaceMemberRole = "admin" | "member";
 
 export type WorkspaceMemberStatus = "active" | "removed";
 

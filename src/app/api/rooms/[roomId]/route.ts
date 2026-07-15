@@ -40,7 +40,7 @@ export async function PATCH(
     const { role } = await requireWorkspaceMembership(client, workspaceId, user.id);
     await assertCanAccessRoom(client, workspaceId, params.roomId, user.id, role);
 
-    const isAdmin = role === "owner" || role === "admin";
+    const isAdmin = role === "admin" || role === "owner";
     if (!isAdmin) {
       return NextResponse.json({ error: "Only workspace admins can update rooms." }, { status: 403 });
     }
@@ -92,7 +92,7 @@ export async function DELETE(
     const { role } = await requireWorkspaceMembership(client, workspaceId, user.id);
     await assertCanAccessRoom(client, workspaceId, params.roomId, user.id, role);
 
-    const isAdmin = role === "owner" || role === "admin";
+    const isAdmin = role === "admin" || role === "owner";
     if (!isAdmin) {
       return NextResponse.json({ error: "Only workspace admins can delete rooms." }, { status: 403 });
     }

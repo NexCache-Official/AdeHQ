@@ -72,7 +72,7 @@ export function OnboardingOrgGraph({
           </div>
           <div className="flex flex-col gap-px">
             <span className="text-xs font-bold">You</span>
-            <span className="text-[10px] text-white/50">Owner</span>
+            <span className="text-[10px] text-white/50">Admin</span>
           </div>
         </div>
 

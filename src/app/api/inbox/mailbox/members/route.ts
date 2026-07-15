@@ -20,7 +20,7 @@ export async function GET(request: NextRequest) {
       .select("user_id, role")
       .eq("workspace_id", ctx.workspaceId)
       .eq("status", "active")
-      .in("role", ["owner", "admin", "manager", "member"]);
+      .in("role", ["admin", "member", "owner", "manager"]);
     if (error) throw error;
 
     const userIds = (members ?? []).map((m) => String(m.user_id));

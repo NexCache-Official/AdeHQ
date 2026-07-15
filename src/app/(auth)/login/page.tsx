@@ -9,6 +9,7 @@ import { Button } from "@/components/ui";
 import { useStore } from "@/lib/demo-store";
 import { parseAuthError } from "@/lib/auth/confirmation";
 import { isPasswordRecoveryPending } from "@/lib/auth/recovery";
+import { safeAuthNextPath } from "@/lib/auth/safe-next";
 import { ENABLE_DEMO_MODE } from "@/lib/config/features";
 import { supabase } from "@/lib/supabase/client";
 import { ArrowRight, Eye, EyeOff, Sparkles } from "lucide-react";
@@ -17,6 +18,7 @@ function LoginForm() {
   const { actions, error: storeError } = useStore();
   const router = useRouter();
   const searchParams = useSearchParams();
+  const nextPath = searchParams.get("next");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -59,7 +61,12 @@ function LoginForm() {
     setLoading(true);
     try {
       const { onboardingComplete } = await actions.login(email.trim(), password);
-      router.replace(onboardingComplete ? "/" : "/onboarding");
+      const destination = nextPath
+        ? safeAuthNextPath(nextPath, onboardingComplete ? "/" : "/onboarding")
+        : onboardingComplete
+          ? "/"
+          : "/onboarding";
+      router.replace(destination);
     } catch (err) {
       const parsed = parseAuthError(err);
       if (parsed.needsEmailConfirmation) {
@@ -188,7 +195,10 @@ function LoginForm() {
 
       <p className="mt-6 text-center text-sm text-slate-500">
         New here?{" "}
-        <Link href="/signup" className="font-medium text-accent-600 hover:text-accent-700">
+        <Link
+          href={nextPath ? `/signup?next=${encodeURIComponent(nextPath)}` : "/signup"}
+          className="font-medium text-accent-600 hover:text-accent-700"
+        >
           Create your AI workforce
         </Link>
       </p>

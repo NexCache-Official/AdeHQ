@@ -22,7 +22,7 @@ async function loadMemoryRow(
 }
 
 function canMutateMemory(role: string, userId: string, entry: ReturnType<typeof memoryRowToEntry>): boolean {
-  if (role === "owner" || role === "admin") return true;
+  if (role === "admin" || role === "owner") return true;
   return (
     entry.savedByUserId === userId ||
     entry.createdById === userId ||

@@ -17,7 +17,7 @@ export default function SettingsWorkspacePage() {
   const [saved, setSaved] = useState(false);
 
   const myRole = state.workspaceMembers.find((m) => m.userId === state.user?.id)?.role ?? "member";
-  const isWorkspaceOwner = myRole === "owner";
+  const isWorkspaceOwner = myRole === "admin";
   const canManage = canManageWorkspaceSettings(myRole);
   const isRealWorkspace = state.workspace.workspaceMode !== "demo";
 

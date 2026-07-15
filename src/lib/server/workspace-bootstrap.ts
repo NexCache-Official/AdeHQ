@@ -72,7 +72,7 @@ async function ensureMemberRow(
     {
       workspace_id: workspaceId,
       user_id: userId,
-      role: "owner",
+      role: "admin",
       status: "active",
     },
     { onConflict: "workspace_id,user_id" },

@@ -17,7 +17,9 @@ import { ENABLE_DEMO_MODE, WORKFORCE_CALLS_ENABLED } from "@/lib/config/features
 import { useShellUI } from "./AppShell";
 import { useDebugTrace } from "./DebugProvider";
 import { WorkspaceSwitcher } from "./WorkspaceSwitcher";
+import { NotificationsMenu } from "./NotificationsMenu";
 import { SidebarWorkHoursMeter } from "./SidebarWorkHoursMeter";
+import { roleLabel } from "@/lib/workspace/permissions";
 import { Toggle } from "./ui";
 import { EmployeeAvatar } from "./EmployeeAvatar";
 import {
@@ -135,7 +137,14 @@ export function Sidebar() {
   return (
     <aside className="hidden w-[240px] shrink-0 flex-col border-r border-[var(--rail-edge)] bg-rail lg:flex">
       <div className="flex min-h-0 flex-1 flex-col gap-[3px] overflow-y-auto px-3 py-3.5">
-        <WorkspaceSwitcher variant="rail" />
+        <div className="mb-2.5 flex items-start gap-2">
+          <div className="min-w-0 flex-1">
+            <WorkspaceSwitcher variant="rail" />
+          </div>
+          <div className="pt-1">
+            <NotificationsMenu variant="rail" />
+          </div>
+        </div>
         <SidebarWorkHoursMeter />
 
         <div className="relative mb-2 mt-1">
@@ -346,7 +355,11 @@ export function Sidebar() {
             <div className="truncate text-[12.5px] font-semibold text-[var(--rail-ink)]">
               {state.user?.name ?? "You"}
             </div>
-            <div className="text-[11px] text-[var(--rail-ink-3)]">Owner</div>
+            <div className="text-[11px] text-[var(--rail-ink-3)]">
+              {roleLabel(
+                state.workspaceMembers.find((m) => m.userId === state.user?.id)?.role,
+              )}
+            </div>
           </div>
           <ChevronUp
             className={cn(

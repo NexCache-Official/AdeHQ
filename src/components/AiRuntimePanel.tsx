@@ -176,7 +176,7 @@ export function AiRuntimePanel() {
     backend === "supabase" &&
     state.workspaceMembers.some(
       (m) =>
-        m.userId === state.user?.id && (m.role === "owner" || m.role === "admin"),
+        m.userId === state.user?.id && m.role === "admin",
     );
   const roomsForSelectedEmployee = useMemo(
     () =>

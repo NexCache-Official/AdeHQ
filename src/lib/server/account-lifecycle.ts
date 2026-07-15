@@ -61,7 +61,7 @@ export async function getAccountDeletionContext(
   const ownedWorkspaces: WorkspaceSummary[] = (ownedRows ?? []).map((row) => ({
     id: String(row.id),
     name: String(row.name),
-    role: "owner",
+    role: "admin",
   }));
 
   const memberWorkspaces: WorkspaceSummary[] = (memberRows ?? [])

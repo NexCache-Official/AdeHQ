@@ -46,7 +46,7 @@ export async function PATCH(
     await assertCanAccessRoom(client, topic.workspaceId, topic.roomId, user.id, role);
 
     const body = (await request.json()) as PatchTopicBody;
-    const isAdmin = role === "owner" || role === "admin";
+    const isAdmin = role === "admin" || role === "owner";
     const isCreator = topic.createdById === user.id;
 
     if (!isAdmin && !isCreator) {
@@ -112,7 +112,7 @@ export async function DELETE(
     const { role } = await requireWorkspaceMembership(client, topic.workspaceId, user.id);
     await assertCanAccessRoom(client, topic.workspaceId, topic.roomId, user.id, role);
 
-    const isAdmin = role === "owner" || role === "admin";
+    const isAdmin = role === "admin" || role === "owner";
     const isCreator = topic.createdById === user.id;
     if (!isAdmin && !isCreator) {
       return NextResponse.json({ error: "You cannot modify this topic." }, { status: 403 });

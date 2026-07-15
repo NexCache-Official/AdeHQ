@@ -27,7 +27,7 @@ export async function POST(
       return NextResponse.json({ error: "Room not found." }, { status: 404 });
     }
 
-    const isAdmin = role === "owner" || role === "admin";
+    const isAdmin = role === "admin" || role === "owner";
     if (!isAdmin) {
       return NextResponse.json(
         { error: "Only workspace admins can clear all chat history in a room." },

@@ -68,7 +68,7 @@ export async function PATCH(
     const body = PatchBodySchema.parse(await request.json());
     const { role } = await requireWorkspaceMembership(client, body.workspaceId, user.id);
 
-    if (!["owner", "admin", "manager"].includes(role)) {
+    if (!["admin", "member", "owner", "manager"].includes(role)) {
       return NextResponse.json(
         { error: "Only workspace owners, admins, or managers can update employee capabilities." },
         { status: 403 },

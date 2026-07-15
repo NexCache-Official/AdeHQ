@@ -15,7 +15,7 @@ export async function GET(
   try {
     const { user, client } = await requireAuthUser(request);
     const { role } = await requireWorkspaceMembership(client, params.workspaceId, user.id);
-    if (role !== "owner" && role !== "admin") {
+    if (!["admin","owner"].includes(role)) {
       return NextResponse.json({ error: "Admin access required." }, { status: 403 });
     }
 
@@ -37,7 +37,7 @@ export async function PATCH(
   try {
     const { user, client } = await requireAuthUser(request);
     const { role } = await requireWorkspaceMembership(client, params.workspaceId, user.id);
-    if (role !== "owner" && role !== "admin") {
+    if (!["admin","owner"].includes(role)) {
       return NextResponse.json({ error: "Admin access required." }, { status: 403 });
     }
 

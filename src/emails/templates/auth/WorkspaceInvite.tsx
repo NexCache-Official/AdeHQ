@@ -56,7 +56,7 @@ export function WorkspaceInvite({
 }
 
 WorkspaceInvite.PreviewProps = {
-  actionUrl: "https://app.adehq.com/login?next=/onboarding",
+  actionUrl: "https://app.adehq.com/invite/preview-token",
   workspaceName: "Acme Inc.",
   inviterName: "Jordan Lee",
   role: "member",

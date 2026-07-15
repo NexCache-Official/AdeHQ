@@ -871,7 +871,7 @@ export function buildDemoState(): DemoState {
         userId: DEMO_USER.id,
         name: DEMO_USER.name,
         email: DEMO_USER.email,
-        role: "owner",
+        role: "admin",
         createdAt: t(60 * 24 * 10),
       },
     ],

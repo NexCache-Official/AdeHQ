@@ -1,10 +1,28 @@
 import { NextRequest, NextResponse } from "next/server";
 import { AuthError, requireAuthUser, requireWorkspaceMembership } from "@/lib/supabase/auth-server";
 import { createSupabaseSecretClient } from "@/lib/supabase/server";
-import { assignableRoles, canManageMembers } from "@/lib/workspace/permissions";
+import {
+  assignableRoles,
+  canManageMembers,
+  isWorkspaceAdmin,
+  normalizeWorkspaceRole,
+} from "@/lib/workspace/permissions";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+async function countAdmins(
+  service: ReturnType<typeof createSupabaseSecretClient>,
+  workspaceId: string,
+): Promise<number> {
+  const { data, error } = await service
+    .from("workspace_members")
+    .select("user_id, role")
+    .eq("workspace_id", workspaceId)
+    .eq("status", "active");
+  if (error) throw error;
+  return (data ?? []).filter((m) => isWorkspaceAdmin(String(m.role))).length;
+}
 
 export async function GET(
   request: NextRequest,
@@ -23,7 +41,7 @@ export async function GET(
         .eq("status", "active"),
       service
         .from("workspace_invitations")
-        .select("id, invited_email, role, status, created_at")
+        .select("id, invited_email, role, status, created_at, token")
         .eq("workspace_id", params.workspaceId)
         .eq("status", "pending"),
     ]);
@@ -41,7 +59,7 @@ export async function GET(
       const profile = profileById.get(m.user_id);
       return {
         userId: m.user_id,
-        role: m.role,
+        role: normalizeWorkspaceRole(String(m.role)),
         joinedAt: m.joined_at,
         name: profile?.name ?? null,
         email: profile?.email ?? null,
@@ -49,7 +67,16 @@ export async function GET(
       };
     });
 
-    return NextResponse.json({ members, invitations: invitesRes.data ?? [] });
+    return NextResponse.json({
+      members,
+      invitations: (invitesRes.data ?? []).map((inv) => ({
+        id: inv.id,
+        invited_email: inv.invited_email,
+        role: normalizeWorkspaceRole(String(inv.role)),
+        status: inv.status,
+        created_at: inv.created_at,
+      })),
+    });
   } catch (error) {
     if (error instanceof AuthError) {
       return NextResponse.json({ error: error.message }, { status: error.status });
@@ -77,7 +104,8 @@ export async function PATCH(
     if (!body.targetUserId || !body.role) {
       return NextResponse.json({ error: "targetUserId and role are required." }, { status: 400 });
     }
-    if (!assignableRoles().includes(body.role as never)) {
+    const nextRole = normalizeWorkspaceRole(body.role);
+    if (!assignableRoles().includes(nextRole)) {
       return NextResponse.json({ error: "Invalid role." }, { status: 400 });
     }
 
@@ -87,21 +115,30 @@ export async function PATCH(
       .select("role")
       .eq("workspace_id", params.workspaceId)
       .eq("user_id", body.targetUserId)
+      .eq("status", "active")
       .maybeSingle();
     if (targetError) throw targetError;
     if (!target) return NextResponse.json({ error: "Member not found." }, { status: 404 });
-    if (target.role === "owner") {
-      return NextResponse.json({ error: "The owner role cannot be changed here." }, { status: 400 });
+
+    const wasAdmin = isWorkspaceAdmin(String(target.role));
+    if (wasAdmin && nextRole === "member") {
+      const admins = await countAdmins(service, params.workspaceId);
+      if (admins <= 1) {
+        return NextResponse.json(
+          { error: "Keep at least one admin in the workspace." },
+          { status: 400 },
+        );
+      }
     }
 
     const { error: updateError } = await service
       .from("workspace_members")
-      .update({ role: body.role })
+      .update({ role: nextRole })
       .eq("workspace_id", params.workspaceId)
       .eq("user_id", body.targetUserId);
     if (updateError) throw updateError;
 
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({ ok: true, role: nextRole });
   } catch (error) {
     if (error instanceof AuthError) {
       return NextResponse.json({ error: error.message }, { status: error.status });
@@ -136,11 +173,19 @@ export async function DELETE(
       .select("role")
       .eq("workspace_id", params.workspaceId)
       .eq("user_id", targetUserId)
+      .eq("status", "active")
       .maybeSingle();
     if (targetError) throw targetError;
     if (!target) return NextResponse.json({ error: "Member not found." }, { status: 404 });
-    if (target.role === "owner") {
-      return NextResponse.json({ error: "The owner cannot be removed." }, { status: 400 });
+
+    if (isWorkspaceAdmin(String(target.role))) {
+      const admins = await countAdmins(service, params.workspaceId);
+      if (admins <= 1) {
+        return NextResponse.json(
+          { error: "Keep at least one admin in the workspace." },
+          { status: 400 },
+        );
+      }
     }
 
     const { error: removeError } = await service

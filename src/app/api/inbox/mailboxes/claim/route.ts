@@ -103,7 +103,7 @@ export async function POST(request: NextRequest) {
       .select("user_id")
       .eq("workspace_id", body.workspaceId)
       .eq("status", "active")
-      .in("role", ["owner", "admin"]);
+      .in("role", ["admin", "owner"]);
 
     if (admins && admins.length > 0) {
       await secret.from("email_mailbox_access").upsert(

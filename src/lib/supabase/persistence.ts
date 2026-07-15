@@ -27,6 +27,7 @@ import type {
 } from "@/lib/types";
 import { normalizeLiveProvider } from "@/lib/config/features";
 import { authHeaders } from "@/lib/api/auth-client";
+import { normalizeWorkspaceRole } from "@/lib/workspace/permissions";
 import {
   artifactFromCompletedJob,
   collectQueuedArtifactJobIds,
@@ -119,7 +120,7 @@ export function buildWorkspaceStateFromDemo(
         userId: user.id,
         name: user.name,
         email: user.email,
-        role: "owner",
+        role: "admin",
         createdAt: nowISO(),
       },
     ],
@@ -171,7 +172,7 @@ export function buildFreshWorkspaceState(
       userId: user.id,
       name: user.name,
       email: user.email,
-      role: "owner",
+      role: "admin",
       createdAt: nowISO(),
     },
   ],
@@ -293,7 +294,7 @@ export function buildPendingSignupState(user: User, profile: HumanUser): DemoSta
       userId: profile.id,
       name: profile.name,
       email: profile.email,
-      role: "owner",
+      role: "admin",
       createdAt: nowISO(),
     },
   ]);
@@ -362,7 +363,7 @@ export async function listUserWorkspaces(userId: string): Promise<UserWorkspaceS
       return {
         id: ws.id,
         name: ws.name,
-        role: row.role as WorkspaceMemberRole,
+        role: normalizeWorkspaceRole(String(row.role)),
         workspaceMode: ws.workspace_mode === "demo" ? "demo" : "real",
       } satisfies UserWorkspaceSummary;
     })
@@ -725,7 +726,7 @@ async function hydrateWorkspaceMembers(rows: DbRow[]): Promise<WorkspaceMember[]
         userId: row.user_id,
         name: profile?.name,
         email: profile?.email,
-        role: row.role as WorkspaceMemberRole,
+        role: normalizeWorkspaceRole(String(row.role)),
         createdAt: row.created_at ?? nowISO(),
       };
     })
@@ -754,7 +755,7 @@ function invitationFromRow(
     invitedEmail: row.invited_email,
     invitedBy: row.invited_by,
     invitedByName: invitedBy?.name,
-    role: row.role,
+    role: normalizeWorkspaceRole(String(row.role)),
     status: row.status,
     token: row.token,
     expiresAt: row.expires_at ?? undefined,
@@ -1532,7 +1533,8 @@ export async function acceptWorkspaceInvitation(
     {
       workspace_id: invitation.workspaceId,
       user_id: user.id,
-      role: invitation.role,
+      role: normalizeWorkspaceRole(invitation.role),
+      status: "active",
     },
     { onConflict: "workspace_id,user_id" },
   );

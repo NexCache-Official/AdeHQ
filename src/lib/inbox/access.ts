@@ -101,7 +101,7 @@ export async function getInboxAccess(
 
   const role = String(member.role);
 
-  if (role === "owner" || role === "admin") {
+  if (role === "admin" || role === "owner") {
     const flags = {
       canRead: true,
       canSend: true,
@@ -117,7 +117,7 @@ export async function getInboxAccess(
     };
   }
 
-  if (role === "manager" || role === "member") {
+  if (role === "member" || role === "manager") {
     const { data: grant, error: grantError } = await secret
       .from("email_mailbox_access")
       .select("can_read, can_send, can_manage")
@@ -129,16 +129,13 @@ export async function getInboxAccess(
     const canRead = Boolean(grant?.can_read);
     const canSend = Boolean(grant?.can_send);
     const canManage = Boolean(grant?.can_manage);
-    // Managers may organize (archive / spam) any mailbox they can read.
-    const canOrganize = canManage || (role === "manager" && canRead);
-    // Approvers: manage grant or managers who can read.
-    const canApprove = canManage || (role === "manager" && canRead);
+    const canOrganize = canManage || canRead;
+    const canApprove = canManage;
     const flags = { canRead, canSend, canOrganize, canManage, canApprove };
 
     return { role, isAdmin: false, ...flags, permissions: buildPermissions(flags) };
   }
 
-  // guest and anything else
   return { role, ...NO_ACCESS };
 }
 
@@ -191,8 +188,8 @@ export async function requireWorkspaceAdmin(
     .eq("user_id", params.userId)
     .maybeSingle();
   if (error) throw error;
-  if (!data || data.status !== "active" || !["owner", "admin"].includes(String(data.role))) {
-    throw new AuthError("Only workspace owners and admins can perform this action.", 403);
+  if (!data || data.status !== "active" || !["admin", "owner"].includes(String(data.role))) {
+    throw new AuthError("Only workspace admins can perform this action.", 403);
   }
   return { role: String(data.role) };
 }

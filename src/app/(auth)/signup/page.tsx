@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { AuthShell } from "@/components/AuthShell";
 import { Button } from "@/components/ui";
 import { useStore } from "@/lib/demo-store";
 import { ResendConfirmation } from "@/components/auth/ResendConfirmation";
+import { safeAuthNextPath } from "@/lib/auth/safe-next";
 import { ENABLE_DEMO_MODE } from "@/lib/config/features";
 import { getSiteUrl } from "@/lib/site-url";
 import { ArrowRight, Check, Eye, EyeOff, Sparkles } from "lucide-react";
@@ -38,9 +39,11 @@ function PasswordRequirement({ met, children }: { met: boolean; children: React.
   );
 }
 
-export default function SignupPage() {
+function SignupForm() {
   const { actions, error: storeError } = useStore();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const nextPath = searchParams.get("next");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -100,7 +103,7 @@ export default function SignupPage() {
         setConfirmationSent(true);
         return;
       }
-      router.replace("/onboarding");
+      router.replace(safeAuthNextPath(nextPath, "/onboarding"));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to create workspace.");
     } finally {
@@ -291,12 +294,29 @@ export default function SignupPage() {
 
           <p className="mt-6 text-center text-sm text-slate-500">
             Already have a workspace?{" "}
-            <Link href="/login" className="font-medium text-accent-600 hover:text-accent-700">
+            <Link
+              href={nextPath ? `/login?next=${encodeURIComponent(nextPath)}` : "/login"}
+              className="font-medium text-accent-600 hover:text-accent-700"
+            >
               Enter workspace
             </Link>
           </p>
         </>
       )}
     </AuthShell>
+  );
+}
+
+export default function SignupPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex min-h-screen items-center justify-center text-sm text-slate-500">
+          Loading…
+        </div>
+      }
+    >
+      <SignupForm />
+    </Suspense>
   );
 }

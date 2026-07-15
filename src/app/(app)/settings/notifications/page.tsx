@@ -1,10 +1,18 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { authHeaders } from "@/lib/api/auth-client";
 import { PageHeader } from "@/components/Page";
-import { Card, Toggle } from "@/components/ui";
-import { Bell, ShieldCheck } from "lucide-react";
+import { Card, Button, Toggle } from "@/components/ui";
+import { useStore } from "@/lib/demo-store";
+import {
+  acceptInvitationByToken,
+  declineInvitationByToken,
+} from "@/lib/workspace/invitations-client";
+import { roleLabel } from "@/lib/workspace/permissions";
+import { Bell, Building2, ShieldCheck } from "lucide-react";
 
 type Prefs = {
   product_updates: boolean;
@@ -19,10 +27,23 @@ const CATEGORIES: { key: keyof Prefs; title: string; description: string }[] = [
 ];
 
 export default function NotificationsSettingsPage() {
+  const { state, actions } = useStore();
+  const router = useRouter();
   const [prefs, setPrefs] = useState<Prefs | null>(null);
   const [loading, setLoading] = useState(true);
   const [savingKey, setSavingKey] = useState<keyof Prefs | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [inviteBusy, setInviteBusy] = useState<string | null>(null);
+
+  const pendingInvites = useMemo(
+    () =>
+      state.workspaceInvitations.filter(
+        (invite) =>
+          invite.status === "pending" &&
+          invite.invitedEmail.toLowerCase() === (state.user?.email ?? "").toLowerCase(),
+      ),
+    [state.user?.email, state.workspaceInvitations],
+  );
 
   const load = useCallback(async () => {
     try {
@@ -69,8 +90,8 @@ export default function NotificationsSettingsPage() {
   return (
     <>
       <PageHeader
-        title="Email notifications"
-        subtitle="Choose which non-essential emails you receive. Account, security, and billing emails are always sent."
+        title="Notifications"
+        subtitle="Workspace invites and email preferences. Account, security, and billing emails are always sent."
       />
 
       {error ? (
@@ -79,6 +100,81 @@ export default function NotificationsSettingsPage() {
         </div>
       ) : null}
 
+      <Card className="mb-4 p-4">
+        <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-ink">
+          <Building2 className="h-4 w-4 text-accent" />
+          Workspace invites
+        </div>
+        {pendingInvites.length === 0 ? (
+          <p className="text-sm text-ink-3">No pending workspace invitations.</p>
+        ) : (
+          <div className="space-y-3">
+            {pendingInvites.map((invite) => (
+              <div
+                key={invite.id}
+                className="flex flex-wrap items-center gap-3 rounded-xl border border-border-2 bg-muted/40 px-3 py-2.5"
+              >
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-sm font-medium text-ink">
+                    {invite.workspaceName ?? "Workspace"}
+                  </div>
+                  <div className="text-xs text-ink-3">Invited as {roleLabel(invite.role)}</div>
+                </div>
+                <Button
+                  size="sm"
+                  disabled={inviteBusy === invite.token}
+                  onClick={() => {
+                    void (async () => {
+                      setInviteBusy(invite.token);
+                      setError(null);
+                      try {
+                        const result = await acceptInvitationByToken(invite.token);
+                        await actions.switchWorkspace(result.workspaceId);
+                        router.push("/");
+                      } catch (err) {
+                        setError(err instanceof Error ? err.message : "Unable to accept.");
+                      } finally {
+                        setInviteBusy(null);
+                      }
+                    })();
+                  }}
+                >
+                  Accept
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  disabled={inviteBusy === invite.token}
+                  onClick={() => {
+                    void (async () => {
+                      setInviteBusy(invite.token);
+                      setError(null);
+                      try {
+                        await declineInvitationByToken(invite.token);
+                        await actions.declineWorkspaceInvitation(invite.id);
+                      } catch (err) {
+                        setError(err instanceof Error ? err.message : "Unable to decline.");
+                      } finally {
+                        setInviteBusy(null);
+                      }
+                    })();
+                  }}
+                >
+                  Decline
+                </Button>
+                <Link
+                  href={`/invite/${invite.token}`}
+                  className="text-xs font-medium text-accent"
+                >
+                  Open
+                </Link>
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
+
+      <h2 className="mb-2 text-sm font-semibold text-ink">Email preferences</h2>
       <Card className="p-0">
         {loading || !prefs ? (
           <div className="p-6 text-sm text-ink-3">Loading preferences…</div>

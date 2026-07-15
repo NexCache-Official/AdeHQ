@@ -1965,12 +1965,16 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         if (!invitation) throw new Error("Invitation not found.");
 
         const loaded = await acceptWorkspaceInvitationRemote(user, invitation);
+        if (loaded.workspace.id) setActiveWorkspaceId(loaded.workspace.id);
+        const workspaces = await listUserWorkspaces(user.id);
+        setUserWorkspaces(workspaces);
         setRemoteState(loaded);
         setBackend("supabase");
         setError(null);
       },
 
       declineWorkspaceInvitation: async (id) => {
+        if (!id) return;
         await declineWorkspaceInvitationRemote(id);
         set((s) => ({
           ...s,

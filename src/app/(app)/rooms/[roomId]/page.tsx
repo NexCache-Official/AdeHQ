@@ -464,7 +464,7 @@ export default function RoomDetailPage() {
 
   const isWorkspaceAdmin = useMemo(() => {
     const member = state.workspaceMembers.find((m) => m.userId === state.user?.id);
-    return member?.role === "owner" || member?.role === "admin";
+    return member?.role === "admin";
   }, [state.workspaceMembers, state.user?.id]);
 
   const renameTopicById = async (topic: RoomTopic, newTitle: string) => {

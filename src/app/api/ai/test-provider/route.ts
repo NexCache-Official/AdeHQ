@@ -41,7 +41,7 @@ export async function POST(request: NextRequest) {
     }
 
     const { role } = await requireWorkspaceMembership(client, body.workspaceId, user.id);
-    if (role !== "owner" && role !== "admin") {
+    if (!["admin","owner"].includes(role)) {
       return NextResponse.json(
         { error: "Only workspace owners and admins can test AI providers." },
         { status: 403 },

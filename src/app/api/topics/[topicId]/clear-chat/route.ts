@@ -30,7 +30,7 @@ export async function POST(
     const { role } = await requireWorkspaceMembership(client, topic.workspaceId, user.id);
     await assertCanAccessRoom(client, topic.workspaceId, topic.roomId, user.id, role);
 
-    const isAdmin = role === "owner" || role === "admin";
+    const isAdmin = role === "admin" || role === "owner";
     const isCreator = topic.createdById === user.id;
     const canClear = isAdmin || isCreator || isGeneralTopic(topic);
     if (!canClear) {

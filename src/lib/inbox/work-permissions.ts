@@ -108,6 +108,6 @@ export async function userIsRoomMemberOrAdmin(
   client: SupabaseClient,
   params: { workspaceId: string; roomId: string; userId: string; role: string },
 ): Promise<boolean> {
-  if (params.role === "owner" || params.role === "admin") return true;
+  if (params.role === "admin" || params.role === "owner") return true;
   return isRoomMember(client, params.workspaceId, params.roomId, params.userId);
 }

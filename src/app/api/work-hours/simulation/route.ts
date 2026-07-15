@@ -15,7 +15,7 @@ export async function GET(request: NextRequest) {
     const weekStart = request.nextUrl.searchParams.get("weekStart")?.trim() || undefined;
     const { user, client } = await requireAuthUser(request);
     const { role } = await requireWorkspaceMembership(client, workspaceId, user.id);
-    if (role !== "owner" && role !== "admin") {
+    if (!["admin","owner"].includes(role)) {
       return NextResponse.json({ error: "Admin access required." }, { status: 403 });
     }
 

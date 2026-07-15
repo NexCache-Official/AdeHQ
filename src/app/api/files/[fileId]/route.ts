@@ -67,7 +67,7 @@ export async function DELETE(
 ) {
   try {
     const { user, client, file, role } = await loadAccessibleFile(request, params.fileId);
-    const isAdmin = role === "owner" || role === "admin";
+    const isAdmin = role === "admin" || role === "owner";
     if (!isAdmin && file.uploadedByUserId !== user.id) {
       return NextResponse.json({ error: "Only the uploader or a workspace admin can remove this file." }, { status: 403 });
     }

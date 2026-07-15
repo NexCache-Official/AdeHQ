@@ -38,7 +38,7 @@ create table if not exists public.workspaces (
 create table if not exists public.workspace_members (
   workspace_id uuid not null references public.workspaces(id) on delete cascade,
   user_id uuid not null references auth.users(id) on delete cascade,
-  role text not null default 'member' check (role in ('owner', 'admin', 'member', 'viewer')),
+  role text not null default 'member' check (role in ('admin', 'member')),
   status text not null default 'active' check (status in ('active', 'removed')),
   joined_at timestamptz not null default now(),
   created_at timestamptz not null default now(),
@@ -50,7 +50,7 @@ create table if not exists public.workspace_invitations (
   workspace_id uuid not null references public.workspaces(id) on delete cascade,
   invited_email text not null,
   invited_by uuid not null references auth.users(id) on delete cascade,
-  role text not null default 'member',
+  role text not null default 'member' check (role in ('admin', 'member')),
   status text not null default 'pending',
   token text not null unique default encode(gen_random_bytes(24), 'hex'),
   expires_at timestamptz,
@@ -510,7 +510,8 @@ as $$
     from public.workspace_members wm
     where wm.workspace_id = target_workspace_id
       and wm.user_id = auth.uid()
-      and wm.role in ('owner', 'admin')
+      and wm.status is distinct from 'removed'
+      and wm.role = 'admin'
   );
 $$;
 

@@ -114,7 +114,7 @@ export default function SettingsBillingPage() {
     return (
       <>
         <PageHeader title="Billing" icon={<CreditCard className="h-5 w-5" />} />
-        <Card className="p-6 text-sm text-ink-3">Only workspace owners and admins can view billing.</Card>
+        <Card className="p-6 text-sm text-ink-3">Only workspace admins can view billing.</Card>
       </>
     );
   }

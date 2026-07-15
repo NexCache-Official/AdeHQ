@@ -55,7 +55,7 @@ export async function assertCanAccessRoom(
   userId: string,
   role: string,
 ): Promise<void> {
-  if (role === "owner" || role === "admin") return;
+  if (role === "admin" || role === "owner") return;
 
   const member = await isRoomMember(client, workspaceId, roomId, userId);
   if (!member) {

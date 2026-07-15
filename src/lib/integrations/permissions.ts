@@ -23,16 +23,14 @@ export function resolveHumanIntegrationPermissions(
   role: WorkspaceMemberRole | string,
 ): HumanIntegrationPermissions {
   switch (role) {
-    case "owner":
     case "admin":
+    case "owner": // legacy
       return { integrationsAdmin: true, approveExternalActions: true, requestViaAi: true };
-    case "manager":
-      return { integrationsAdmin: false, approveExternalActions: true, requestViaAi: true };
     case "member":
-      return { integrationsAdmin: false, approveExternalActions: false, requestViaAi: true };
+    case "manager": // legacy → treat as member with AI request
+      return { integrationsAdmin: false, approveExternalActions: true, requestViaAi: true };
     default:
-      // guest / unknown — read-only
-      return { integrationsAdmin: false, approveExternalActions: false, requestViaAi: false };
+      return { integrationsAdmin: false, approveExternalActions: false, requestViaAi: true };
   }
 }
 
