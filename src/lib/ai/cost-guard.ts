@@ -11,9 +11,11 @@ import {
   buildRunEstimate,
   appendRunStep,
 } from "@/lib/supabase/ai-runtime";
-import { getOutputTokenCap, type ModelMode } from "@/lib/ai/model-catalog";
+import { estimateCost, getOutputTokenCap, type ModelMode } from "@/lib/ai/model-catalog";
 import { recordAiRuntime } from "@/lib/ai/runtime-log";
 import { checkWorkspaceAiCapacity } from "@/lib/billing/usage/periods";
+import { calculateModelCost } from "@/lib/billing/costing/calculate-model-cost";
+import { recordCostEvent } from "@/lib/billing/costing/record-cost-event";
 
 export type BeginAiRunContext = {
   client: SupabaseClient;
@@ -233,6 +235,89 @@ export async function finalizeAiRun(params: FinalizeAiRunParams): Promise<void> 
     actualCostUsd: params.actualCostUsd,
     latencyMs: params.latencyMs,
     errorMessage: params.errorMessage,
+  });
+
+  // Customer Usage reads ai_cost_ledger_entries. Shadow work-unit completion is
+  // optional / often skipped — always mirror successful runs into the ledger.
+  if (!params.failed) {
+    try {
+      await recordCommercialUsageFromFinalizedRun(params);
+    } catch (error) {
+      console.warn("[AdeHQ cost ledger] finalizeAiRun mirror failed", error);
+    }
+  }
+}
+
+async function recordCommercialUsageFromFinalizedRun(
+  params: FinalizeAiRunParams,
+): Promise<void> {
+  const [{ data: run }, { data: usage }] = await Promise.all([
+    params.client
+      .from("agent_runs")
+      .select("employee_id, room_id, topic_id")
+      .eq("workspace_id", params.workspaceId)
+      .eq("id", params.runId)
+      .maybeSingle(),
+    params.client
+      .from("ai_usage_events")
+      .select("employee_id, model, provider, estimated_cost_usd")
+      .eq("id", params.usageId)
+      .maybeSingle(),
+  ]);
+
+  const employeeId =
+    (run?.employee_id ? String(run.employee_id) : null) ??
+    (usage?.employee_id ? String(usage.employee_id) : null);
+  const modelId =
+    (typeof usage?.model === "string" && usage.model.trim() ? usage.model.trim() : null) ??
+    null;
+  const inputTokens = Math.max(0, params.inputTokens ?? 0);
+  const outputTokens = Math.max(0, params.outputTokens ?? 0);
+  const cachedTokens = Math.max(0, params.cachedTokens ?? 0);
+
+  let { costUsd, costSource } = calculateModelCost({
+    modelId,
+    inputTokens,
+    cachedInputTokens: cachedTokens,
+    outputTokens,
+    actualCostUsd: params.actualCostUsd,
+    estimatedCostUsd:
+      usage?.estimated_cost_usd != null ? Number(usage.estimated_cost_usd) : null,
+  });
+
+  if (costUsd <= 0 && (inputTokens > 0 || outputTokens > 0)) {
+    costUsd = estimateCost(modelId ?? "default", inputTokens + cachedTokens, outputTokens);
+    costSource = "estimated";
+  }
+  // Completed employee replies with missing token/cost telemetry still consumed
+  // capacity — charge a tiny floor so the Work Hours meter cannot stay stuck at 0.
+  if (costUsd <= 0) {
+    costUsd = 0.0001;
+    costSource = "estimated";
+  }
+
+  await recordCostEvent(params.client, {
+    workspaceId: params.workspaceId,
+    employeeId,
+    roomId: run?.room_id ? String(run.room_id) : null,
+    topicId: run?.topic_id ? String(run.topic_id) : null,
+    messageId: params.responseMessageId ?? null,
+    sourceType: "llm",
+    providerName: typeof usage?.provider === "string" ? usage.provider : null,
+    modelId,
+    workType: "employee_reply",
+    inputTokens,
+    cachedInputTokens: cachedTokens,
+    outputTokens,
+    estimatedCostUsd: costSource === "estimated" ? costUsd : undefined,
+    actualCostUsd: costSource === "provider_usage" ? costUsd : undefined,
+    costSource,
+    status: "succeeded",
+    metadata: {
+      agentRunId: params.runId,
+      usageId: params.usageId,
+      mirroredFrom: "finalizeAiRun",
+    },
   });
 }
 

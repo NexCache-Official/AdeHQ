@@ -25,7 +25,7 @@ Scope of this pass: Phase 1 (partial), Phase 2/3 (partial via Maya/Elena/David),
 | P1 | Approval chips in chat were non-clickable (no Approve UI) | **Fixed** — inline `ApprovalCard` + Review link (`RoomMessageItem.tsx`) |
 | — | Casey → draft → Approvals → Approve for `skumar@nexcache.com` | **Verified** Casey E2E `bugs: []`; bulk-approve script clearing stacked cards |
 | P2 | Duplicate SaaS Company 1 switcher rows / incomplete onboarding clone | Known; marathon skips onboarding rows |
-| P1 | AI Work Hours rail stuck at `0.00 / 10.00` despite active AI work | **Fixed** — period total now floors raw ledger sum; leaf-first floor no longer zeros the meter (`round-display.ts`, `summary.ts`) — needs prod deploy |
+| P1 | AI Work Hours rail stuck at `0.00 / 10.00` despite active AI work | **Fixed** — (1) floor raw period total for display (2) `finalizeAiRun` now mirrors into `ai_cost_ledger_entries` (Usage was empty because only shadow work-units wrote the ledger) |
 | P1 | Marathon/E2E `waitAi` treated leftover draft cards as success → room collab looked “done” while AI silent | **Fixed** — require new `[data-message-id]` growth; ignore stale draft cards |
 | P1 | Lane CRM ask became a Tasks card; `/crm` stayed empty (false-pass in CRM wave) | **Verified** Casey DM creates Contact + Deal + Task; CRM shows $18k Qualified (duplicate deal cards noted as P2) |
 | P1 | Room collab silent after AI tool cards (ambient governance) | **Fixed** — work intents (`task_request`, `direct_question`, collab, etc.) bypass after-AI skip (`ambient-governance.ts`); marathon now `@mentions` team |
