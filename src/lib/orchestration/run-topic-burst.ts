@@ -34,7 +34,6 @@ import {
   parseEmployeeMentions,
 } from "@/lib/server/room-messages";
 import { queueAgentRuns, type QueuedRun } from "@/lib/server/queue-agent-runs";
-import { cancelActiveTopicWork } from "@/lib/server/cancel-active-topic-work";
 import { isAiQueueingBlocked } from "@/lib/topic-ai-control";
 import { getAiParticipationMode, isHiringTopic, isSmartAssistMode } from "@/lib/topics";
 import { isMayaEmployee } from "@/lib/maya-employee";
@@ -192,14 +191,6 @@ export async function runTopicBurstOrchestration(
     }
 
     const burst = buildBurstStewardContext(distinctFresh);
-    await cancelActiveTopicWork(client, {
-      workspaceId: params.workspaceId,
-      roomId: params.roomId,
-      topicId: params.topicId,
-      reason: "Paused — waiting for the room to finish typing.",
-      cancelReasonCode: "human_typing_pause",
-      skipBrowserResearch: true,
-    });
 
     const respondersCtx = await loadRespondersContext(
       client,

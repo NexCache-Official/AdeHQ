@@ -2155,11 +2155,11 @@ export async function processQueuedAgentRun(
       (error instanceof Error &&
         (error.name === "AbortError" || /abort/i.test(error.message)));
     const message = aborted
-      ? "Paused — waiting for humans to finish typing."
+      ? "Agent run aborted."
       : serializeUnknownError(error);
 
     if (aborted) {
-      const meta = { ...runMetadata, cancelReason: "human_typing_pause" };
+      const meta = { ...runMetadata, cancelReason: "aborted" };
       await client
         .from("agent_runs")
         .update({

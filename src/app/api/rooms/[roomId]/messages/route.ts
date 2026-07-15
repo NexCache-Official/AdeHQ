@@ -343,23 +343,9 @@ export async function POST(
     const stopDetection = detectWorkStopRequest(trimmed);
     let workStopCancelResult: CancelActiveTopicWorkResult | null = null;
 
-    // Group rooms defer orchestration until room-wide quiet (typing pause + burst).
-    // Employee DMs must run immediately — a single human is talking to one AI, and the
-    // deferred client flush was silently dropping replies (empty queuedRuns, no agent_runs).
-    // Work-stop always runs immediately so "stop" is not delayed.
+    // Always orchestrate on send. Do not pause/defer for human typing — presence
+    // indicators stay in the UI, but AI work must not wait on them.
     const isEmployeeDm = respondersCtx.room.kind === "dm";
-    if (!stopDetection.isStop && !isEmployeeDm) {
-      return NextResponse.json({
-        humanMessage,
-        deferred: true,
-        queuedRuns: [],
-        blockedRuns: [],
-        waitingRuns: [],
-        cancelledResearchRuns: [],
-        aiResponses: [],
-        aiMessages: [],
-      });
-    }
 
     const [recentMessagesResult, topicsResult, topicOrchestrationState] = await Promise.all([
       client

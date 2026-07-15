@@ -344,7 +344,6 @@ export function RoomChat({
   const pendingBurstFlushRef = useRef(false);
   const flushInFlightRef = useRef(false);
   const lastHumanActivityAtRef = useRef(0);
-  const anyHumanTypingRef = useRef(false);
   const [failedSend, setFailedSend] = useState<PendingSend | null>(null);
   const [sendError, setSendError] = useState<string | null>(null);
   const [activeRuns, setActiveRuns] = useState<ActiveRun[]>([]);
@@ -367,11 +366,7 @@ export function RoomChat({
   const scrollTopicKeyRef = useRef<string | null>(null);
 
   const useServerApi = backend === "supabase";
-  const {
-    typingHumans,
-    anyHumanTyping,
-    setLocalTyping,
-  } = useTopicPresence({
+  const { typingHumans, setLocalTyping } = useTopicPresence({
     enabled: useServerApi && Boolean(topic?.id && state.workspace?.id && state.user?.id),
     workspaceId: state.workspace?.id,
     topicId: topic?.id,
@@ -379,9 +374,6 @@ export function RoomChat({
     displayName: state.user?.name ?? "You",
   });
   const typingLabel = formatTypingHumansLabel(typingHumans, state.user?.id);
-  useEffect(() => {
-    anyHumanTypingRef.current = anyHumanTyping;
-  }, [anyHumanTyping]);
 
   const allTopicMessages = topic
     ? room.messages
@@ -753,7 +745,6 @@ export function RoomChat({
   // rooms/DMs with no research-capable employee had no realtime delivery at
   // all and depended on a manual reload or the heavy whole-workspace refetch.
   const scheduleBurstFlushRef = useRef<(() => void) | null>(null);
-  const pauseAiForTypingRef = useRef<(() => Promise<void>) | null>(null);
 
   const handleMessageInsert = useCallback(
     (message: RoomMessage) => {
@@ -767,13 +758,8 @@ export function RoomChat({
       }
       actions.addMessage(room.id, { ...message, topicId: topic.id });
       notifyTopicSummaryUpdated(topic.id);
-      if (message.senderType === "human" && message.senderId !== state.user?.id) {
-        // Remote human extended the burst — reset quiet window for everyone.
-        scheduleBurstFlushRef.current?.();
-        void pauseAiForTypingRef.current?.();
-      }
     },
-    [actions, room.id, state.user?.id, topic],
+    [actions, room.id, topic],
   );
 
   const handleMessageUpdate = useCallback(
@@ -811,10 +797,6 @@ export function RoomChat({
       actions.removeLocalMessage(room.id, `stream-${run.runId}`);
       processingRunIdsRef.current.delete(run.runId);
       setActiveRuns((prev) => prev.filter((r) => r.runId !== run.runId));
-      if (run.cancelReason === "human_typing_pause" || /typing|paused/i.test(run.status)) {
-        // Keep quiet-gate pending so a flush still happens after room quiet.
-        pendingBurstFlushRef.current = true;
-      }
     },
     [actions, room.id],
   );
@@ -888,38 +870,8 @@ export function RoomChat({
     [actions, room.id, room.messages],
   );
 
-  const clearAiTypingUi = useCallback(() => {
-    for (const [runId, controller] of processAbortByRunRef.current) {
-      controller.abort();
-      processAbortByRunRef.current.delete(runId);
-      actions.removeLocalMessage(room.id, `stream-${runId}`);
-    }
-    setActiveRuns((prev) =>
-      prev.map((r) =>
-        ["reading", "thinking", "typing", "queued"].includes(r.phase)
-          ? { ...r, phase: "waiting_on" as const, waitingOnEmployeeName: "the room" }
-          : r,
-      ),
-    );
-  }, [actions, room.id]);
-
-  const pauseAiForTyping = useCallback(async () => {
-    if (!topic || !useServerApi) return;
-    clearAiTypingUi();
-    try {
-      const headers = await withDebugHeaders();
-      await fetch(`/api/rooms/${room.id}/topics/${topic.id}/pause-ai`, {
-        method: "POST",
-        headers,
-      });
-    } catch (error) {
-      console.warn("[AdeHQ] pause-ai failed", error);
-    }
-  }, [clearAiTypingUi, room.id, topic, useServerApi]);
-
   const flushBurstOrchestration = useCallback(async () => {
     if (!topic || !useServerApi || !state.workspace?.id) return;
-    if (anyHumanTyping) return;
     if (flushInFlightRef.current) return;
     if (Date.now() - lastHumanActivityAtRef.current < HUMAN_TYPING_QUIET_MS) return;
 
@@ -979,7 +931,7 @@ export function RoomChat({
     } finally {
       flushInFlightRef.current = false;
     }
-  }, [anyHumanTyping, room.id, state.workspace?.id, topic, trace, useServerApi]);
+  }, [room.id, state.workspace?.id, topic, trace, useServerApi]);
 
   const processQueuedRunsRef = useRef<
     ((queued: QueuedRunClient[], waiting?: ActiveRun[]) => Promise<void>) | null
@@ -995,22 +947,6 @@ export function RoomChat({
   }, [flushBurstOrchestration]);
 
   scheduleBurstFlushRef.current = scheduleBurstFlush;
-  pauseAiForTypingRef.current = pauseAiForTyping;
-
-  useEffect(() => {
-    if (!useServerApi || !topic) return;
-    if (anyHumanTyping) {
-      if (quietTimerRef.current) {
-        clearTimeout(quietTimerRef.current);
-        quietTimerRef.current = null;
-      }
-      void pauseAiForTyping();
-      return;
-    }
-    if (pendingBurstFlushRef.current) {
-      scheduleBurstFlush();
-    }
-  }, [anyHumanTyping, pauseAiForTyping, scheduleBurstFlush, topic, useServerApi]);
 
   const processQueuedRuns = useCallback(
     async (queuedRuns: QueuedRunClient[], waitingRuns: ActiveRun[] = []) => {
@@ -1084,10 +1020,6 @@ export function RoomChat({
           const abortController = new AbortController();
           processAbortByRunRef.current.set(run.runId, abortController);
           try {
-            if (anyHumanTypingRef.current) {
-              abortController.abort();
-              return;
-            }
             setActiveRuns((prev) =>
               prev.map((r) =>
                 r.runId === run.runId ? { ...r, phase: "typing" } : r,
@@ -1137,10 +1069,7 @@ export function RoomChat({
             }
             processAbortByRunRef.current.delete(run.runId);
 
-            if (
-              result.data?.code === "human_typing_pause" ||
-              abortController.signal.aborted
-            ) {
+            if (result.data?.code === "aborted" || abortController.signal.aborted) {
               setActiveRuns((prev) => prev.filter((r) => r.runId !== run.runId));
               return;
             }
@@ -2363,11 +2292,6 @@ export function RoomChat({
           )}
           {typingLabel && (
             <p className="mb-1.5 px-1 text-[12.5px] text-ink-3">{typingLabel}</p>
-          )}
-          {anyHumanTyping && activeRuns.some((r) => r.phase === "waiting_on") && (
-            <p className="mb-1.5 px-1 text-[12.5px] text-ink-3">
-              AI is waiting for the room to finish typing…
-            </p>
           )}
           {isMayaHiringMode && <MayaHiringSuggestionChips />}
           <ChatComposer

@@ -131,11 +131,11 @@ export async function POST(
               send("error", { error: error.code, code: error.code });
             } else if (
               error instanceof Error &&
-              (error.name === "AbortError" || /abort|paused/i.test(error.message))
+              (error.name === "AbortError" || /abort/i.test(error.message))
             ) {
               send("error", {
                 error: error.message,
-                code: "human_typing_pause",
+                code: "aborted",
               });
             } else {
               const message = serializeUnknownError(error);
@@ -180,10 +180,10 @@ export async function POST(
   } catch (error) {
     if (
       error instanceof Error &&
-      (error.name === "AbortError" || /abort|paused/i.test(error.message))
+      (error.name === "AbortError" || /abort/i.test(error.message))
     ) {
       return NextResponse.json(
-        { ok: false, error: error.message, code: "human_typing_pause" },
+        { ok: false, error: error.message, code: "aborted" },
         { status: 499 },
       );
     }
