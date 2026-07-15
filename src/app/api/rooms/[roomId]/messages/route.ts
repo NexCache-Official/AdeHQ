@@ -343,10 +343,12 @@ export async function POST(
     const stopDetection = detectWorkStopRequest(trimmed);
     let workStopCancelResult: CancelActiveTopicWorkResult | null = null;
 
-    // Normal sends defer orchestration until room-wide quiet (typing pause + burst).
-    // Work-stop still runs immediately so "stop" is not delayed 5s.
-    // Near-duplicate human lines are filtered at flush in runTopicBurstOrchestration.
-    if (!stopDetection.isStop) {
+    // Group rooms defer orchestration until room-wide quiet (typing pause + burst).
+    // Employee DMs must run immediately — a single human is talking to one AI, and the
+    // deferred client flush was silently dropping replies (empty queuedRuns, no agent_runs).
+    // Work-stop always runs immediately so "stop" is not delayed.
+    const isEmployeeDm = respondersCtx.room.kind === "dm";
+    if (!stopDetection.isStop && !isEmployeeDm) {
       return NextResponse.json({
         humanMessage,
         deferred: true,
@@ -460,8 +462,6 @@ export async function POST(
 
     let orchestrationId: string | null = null;
     let topicSuggestions: Record<string, unknown>[] = [];
-
-    const isEmployeeDm = respondersCtx.room.kind === "dm";
 
     if (!isAiQueueingBlocked(topic)) {
       try {

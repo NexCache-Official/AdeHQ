@@ -940,6 +940,11 @@ export function RoomChat({
       if (!res.ok) {
         if (payload.skipReason === "still_hot" || payload.skipReason === "lock_held") {
           pendingBurstFlushRef.current = true;
+          // Re-arm quiet timer — previously we only set a flag and never retried.
+          if (quietTimerRef.current) clearTimeout(quietTimerRef.current);
+          quietTimerRef.current = setTimeout(() => {
+            void flushBurstOrchestration();
+          }, HUMAN_TYPING_QUIET_MS);
           return;
         }
         trace("agent-run", "warn", "Burst orchestrate failed", payload);
@@ -947,15 +952,30 @@ export function RoomChat({
       }
       if (payload.skipReason === "still_hot" || payload.skipReason === "lock_held") {
         pendingBurstFlushRef.current = true;
+        if (quietTimerRef.current) clearTimeout(quietTimerRef.current);
+        quietTimerRef.current = setTimeout(() => {
+          void flushBurstOrchestration();
+        }, HUMAN_TYPING_QUIET_MS);
         return;
       }
+      trace("agent-run", "info", "Burst orchestrate result", {
+        queued: payload.queuedRuns?.length ?? 0,
+        skipped: payload.skipped,
+        skipReason: payload.skipReason,
+      });
       if (payload.queuedRuns?.length) {
         // processQueuedRuns is defined below — call via ref after assignment
         await processQueuedRunsRef.current?.(payload.queuedRuns, []);
+      } else if (payload.skipReason && payload.skipReason !== "no_pending_messages") {
+        trace("agent-run", "warn", `Burst produced no runs (${payload.skipReason})`, payload);
       }
     } catch (error) {
       console.warn("[AdeHQ] orchestrate-burst failed", error);
       pendingBurstFlushRef.current = true;
+      if (quietTimerRef.current) clearTimeout(quietTimerRef.current);
+      quietTimerRef.current = setTimeout(() => {
+        void flushBurstOrchestration();
+      }, HUMAN_TYPING_QUIET_MS);
     } finally {
       flushInFlightRef.current = false;
     }
@@ -1528,6 +1548,7 @@ export function RoomChat({
         {
           workMode: options?.workMode,
           roomKind: isDm ? "dm" : "room",
+          deferred: payload.deferred,
           queuedRuns: payload.queuedRuns,
           blockedRuns: payload.blockedRuns,
           code: payload.code,
