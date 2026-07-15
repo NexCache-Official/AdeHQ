@@ -4,6 +4,30 @@ Evaluator: Claude acting as Principal QA + Product Designer + CEO
 Started: 2026-07-10
 Scope of this pass: Phase 1 (partial), Phase 2/3 (partial via Maya/Elena/David), Phase 5 (collaboration, via pre-seeded room), Hire flow (Phase 8-adjacent). Real estate only, per user direction. Other 11 phases and 6 additional industries not yet covered — continuing in next pass.
 
+---
+
+## Session 2026-07-15 evening — SaaS Company 1 CEO marathon (Playwright)
+
+**Persona:** Founder/CEO, SaaS Company 1 (FlowDesk / mid-market ops). Production `https://app.adehq.com`. Artifacts: `/tmp/adehq-saas-marathon`, `/tmp/adehq-saas-casey-email`.
+
+### What worked
+- Landed on completed SaaS Company 1 (Lane / Casey / Jules hired; Engineering room live).
+- CEO Inbox compose → send to `skumar@nexcache.com` with undo toast (`Sending "SaaS Company 1 weekly note…"`); mailbox `saas1edwez@inbox.adehq.com`.
+- Lane DM: PRD outline + **Task created: Review Approvals Inbox PRD outline**.
+
+### Bugs found / fixed this session
+| Sev | Bug | Status |
+|---|---|---|
+| P1 | Inbox stuck on "Loading inbox…" (Compose missing until slow fetch) | **Fixed** — 25s mailbox timeout + Retry button (`inbox/page.tsx`) |
+| P1 | Subject field hard to target in E2E | **Fixed** — `aria-label`/`placeholder` on Composer Subject |
+| P1 | Agent process `Failed to fetch` left employees silent | **Fixed** — one retry on transient network errors (`RoomChat.tsx`) |
+| P0 | Lane previously refused email ("don't have the ability") — still in stale topic summary | Tool-path + infer-email already on `main`; production deploy lag; focused Casey email E2E running |
+| P2 | Duplicate SaaS Company 1 switcher rows / incomplete onboarding clone | Known; marathon skips onboarding rows |
+
+### Scripts
+- `scripts/e2e-playbook/saas-company1-marathon.mjs` (~70m waves)
+- `scripts/e2e-playbook/saas-casey-email.mjs` (focused inbox tool path)
+
 ## Session 2026-07-15 — Hybrid workforce + topic/memory suggestion retest
 
 **Persona:** Owner, RealEstatePros Ltd (Canterbury lettings/sales). Production `https://app.adehq.com`. Screenshots under `/tmp/adehq-hybrid-e2e`, `/tmp/adehq-topic-session`.
