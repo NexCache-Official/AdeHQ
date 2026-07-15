@@ -129,12 +129,22 @@ export default function DrivePage() {
     setLoading(true);
     setError(null);
     try {
-      const list = await fetchDriveList({
-        workspaceId,
-        section: activeSection,
-        folderId,
-        query: query.trim() || undefined,
-      });
+      // Bound the request so a hung API never leaves the page on
+      // "Loading Drive…" forever (seen in SaaS CEO E2E).
+      const list = await Promise.race([
+        fetchDriveList({
+          workspaceId,
+          section: activeSection,
+          folderId,
+          query: query.trim() || undefined,
+        }),
+        new Promise<never>((_, reject) => {
+          window.setTimeout(
+            () => reject(new Error("Drive is taking too long to load. Try again.")),
+            25_000,
+          );
+        }),
+      ]);
       setData(list);
       try {
         const quotaResult = await fetchDriveQuota(workspaceId);
@@ -599,9 +609,17 @@ export default function DrivePage() {
               )}
 
               {error && (
-                <p className="mb-3 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
-                  {error}
-                </p>
+                <div className="mb-3 flex flex-wrap items-center gap-3 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
+                  <p className="min-w-0 flex-1">{error}</p>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    className="shrink-0"
+                    onClick={() => void load()}
+                  >
+                    Retry
+                  </Button>
+                </div>
               )}
 
               {loading ? (
@@ -609,15 +627,21 @@ export default function DrivePage() {
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   Loading Drive…
                 </div>
-              ) : itemCount === 0 ? (
-                <EmptyState
-                  icon={HardDrive}
-                  title="This folder is empty"
-                  description="Upload files or create folders to organize your workspace knowledge."
-                />
+              ) : !data || itemCount === 0 ? (
+                error ? (
+                  <p className="py-12 text-center text-sm text-ink-3">
+                    Couldn’t load Drive files. Use Retry above.
+                  </p>
+                ) : (
+                  <EmptyState
+                    icon={HardDrive}
+                    title="This folder is empty"
+                    description="Upload files or create folders to organize your workspace knowledge."
+                  />
+                )
               ) : (
                 <DriveItemsGrid
-                  data={data!}
+                  data={data}
                   viewMode={viewMode}
                   dragItem={dragItem}
                   dropTargetFolderId={dropTargetFolderId}
