@@ -18,8 +18,10 @@ export default function SettingsUsagePage() {
   const { data, loading, error } = useWorkspaceUsage(state.workspace.id);
 
   const rows: EmployeeWorkTypeUsage[] = data?.byEmployeeWorkType ?? [];
-  const teamTotal = data?.teamWorkHours ?? rows.reduce((s, r) => s + r.workHours, 0);
+  // Always derive from the API's single floored period total — never mix capacity.used.
   const periodTotal = data?.totalWorkHours ?? 0;
+  const teamTotal =
+    data?.teamWorkHours ?? rows.reduce((s, r) => s + r.workHours, 0);
   const guideHours = data?.guideWorkHours ?? Math.max(0, periodTotal - teamTotal);
 
   return (

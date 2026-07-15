@@ -5,8 +5,8 @@ import {
   intelligenceModeFromModelMode,
   type IntelligenceMode,
 } from "@/lib/ai/intelligence-policy";
-import { displayWorkHours } from "@/lib/billing/costing/work-hours";
 import { formatWorkTypeLabel } from "@/lib/work-hours/labels";
+import { floorDisplayHours, floorDisplayTree } from "./round-display";
 import { getWorkspaceCapacity, type WorkspaceCapacity } from "./periods";
 
 export type UsageBreakdownRow = {
@@ -253,22 +253,24 @@ export async function summarizeWorkspaceUsage(
     return nameById.get(id) ?? "AI employee";
   };
 
+  // Floor leaves first, then roll parents up as sums so hire rows always equal hire total
+  // and hire + guide always equals the period total (never round individual rows up).
   const byEmployeeWorkType: EmployeeWorkTypeBreakdown[] = [...matrix.entries()]
     .map(([employeeId, byIntel]) => {
       const byIntelligence: IntelligenceWorkTypeBreakdown[] = [...byIntel.entries()]
         .map(([intelKey, byType]) => {
-          const intelTotal = [...byType.values()].reduce((s, n) => s + n, 0);
+          const { rows: byWorkType, total: intelHours } = floorDisplayTree(
+            [...byType.entries()].map(([key, hours]) => ({
+              key,
+              label: formatWorkTypeLabel(key),
+              workHours: hours,
+            })),
+          );
           return {
             key: intelKey,
             label: intelligenceLabel(intelKey),
-            workHours: Math.round(intelTotal * 10000) / 10000,
-            byWorkType: [...byType.entries()]
-              .map(([key, hours]) => ({
-                key,
-                label: formatWorkTypeLabel(key),
-                workHours: Math.round(hours * 10000) / 10000,
-              }))
-              .sort((a, b) => b.workHours - a.workHours),
+            workHours: intelHours,
+            byWorkType: byWorkType.sort((a, b) => b.workHours - a.workHours),
           };
         })
         .filter((row) => row.workHours > 0)
@@ -281,33 +283,46 @@ export async function summarizeWorkspaceUsage(
         }
       }
 
-      const rawTotal = byIntelligence.reduce((s, n) => s + n.workHours, 0);
+      const workHours = byIntelligence.reduce((s, n) => s + n.workHours, 0);
       return {
         employeeId,
         label: employeeLabel(employeeId),
-        workHours: Math.round(rawTotal * 10000) / 10000,
+        workHours,
         byIntelligence,
         byWorkType: [...workTypeRollup.entries()]
           .map(([key, hours]) => ({
             key,
             label: formatWorkTypeLabel(key),
-            workHours: Math.round(hours * 10000) / 10000,
+            workHours: hours,
           }))
+          .filter((row) => row.workHours > 0)
           .sort((a, b) => b.workHours - a.workHours),
       };
     })
+    .filter((row) => row.workHours > 0)
     .sort((a, b) => b.workHours - a.workHours || a.label.localeCompare(b.label));
 
-  const teamWorkHoursRaw = byEmployeeWorkType.reduce((sum, row) => sum + row.workHours, 0);
+  const teamWorkHoursRaw = [...employeeAgg.values()].reduce((sum, row) => sum + row.workHours, 0);
   const guideWorkHoursRaw = Math.max(0, totalWorkHours - teamWorkHoursRaw);
-  const totalDisplay = displayWorkHours(totalWorkHours);
-  const teamDisplay = displayWorkHours(teamWorkHoursRaw);
-  const guideDisplay = displayWorkHours(guideWorkHoursRaw);
+  const teamDisplay = byEmployeeWorkType.reduce((sum, row) => sum + row.workHours, 0);
+  const guideDisplay = floorDisplayHours(guideWorkHoursRaw);
+  // One period number everywhere: floored hire rows + floored guide (never an inflated round-up).
+  const totalDisplay = Math.round((teamDisplay + guideDisplay) * 100) / 100;
 
-  // Ledger is the commercial source of truth for customer-facing meters.
-  // Period counters can drift if a ledger write landed without applyCostToPeriod —
-  // never show that drift in the UI (do not write period back here; that races increments).
-  const capacitySynced = syncCapacityToLedgerUsed(capacity, totalWorkHours);
+  const byEmployee = toRows(employeeAgg, employeeLabel).map((row) => ({
+    ...row,
+    workHours: floorDisplayHours(row.workHours),
+  })).filter((row) => row.workHours > 0);
+  // Reconcile flat employee list to the same hire total (sum of floored rows).
+  const byEmployeeAligned = alignFlatRowsToTotal(byEmployee, teamDisplay);
+
+  const byWorkType = toRows(workTypeAgg, formatWorkTypeLabel).map((row) => ({
+    ...row,
+    workHours: floorDisplayHours(row.workHours),
+  })).filter((row) => row.workHours > 0);
+  const byWorkTypeAligned = alignFlatRowsToTotal(byWorkType, totalDisplay);
+
+  const capacitySynced = syncCapacityToDisplayedUsed(capacity, totalDisplay);
 
   return {
     capacity: capacitySynced,
@@ -315,27 +330,55 @@ export async function summarizeWorkspaceUsage(
     totalWorkHours: totalDisplay,
     teamWorkHours: teamDisplay,
     guideWorkHours: guideDisplay,
-    byEmployee: toRows(employeeAgg, employeeLabel),
-    byWorkType: toRows(workTypeAgg, formatWorkTypeLabel),
+    byEmployee: byEmployeeAligned,
+    byWorkType: byWorkTypeAligned,
     byEmployeeWorkType,
-    byProvider: toRows(providerAgg, (p) => p),
-    byModel: toRows(modelAgg, (m) => m),
+    byProvider: toRows(providerAgg, (p) => p).map((row) => ({
+      ...row,
+      workHours: floorDisplayHours(row.workHours),
+    })),
+    byModel: toRows(modelAgg, (m) => m).map((row) => ({
+      ...row,
+      workHours: floorDisplayHours(row.workHours),
+    })),
     totalCostUsd: includeCost ? Math.round(totalCostUsd * 10000) / 10000 : 0,
     totalTokens,
     failedRunWasteUsd: includeCost ? Math.round(failedRunWasteUsd * 10000) / 10000 : 0,
   };
 }
 
-function syncCapacityToLedgerUsed(
+/** If floored flat rows overshoot the rolled tree total, trim from the largest rows. */
+function alignFlatRowsToTotal(
+  rows: UsageBreakdownRow[],
+  target: number,
+): UsageBreakdownRow[] {
+  const targetCents = Math.round(target * 100);
+  let sumCents = rows.reduce((s, r) => s + Math.round(r.workHours * 100), 0);
+  if (sumCents <= targetCents) return rows;
+  const next = rows.map((r) => ({ ...r }));
+  const order = next
+    .map((r, i) => ({ i, hours: r.workHours }))
+    .sort((a, b) => b.hours - a.hours || a.i - b.i);
+  for (const { i } of order) {
+    if (sumCents <= targetCents) break;
+    const cents = Math.round(next[i]!.workHours * 100);
+    if (cents <= 0) continue;
+    next[i] = { ...next[i]!, workHours: (cents - 1) / 100 };
+    sumCents -= 1;
+  }
+  return next.filter((r) => r.workHours > 0);
+}
+
+function syncCapacityToDisplayedUsed(
   capacity: WorkspaceCapacity,
-  ledgerUsedRaw: number,
+  usedDisplay: number,
 ): WorkspaceCapacity {
-  const used = displayWorkHours(ledgerUsedRaw);
+  const used = floorDisplayHours(usedDisplay);
   if (capacity.unlimited) {
     return { ...capacity, used, warningLevel: "ok" };
   }
-  const remaining = Math.max(0, Math.round((capacity.allowance - ledgerUsedRaw) * 10000) / 10000);
-  const remainingDisplay = displayWorkHours(remaining);
+  // Remaining from the same displayed used so meters cannot disagree.
+  const remaining = Math.max(0, Math.round((capacity.allowance - used) * 100) / 100);
   let warningLevel: WorkspaceCapacity["warningLevel"] = "ok";
   if (remaining <= 0) warningLevel = "exhausted";
   else if (capacity.allowance > 0 && remaining <= capacity.allowance * 0.15) {
@@ -344,7 +387,7 @@ function syncCapacityToLedgerUsed(
   return {
     ...capacity,
     used,
-    remaining: remainingDisplay,
+    remaining,
     warningLevel,
   };
 }

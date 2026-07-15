@@ -15,7 +15,7 @@ export function SidebarWorkHoursMeter() {
 
   const cap = data?.capacity;
   const unlimited = cap?.unlimited ?? false;
-  // Prefer ledger-backed period total so the rail matches Settings → Usage.
+  // Same period total as Settings → Usage (floored ledger rollup).
   const used = data?.totalWorkHours ?? cap?.used ?? 0;
   const allowance = cap?.allowance ?? 0;
   const pct = unlimited || allowance <= 0 ? 0 : Math.min(100, (used / allowance) * 100);

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { AuthError, requireAuthUser, requireWorkspaceMembership } from "@/lib/supabase/auth-server";
 import { createSupabaseSecretClient } from "@/lib/supabase/server";
 import { summarizeWorkspaceUsage } from "@/lib/billing/usage/summary";
-import { allocateDisplayHours } from "@/lib/billing/usage/round-display";
+import { floorDisplayHours } from "@/lib/billing/usage/round-display";
 import { canViewUsage } from "@/lib/workspace/permissions";
 
 export const runtime = "nodejs";
@@ -25,64 +25,20 @@ export async function GET(
       includeCost: false,
     });
 
-    const round2 = (n: number) => Math.round(n * 100) / 100;
-    const totalWorkHours = round2(summary.totalWorkHours);
-    const teamWorkHours = round2(summary.teamWorkHours);
-    const guideWorkHours = round2(summary.guideWorkHours);
-
-    const employeeRaw = summary.byEmployeeWorkType.map((emp) => emp.workHours);
-    const employeeDisplay = allocateDisplayHours(employeeRaw, teamWorkHours);
-
-    const byEmployeeWorkType = summary.byEmployeeWorkType.map((emp, empIdx) => {
-      const empHours = employeeDisplay[empIdx] ?? 0;
-      const intelRaw = emp.byIntelligence.map((intel) => intel.workHours);
-      const intelDisplay = allocateDisplayHours(intelRaw, empHours);
-
-      const byIntelligence = emp.byIntelligence.map((intel, intelIdx) => {
-        const intelHours = intelDisplay[intelIdx] ?? 0;
-        const wtRaw = intel.byWorkType.map((wt) => wt.workHours);
-        const wtDisplay = allocateDisplayHours(wtRaw, intelHours);
-        return {
-          key: intel.key,
-          label: intel.label,
-          workHours: intelHours,
-          byWorkType: intel.byWorkType.map((wt, wtIdx) => ({
-            key: wt.key,
-            label: wt.label,
-            workHours: wtDisplay[wtIdx] ?? 0,
-          })),
-        };
-      });
-
-      const flatRaw = emp.byWorkType.map((wt) => wt.workHours);
-      const flatDisplay = allocateDisplayHours(flatRaw, empHours);
-
-      return {
-        employeeId: emp.employeeId,
-        label: emp.label,
-        workHours: empHours,
-        byIntelligence,
-        byWorkType: emp.byWorkType.map((wt, wtIdx) => ({
-          key: wt.key,
-          label: wt.label,
-          workHours: flatDisplay[wtIdx] ?? 0,
-        })),
-      };
-    });
-
-    const byEmployeeRaw = summary.byEmployee.map((r) => r.workHours);
-    const byEmployeeDisplay = allocateDisplayHours(byEmployeeRaw, teamWorkHours);
-
-    const byWorkTypeRaw = summary.byWorkType.map((r) => r.workHours);
-    // Work-type rollup includes Maya; match period total.
-    const byWorkTypeDisplay = allocateDisplayHours(byWorkTypeRaw, totalWorkHours);
+    // Summary already floors leaves and rolls parents up — pass through one shared total.
+    const totalWorkHours = floorDisplayHours(summary.totalWorkHours);
+    const teamWorkHours = floorDisplayHours(summary.teamWorkHours);
+    const guideWorkHours = floorDisplayHours(summary.guideWorkHours);
+    const allowance = summary.capacity.unlimited ? null : summary.capacity.allowance;
+    const remaining = summary.capacity.unlimited
+      ? null
+      : Math.max(0, Math.round(((allowance ?? 0) - totalWorkHours) * 100) / 100);
 
     return NextResponse.json({
       capacity: {
-        allowance: summary.capacity.unlimited ? null : round2(summary.capacity.allowance),
-        // Keep meter identical to the ledger-backed period total.
+        allowance,
         used: totalWorkHours,
-        remaining: summary.capacity.unlimited ? null : round2(summary.capacity.remaining),
+        remaining,
         unlimited: summary.capacity.unlimited,
         warningLevel: summary.capacity.warningLevel,
         resetsAt: summary.capacity.resetsAt,
@@ -94,15 +50,34 @@ export async function GET(
       totalWorkHours,
       teamWorkHours,
       guideWorkHours,
-      byEmployee: summary.byEmployee.map((r, i) => ({
+      byEmployee: summary.byEmployee.map((r) => ({
         label: r.label,
-        workHours: byEmployeeDisplay[i] ?? 0,
+        workHours: r.workHours,
       })),
-      byWorkType: summary.byWorkType.map((r, i) => ({
+      byWorkType: summary.byWorkType.map((r) => ({
         label: r.label,
-        workHours: byWorkTypeDisplay[i] ?? 0,
+        workHours: r.workHours,
       })),
-      byEmployeeWorkType,
+      byEmployeeWorkType: summary.byEmployeeWorkType.map((emp) => ({
+        employeeId: emp.employeeId,
+        label: emp.label,
+        workHours: emp.workHours,
+        byIntelligence: emp.byIntelligence.map((intel) => ({
+          key: intel.key,
+          label: intel.label,
+          workHours: intel.workHours,
+          byWorkType: intel.byWorkType.map((wt) => ({
+            key: wt.key,
+            label: wt.label,
+            workHours: wt.workHours,
+          })),
+        })),
+        byWorkType: emp.byWorkType.map((wt) => ({
+          key: wt.key,
+          label: wt.label,
+          workHours: wt.workHours,
+        })),
+      })),
     });
   } catch (error) {
     if (error instanceof AuthError) {
