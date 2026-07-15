@@ -195,6 +195,7 @@ function messageBox(page) {
 
 async function waitAi(page, label, minMs = 8000) {
   const t0 = Date.now();
+  const before = await page.locator("[data-message-id]").count().catch(() => 0);
   await pace(Math.min(minMs, SHELL_MS), label);
   while (Date.now() - t0 < SHELL_MS) {
     await autoShot(page, label);
@@ -203,7 +204,17 @@ async function waitAi(page, label, minMs = 8000) {
       .first()
       .isVisible()
       .catch(() => false);
-    if (!busy && Date.now() - t0 > minMs) break;
+    const after = await page.locator("[data-message-id]").count().catch(() => 0);
+    const hasDraftCard = await page
+      .getByText(/email draft|Approve send|Draft ready|inbox draft/i)
+      .first()
+      .isVisible()
+      .catch(() => false);
+    if ((after > before || hasDraftCard) && !busy && Date.now() - t0 > minMs) break;
+    if (!busy && Date.now() - t0 > Math.max(minMs, 25000) && after === before) {
+      note("ux", `No new AI message after ${Date.now() - t0}ms (${label})`);
+      break;
+    }
     await page.waitForTimeout(2000);
   }
   await shot(page, `${label}-done`);

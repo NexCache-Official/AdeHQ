@@ -153,17 +153,39 @@ async function runAgentProcessRequest(params: {
   headers: Record<string, string>;
   signal?: AbortSignal;
 }): Promise<ProcessRequestResult> {
-  const res = await fetch(`/api/agent-runs/${params.runId}/process`, {
-    method: "POST",
-    headers: params.headers,
-    body: JSON.stringify({
-      workspaceId: params.workspaceId,
-      mode: "live",
-    }),
-    signal: params.signal,
-  });
-  const data = await res.json().catch(() => ({}));
-  return { status: res.status, ok: res.ok, data };
+  const attempt = async (): Promise<ProcessRequestResult> => {
+    const res = await fetch(`/api/agent-runs/${params.runId}/process`, {
+      method: "POST",
+      headers: params.headers,
+      body: JSON.stringify({
+        workspaceId: params.workspaceId,
+        mode: "live",
+      }),
+      signal: params.signal,
+    });
+    const data = await res.json().catch(() => ({}));
+    return { status: res.status, ok: res.ok, data };
+  };
+
+  try {
+    return await attempt();
+  } catch (err) {
+    // Transient network blips ("Failed to fetch") used to leave the employee
+    // permanently silent for that run. Retry once unless the user/runtime
+    // intentionally aborted.
+    const aborted =
+      params.signal?.aborted ||
+      (err instanceof Error &&
+        (err.name === "AbortError" || /abort/i.test(err.message)));
+    if (aborted) throw err;
+    const transient =
+      err instanceof TypeError ||
+      (err instanceof Error && /failed to fetch|network|load failed/i.test(err.message));
+    if (!transient) throw err;
+    await new Promise((r) => setTimeout(r, 1200));
+    if (params.signal?.aborted) throw err;
+    return await attempt();
+  }
 }
 
 function isSameCalendarDay(a: string, b: string): boolean {
