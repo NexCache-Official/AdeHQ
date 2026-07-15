@@ -17,10 +17,18 @@ export type WorkspaceUsageCapacity = {
 
 export type UsageBreakdownRow = { label: string; workHours: number };
 
+export type IntelligenceUsage = {
+  key: string;
+  label: string;
+  workHours: number;
+  byWorkType: Array<{ key: string; label: string; workHours: number }>;
+};
+
 export type EmployeeWorkTypeUsage = {
   employeeId: string;
   label: string;
   workHours: number;
+  byIntelligence?: IntelligenceUsage[];
   byWorkType: Array<{ key: string; label: string; workHours: number }>;
 };
 

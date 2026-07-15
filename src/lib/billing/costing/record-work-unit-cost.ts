@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { intelligenceModeFromModelMode } from "@/lib/ai/intelligence-policy";
 import type { AiWorkUnit } from "@/lib/supabase/ai-work-units";
 import { calculateModelCost } from "./calculate-model-cost";
 import { recordCostEvent } from "./record-cost-event";
@@ -37,6 +38,18 @@ function stringFromMeta(meta: Record<string, unknown>, key: string): string | nu
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
+/** Resolve Efficient / Balanced / Strong (etc.) for Usage breakdowns. */
+function intelligenceModeFromMeta(meta: Record<string, unknown>): string | null {
+  const explicit = stringFromMeta(meta, "intelligenceMode");
+  if (explicit) return intelligenceModeFromModelMode(explicit);
+  const modelMode =
+    stringFromMeta(meta, "resolvedRunModelMode") ??
+    stringFromMeta(meta, "modelMode") ??
+    stringFromMeta(meta, "oldModelMode");
+  if (modelMode) return intelligenceModeFromModelMode(modelMode);
+  return null;
+}
+
 /**
  * Derive a billable cost event from a completed work unit and write it to the cost ledger.
  * This is the primary capture hook — every path that completes a work unit records cost here.
@@ -58,8 +71,14 @@ export async function recordCostFromWorkUnit(
   const outputTokens = result?.outputTokens ?? numFromMeta(meta, "outputTokens");
   const cachedInputTokens = result?.cachedInputTokens ?? numFromMeta(meta, "cachedInputTokens");
 
+  const modelId =
+    stringFromMeta(meta, "modelId") ??
+    workUnit.modelId ??
+    null;
+  const intelligenceMode = intelligenceModeFromMeta(meta);
+
   const { costUsd, costSource } = calculateModelCost({
-    modelId: workUnit.modelId,
+    modelId,
     inputTokens,
     cachedInputTokens,
     outputTokens,
@@ -80,13 +99,16 @@ export async function recordCostFromWorkUnit(
     roomId: workUnit.roomId ?? null,
     topicId: workUnit.topicId ?? null,
     sourceType: sourceTypeFor(workUnit),
-    providerRoute: workUnit.providerRoute ?? null,
-    providerName: workUnit.providerName ?? null,
-    modelId: workUnit.modelId ?? null,
+    providerRoute:
+      stringFromMeta(meta, "providerRoute") ?? workUnit.providerRoute ?? null,
+    providerName:
+      stringFromMeta(meta, "providerName") ?? workUnit.providerName ?? null,
+    modelId,
     providerCredentialId: stringFromMeta(meta, "providerCredentialId"),
     providerAllocationId: stringFromMeta(meta, "providerAllocationId"),
     providerProjectId: stringFromMeta(meta, "providerProjectId"),
-    runtimeMode: workUnit.runtimeMode ?? null,
+    runtimeMode:
+      stringFromMeta(meta, "runtimeMode") ?? workUnit.runtimeMode ?? null,
     capability: workUnit.capability ?? null,
     workType: workUnit.workType,
     inputTokens,
@@ -97,6 +119,11 @@ export async function recordCostFromWorkUnit(
     costSource,
     platformOverhead,
     billableToWorkspace: !platformOverhead,
-    metadata: { workType: workUnit.workType, workUnitStatus: workUnit.status },
+    metadata: {
+      workType: workUnit.workType,
+      workUnitStatus: workUnit.status,
+      ...(intelligenceMode ? { intelligenceMode } : {}),
+      ...(modelId ? { modelId } : {}),
+    },
   });
 }

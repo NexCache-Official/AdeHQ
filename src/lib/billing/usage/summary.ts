@@ -1,5 +1,10 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getCurrentUsagePeriodRange } from "@/lib/ai/work-hours/periods";
+import {
+  INTELLIGENCE_MODE_LABELS,
+  intelligenceModeFromModelMode,
+  type IntelligenceMode,
+} from "@/lib/ai/intelligence-policy";
 import { displayWorkHours } from "@/lib/billing/costing/work-hours";
 import { getWorkspaceCapacity, type WorkspaceCapacity } from "./periods";
 
@@ -10,10 +15,20 @@ export type UsageBreakdownRow = {
   costUsd: number;
 };
 
+export type IntelligenceWorkTypeBreakdown = {
+  key: string;
+  label: string;
+  workHours: number;
+  byWorkType: Array<{ key: string; label: string; workHours: number }>;
+};
+
 export type EmployeeWorkTypeBreakdown = {
   employeeId: string;
   label: string;
   workHours: number;
+  /** Nested intelligence → work-type breakdown. */
+  byIntelligence: IntelligenceWorkTypeBreakdown[];
+  /** Flat work-type rollup (same hours as byIntelligence). */
   byWorkType: Array<{ key: string; label: string; workHours: number }>;
 };
 
@@ -27,7 +42,7 @@ export type WorkspaceUsageSummary = {
   guideWorkHours: number;
   byEmployee: UsageBreakdownRow[];
   byWorkType: UsageBreakdownRow[];
-  /** Nested employee → work-type breakdown (excludes Maya). */
+  /** Nested employee → intelligence → work-type breakdown (excludes Maya). */
   byEmployeeWorkType: EmployeeWorkTypeBreakdown[];
   byProvider: UsageBreakdownRow[];
   byModel: UsageBreakdownRow[];
@@ -48,12 +63,20 @@ type LedgerRow = {
   total_tokens: number | null;
   status: string | null;
   billable_to_workspace: boolean | null;
+  metadata: Record<string, unknown> | null;
 };
 
 function humanizeWorkType(workType: string): string {
   return workType
     .replace(/[_-]+/g, " ")
     .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function intelligenceLabel(key: string): string {
+  if (key === "unspecified") return "Unspecified intelligence";
+  const mode = key as IntelligenceMode;
+  const base = INTELLIGENCE_MODE_LABELS[mode] ?? humanizeWorkType(key);
+  return `${base} intelligence`;
 }
 
 function bump(
@@ -66,6 +89,24 @@ function bump(
   entry.workHours += workHours;
   entry.costUsd += costUsd;
   map.set(key, entry);
+}
+
+function resolveIntelligenceKey(
+  row: LedgerRow,
+  employeeDefaultById: Map<string, string>,
+): string {
+  const meta = row.metadata ?? {};
+  const fromMeta =
+    (typeof meta.intelligenceMode === "string" && meta.intelligenceMode.trim()) ||
+    (typeof meta.resolvedRunModelMode === "string" && meta.resolvedRunModelMode.trim()) ||
+    (typeof meta.modelMode === "string" && meta.modelMode.trim()) ||
+    null;
+  if (fromMeta) return intelligenceModeFromModelMode(fromMeta);
+  const employeeId = row.employee_id ? String(row.employee_id) : null;
+  if (employeeId && employeeDefaultById.has(employeeId)) {
+    return employeeDefaultById.get(employeeId)!;
+  }
+  return "unspecified";
 }
 
 /**
@@ -87,7 +128,7 @@ export async function summarizeWorkspaceUsage(
     client
       .from("ai_cost_ledger_entries")
       .select(
-        "employee_id, work_type, provider_route, provider_name, model_id, work_hours_charged, actual_cost_usd, estimated_cost_usd, total_tokens, status, billable_to_workspace",
+        "employee_id, work_type, provider_route, provider_name, model_id, work_hours_charged, actual_cost_usd, estimated_cost_usd, total_tokens, status, billable_to_workspace, metadata",
       )
       .eq("workspace_id", workspaceId)
       .gte("created_at", startIso)
@@ -95,7 +136,7 @@ export async function summarizeWorkspaceUsage(
       .limit(5000),
     client
       .from("ai_employees")
-      .select("id, name, system_employee_key, is_system_employee")
+      .select("id, name, system_employee_key, is_system_employee, model_mode, intelligence_policy")
       .eq("workspace_id", workspaceId),
   ]);
 
@@ -125,21 +166,39 @@ export async function summarizeWorkspaceUsage(
     name: string;
     system_employee_key?: string | null;
     is_system_employee?: boolean | null;
+    model_mode?: string | null;
+    intelligence_policy?: { defaultMode?: string } | null;
   }>;
 
   const nameById = new Map(employees.map((e) => [String(e.id), String(e.name)]));
-  const isMaya = (e: { system_employee_key?: string | null; is_system_employee?: boolean | null; name: string }) =>
+  const isMaya = (e: {
+    system_employee_key?: string | null;
+    is_system_employee?: boolean | null;
+    name: string;
+  }) =>
     e.system_employee_key === "maya" ||
     (Boolean(e.is_system_employee) && /maya/i.test(String(e.name)));
   const mayaIds = new Set(employees.filter(isMaya).map((e) => String(e.id)));
   const hiredEmployeeIds = employees.filter((e) => !isMaya(e)).map((e) => String(e.id));
 
+  const employeeDefaultById = new Map<string, string>();
+  for (const e of employees) {
+    const fromPolicy =
+      typeof e.intelligence_policy?.defaultMode === "string"
+        ? e.intelligence_policy.defaultMode
+        : null;
+    employeeDefaultById.set(
+      String(e.id),
+      intelligenceModeFromModelMode(fromPolicy ?? e.model_mode ?? "balanced"),
+    );
+  }
+
   const employeeAgg = new Map<string, { workHours: number; costUsd: number }>();
   const workTypeAgg = new Map<string, { workHours: number; costUsd: number }>();
   const providerAgg = new Map<string, { workHours: number; costUsd: number }>();
   const modelAgg = new Map<string, { workHours: number; costUsd: number }>();
-  /** employeeId → workType → hours (hired team only; Maya excluded) */
-  const matrix = new Map<string, Map<string, number>>();
+  /** employeeId → intelligence → workType → hours */
+  const matrix = new Map<string, Map<string, Map<string, number>>>();
   for (const id of hiredEmployeeIds) {
     matrix.set(id, new Map());
     employeeAgg.set(id, { workHours: 0, costUsd: 0 });
@@ -149,6 +208,7 @@ export async function summarizeWorkspaceUsage(
   let totalCostUsd = 0;
   let totalTokens = 0;
   let failedRunWasteUsd = 0;
+
   for (const row of rows) {
     const workHours = Number(row.work_hours_charged ?? 0);
     const costUsd = Number(row.actual_cost_usd ?? row.estimated_cost_usd ?? 0);
@@ -160,6 +220,7 @@ export async function summarizeWorkspaceUsage(
 
     const employeeId = row.employee_id ? String(row.employee_id) : "unassigned";
     const workType = row.work_type?.trim() || "other";
+    const intelligenceKey = resolveIntelligenceKey(row, employeeDefaultById);
 
     totalWorkHours += workHours;
     totalCostUsd += costUsd;
@@ -168,13 +229,14 @@ export async function summarizeWorkspaceUsage(
     bump(providerAgg, row.provider_route ?? row.provider_name ?? "unknown", workHours, costUsd);
     if (row.model_id) bump(modelAgg, row.model_id, workHours, costUsd);
 
-    // Maya (guide) stays in the period total only — not the hire-team matrix.
     if (mayaIds.has(employeeId)) continue;
 
     bump(employeeAgg, employeeId, workHours, costUsd);
-    const byType = matrix.get(employeeId) ?? new Map<string, number>();
+    const byIntel = matrix.get(employeeId) ?? new Map<string, Map<string, number>>();
+    const byType = byIntel.get(intelligenceKey) ?? new Map<string, number>();
     byType.set(workType, (byType.get(workType) ?? 0) + workHours);
-    matrix.set(employeeId, byType);
+    byIntel.set(intelligenceKey, byType);
+    matrix.set(employeeId, byIntel);
   }
 
   const toRows = (
@@ -186,7 +248,6 @@ export async function summarizeWorkspaceUsage(
       .map(([key, value]) => ({
         key,
         label: labelFor(key),
-        // Keep enough precision that summed rows still match period total.
         workHours: Math.round(value.workHours * 10000) / 10000,
         costUsd: includeCost ? Math.round(value.costUsd * 10000) / 10000 : 0,
       }))
@@ -198,13 +259,40 @@ export async function summarizeWorkspaceUsage(
   };
 
   const byEmployeeWorkType: EmployeeWorkTypeBreakdown[] = [...matrix.entries()]
-    .map(([employeeId, byType]) => {
-      const rawTotal = [...byType.values()].reduce((s, n) => s + n, 0);
+    .map(([employeeId, byIntel]) => {
+      const byIntelligence: IntelligenceWorkTypeBreakdown[] = [...byIntel.entries()]
+        .map(([intelKey, byType]) => {
+          const intelTotal = [...byType.values()].reduce((s, n) => s + n, 0);
+          return {
+            key: intelKey,
+            label: intelligenceLabel(intelKey),
+            workHours: Math.round(intelTotal * 10000) / 10000,
+            byWorkType: [...byType.entries()]
+              .map(([key, hours]) => ({
+                key,
+                label: humanizeWorkType(key),
+                workHours: Math.round(hours * 10000) / 10000,
+              }))
+              .sort((a, b) => b.workHours - a.workHours),
+          };
+        })
+        .filter((row) => row.workHours > 0)
+        .sort((a, b) => b.workHours - a.workHours || a.label.localeCompare(b.label));
+
+      const workTypeRollup = new Map<string, number>();
+      for (const intel of byIntelligence) {
+        for (const wt of intel.byWorkType) {
+          workTypeRollup.set(wt.key, (workTypeRollup.get(wt.key) ?? 0) + wt.workHours);
+        }
+      }
+
+      const rawTotal = byIntelligence.reduce((s, n) => s + n.workHours, 0);
       return {
         employeeId,
         label: employeeLabel(employeeId),
         workHours: Math.round(rawTotal * 10000) / 10000,
-        byWorkType: [...byType.entries()]
+        byIntelligence,
+        byWorkType: [...workTypeRollup.entries()]
           .map(([key, hours]) => ({
             key,
             label: humanizeWorkType(key),
@@ -213,11 +301,9 @@ export async function summarizeWorkspaceUsage(
           .sort((a, b) => b.workHours - a.workHours),
       };
     })
-    // Active hours first; keep zero-hour hires visible so every hired employee is listed.
     .sort((a, b) => b.workHours - a.workHours || a.label.localeCompare(b.label));
 
   const teamWorkHoursRaw = byEmployeeWorkType.reduce((sum, row) => sum + row.workHours, 0);
-  // Residual is Maya / guide (and any other excluded system hours).
   const guideWorkHours = Math.max(0, totalWorkHours - teamWorkHoursRaw);
 
   return {

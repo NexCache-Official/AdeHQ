@@ -38,7 +38,10 @@ import {
 } from "@/lib/supabase/ai-work-units";
 import { inferEmployeeReplyCapability } from "@/lib/ai/runtime/hot-path-shadow";
 import type { ModelMode } from "@/lib/ai/model-catalog";
-import { resolveEmployeeIntelligencePolicy } from "@/lib/ai/intelligence-policy";
+import {
+  intelligenceModeFromModelMode,
+  resolveEmployeeIntelligencePolicy,
+} from "@/lib/ai/intelligence-policy";
 import { recordRouteOutcome } from "@/lib/ai/runtime/route-health";
 import { messageLikelyNeedsStructuredEffects } from "@/lib/ai/message-intent";
 
@@ -251,6 +254,7 @@ export async function generateEmployeeQueuedResponseRuntime(
       await completeAiWorkUnit(ctx.client, ctx.workspaceId, workUnitId, {
         actualCostUsd: result.usage.totalCostUsd,
         actualWorkMinutes: result.workMinutesEstimated,
+        modelId: result.usage.modelId,
         metadata: {
           ...workUnitMetadata(input, meta, capability, result.routing?.runtimeMode),
           providerRoute: result.usage.providerRoute,
@@ -262,6 +266,9 @@ export async function generateEmployeeQueuedResponseRuntime(
           workMinutesEstimated: result.workMinutesEstimated,
           inputTokens: result.usage.inputTokens,
           outputTokens: result.usage.outputTokens,
+          modelId: result.usage.modelId,
+          modelMode,
+          intelligenceMode: intelligenceModeFromModelMode(modelMode),
           routeOptimizer: result.routing?.routeOptimizer,
         },
       });

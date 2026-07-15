@@ -30,12 +30,14 @@ npx playwright install chrome
 | `accept-topic-now.mjs` | Open room and accept an already-pending topic banner |
 | `suggestion-followup-e2e.mjs` | Topic + memory suggestion follow-up after a prior session |
 | `room-collab-e2e.mjs` | Silent steward routing + brainstorm + tasks page smoke |
+| `usage-ledger-e2e.mjs` | Employee AI reply → cost ledger + Usage API (+ intelligence breakdown) |
 
 ## Run examples
 
 ```bash
 E2E_EMAIL=… E2E_PASSWORD=… node scripts/e2e-playbook/hybrid-workforce-e2e.mjs
 E2E_EMAIL=… E2E_PASSWORD=… node scripts/e2e-playbook/topic-same-session.mjs
+E2E_EMAIL=… E2E_PASSWORD=… node scripts/e2e-playbook/usage-ledger-e2e.mjs
 ```
 
 Artifacts land under `/tmp/adehq-*` (see each script’s `OUT` path) with `report.json` + screenshots.

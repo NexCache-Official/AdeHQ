@@ -54,6 +54,16 @@ export async function GET(
         employeeId: emp.employeeId,
         label: emp.label,
         workHours: round2(emp.workHours),
+        byIntelligence: emp.byIntelligence.map((intel) => ({
+          key: intel.key,
+          label: intel.label,
+          workHours: round2(intel.workHours),
+          byWorkType: intel.byWorkType.map((wt) => ({
+            key: wt.key,
+            label: wt.label,
+            workHours: round2(wt.workHours),
+          })),
+        })),
         byWorkType: emp.byWorkType.map((wt) => ({
           key: wt.key,
           label: wt.label,

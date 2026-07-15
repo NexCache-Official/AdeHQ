@@ -296,6 +296,7 @@ export async function completeAiWorkUnit(
   result?: {
     actualCostUsd?: number;
     actualWorkMinutes?: number;
+    modelId?: string | null;
     metadata?: Record<string, unknown>;
   },
 ): Promise<AiWorkUnit> {
@@ -305,6 +306,7 @@ export async function completeAiWorkUnit(
     actual_cost_usd: result?.actualCostUsd ?? null,
     actual_work_minutes: result?.actualWorkMinutes ?? null,
   };
+  if (result?.modelId) patch.model_id = result.modelId;
   if (result?.metadata) patch.metadata = result.metadata;
   const completed = await patchAiWorkUnit(client, workspaceId, workUnitId, patch);
   void recordShadowWorkMinutesFromWorkUnit(client, completed, {

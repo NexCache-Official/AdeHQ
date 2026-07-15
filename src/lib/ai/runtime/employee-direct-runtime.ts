@@ -30,7 +30,10 @@ import {
 } from "@/lib/supabase/ai-work-units";
 import { inferEmployeeReplyCapability } from "@/lib/ai/runtime/hot-path-shadow";
 import type { ModelMode } from "@/lib/ai/model-catalog";
-import { resolveEmployeeIntelligencePolicy } from "@/lib/ai/intelligence-policy";
+import {
+  intelligenceModeFromModelMode,
+  resolveEmployeeIntelligencePolicy,
+} from "@/lib/ai/intelligence-policy";
 import { recordRouteOutcome } from "@/lib/ai/runtime/route-health";
 
 export type EmployeeDirectRuntimeDispatch = "old" | "shadow" | "legacy-guarded" | "runtime-on";
@@ -192,6 +195,7 @@ export async function generateEmployeeDirectResponseRuntime(
       await completeAiWorkUnit(ctx.client, ctx.workspaceId, workUnitId, {
         actualCostUsd: result.usage.totalCostUsd,
         actualWorkMinutes: result.workMinutesEstimated,
+        modelId: result.usage.modelId,
         metadata: {
           providerRoute: result.usage.providerRoute,
           providerName: result.usage.providerName,
@@ -204,6 +208,9 @@ export async function generateEmployeeDirectResponseRuntime(
           workMinutesEstimated: result.workMinutesEstimated,
           inputTokens: result.usage.inputTokens,
           outputTokens: result.usage.outputTokens,
+          modelId: result.usage.modelId,
+          modelMode,
+          intelligenceMode: intelligenceModeFromModelMode(modelMode),
           agentRunId: ctx.agentRunId,
           routeOptimizer: result.routing?.routeOptimizer,
         },

@@ -48,7 +48,7 @@ export default function SettingsUsagePage() {
               {data?.capacity.unlimited
                 ? "unlimited"
                 : `${(data?.capacity.allowance ?? 0).toFixed(2)}`}{" "}
-              pooled workspace hours used — do not add employee rows to work-type rows.
+              pooled workspace hours used — do not add breakdown rows together.
             </p>
             {guideHours > 0 && (
               <p className="mt-2 text-xs text-ink-3">
@@ -65,46 +65,79 @@ export default function SettingsUsagePage() {
               </p>
             </div>
             <p className="mb-4 text-xs text-ink-3">
-              Hours per hired employee, then by work type (chat, search, artifacts, etc.). These
-              rows explain the plan total above — they are not added on top of it.
+              Hours per hired employee, by intelligence (Balanced, Strong, etc.) and work type.
+              These rows explain the plan total above — they are not added on top of it.
             </p>
 
             {rows.length === 0 ? (
               <p className="text-sm text-ink-3">No hired-employee AI activity yet this period.</p>
             ) : (
               <div className="space-y-4">
-                {rows.map((employee) => (
-                  <div
-                    key={employee.employeeId}
-                    className="rounded-xl border border-border-2 bg-muted/30 p-3"
-                  >
-                    <div className="mb-2 flex items-center justify-between gap-3">
-                      <p className="text-sm font-semibold text-ink">{employee.label}</p>
-                      <p className="shrink-0 text-sm font-semibold tabular-nums text-ink">
-                        {formatHrs(employee.workHours)} hrs
-                      </p>
-                    </div>
-                    <div className="space-y-1.5">
-                      {employee.byWorkType.length === 0 ? (
+                {rows.map((employee) => {
+                  const intelRows = employee.byIntelligence ?? [];
+                  return (
+                    <div
+                      key={employee.employeeId}
+                      className="rounded-xl border border-border-2 bg-muted/30 p-3"
+                    >
+                      <div className="mb-2 flex items-center justify-between gap-3">
+                        <p className="text-sm font-semibold text-ink">{employee.label}</p>
+                        <p className="shrink-0 text-sm font-semibold tabular-nums text-ink">
+                          {formatHrs(employee.workHours)} hrs
+                        </p>
+                      </div>
+
+                      {intelRows.length === 0 && employee.byWorkType.length === 0 ? (
                         <p className="rounded-lg bg-surface px-3 py-2 text-sm text-ink-3">
                           No billable work this period
                         </p>
+                      ) : intelRows.length > 0 ? (
+                        <div className="space-y-2">
+                          {intelRows.map((intel) => (
+                            <div
+                              key={`${employee.employeeId}-${intel.key}`}
+                              className="rounded-lg bg-surface px-3 py-2"
+                            >
+                              <div className="mb-1.5 flex items-center justify-between gap-3">
+                                <span className="text-sm font-medium text-ink-2">{intel.label}</span>
+                                <span className="shrink-0 text-sm tabular-nums text-ink">
+                                  {formatHrs(intel.workHours)} hrs
+                                </span>
+                              </div>
+                              <div className="space-y-1 border-l border-border-2 pl-3">
+                                {intel.byWorkType.map((wt) => (
+                                  <div
+                                    key={`${employee.employeeId}-${intel.key}-${wt.key}`}
+                                    className="flex items-center justify-between gap-3"
+                                  >
+                                    <span className="truncate text-xs text-ink-3">{wt.label}</span>
+                                    <span className="shrink-0 text-xs tabular-nums text-ink-2">
+                                      {formatHrs(wt.workHours)} hrs
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
                       ) : (
-                        employee.byWorkType.map((wt) => (
-                          <div
-                            key={`${employee.employeeId}-${wt.key}`}
-                            className="flex items-center justify-between rounded-lg bg-surface px-3 py-2"
-                          >
-                            <span className="truncate text-sm text-ink-2">{wt.label}</span>
-                            <span className="ml-3 shrink-0 text-sm tabular-nums text-ink">
-                              {formatHrs(wt.workHours)} hrs
-                            </span>
-                          </div>
-                        ))
+                        <div className="space-y-1.5">
+                          {employee.byWorkType.map((wt) => (
+                            <div
+                              key={`${employee.employeeId}-${wt.key}`}
+                              className="flex items-center justify-between rounded-lg bg-surface px-3 py-2"
+                            >
+                              <span className="truncate text-sm text-ink-2">{wt.label}</span>
+                              <span className="ml-3 shrink-0 text-sm tabular-nums text-ink">
+                                {formatHrs(wt.workHours)} hrs
+                              </span>
+                            </div>
+                          ))}
+                        </div>
                       )}
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
 
                 <div className="flex items-center justify-between border-t border-border-2 pt-3">
                   <span className="text-sm font-medium text-ink">Hire team total</span>
