@@ -60,10 +60,15 @@ function Confetti() {
   );
 }
 
-export function OnboardingFlow() {
+export function OnboardingFlow({
+  escapeWorkspace = null,
+}: {
+  escapeWorkspace?: { id: string; name: string } | null;
+}) {
   const { state, actions } = useStore();
   const router = useRouter();
   const [stage, setStage] = useState(0);
+  const [escaping, setEscaping] = useState(false);
   const [outcomeId, setOutcomeId] = useState<WorkforceOutcomeId | null>(null);
   const [goalText, setGoalText] = useState("");
   const [domainText, setDomainText] = useState("");
@@ -205,19 +210,24 @@ export function OnboardingFlow() {
     }
   };
 
-  const skipToWorkspace = async () => {
+  const finishAndLeave = async (destination: string) => {
     setBusy(true);
     setError(null);
     try {
       const result = await ensureWorkspaceSetup();
+      // Seal + persist before navigation so AppShell cannot bounce back to /onboarding.
       await actions.completeOnboarding();
       clearOnboardingLaunchPending();
-      router.push(`/rooms/${result.firstRoomId}`);
+      const target =
+        destination === "__first_room__" ? `/rooms/${result.firstRoomId}` : destination;
+      router.replace(target);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not finish setup.");
       setBusy(false);
     }
   };
+
+  const skipToWorkspace = () => finishAndLeave("__first_room__");
 
   const continueFromMaya = async () => {
     setBusy(true);
@@ -237,33 +247,9 @@ export function OnboardingFlow() {
     }
   };
 
-  const openMayaHiringJourney = async () => {
-    setBusy(true);
-    setError(null);
-    try {
-      await ensureWorkspaceSetup();
-      await actions.completeOnboarding();
-      clearOnboardingLaunchPending();
-      router.push("/hire?onboarding=1");
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not open Maya.");
-      setBusy(false);
-    }
-  };
+  const openMayaHiringJourney = () => finishAndLeave("/hire?onboarding=1");
 
-  const goToWorkspaceFromLaunch = async () => {
-    setBusy(true);
-    setError(null);
-    try {
-      const result = await ensureWorkspaceSetup();
-      await actions.completeOnboarding();
-      clearOnboardingLaunchPending();
-      router.push(`/rooms/${result.firstRoomId}`);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not open workspace.");
-      setBusy(false);
-    }
-  };
+  const goToWorkspaceFromLaunch = () => finishAndLeave("__first_room__");
 
   const goStage = (n: number) => setStage(n);
   const next = () => setStage((s) => Math.min(4, s + 1));
@@ -311,16 +297,40 @@ export function OnboardingFlow() {
           }}
         />
 
-        <header className="relative z-[3] flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-[var(--accent)] to-[var(--accent-2)] shadow-[0_8px_24px_-8px_rgba(47,111,237,.55)]">
-            <BrandMark size={20} />
+        <header className="relative z-[3] flex flex-col gap-3">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-[var(--accent)] to-[var(--accent-2)] shadow-[0_8px_24px_-8px_rgba(47,111,237,.55)]">
+              <BrandMark size={20} />
+            </div>
+            <div className="flex min-w-0 flex-col gap-0.5">
+              <span className="font-mono text-[10px] uppercase tracking-[0.09em] text-white/45">
+                AdeHQ workspace setup
+              </span>
+              <span className="truncate text-[15px] font-bold tracking-tight">{companyName}</span>
+            </div>
           </div>
-          <div className="flex flex-col gap-0.5">
-            <span className="font-mono text-[10px] uppercase tracking-[0.09em] text-white/45">
-              AdeHQ workspace setup
-            </span>
-            <span className="text-[15px] font-bold tracking-tight">{companyName}</span>
-          </div>
+          {escapeWorkspace ? (
+            <button
+              type="button"
+              disabled={escaping || busy}
+              onClick={() => {
+                if (escaping) return;
+                setEscaping(true);
+                void (async () => {
+                  try {
+                    await actions.switchWorkspace(escapeWorkspace.id);
+                    router.replace("/");
+                  } finally {
+                    setEscaping(false);
+                  }
+                })();
+              }}
+              className="inline-flex w-fit items-center gap-1.5 rounded-full border border-white/15 bg-white/5 px-3 py-1.5 text-xs font-medium text-white/70 transition hover:border-white/25 hover:bg-white/10 hover:text-white disabled:opacity-60"
+            >
+              <ArrowLeft className="h-3.5 w-3.5" />
+              {escaping ? "Switching…" : `Back to ${escapeWorkspace.name}`}
+            </button>
+          ) : null}
         </header>
 
         <OnboardingOrgGraph

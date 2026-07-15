@@ -255,6 +255,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const backendRef = useRef<BackendMode>(backend);
   const authUserRef = useRef<User | null>(null);
   const authBusyRef = useRef(false);
+  /** Workspaces sealed complete locally — realtime reloads must not regress the flag. */
+  const onboardingSealedRef = useRef<Set<string>>(new Set());
   const setupOnboardingInFlightRef = useRef<Promise<{
     workspaceId: string;
     firstRoomId: string;
@@ -277,9 +279,29 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         };
       });
 
+      const workspaceId = loaded.workspace.id;
+      const sealed =
+        Boolean(workspaceId) && onboardingSealedRef.current.has(workspaceId);
+      const sameWorkspace = previous.workspace.id === workspaceId && Boolean(workspaceId);
+      // Never let a stale realtime reload undo a just-completed onboarding seal.
+      const onboardingComplete =
+        sealed ||
+        loaded.onboardingComplete ||
+        (sameWorkspace && previous.onboardingComplete);
+
+      if (onboardingComplete && workspaceId) {
+        onboardingSealedRef.current.add(workspaceId);
+      }
+
       const merged = mergeMayaIntoState(
         {
           ...loaded,
+          onboardingComplete,
+          workspace: {
+            ...loaded.workspace,
+            onboardingComplete:
+              onboardingComplete || Boolean(loaded.workspace.onboardingComplete),
+          },
           rooms: roomsWithMergedMessages,
           employees: mergeEmployeesById(previous.employees, loaded.employees),
           settings: previous.settings ?? loaded.settings,
@@ -313,7 +335,13 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       const loaded = await loadWorkspaceState(user, workspaceId);
       if (loaded.workspace.id) setActiveWorkspaceId(loaded.workspace.id);
       const workspaces = await listUserWorkspaces(user.id);
-      setUserWorkspaces(workspaces);
+      setUserWorkspaces(
+        workspaces.map((ws) =>
+          onboardingSealedRef.current.has(ws.id)
+            ? { ...ws, onboardingComplete: true }
+            : ws,
+        ),
+      );
       setRemoteState(loaded);
       setBackend("supabase");
       setHydrated(true);
@@ -939,10 +967,13 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
             throw new Error("Workspace not ready. Complete onboarding setup before hiring.");
           }
 
+          if (workspaceId) onboardingSealedRef.current.add(workspaceId);
+
           if (backendRef.current !== "supabase") {
             set((s) => ({
               ...s,
               onboardingComplete: true,
+              workspace: { ...s.workspace, onboardingComplete: true },
               employees: s.employees.some((e) => e.id === employee.id)
                 ? s.employees
                 : [...s.employees, employee],
@@ -980,6 +1011,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
             set((s) => ({
               ...s,
               onboardingComplete: true,
+              workspace: { ...s.workspace, onboardingComplete: true },
               employees: [...s.employees, employee],
               rooms: [room, ...s.rooms.filter((existing) => existing.id !== room.id)],
               workLog: [workLog, ...s.workLog],
@@ -1007,6 +1039,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
             const bootstrapped = await bootstrapWorkspaceRemote(name);
             workspaceId = bootstrapped.workspaceId;
           }
+
+          onboardingSealedRef.current.add(workspaceId);
 
           await persistRoom(workspaceId, room);
           await Promise.all([
@@ -1051,6 +1085,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           authUserRef.current = null;
           setBackend("demo");
           setUserWorkspaces([]);
+          onboardingSealedRef.current.clear();
           clearActiveWorkspaceId();
           setState(buildSignedOutState());
           setHydrated(true);
@@ -1063,12 +1098,53 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       clearError: () => setError(null),
 
       completeOnboarding: async () => {
-        if (stateRef.current.onboardingComplete) return;
-        set((s) => ({ ...s, onboardingComplete: true }));
-        if (backendRef.current !== "supabase") return;
         const workspaceId = stateRef.current.workspace.id;
+        if (stateRef.current.onboardingComplete && workspaceId) {
+          onboardingSealedRef.current.add(workspaceId);
+          return;
+        }
+
+        if (workspaceId) onboardingSealedRef.current.add(workspaceId);
+
+        set((s) => ({
+          ...s,
+          onboardingComplete: true,
+          workspace: { ...s.workspace, onboardingComplete: true },
+        }));
+        if (workspaceId) {
+          setUserWorkspaces((prev) =>
+            prev.map((ws) =>
+              ws.id === workspaceId ? { ...ws, onboardingComplete: true } : ws,
+            ),
+          );
+        }
+
+        if (backendRef.current !== "supabase") return;
         if (!workspaceId) return;
+
         await persistWorkspace(workspaceId, { onboardingComplete: true });
+
+        // Confirm the write stuck; if RLS blocked the update, fail loudly.
+        const { data, error } = await supabase
+          .from("workspaces")
+          .select("onboarding_complete")
+          .eq("id", workspaceId)
+          .maybeSingle();
+        if (error) throw error;
+        if (!data?.onboarding_complete) {
+          onboardingSealedRef.current.delete(workspaceId);
+          set((s) => ({
+            ...s,
+            onboardingComplete: false,
+            workspace: { ...s.workspace, onboardingComplete: false },
+          }));
+          setUserWorkspaces((prev) =>
+            prev.map((ws) =>
+              ws.id === workspaceId ? { ...ws, onboardingComplete: false } : ws,
+            ),
+          );
+          throw new Error("Could not mark onboarding complete. Try again.");
+        }
       },
 
       updateProfile: (patch) => {

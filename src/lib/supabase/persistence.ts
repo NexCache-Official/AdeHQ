@@ -1399,12 +1399,18 @@ export async function persistWorkspace(
 
   if (!Object.keys(payload).length) return;
 
-  const { error } = await supabase
+  // Prefer returning the row so RLS "0 rows updated" cannot look like success.
+  const { data, error } = await supabase
     .from("workspaces")
     .update(payload)
-    .eq("id", workspaceId);
+    .eq("id", workspaceId)
+    .select("id, onboarding_complete")
+    .maybeSingle();
 
   if (error) throw error;
+  if (!data) {
+    throw new Error("Could not update workspace (not found or blocked by permissions).");
+  }
 }
 
 export async function persistEmployee(workspaceId: string, employee: AIEmployee) {

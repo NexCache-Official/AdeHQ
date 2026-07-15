@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
 import { OnboardingFlow } from "@/components/OnboardingFlow";
 import { useConfirmedEmailGate } from "@/components/auth/useConfirmedEmailGate";
 import { isPasswordRecoveryPending } from "@/lib/auth/recovery";
@@ -18,7 +17,6 @@ export default function OnboardingPage() {
   const router = useRouter();
   const emailGate = useConfirmedEmailGate();
   const [launchPending, setLaunchPending] = useState(false);
-  const [switching, setSwitching] = useState(false);
 
   const completedOther = useMemo(
     () =>
@@ -53,9 +51,13 @@ export default function OnboardingPage() {
       !isOnboardingLaunchPending()
     ) {
       void (async () => {
-        await actions.completeOnboarding();
-        clearOnboardingLaunchPending();
-        router.replace("/");
+        try {
+          await actions.completeOnboarding();
+          clearOnboardingLaunchPending();
+          router.replace("/");
+        } catch (err) {
+          console.error("[AdeHQ onboarding recovery]", err);
+        }
       })();
       return;
     }
@@ -80,17 +82,6 @@ export default function OnboardingPage() {
     actions,
   ]);
 
-  const backToCompleted = async () => {
-    if (!completedOther || switching) return;
-    setSwitching(true);
-    try {
-      await actions.switchWorkspace(completedOther.id);
-      router.replace("/");
-    } finally {
-      setSwitching(false);
-    }
-  };
-
   // Never render the flow (even for a frame) for signed-out users or users who
   // have already completed onboarding — unless Launch handoff is in progress.
   if (emailGate !== "allowed" || !hydrated || !state.user) {
@@ -102,21 +93,14 @@ export default function OnboardingPage() {
   }
 
   return (
-    <div className="relative h-screen overflow-hidden bg-[var(--canvas)]">
-      {completedOther ? (
-        <div className="absolute left-4 top-4 z-20 sm:left-6 sm:top-5">
-          <button
-            type="button"
-            disabled={switching}
-            onClick={() => void backToCompleted()}
-            className="inline-flex items-center gap-1.5 rounded-full border border-border bg-surface/90 px-3 py-1.5 text-xs font-medium text-ink-2 shadow-sm backdrop-blur transition hover:border-accent/40 hover:text-ink disabled:opacity-60"
-          >
-            <ArrowLeft className="h-3.5 w-3.5" />
-            {switching ? "Switching…" : `Back to ${completedOther.name}`}
-          </button>
-        </div>
-      ) : null}
-      <OnboardingFlow />
+    <div className="h-screen overflow-hidden bg-[var(--canvas)]">
+      <OnboardingFlow
+        escapeWorkspace={
+          completedOther
+            ? { id: completedOther.id, name: completedOther.name }
+            : null
+        }
+      />
     </div>
   );
 }
