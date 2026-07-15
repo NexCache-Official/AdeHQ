@@ -13,6 +13,7 @@ import { EmployeeCard } from "@/components/EmployeeCard";
 import { ProjectRoomCard } from "@/components/ProjectRoomCard";
 import { ApprovalCard } from "@/components/ApprovalCard";
 import { WorkLogTimeline } from "@/components/WorkLogTimeline";
+import { UnclaimedInboxBanner } from "@/components/inbox/UnclaimedInboxBanner";
 import { Card } from "@/components/ui";
 import {
   ArrowRight,
@@ -72,6 +73,7 @@ export default function HomePage() {
 
   return (
     <PageContainer wide className="pb-16">
+      <UnclaimedInboxBanner />
       {/* Command center hero */}
       <div className="relative mb-[18px] overflow-hidden rounded-[22px] hero-dark p-8 text-white shadow-[0_20px_50px_-24px_rgba(40,30,15,0.5)] sm:p-8">
         <div className="pointer-events-none absolute -right-16 -top-16 h-[280px] w-[280px] rounded-full bg-[radial-gradient(circle,var(--hero-glow),transparent_70%)] blur-[20px]" />

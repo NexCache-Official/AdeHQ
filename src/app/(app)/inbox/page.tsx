@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   Inbox as InboxIcon,
   Send as SendIcon,
@@ -45,7 +45,6 @@ import {
   fetchInboxLabels,
 } from "@/lib/inbox/client";
 import { useInboxRealtime } from "@/lib/inbox/use-inbox-realtime";
-import { ClaimGate } from "@/components/inbox/ClaimGate";
 import {
   ThreadReader,
   type AssignSavePayload,
@@ -90,8 +89,8 @@ function relativeTime(iso: string | null): string {
 
 export default function InboxPage() {
   const { state } = useStore();
+  const router = useRouter();
   const workspaceId = state.workspace.id;
-  const workspaceName = state.workspace.name || "Workspace";
 
   const [mailbox, setMailbox] = useState<InboxMailboxResponse | null>(null);
   const [mailboxError, setMailboxError] = useState<string | null>(null);
@@ -171,6 +170,13 @@ export default function InboxPage() {
     setNextCursor(null);
     void loadMailbox();
   }, [loadMailbox]);
+
+  // Unclaimed workspaces claim under Settings → Inbox (dedicated page).
+  useEffect(() => {
+    if (mailbox && !mailbox.claimed) {
+      router.replace("/settings/inbox");
+    }
+  }, [mailbox, router]);
 
   // --- Folder loading -------------------------------------------------------
   const applyFolderToUi = useCallback((target: InboxFolder, cached: FolderCache) => {
@@ -801,14 +807,7 @@ export default function InboxPage() {
     return <CenterMessage text="Loading inbox…" spinner />;
   }
   if (!mailbox.claimed) {
-    return (
-      <ClaimGate
-        workspaceId={workspaceId}
-        canClaim={mailbox.canClaim}
-        defaultDisplayName={workspaceName}
-        onClaimed={loadMailbox}
-      />
-    );
+    return <CenterMessage text="Opening inbox setup…" spinner />;
   }
   if (!mailbox.access.canRead) {
     return (

@@ -148,7 +148,7 @@ export async function createWorkspaceForUser(
     console.warn("[AdeHQ provider allocations create]", error);
   });
 
-  // Mailbox is claim-first — owners claim via /inbox. Do not auto-provision.
+  // Mailbox is claim-first — owners claim via Settings → Inbox. Do not auto-provision.
 
   if (options?.sendWelcome) {
     void sendWelcomeEmail(user, workspaceId);

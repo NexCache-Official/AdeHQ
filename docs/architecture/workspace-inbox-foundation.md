@@ -13,7 +13,7 @@ Slice 0 transport proof remains under `src/lib/inbox-transport-proof/` — do no
 ## Address model
 
 - Format: `{canonical_local_part}@inbox.adehq.com`
-- **Claim-first**: owner/admin chooses the local-part; no silent auto-provision on workspace create
+- **Claim-first**: owner/admin chooses the local-part at **Settings → Inbox** (unclaimed `/inbox` redirects there); no silent auto-provision on workspace create
 - Default assistance mode on claim: **Organise inbox** (`ai_triage`) with consent copy (no auto-draft/send)
 - Consent audit: `mailbox.assistance_consent`
 - `canonical_local_part` is **immutable** after claim
