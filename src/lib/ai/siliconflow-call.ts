@@ -83,10 +83,16 @@ export async function streamSiliconFlowText(
   timeoutMs: number,
   temperature = 0.45,
   onReplyDelta: (delta: string) => void,
+  externalSignal?: AbortSignal,
 ): Promise<SiliconFlowTextStreamResult> {
   const modelId = model.trim() || DEFAULT_SILICONFLOW_MODEL;
   const abortController = new AbortController();
   const timer = setTimeout(() => abortController.abort(), timeoutMs);
+  const onExternalAbort = () => abortController.abort();
+  if (externalSignal) {
+    if (externalSignal.aborted) abortController.abort();
+    else externalSignal.addEventListener("abort", onExternalAbort, { once: true });
+  }
   try {
     const result = streamText({
       model: siliconFlowChatModel(modelId),
@@ -100,6 +106,9 @@ export async function streamSiliconFlowText(
 
     let text = "";
     for await (const delta of result.textStream) {
+      if (abortController.signal.aborted) {
+        throw new Error("Stream aborted");
+      }
       if (!delta) continue;
       text += delta;
       onReplyDelta(delta);
@@ -113,9 +122,18 @@ export async function streamSiliconFlowText(
       outputTokens: usage?.outputTokens,
     };
   } catch (error) {
+    if (
+      abortController.signal.aborted ||
+      (error instanceof Error && /abort/i.test(error.message))
+    ) {
+      const abortErr = new Error("Stream aborted");
+      abortErr.name = "AbortError";
+      throw abortErr;
+    }
     throw new Error(formatProviderError(error, "siliconflow", modelId));
   } finally {
     clearTimeout(timer);
+    externalSignal?.removeEventListener("abort", onExternalAbort);
   }
 }
 

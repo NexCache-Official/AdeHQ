@@ -122,12 +122,21 @@ export async function POST(
               {
                 mode: body.mode,
                 onReplyDelta: (text) => send("delta", { text }),
+                abortSignal: request.signal,
               },
             );
             send("done", buildPayload(result));
           } catch (error) {
             if (error instanceof AgentRunClaimError) {
               send("error", { error: error.code, code: error.code });
+            } else if (
+              error instanceof Error &&
+              (error.name === "AbortError" || /abort|paused/i.test(error.message))
+            ) {
+              send("error", {
+                error: error.message,
+                code: "human_typing_pause",
+              });
             } else {
               const message = serializeUnknownError(error);
               try {
@@ -163,11 +172,21 @@ export async function POST(
       params.runId,
       {
         mode: body.mode,
+        abortSignal: request.signal,
       },
     );
 
     return NextResponse.json(buildPayload(result));
   } catch (error) {
+    if (
+      error instanceof Error &&
+      (error.name === "AbortError" || /abort|paused/i.test(error.message))
+    ) {
+      return NextResponse.json(
+        { ok: false, error: error.message, code: "human_typing_pause" },
+        { status: 499 },
+      );
+    }
     if (error instanceof AgentRunClaimError) {
       return NextResponse.json(
         { ok: false, error: error.code, code: error.code },

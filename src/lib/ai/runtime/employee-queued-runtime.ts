@@ -335,6 +335,7 @@ export async function generateEmployeeQueuedResponseRuntime(
 
 export type EmployeeReplyStreaming = {
   onReplyDelta: (delta: string) => void;
+  abortSignal?: AbortSignal;
 };
 
 /** Providers whose employee composer path supports token streaming today. */
@@ -435,6 +436,7 @@ async function streamEmployeeQueuedResponse(
       timeoutMs,
       temperature,
       streaming.onReplyDelta,
+      streaming.abortSignal,
     );
 
     // Streaming has no effects channel — recover executable calls from faux

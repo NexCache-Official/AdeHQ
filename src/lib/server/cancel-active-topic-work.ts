@@ -23,6 +23,10 @@ export type CancelActiveTopicWorkParams = {
   topicId: string;
   employeeId?: string;
   reason?: string;
+  /** Stored on run_metadata.cancelReason (default user_requested_stop). */
+  cancelReasonCode?: string;
+  /** When true, skip cancelling browser research (typing pause keeps research optional). */
+  skipBrowserResearch?: boolean;
   /** When set, this agent run id is left active (the stop-ack run). */
   exceptAgentRunId?: string;
 };
@@ -57,7 +61,7 @@ async function cancelTopicAgentRunsExcept(
     const status = String(row.status);
     const meta = { ...((row.run_metadata as Record<string, unknown>) ?? {}) };
     meta.collaborationStatus = "cancelled";
-    meta.cancelReason = "user_requested_stop";
+    meta.cancelReason = params.cancelReasonCode ?? "user_requested_stop";
 
     if (status === "queued" || status === "waiting") {
       const { error: cancelError } = await client
@@ -99,26 +103,28 @@ export async function cancelActiveTopicWork(
   const reason = params.reason ?? "Stopped by user request.";
   const cancelledBrowserResearchRuns: BrowserResearchRun[] = [];
 
-  const runs = await listBrowserResearchRuns(client, {
-    workspaceId: params.workspaceId,
-    topicId: params.topicId,
-    employeeId: params.employeeId,
-    limit: 10,
-  });
+  if (!params.skipBrowserResearch) {
+    const runs = await listBrowserResearchRuns(client, {
+      workspaceId: params.workspaceId,
+      topicId: params.topicId,
+      employeeId: params.employeeId,
+      limit: 10,
+    });
 
-  for (const run of runs) {
-    if (!isActiveBrowserResearchRun(run)) continue;
-    if (params.employeeId && run.employeeId !== params.employeeId) continue;
-    try {
-      const cancelled = await cancelBrowserResearchRun(
-        client,
-        params.workspaceId,
-        run.id,
-        reason,
-      );
-      cancelledBrowserResearchRuns.push(cancelled);
-    } catch (error) {
-      console.warn("[AdeHQ work stop] browser research cancel failed", run.id, error);
+    for (const run of runs) {
+      if (!isActiveBrowserResearchRun(run)) continue;
+      if (params.employeeId && run.employeeId !== params.employeeId) continue;
+      try {
+        const cancelled = await cancelBrowserResearchRun(
+          client,
+          params.workspaceId,
+          run.id,
+          reason,
+        );
+        cancelledBrowserResearchRuns.push(cancelled);
+      } catch (error) {
+        console.warn("[AdeHQ work stop] browser research cancel failed", run.id, error);
+      }
     }
   }
 

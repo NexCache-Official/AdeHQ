@@ -82,6 +82,10 @@ export type TopicOrchestrationState = {
   currentWorkIntent?: TopicOrchestrationWorkIntent;
   lastDecision?: string;
   lastProjectEntity?: string;
+  /** Human message ids already flushed in a typing-burst orchestration. */
+  burstConsumedMessageIds?: string[];
+  burstLockToken?: string;
+  burstLockUntil?: string;
   createdAt?: string;
   updatedAt?: string;
 };

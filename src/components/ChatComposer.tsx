@@ -245,6 +245,7 @@ export function ChatComposer({
   artifactIntent,
   onContextConsumed,
   onAddEmployee,
+  onTypingChange,
   browserResearchAvailable = false,
   browserResearchEnabled = false,
   onBrowserResearchEnabledChange,
@@ -266,6 +267,8 @@ export function ChatComposer({
   ) => void | Promise<void>;
   onUploadFiles?: (files: File[]) => Promise<ComposerUploadedFile[]>;
   onAddEmployee?: () => void;
+  /** Broadcast local human typing for topic presence / AI pause. */
+  onTypingChange?: (typing: boolean) => void;
   disabled?: boolean;
   placeholder?: string;
   draftText?: string;
@@ -381,6 +384,7 @@ export function ChatComposer({
     const next = e.target.value;
     setValue(next);
     updateQueryState(next, e.target.selectionStart);
+    onTypingChange?.(next.trim().length > 0);
   };
 
   const addFiles = (files: FileList | File[]) => {
@@ -602,6 +606,7 @@ export function ChatComposer({
     setSlashQuery(null);
     setTrackedMentions([]);
     setCommandNotice(null);
+    onTypingChange?.(false);
 
     try {
       await onSend(
@@ -1070,6 +1075,7 @@ export function ChatComposer({
             value={value}
             onChange={handleChange}
             onKeyDown={handleKeyDown}
+            onBlur={() => onTypingChange?.(false)}
             onPaste={(event) => {
               if (event.clipboardData.files.length > 0) addFiles(event.clipboardData.files);
             }}

@@ -207,6 +207,11 @@ function rowToTopicOrchestrationState(
     currentWorkIntent: normalizeWorkIntent(row.current_work_intent),
     lastDecision: row.last_decision ? String(row.last_decision) : undefined,
     lastProjectEntity: row.last_project_entity ? String(row.last_project_entity) : undefined,
+    burstConsumedMessageIds: Array.isArray(row.burst_consumed_message_ids)
+      ? (row.burst_consumed_message_ids as unknown[]).map(String)
+      : [],
+    burstLockToken: row.burst_lock_token ? String(row.burst_lock_token) : undefined,
+    burstLockUntil: row.burst_lock_until ? String(row.burst_lock_until) : undefined,
     createdAt: row.created_at ? String(row.created_at) : undefined,
     updatedAt: row.updated_at ? String(row.updated_at) : undefined,
   };
@@ -256,11 +261,38 @@ export async function persistTopicOrchestrationState(
         current_work_intent: state.currentWorkIntent ?? "unknown",
         last_decision: state.lastDecision ?? null,
         last_project_entity: state.lastProjectEntity ?? null,
+        burst_consumed_message_ids: state.burstConsumedMessageIds ?? [],
+        burst_lock_token: state.burstLockToken ?? null,
+        burst_lock_until: state.burstLockUntil ?? null,
         updated_at: new Date().toISOString(),
       },
       { onConflict: "workspace_id,topic_id" },
     );
     if (error && !isMissingStateTableError(error)) {
+      // Older DBs may lack burst_* columns — retry without them so steward still works.
+      const msg = String(error.message ?? "");
+      if (msg.includes("burst_")) {
+        const { error: fallbackError } = await client.from("topic_orchestration_state").upsert(
+          {
+            workspace_id: state.workspaceId,
+            room_id: state.roomId,
+            topic_id: state.topicId,
+            active_employee_ids: state.activeEmployeeIds,
+            last_human_message_id: state.lastHumanMessageId ?? null,
+            last_ai_message_id: state.lastAiMessageId ?? null,
+            pending_questions: state.pendingQuestions,
+            current_work_intent: state.currentWorkIntent ?? "unknown",
+            last_decision: state.lastDecision ?? null,
+            last_project_entity: state.lastProjectEntity ?? null,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: "workspace_id,topic_id" },
+        );
+        if (fallbackError && !isMissingStateTableError(fallbackError)) {
+          console.warn("[AdeHQ room steward] state persist failed", fallbackError);
+        }
+        return;
+      }
       console.warn("[AdeHQ room steward] state persist failed", error);
     }
   } catch (error) {

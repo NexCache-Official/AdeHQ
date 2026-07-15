@@ -53,6 +53,7 @@
     "test:intelligence-fast-path": "tsx scripts/test-intelligence-fast-path.ts",
     "test:intelligence-pipeline": "tsx scripts/test-intelligence-pipeline.ts",
     "test:work-stop": "tsx scripts/test-work-stop.ts",
+    "test:human-burst": "tsx scripts/test-human-burst.ts",
     "test:topic-context-imports": "tsx scripts/test-topic-context-imports.ts",
     "test:browser-research:mock": "tsx scripts/test-browser-research-mock.ts",
     "test:browser-research:tavily": "tsx scripts/test-browser-research-tavily.ts",

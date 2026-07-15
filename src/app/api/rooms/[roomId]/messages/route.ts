@@ -342,6 +342,22 @@ export async function POST(
     const stopDetection = detectWorkStopRequest(trimmed);
     let workStopCancelResult: CancelActiveTopicWorkResult | null = null;
 
+    // Normal sends defer orchestration until room-wide quiet (typing pause + burst).
+    // Work-stop still runs immediately so "stop" is not delayed 5s.
+    // Near-duplicate human lines are filtered at flush in runTopicBurstOrchestration.
+    if (!stopDetection.isStop) {
+      return NextResponse.json({
+        humanMessage,
+        deferred: true,
+        queuedRuns: [],
+        blockedRuns: [],
+        waitingRuns: [],
+        cancelledResearchRuns: [],
+        aiResponses: [],
+        aiMessages: [],
+      });
+    }
+
     const [recentMessagesResult, topicsResult, topicOrchestrationState] = await Promise.all([
       client
         .from("messages")

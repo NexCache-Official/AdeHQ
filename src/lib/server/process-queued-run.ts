@@ -272,6 +272,7 @@ export async function processQueuedAgentRun(
     mode?: "mock" | "live";
     content?: string;
     onReplyDelta?: (delta: string) => void;
+    abortSignal?: AbortSignal;
   } = {},
 ): Promise<{
   reply: string;
@@ -337,7 +338,32 @@ export async function processQueuedAgentRun(
     ? Number(usageRow.estimated_max_output_tokens)
     : undefined;
 
+  const abortController = new AbortController();
+  const onExternalAbort = () => abortController.abort();
+  if (options.abortSignal) {
+    if (options.abortSignal.aborted) abortController.abort();
+    else options.abortSignal.addEventListener("abort", onExternalAbort, { once: true });
+  }
+  const cancelPoll = setInterval(() => {
+    void client
+      .from("agent_runs")
+      .select("status")
+      .eq("workspace_id", workspaceId)
+      .eq("id", runId)
+      .maybeSingle()
+      .then(({ data }) => {
+        const status = data ? String(data.status) : "";
+        if (status === "cancelled" || status === "failed") abortController.abort();
+      });
+  }, 750);
+
   try {
+    if (abortController.signal.aborted) {
+      const err = new Error("Run aborted");
+      err.name = "AbortError";
+      throw err;
+    }
+
     const ctx = await loadTopicContext(client, workspaceId, roomId, topicId, {
       lean: true,
     });
@@ -1704,7 +1730,9 @@ export async function processQueuedAgentRun(
       routeInput,
       routeOptions,
       queuedMeta,
-      options.onReplyDelta ? { onReplyDelta: options.onReplyDelta } : undefined,
+      options.onReplyDelta
+        ? { onReplyDelta: options.onReplyDelta, abortSignal: abortController.signal }
+        : undefined,
     );
 
     // If the user clearly asked for CRM/Drive/task work but the model returned
@@ -2122,7 +2150,37 @@ export async function processQueuedAgentRun(
         : undefined,
     };
   } catch (error) {
-    const message = serializeUnknownError(error);
+    const aborted =
+      abortController.signal.aborted ||
+      (error instanceof Error &&
+        (error.name === "AbortError" || /abort/i.test(error.message)));
+    const message = aborted
+      ? "Paused — waiting for humans to finish typing."
+      : serializeUnknownError(error);
+
+    if (aborted) {
+      const meta = { ...runMetadata, cancelReason: "human_typing_pause" };
+      await client
+        .from("agent_runs")
+        .update({
+          status: "cancelled",
+          error_message: message,
+          run_metadata: meta,
+          completed_at: nowISO(),
+        })
+        .eq("workspace_id", workspaceId)
+        .eq("id", runId)
+        .in("status", ["queued", "waiting", "running"]);
+      await client
+        .from("ai_employees")
+        .update({ status: "idle", last_active_at: nowISO() })
+        .eq("workspace_id", workspaceId)
+        .eq("id", employeeId);
+      const abortErr = new Error(message);
+      abortErr.name = "AbortError";
+      throw abortErr;
+    }
+
     await persistRunOrchestrationPhase(
       client,
       workspaceId,
@@ -2158,5 +2216,8 @@ export async function processQueuedAgentRun(
       .eq("workspace_id", workspaceId)
       .eq("id", employeeId);
     throw error;
+  } finally {
+    clearInterval(cancelPoll);
+    options.abortSignal?.removeEventListener("abort", onExternalAbort);
   }
 }

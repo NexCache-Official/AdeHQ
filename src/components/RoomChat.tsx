@@ -65,6 +65,12 @@ import {
 } from "@/lib/ai/browser-research/client-api";
 import { useBrowserResearchRealtime } from "@/lib/ai/browser-research/use-browser-research-realtime";
 import { useMessagesRealtime } from "@/lib/realtime/use-messages-realtime";
+import { useAgentRunsRealtime } from "@/lib/realtime/use-agent-runs-realtime";
+import { useTopicPresence } from "@/lib/realtime/use-topic-presence";
+import {
+  formatTypingHumansLabel,
+  HUMAN_TYPING_QUIET_MS,
+} from "@/lib/orchestration/human-burst";
 import { BrowserResearchMessageCard } from "@/components/browser-research/BrowserResearchMessageCard";
 import { STATUS_META } from "@/lib/icons";
 import { effectiveEmployeeStatus, isMayaEmployee } from "@/lib/maya-employee";
@@ -151,6 +157,7 @@ async function runAgentProcessRequest(params: {
   workspaceId: string;
   headers: Record<string, string>;
   onReplyText?: (fullText: string) => void;
+  signal?: AbortSignal;
 }): Promise<ProcessRequestResult> {
   const wantsStream = Boolean(params.onReplyText) && EMPLOYEE_REPLY_STREAMING;
   const res = await fetch(`/api/agent-runs/${params.runId}/process`, {
@@ -164,6 +171,7 @@ async function runAgentProcessRequest(params: {
       mode: "live",
       ...(wantsStream ? { stream: true } : {}),
     }),
+    signal: params.signal,
   });
 
   const contentType = res.headers.get("content-type") ?? "";
@@ -331,6 +339,12 @@ export function RoomChat({
   const processingRunIdsRef = useRef(new Set<string>());
   const sendInFlightRef = useRef(false);
   const lastSendFingerprintRef = useRef<{ content: string; at: number } | null>(null);
+  const processAbortByRunRef = useRef(new Map<string, AbortController>());
+  const quietTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingBurstFlushRef = useRef(false);
+  const flushInFlightRef = useRef(false);
+  const lastHumanActivityAtRef = useRef(0);
+  const anyHumanTypingRef = useRef(false);
   const [failedSend, setFailedSend] = useState<PendingSend | null>(null);
   const [sendError, setSendError] = useState<string | null>(null);
   const [activeRuns, setActiveRuns] = useState<ActiveRun[]>([]);
@@ -351,6 +365,23 @@ export function RoomChat({
   const bottomRef = useRef<HTMLDivElement>(null);
   const messagesScrollRef = useRef<HTMLDivElement>(null);
   const scrollTopicKeyRef = useRef<string | null>(null);
+
+  const useServerApi = backend === "supabase";
+  const {
+    typingHumans,
+    anyHumanTyping,
+    setLocalTyping,
+  } = useTopicPresence({
+    enabled: useServerApi && Boolean(topic?.id && state.workspace?.id && state.user?.id),
+    workspaceId: state.workspace?.id,
+    topicId: topic?.id,
+    userId: state.user?.id,
+    displayName: state.user?.name ?? "You",
+  });
+  const typingLabel = formatTypingHumansLabel(typingHumans, state.user?.id);
+  useEffect(() => {
+    anyHumanTypingRef.current = anyHumanTyping;
+  }, [anyHumanTyping]);
 
   const allTopicMessages = topic
     ? room.messages
@@ -645,8 +676,6 @@ export function RoomChat({
     onContinueHiringHere: coordinator?.handleContinueHiringHere,
   });
 
-  const useServerApi = backend === "supabase";
-
   const researchEmployee = useMemo(() => {
     if (dmEmployee && canEmployeeUseBrowserResearch(dmEmployee)) return dmEmployee;
     return roomEmployees.find(canEmployeeUseBrowserResearch);
@@ -723,6 +752,9 @@ export function RoomChat({
   // any feature flag, unlike useBrowserResearchRealtime above. Without this,
   // rooms/DMs with no research-capable employee had no realtime delivery at
   // all and depended on a manual reload or the heavy whole-workspace refetch.
+  const scheduleBurstFlushRef = useRef<(() => void) | null>(null);
+  const pauseAiForTypingRef = useRef<(() => Promise<void>) | null>(null);
+
   const handleMessageInsert = useCallback(
     (message: RoomMessage) => {
       if (!topic) return;
@@ -735,8 +767,13 @@ export function RoomChat({
       }
       actions.addMessage(room.id, { ...message, topicId: topic.id });
       notifyTopicSummaryUpdated(topic.id);
+      if (message.senderType === "human" && message.senderId !== state.user?.id) {
+        // Remote human extended the burst — reset quiet window for everyone.
+        scheduleBurstFlushRef.current?.();
+        void pauseAiForTypingRef.current?.();
+      }
     },
-    [actions, room.id, topic],
+    [actions, room.id, state.user?.id, topic],
   );
 
   const handleMessageUpdate = useCallback(
@@ -757,6 +794,36 @@ export function RoomChat({
     topicId: topic?.id,
     onInsert: handleMessageInsert,
     onUpdate: handleMessageUpdate,
+  });
+
+  const handleAgentRunRealtime = useCallback(
+    (run: {
+      runId: string;
+      status: string;
+      cancelReason?: string | null;
+    }) => {
+      if (run.status !== "cancelled" && run.status !== "failed") return;
+      const controller = processAbortByRunRef.current.get(run.runId);
+      if (controller) {
+        controller.abort();
+        processAbortByRunRef.current.delete(run.runId);
+      }
+      actions.removeLocalMessage(room.id, `stream-${run.runId}`);
+      processingRunIdsRef.current.delete(run.runId);
+      setActiveRuns((prev) => prev.filter((r) => r.runId !== run.runId));
+      if (run.cancelReason === "human_typing_pause" || /typing|paused/i.test(run.status)) {
+        // Keep quiet-gate pending so a flush still happens after room quiet.
+        pendingBurstFlushRef.current = true;
+      }
+    },
+    [actions, room.id],
+  );
+
+  useAgentRunsRealtime({
+    enabled: backend === "supabase",
+    workspaceId: state.workspace?.id,
+    topicId: topic?.id,
+    onUpdate: handleAgentRunRealtime,
   });
 
   const activeResearchRunIds = useMemo(
@@ -820,6 +887,110 @@ export function RoomChat({
     },
     [actions, room.id, room.messages],
   );
+
+  const clearAiTypingUi = useCallback(() => {
+    for (const [runId, controller] of processAbortByRunRef.current) {
+      controller.abort();
+      processAbortByRunRef.current.delete(runId);
+      actions.removeLocalMessage(room.id, `stream-${runId}`);
+    }
+    setActiveRuns((prev) =>
+      prev.map((r) =>
+        ["reading", "thinking", "typing", "queued"].includes(r.phase)
+          ? { ...r, phase: "waiting_on" as const, waitingOnEmployeeName: "the room" }
+          : r,
+      ),
+    );
+  }, [actions, room.id]);
+
+  const pauseAiForTyping = useCallback(async () => {
+    if (!topic || !useServerApi) return;
+    clearAiTypingUi();
+    try {
+      const headers = await withDebugHeaders();
+      await fetch(`/api/rooms/${room.id}/topics/${topic.id}/pause-ai`, {
+        method: "POST",
+        headers,
+      });
+    } catch (error) {
+      console.warn("[AdeHQ] pause-ai failed", error);
+    }
+  }, [clearAiTypingUi, room.id, topic, useServerApi]);
+
+  const flushBurstOrchestration = useCallback(async () => {
+    if (!topic || !useServerApi || !state.workspace?.id) return;
+    if (anyHumanTyping) return;
+    if (flushInFlightRef.current) return;
+    if (Date.now() - lastHumanActivityAtRef.current < HUMAN_TYPING_QUIET_MS) return;
+
+    flushInFlightRef.current = true;
+    pendingBurstFlushRef.current = false;
+    try {
+      const headers = await withDebugHeaders();
+      const res = await fetch(`/api/rooms/${room.id}/topics/${topic.id}/orchestrate-burst`, {
+        method: "POST",
+        headers,
+      });
+      const payload = await parseJsonResponse<{
+        queuedRuns?: QueuedRunClient[];
+        skipped?: boolean;
+        skipReason?: string;
+        error?: string;
+      }>(res);
+      if (!res.ok) {
+        if (payload.skipReason === "still_hot" || payload.skipReason === "lock_held") {
+          pendingBurstFlushRef.current = true;
+          return;
+        }
+        trace("agent-run", "warn", "Burst orchestrate failed", payload);
+        return;
+      }
+      if (payload.skipReason === "still_hot" || payload.skipReason === "lock_held") {
+        pendingBurstFlushRef.current = true;
+        return;
+      }
+      if (payload.queuedRuns?.length) {
+        // processQueuedRuns is defined below — call via ref after assignment
+        await processQueuedRunsRef.current?.(payload.queuedRuns, []);
+      }
+    } catch (error) {
+      console.warn("[AdeHQ] orchestrate-burst failed", error);
+      pendingBurstFlushRef.current = true;
+    } finally {
+      flushInFlightRef.current = false;
+    }
+  }, [anyHumanTyping, room.id, state.workspace?.id, topic, trace, useServerApi]);
+
+  const processQueuedRunsRef = useRef<
+    ((queued: QueuedRunClient[], waiting?: ActiveRun[]) => Promise<void>) | null
+  >(null);
+
+  const scheduleBurstFlush = useCallback(() => {
+    lastHumanActivityAtRef.current = Date.now();
+    pendingBurstFlushRef.current = true;
+    if (quietTimerRef.current) clearTimeout(quietTimerRef.current);
+    quietTimerRef.current = setTimeout(() => {
+      void flushBurstOrchestration();
+    }, HUMAN_TYPING_QUIET_MS);
+  }, [flushBurstOrchestration]);
+
+  scheduleBurstFlushRef.current = scheduleBurstFlush;
+  pauseAiForTypingRef.current = pauseAiForTyping;
+
+  useEffect(() => {
+    if (!useServerApi || !topic) return;
+    if (anyHumanTyping) {
+      if (quietTimerRef.current) {
+        clearTimeout(quietTimerRef.current);
+        quietTimerRef.current = null;
+      }
+      void pauseAiForTyping();
+      return;
+    }
+    if (pendingBurstFlushRef.current) {
+      scheduleBurstFlush();
+    }
+  }, [anyHumanTyping, pauseAiForTyping, scheduleBurstFlush, topic, useServerApi]);
 
   const processQueuedRuns = useCallback(
     async (queuedRuns: QueuedRunClient[], waitingRuns: ActiveRun[] = []) => {
@@ -890,7 +1061,13 @@ export function RoomChat({
           );
 
           const started = Date.now();
+          const abortController = new AbortController();
+          processAbortByRunRef.current.set(run.runId, abortController);
           try {
+            if (anyHumanTypingRef.current) {
+              abortController.abort();
+              return;
+            }
             setActiveRuns((prev) =>
               prev.map((r) =>
                 r.runId === run.runId ? { ...r, phase: "typing" } : r,
@@ -907,6 +1084,7 @@ export function RoomChat({
               runId: run.runId,
               workspaceId: state.workspace.id,
               headers,
+              signal: abortController.signal,
               onReplyText: (fullText) => {
                 if (!fullText.trim()) return;
                 if (!placeholderCreated) {
@@ -936,6 +1114,15 @@ export function RoomChat({
             // Swap the live placeholder for the persisted message below.
             if (placeholderCreated) {
               actions.removeLocalMessage(room.id, placeholderId);
+            }
+            processAbortByRunRef.current.delete(run.runId);
+
+            if (
+              result.data?.code === "human_typing_pause" ||
+              abortController.signal.aborted
+            ) {
+              setActiveRuns((prev) => prev.filter((r) => r.runId !== run.runId));
+              return;
             }
             const data = result.data;
             const responseStatus = result.status;
@@ -1091,10 +1278,20 @@ export function RoomChat({
             );
             processingRunIdsRef.current.delete(run.runId);
           } catch (err) {
+            processAbortByRunRef.current.delete(run.runId);
+            processingRunIdsRef.current.delete(run.runId);
+            const aborted =
+              (err instanceof Error &&
+                (err.name === "AbortError" || /abort|paused/i.test(err.message))) ||
+              abortController.signal.aborted;
+            if (aborted) {
+              actions.removeLocalMessage(room.id, `stream-${run.runId}`);
+              setActiveRuns((prev) => prev.filter((r) => r.runId !== run.runId));
+              return;
+            }
             const message = err instanceof Error ? err.message : "AI response failed";
             console.error("[AdeHQ process run]", err);
             failedRunIdsRef.current.add(run.runId);
-            processingRunIdsRef.current.delete(run.runId);
             trace("agent-run", "error", `${run.employeeName} couldn't respond`, {
               runId: run.runId,
               error: message,
@@ -1139,6 +1336,8 @@ export function RoomChat({
       trace,
     ],
   );
+
+  processQueuedRunsRef.current = processQueuedRuns;
 
   useEffect(() => {
     if (!topic || backend !== "supabase") return;
@@ -1301,6 +1500,7 @@ export function RoomChat({
         queuedRuns?: QueuedRunClient[];
         blockedRuns?: Array<{ employeeName?: string; reason: string }>;
         cancelledResearchRuns?: BrowserResearchRun[];
+        deferred?: boolean;
         workStop?: {
           detected: boolean;
           target: string;
@@ -1462,7 +1662,10 @@ export function RoomChat({
         }),
       );
 
-      if (payload.queuedRuns?.length || waitingRuns.length) {
+      if (payload.deferred) {
+        // Wait for room-wide quiet, then flush one steward turn for the burst.
+        scheduleBurstFlush();
+      } else if (payload.queuedRuns?.length || waitingRuns.length) {
         void processQueuedRuns(payload.queuedRuns ?? [], waitingRuns);
       } else if (payload.blockedRuns?.length) {
         const reason = payload.blockedRuns
@@ -2137,11 +2340,20 @@ export function RoomChat({
               {sendError}
             </div>
           )}
+          {typingLabel && (
+            <p className="mb-1.5 px-1 text-[12.5px] text-ink-3">{typingLabel}</p>
+          )}
+          {anyHumanTyping && activeRuns.some((r) => r.phase === "waiting_on") && (
+            <p className="mb-1.5 px-1 text-[12.5px] text-ink-3">
+              AI is waiting for the room to finish typing…
+            </p>
+          )}
           {isMayaHiringMode && <MayaHiringSuggestionChips />}
           <ChatComposer
             employees={roomEmployees}
             mentionHumans={mentionHumans}
             onSend={handleSend}
+            onTypingChange={useServerApi ? setLocalTyping : undefined}
             onUploadFiles={useServerApi ? uploadFiles : undefined}
             onAddEmployee={onAddEmployee}
             disabled={!topic || chatDisabled}
