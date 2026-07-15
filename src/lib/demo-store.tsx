@@ -1576,6 +1576,16 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           currentRoom?.messages.find((m) => m.id === messageId) ??
           (clientId
             ? currentRoom?.messages.find((m) => m.clientMessageId === clientId)
+            : undefined) ??
+          // Defensive: the same agent run should only ever produce one visible
+          // reply. If it's somehow persisted or delivered twice under different
+          // message ids (e.g. a realtime insert racing the request's own
+          // response), treat the one already on screen as canonical instead of
+          // rendering a second bubble.
+          (msg.senderType === "ai" && msg.agentRunId
+            ? currentRoom?.messages.find(
+                (m) => m.senderType === "ai" && m.agentRunId === msg.agentRunId,
+              )
             : undefined);
         if (existing) return existing;
 

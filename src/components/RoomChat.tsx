@@ -42,6 +42,7 @@ import { readDebugMode } from "@/lib/debug-trace";
 import { useDebugTrace } from "./DebugProvider";
 import {
   AlertCircle,
+  ArrowDown,
   Bot,
   ListChecks,
   Loader2,
@@ -127,15 +128,6 @@ type QueuedRunClient = {
 const MESSAGE_PAGE = 50;
 const GROUP_WINDOW_MS = 5 * 60 * 1000;
 
-/**
- * Reply token-streaming (Phase 4) — streams conversational quick replies token by
- * token over SSE. On by default; set localStorage adehq:stream="0" to force the
- * blocking JSON path. Any streaming failure falls back to blocking automatically.
- */
-const EMPLOYEE_REPLY_STREAMING =
-  typeof window === "undefined" ||
-  window.localStorage?.getItem("adehq:stream") !== "0";
-
 type ProcessRequestResult = {
   status: number;
   ok: boolean;
@@ -143,104 +135,35 @@ type ProcessRequestResult = {
   // exactly as the previous `await res.json()` value was.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   data: any;
-  streamed: boolean;
 };
 
 /**
- * Runs the agent-run process request. When streaming is enabled it consumes the
- * SSE stream, forwarding reply-token deltas to `onReplyText` (called with the full
- * accumulated reply each time), and resolves with the final `done` payload — shaped
- * identically to the non-streaming JSON response so downstream handling is shared.
+ * Runs the agent-run process request and resolves with the final reply payload
+ * in one shot. Employee replies are intentionally delivered whole (Slack/iMessage
+ * style), not revealed token-by-token — a live-typing placeholder that grows
+ * character-by-character read as a chatbot-y typewriter effect, and (worse) could
+ * briefly coexist with the persisted message once realtime delivered it, which is
+ * where the "duplicate AI message" reports came from. The "AI is typing" dots
+ * (driven by activeRuns phase, set independently of this request) already cover
+ * the waiting state, so nothing is lost by not streaming tokens into the bubble.
  */
 async function runAgentProcessRequest(params: {
   runId: string;
   workspaceId: string;
   headers: Record<string, string>;
-  onReplyText?: (fullText: string) => void;
   signal?: AbortSignal;
 }): Promise<ProcessRequestResult> {
-  const wantsStream = Boolean(params.onReplyText) && EMPLOYEE_REPLY_STREAMING;
   const res = await fetch(`/api/agent-runs/${params.runId}/process`, {
     method: "POST",
-    headers: {
-      ...params.headers,
-      ...(wantsStream ? { Accept: "text/event-stream" } : {}),
-    },
+    headers: params.headers,
     body: JSON.stringify({
       workspaceId: params.workspaceId,
       mode: "live",
-      ...(wantsStream ? { stream: true } : {}),
     }),
     signal: params.signal,
   });
-
-  const contentType = res.headers.get("content-type") ?? "";
-  if (!wantsStream || !res.body || !contentType.includes("text/event-stream")) {
-    const data = await res.json().catch(() => ({}));
-    return { status: res.status, ok: res.ok, data, streamed: false };
-  }
-
-  const reader = res.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = "";
-  let fullReply = "";
-  let streamed = false;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let donePayload: any = null;
-  let errorPayload: { error?: string; code?: string } | null = null;
-
-  const handleEvent = (name: string, dataRaw: string) => {
-    let parsed: Record<string, unknown> = {};
-    try {
-      parsed = dataRaw ? JSON.parse(dataRaw) : {};
-    } catch {
-      return;
-    }
-    if (name === "delta" && typeof parsed.text === "string") {
-      fullReply += parsed.text;
-      streamed = true;
-      params.onReplyText?.(fullReply);
-    } else if (name === "done") {
-      donePayload = parsed as ProcessRequestResult["data"];
-    } else if (name === "error") {
-      errorPayload = parsed as { error?: string; code?: string };
-    }
-  };
-
-  // Parse the SSE framing: events separated by a blank line.
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-    let sep;
-    while ((sep = buffer.indexOf("\n\n")) !== -1) {
-      const rawEvent = buffer.slice(0, sep);
-      buffer = buffer.slice(sep + 2);
-      let eventName = "message";
-      const dataLines: string[] = [];
-      for (const line of rawEvent.split("\n")) {
-        if (line.startsWith("event:")) eventName = line.slice(6).trim();
-        else if (line.startsWith("data:")) dataLines.push(line.slice(5).trim());
-      }
-      if (dataLines.length) handleEvent(eventName, dataLines.join("\n"));
-    }
-  }
-
-  // Cast: TS control-flow does not track the assignment inside handleEvent.
-  const finalError = errorPayload as { error?: string; code?: string } | null;
-  if (finalError) {
-    const code = finalError.code;
-    return {
-      status: code ? 409 : 500,
-      ok: false,
-      data: { ok: false, error: finalError.error, code },
-      streamed,
-    };
-  }
-  if (donePayload) {
-    return { status: 200, ok: true, data: donePayload, streamed };
-  }
-  return { status: 500, ok: false, data: { ok: false, error: "Stream ended early." }, streamed };
+  const data = await res.json().catch(() => ({}));
+  return { status: res.status, ok: res.ok, data };
 }
 
 function isSameCalendarDay(a: string, b: string): boolean {
@@ -364,6 +287,12 @@ export function RoomChat({
   const bottomRef = useRef<HTMLDivElement>(null);
   const messagesScrollRef = useRef<HTMLDivElement>(null);
   const scrollTopicKeyRef = useRef<string | null>(null);
+  // Whether the viewport was already near the bottom before this update — new
+  // messages only auto-scroll into view while the reader is caught up; if
+  // they've scrolled up to read history, an incoming message shouldn't yank
+  // them back down. Starts true so the first load / topic switch still jumps.
+  const stickToBottomRef = useRef(true);
+  const [hasNewMessagesBelow, setHasNewMessagesBelow] = useState(false);
 
   const useServerApi = backend === "supabase";
   const { typingHumans, setLocalTyping } = useTopicPresence({
@@ -501,28 +430,40 @@ export function RoomChat({
     const switched = scrollTopicKeyRef.current !== key;
     scrollTopicKeyRef.current = key;
     const scroller = messagesScrollRef.current;
-    const jumpToBottom = () => {
+    const jumpToBottom = (behavior: ScrollBehavior) => {
       if (!scroller) {
-        bottomRef.current?.scrollIntoView({
-          behavior: switched ? "auto" : "smooth",
-          block: "end",
-        });
+        bottomRef.current?.scrollIntoView({ behavior, block: "end" });
         return;
       }
-      // Instant jump on chat switch; smooth only for new messages in the same thread.
-      scroller.scrollTo({
-        top: scroller.scrollHeight,
-        behavior: switched ? "auto" : "smooth",
-      });
+      scroller.scrollTo({ top: scroller.scrollHeight, behavior });
     };
-    jumpToBottom();
-    // After DM/room switches, layout (file viewers, chips) often settles a frame
-    // later — re-jump so we don't leave a large empty gap above the composer.
+
     if (switched) {
+      // Instant jump + re-jump a frame later on chat switch — layout (file
+      // viewers, chips) often settles after the first paint, otherwise we'd
+      // leave a gap above the composer.
+      stickToBottomRef.current = true;
+      setHasNewMessagesBelow(false);
+      jumpToBottom("auto");
       requestAnimationFrame(() => {
-        jumpToBottom();
-        requestAnimationFrame(jumpToBottom);
+        jumpToBottom("auto");
+        requestAnimationFrame(() => jumpToBottom("auto"));
       });
+      return;
+    }
+
+    // Your own outgoing message always pulls you to the bottom, even if you'd
+    // scrolled up — you just acted, you want to see it land. Everything else
+    // (an AI reply, a teammate's message) only auto-scrolls if the reader was
+    // already caught up; otherwise it surfaces a "New messages" pill instead
+    // of yanking their view away from whatever they're reading.
+    const latest = displayMessages.at(-1);
+    const isOwnMessage = latest?.senderType === "human" && latest.senderId === state.user?.id;
+    if (stickToBottomRef.current || isOwnMessage) {
+      setHasNewMessagesBelow(false);
+      jumpToBottom("smooth");
+    } else if (latest) {
+      setHasNewMessagesBelow(true);
     }
   }, [
     room.id,
@@ -531,7 +472,28 @@ export function RoomChat({
     activeRuns.length,
     browserResearchRuns.length,
     displayMessages.at(-1)?.id,
+    state.user?.id,
   ]);
+
+  const handleMessagesScroll = useCallback(() => {
+    const el = messagesScrollRef.current;
+    if (!el) return;
+    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    const atBottom = distanceFromBottom < 120;
+    stickToBottomRef.current = atBottom;
+    if (atBottom) setHasNewMessagesBelow(false);
+  }, []);
+
+  const scrollToBottomNow = useCallback(() => {
+    stickToBottomRef.current = true;
+    setHasNewMessagesBelow(false);
+    const el = messagesScrollRef.current;
+    if (el) {
+      el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+    } else {
+      bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+    }
+  }, []);
 
   useEffect(() => {
     if (!topic || backend !== "supabase" || !state.workspace?.id) {
@@ -666,6 +628,10 @@ export function RoomChat({
     firstName: state.user?.name?.split(" ")[0],
     onCreateHiringTopic: coordinator?.handleCreateHiringTopic,
     onContinueHiringHere: coordinator?.handleContinueHiringHere,
+    // The real Maya AI employee also replies via the normal agent-run pipeline
+    // once a real backend is wired up — don't let this scripted responder's
+    // plain-text fallback double up with it (see hook doc for what still runs).
+    suppressGenericReplies: useServerApi,
   });
 
   const researchEmployee = useMemo(() => {
@@ -1030,43 +996,12 @@ export function RoomChat({
               workspaceId: state.workspace.id,
             });
 
-            const placeholderId = `stream-${run.runId}`;
-            let placeholderCreated = false;
             const result = await runAgentProcessRequest({
               runId: run.runId,
               workspaceId: state.workspace.id,
               headers,
               signal: abortController.signal,
-              onReplyText: (fullText) => {
-                if (!fullText.trim()) return;
-                if (!placeholderCreated) {
-                  placeholderCreated = true;
-                  if (triggerId) {
-                    actions.updateMessage(room.id, triggerId, {
-                      pending: false,
-                      deliveryStatus: "delivered",
-                      deliveredAt: new Date().toISOString(),
-                    });
-                  }
-                  actions.addLocalMessage(room.id, {
-                    id: placeholderId,
-                    topicId: topic.id,
-                    senderType: "ai",
-                    senderId: run.employeeId,
-                    senderName: run.employeeName,
-                    content: fullText,
-                    agentRunId: run.runId,
-                    streaming: true,
-                  });
-                } else {
-                  actions.updateLocalMessage(room.id, placeholderId, { content: fullText });
-                }
-              },
             });
-            // Swap the live placeholder for the persisted message below.
-            if (placeholderCreated) {
-              actions.removeLocalMessage(room.id, placeholderId);
-            }
             processAbortByRunRef.current.delete(run.runId);
 
             if (result.data?.code === "aborted" || abortController.signal.aborted) {
@@ -1076,7 +1011,6 @@ export function RoomChat({
             const data = result.data;
             const responseStatus = result.status;
             const responseOk = result.ok;
-            const streamed = result.streamed;
             const ms = Date.now() - started;
 
             if (responseStatus === 409) {
@@ -1141,9 +1075,10 @@ export function RoomChat({
               });
             }
 
-            // When tokens already streamed live, skip the artificial hold — the
-            // live typing itself is the human-paced signal.
-            const holdMs = streamed ? 0 : minimumReplyHoldMs(undefined, data.aiMode as string | undefined);
+            // Minimum human-paced hold before the reply pops in — the "typing"
+            // dots (shown independently, via activeRuns phase) already covered
+            // the wait, this just avoids an instant, jarring appearance.
+            const holdMs = minimumReplyHoldMs(undefined, data.aiMode as string | undefined);
             const elapsed = Date.now() - started;
             if (holdMs > elapsed) {
               await new Promise((resolve) => setTimeout(resolve, holdMs - elapsed));
@@ -1156,13 +1091,6 @@ export function RoomChat({
             }
 
             if (data.aiMessage?.content) {
-              // Defensive: guarantee the live-typing placeholder is gone before the
-              // final persisted message renders, even if it was already removed once
-              // above — a second removal of an already-gone id is a harmless no-op,
-              // and this prevents a duplicate bubble if the two ever race.
-              if (placeholderCreated) {
-                actions.removeLocalMessage(room.id, placeholderId);
-              }
               actions.addMessage(room.id, {
                 id: data.aiMessage.id,
                 topicId: topic.id,
@@ -2011,7 +1939,12 @@ export function RoomChat({
         </div>
       )}
 
-      <div ref={messagesScrollRef} className="flex-1 overflow-y-auto px-[26px] pb-4 pt-[18px]">
+      <div className="relative min-h-0 flex-1">
+      <div
+        ref={messagesScrollRef}
+        onScroll={handleMessagesScroll}
+        className="h-full overflow-y-auto px-[26px] pb-4 pt-[18px]"
+      >
         {isMayaHiringMode && !mayaHiring ? (
           <div className="flex h-full min-h-[200px] items-center justify-center gap-2 text-sm text-ink-3">
             <Loader2 className="h-4 w-4 animate-spin" />
@@ -2141,7 +2074,10 @@ export function RoomChat({
               .map((run) => {
                 const employee = roomEmployees.find((e) => e.id === run.employeeId);
                 return (
-                  <div key={run.runId} className="group/msg relative flex gap-3 rounded-[10px] px-0 py-1">
+                  <div
+                    key={run.runId}
+                    className="chat-message-enter group/msg relative flex gap-3 rounded-[10px] px-0 py-1"
+                  >
                     <div className="shrink-0">
                       {employee ? (
                         <EmployeeAvatar employee={employee} size="md" showStatus={false} />
@@ -2158,7 +2094,7 @@ export function RoomChat({
                 );
               })}
             {isMayaGeneralChat && mayaResponder.phase !== "idle" && dmEmployee && (
-              <div className="group/msg relative flex gap-3 rounded-[10px] px-0 py-1">
+              <div className="chat-message-enter group/msg relative flex gap-3 rounded-[10px] px-0 py-1">
                 <div className="shrink-0">
                   <EmployeeAvatar employee={dmEmployee} size="md" showStatus={false} />
                 </div>
@@ -2197,7 +2133,7 @@ export function RoomChat({
               </div>
             )}
             {isMayaHiringMode && mayaHiring && (mayaHiring.session.busy || mayaHiring.generatingCandidates) && dmEmployee && (
-              <div className="group/msg relative flex gap-3 rounded-[10px] px-0 py-1">
+              <div className="chat-message-enter group/msg relative flex gap-3 rounded-[10px] px-0 py-1">
                 <div className="shrink-0">
                   <EmployeeAvatar employee={dmEmployee} size="md" showStatus={false} />
                 </div>
@@ -2225,6 +2161,17 @@ export function RoomChat({
         )}
         </>
         )}
+      </div>
+      {hasNewMessagesBelow && (
+        <button
+          type="button"
+          onClick={scrollToBottomNow}
+          className="animate-in fade-in slide-in-from-bottom-2 absolute bottom-3 left-1/2 z-10 flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-border bg-surface px-3.5 py-1.5 text-xs font-medium text-ink-2 shadow-md transition-colors duration-200 hover:bg-muted"
+        >
+          <ArrowDown className="h-3.5 w-3.5" />
+          New messages
+        </button>
+      )}
       </div>
 
       {failedSend && (

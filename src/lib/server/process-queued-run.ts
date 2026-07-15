@@ -34,10 +34,7 @@ import {
   updateOrchestrationEmployeeStatus,
 } from "@/lib/orchestration/persistence";
 import { scheduleTopicSummaryRefresh, refreshTopicSummary } from "@/lib/topic-summary/refresh";
-import {
-  buildMemorySuggestionArtifacts,
-  filterDmMessageArtifacts,
-} from "@/lib/topic-summary/message-artifacts";
+import { filterDmMessageArtifacts } from "@/lib/topic-summary/message-artifacts";
 import type { PersistedOrchestrationEmployeeStatus } from "@/lib/orchestration/types";
 import { serializeUnknownError, toUserFacingToolError } from "@/lib/server/message-errors";
 import { roomIdFromRow } from "@/lib/server/db-row";
@@ -841,7 +838,7 @@ export async function processQueuedAgentRun(
       toolWorkNeeded && toolWorkSource.trim() !== triggerUserContent.trim()
         ? `${content}
 
-[Pending request to fulfill now with effects.toolCalls — use email.createDraft / email.sendDraft, CRM, tasks, or artifact tools as needed. Do NOT say you cannot do this from chat: ${toolWorkSource}]`
+[Pending request to fulfill now with effects.toolCalls — use email.createDraft / email.sendDraft, CRM, tasks, or artifact tools as needed. Do NOT say you cannot do this from chat, and do not assume a prior turn already completed it just because you said you would — only effects.toolCalls that actually ran count. If it did not run yet, run it now: ${toolWorkSource}]`
         : content;
 
     const promptTier = resolveEmployeePromptTier({
@@ -1821,7 +1818,7 @@ export async function processQueuedAgentRun(
         });
         const narratedOnly =
           /^Got it — I'll follow up/i.test(response.reply.trim()) ||
-          (/can'?t send emails?|cannot send emails?|outside what i can do|not something i can do/i.test(
+          (/can'?t send emails?|cannot send emails?|outside what i can do|not something i can do|don'?t have the ability|not able to (?:actually )?send|no ability to send|unable to send|didn'?t (?:go through|send)|it didn'?t (?:go through|send)/i.test(
             response.reply,
           ) &&
             response.reply.trim().length < 420) ||
@@ -1915,6 +1912,11 @@ export async function processQueuedAgentRun(
         fileContext: fileContextBundle,
         usedFileContext,
         mentionsJson: etiquette.mentionsJson,
+        // For short retries/status queries ("try again now", "did you send
+        // it?") this carries the original ask (recipient, subject, "send")
+        // so tool-arg hydration and the send-approval auto-append both see
+        // real context instead of the two-word follow-up.
+        triggerMessageText: toolWorkNeeded ? toolWorkSource : undefined,
       },
     );
 
@@ -2031,11 +2033,14 @@ export async function processQueuedAgentRun(
 
       if (refreshTrigger) {
         if (isDm) {
-          // Summary refresh (and any resulting memory-suggestion chip) is advisory —
-          // it must never block or delay an already-computed reply. Fire-and-forget;
-          // if it finds a suggestion, patch the message's artifacts in a separate,
-          // later write (same pattern as queueBackgroundLearningFromSearch).
-          const dmAiMessageId = aiMessage.id;
+          // Summary refresh is advisory — it must never block or delay an
+          // already-computed reply, so it's fire-and-forget. Any suggested
+          // memory it finds surfaces in the DM summary panel (right rail)
+          // only; it must NOT be patched onto this chat message afterward —
+          // that used to attach a suggestion (from a full-topic re-analysis
+          // that can resurface an older fact) onto whichever message
+          // happened to be newest by the time the refresh resolved, which
+          // reads as a stale/unrelated "Save to memory?" card in chat.
           void refreshTopicSummary(client, {
             workspaceId,
             roomId,
@@ -2045,31 +2050,9 @@ export async function processQueuedAgentRun(
             trigger: refreshTrigger,
             employeeId,
             logWorkEvents: false,
-          })
-            .then(async (refreshResult) => {
-              if (!refreshResult.summary?.suggestedMemory.length) return;
-              const { data: current } = await client
-                .from("messages")
-                .select("artifacts")
-                .eq("workspace_id", workspaceId)
-                .eq("id", dmAiMessageId)
-                .maybeSingle();
-              const existingArtifacts = Array.isArray(current?.artifacts)
-                ? (current.artifacts as typeof artifacts)
-                : [];
-              const nextArtifacts = [
-                ...existingArtifacts,
-                ...buildMemorySuggestionArtifacts(refreshResult.summary!.suggestedMemory, topicId),
-              ];
-              await client
-                .from("messages")
-                .update({ artifacts: nextArtifacts })
-                .eq("workspace_id", workspaceId)
-                .eq("id", dmAiMessageId);
-            })
-            .catch((error) => {
-              console.warn("[AdeHQ dm summary refresh]", error);
-            });
+          }).catch((error) => {
+            console.warn("[AdeHQ dm summary refresh]", error);
+          });
         } else {
           scheduleTopicSummaryRefresh(client, {
             workspaceId,

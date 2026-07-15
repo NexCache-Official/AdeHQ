@@ -41,6 +41,16 @@ type UseMayaDmResponderOpts = {
   firstName?: string;
   onCreateHiringTopic?: (proposal: MayaHiringProposal) => Promise<void>;
   onContinueHiringHere?: (proposal: MayaHiringProposal) => Promise<void>;
+  /**
+   * True once a real backend AI employee is also going to reply to this same
+   * message (production, non-demo). This scripted responder pre-dates Maya
+   * having real LLM backing — its hire/improve/review/explain branches still
+   * drive UI the backend doesn't (proposal card, employee picker, artifacts),
+   * but its plain-text fallback would otherwise double up with the real AI's
+   * reply, landing as two "Maya" bubbles for one message. When true, that
+   * plain-text-only fallback is skipped so only the real AI reply lands.
+   */
+  suppressGenericReplies?: boolean;
 };
 
 const READING_MS = 320;
@@ -68,6 +78,7 @@ export function useMayaDmResponder({
   firstName = "there",
   onCreateHiringTopic,
   onContinueHiringHere,
+  suppressGenericReplies = false,
 }: UseMayaDmResponderOpts) {
   const { state, actions } = useStore();
   const [phase, setPhase] = useState<MayaResponderPhase>("idle");
@@ -268,6 +279,10 @@ export function useMayaDmResponder({
 
         setEmployeePickerRoster([]);
         setPendingProposal(null);
+        // No artifact means this intent has nothing beyond the scripted text —
+        // when a real AI employee is also answering, let that be the one reply
+        // instead of landing this canned one alongside it.
+        if (suppressGenericReplies && !artifacts) return;
         await runLifecycleReply(reply, artifacts);
       } finally {
         sendGuardRef.current.end();
@@ -284,6 +299,7 @@ export function useMayaDmResponder({
       runLifecycleReply,
       state.employees,
       state.rooms,
+      suppressGenericReplies,
       topicId,
     ],
   );

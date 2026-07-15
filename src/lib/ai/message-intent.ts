@@ -44,9 +44,25 @@ const CRM_OR_TASK_DELIVERY_INTENT =
  * Short follow-ups that retry a prior tool ask ("try again", "do it", "go ahead").
  * Alone they look conversational — without recent-context lookup they wrongly take
  * the plain-prose stream path (empty effects) and the model doubles down on refusal.
+ *
+ * Trailing filler ("now", "please", "again") is allowed after the core phrase so
+ * "try again now" / "do it now please" still match — a strict `$` anchor right
+ * after the core phrase silently missed these and let the message fall through
+ * to the stream path (this is exactly what happened with "try again now").
  */
 const SHORT_TOOL_RETRY =
-  /^(?:try\s+again|retry|again|do\s+it(?:\s+now)?|please\s+do\s+it|go\s+ahead|send\s+it|just\s+send(?:\s+it)?|yes(?:\s+please)?|yep|yeah|ok(?:ay)?(?:\s+do\s+it)?|please|continue|proceed|make\s+it\s+happen|do\s+that|same\s+again)\.?$/i;
+  /^(?:try\s+again|retry|again|do\s+it|please\s+do\s+it|go\s+ahead|send\s+it|just\s+send(?:\s+it)?|yes(?:\s+please)?|yep|yeah|ok(?:ay)?(?:\s+do\s+it)?|please|continue|proceed|make\s+it\s+happen|do\s+that|same\s+again)(?:\s+(?:now|please|right\s+now|for\s+me|today|already|again))*\.?$/i;
+
+/**
+ * Status/confirmation questions about a prior tool ask ("did you send it?",
+ * "was it sent?", "did it go through?"). These aren't retries in wording, but
+ * functionally need the same treatment: look up what was actually asked/done
+ * rather than let the model answer from a context-free stream turn (which is
+ * how it ends up saying "I can't send emails from here" a second time even
+ * after nothing was ever actually attempted).
+ */
+const STATUS_QUERY =
+  /^(?:did\s+(?:you|it|that)|has\s+it|have\s+you|is\s+it|was\s+it|were\s+they)\b[\s\S]{0,40}\b(?:sent|sending|send|went|goes?|going|gone|through|done|delivered|fired?|out|worked|completed?|finished)\b[\s\S]{0,20}[?.!]*$/i;
 
 export type RecentIntentMessage = {
   role?: string;
@@ -67,7 +83,8 @@ export function messageLikelyNeedsStructuredEffects(message: string): boolean {
 }
 
 export function isShortToolRetryMessage(message: string): boolean {
-  return SHORT_TOOL_RETRY.test(message.trim());
+  const text = message.trim();
+  return SHORT_TOOL_RETRY.test(text) || STATUS_QUERY.test(text);
 }
 
 function isHumanMessage(message: RecentIntentMessage): boolean {

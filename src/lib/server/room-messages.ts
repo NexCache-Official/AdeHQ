@@ -51,8 +51,6 @@ import {
   TOOL_BACKED_WORK_LOG_ACTIONS,
 } from "@/lib/integrations/reconcile-claimed-actions";
 import { handleAutopilotEffect, resolveAutopilotEmployee } from "@/lib/server/autopilot-effect";
-import { filterMemorySuggestions } from "@/lib/memory/curator";
-import { findExistingMemoryForSuggestion } from "@/lib/memory/find-existing";
 import type { ToolCallEffectItem } from "@/lib/types";
 import { extractMentions, nowISO, uid } from "@/lib/utils";
 
@@ -686,6 +684,14 @@ export async function persistEmployeeEffects(
     fileContext?: FileContextBundle | null;
     usedFileContext?: boolean;
     mentionsJson?: MentionRef[];
+    /**
+     * Overrides the trigger-message text used for tool-arg hydration and the
+     * "user asked to send mail" auto-approval check. Pass the resolved prior
+     * ask (not the raw DB row) when this turn is a short retry/status query
+     * like "try again now" or "did you send it?" — otherwise hydration reads
+     * the short follow-up text, which has no recipient/subject/"send" context.
+     */
+    triggerMessageText?: string;
   },
 ): Promise<{ aiMessage: RoomMessage; artifacts: MessageArtifact[] }> {
   reply = sanitizeReplyForChat(reply);
@@ -860,41 +866,13 @@ export async function persistEmployeeEffects(
     if (artifactLogError) throw artifactLogError;
   }
 
-  const durableMemorySuggestions = filterMemorySuggestions(effect.memorySuggestions ?? []);
-  const novelMemorySuggestions: typeof durableMemorySuggestions = [];
-  for (const suggestion of durableMemorySuggestions) {
-    try {
-      const existing = await findExistingMemoryForSuggestion(client, {
-        workspaceId,
-        roomId,
-        topicId,
-        title: suggestion.text.slice(0, 72),
-        content: suggestion.text,
-        scope: "topic",
-      });
-      if (existing) continue;
-    } catch (dedupeError) {
-      console.warn("[AdeHQ] memory suggestion dedupe check failed", dedupeError);
-    }
-    novelMemorySuggestions.push(suggestion);
-  }
-  for (const [index, suggestion] of novelMemorySuggestions.entries()) {
-    const suggestionKey = uid("mem-sug");
-    artifacts.push({
-      type: "memory_suggestion",
-      id: suggestionKey,
-      label: `Save to memory: ${suggestion.text.slice(0, 56)}${suggestion.text.length > 56 ? "…" : ""}`,
-      meta: {
-        memoryText: suggestion.text,
-        reason: suggestion.reason,
-        sourceFileId: suggestion.sourceFileId,
-        sourceChunkId: suggestion.sourceChunkId,
-        sourceArtifactId: suggestion.sourceArtifactId,
-        suggestionKey,
-        suggestionIndex: index,
-      },
-    });
-  }
+  // Memory suggestions are surfaced in the topic/DM summary panel (right rail)
+  // only — not as inline chat cards. That panel independently re-derives
+  // suggestedMemory from a full-topic re-analysis (see refreshTopicSummary),
+  // so a per-turn effect.memorySuggestions here would be redundant at best;
+  // at worst it patches a suggestion onto whichever message happens to be
+  // newest, which can read as "stale" when it actually reflects older
+  // conversation context (see refreshTopicSummary call site).
 
   if (options?.usedFileContext && !(effect.artifacts ?? []).length) {
     const hasFileWorkLog = effect.workLog.some((entry) =>
@@ -1112,6 +1090,7 @@ export async function persistEmployeeEffects(
         topicId,
         agentRunId,
         triggerMessageId,
+        triggerMessageText: options?.triggerMessageText,
         emailThreadId,
         emailMessageId,
         toolCalls: effect.toolCalls,

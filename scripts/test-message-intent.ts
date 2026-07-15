@@ -1,4 +1,8 @@
-import { messageLikelyNeedsStructuredEffects } from "@/lib/ai/message-intent";
+import {
+  messageLikelyNeedsStructuredEffects,
+  isShortToolRetryMessage,
+  conversationLikelyNeedsStructuredEffects,
+} from "@/lib/ai/message-intent";
 
 function assert(condition: boolean, message: string): asserts condition {
   if (!condition) throw new Error(message);
@@ -60,4 +64,52 @@ assert(
 
 console.log("✓ CRM/task/artifact requests with long intervening clauses are detected");
 console.log("✓ conversational/advice questions are not mistaken for tool-work");
+
+// Regression: "try again now" was missed by the old strictly-anchored retry
+// regex (it only matched "try again" with no trailing word), which let the
+// message fall through to the plain-prose stream path and the model
+// re-refused a request it never actually attempted.
+assert(
+  isShortToolRetryMessage("try again now"),
+  "must recognize 'try again now' as a retry despite the trailing word",
+);
+assert(
+  isShortToolRetryMessage("do it now please"),
+  "must recognize 'do it now please' as a retry with multiple trailing fillers",
+);
+assert(isShortToolRetryMessage("try again"), "must still recognize the bare phrase");
+
+// Regression: "did you send it?" style status/confirmation questions must
+// also route onto the structured path — otherwise the model answers from a
+// context-free turn and claims it can never send email, even though nothing
+// was ever actually attempted.
+assert(
+  isShortToolRetryMessage("did you send it?"),
+  "must recognize a status/confirmation question as needing prior tool-ask context",
+);
+assert(isShortToolRetryMessage("was it sent?"), "must recognize 'was it sent?'");
+assert(isShortToolRetryMessage("did it go through?"), "must recognize 'did it go through?'");
+assert(
+  !isShortToolRetryMessage("did the deal move to negotiation stage?"),
+  "an unrelated 'did' question must not be misclassified as a status query",
+);
+
+const emailAskHistory = [
+  {
+    senderType: "human",
+    content:
+      "Send a mail to skumar@nexcache.com asking Shubham how hes doing, just a general life check up mail.",
+  },
+  { senderType: "ai", content: "Hey Shubham — quick heads up: I can draft the email..." },
+];
+assert(
+  conversationLikelyNeedsStructuredEffects("try again now", emailAskHistory),
+  "'try again now' after an email ask must resolve to needing structured effects",
+);
+assert(
+  conversationLikelyNeedsStructuredEffects("did you send it?", emailAskHistory),
+  "'did you send it?' after an email ask must resolve to needing structured effects",
+);
+
+console.log("✓ short retries and status queries route onto the structured tool path");
 console.log("All message-intent tests passed.");

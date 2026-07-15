@@ -6,17 +6,6 @@ import { useStore } from "@/lib/demo-store";
 import { EmployeeAvatar, HumanAvatar } from "./EmployeeAvatar";
 import { cn, formatTime } from "@/lib/utils";
 import { normalizeHumanDelivery } from "@/lib/message-delivery";
-import { saveFileMemorySuggestionClient, saveSuggestedMemoryClient, dismissMemorySuggestionClient, fetchTopicSummaryClient } from "@/lib/topic-summary/client";
-import { MemoryScopeSelect } from "@/components/memory/MemoryScopeSelect";
-import { defaultMemoryScope } from "@/lib/memory/scope-rules";
-import type { MemoryScope } from "@/lib/types";
-import {
-  readLocalSuggestionLifecycle,
-  resolveSuggestionState,
-  setLocalSuggestionState,
-  shouldHideSuggestion,
-  type MemorySuggestionState,
-} from "@/lib/memory/suggestion-lifecycle";
 import {
   collectMessageSources,
   firstArtifactFromMessage,
@@ -145,159 +134,12 @@ function AutopilotOfferCard({
   );
 }
 
-function MemorySuggestionArtifact({
-  artifact,
-  topicId,
-  roomId,
-}: {
-  artifact: import("@/lib/types").MessageArtifact;
-  topicId?: string;
-  roomId?: string;
-}) {
-  const { state, actions } = useStore();
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [hidden, setHidden] = useState(false);
-  const [saveScope, setSaveScope] = useState<MemoryScope | undefined>();
-  const [lifecycleState, setLifecycleState] = useState<MemorySuggestionState | undefined>();
-  const [serverLifecycle, setServerLifecycle] = useState<
-    Record<string, MemorySuggestionState> | undefined
-  >();
-
-  useEffect(() => {
-    if (!topicId) return;
-    let cancelled = false;
-    void fetchTopicSummaryClient(topicId).then((summary) => {
-      if (!cancelled && summary?.memorySuggestionLifecycle) {
-        setServerLifecycle(summary.memorySuggestionLifecycle);
-      }
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [topicId]);
-
-  const room = state.rooms.find((r) => r.id === roomId);
-  const topic = state.topics.find((t) => t.id === topicId);
-  const scopeCtx = room
-    ? { room, topic, employees: state.employees, isDm: room.kind === "dm" }
-    : null;
-
-  const suggestionKey = artifact.meta?.suggestionKey ?? artifact.id;
-  const resolvedState = resolveSuggestionState(
-    suggestionKey,
-    serverLifecycle,
-    topicId ? readLocalSuggestionLifecycle(topicId) : undefined,
-    lifecycleState,
-  );
-
-  if (shouldHideSuggestion(resolvedState) || hidden || !topicId) return null;
-
-  const text = artifact.meta?.memoryText ?? artifact.label;
-  const suggestionIndex = artifact.meta?.suggestionIndex;
-  const isTerminal = resolvedState === "saved" || resolvedState === "already_saved";
-
-  const dismiss = async () => {
-    setLifecycleState("dismissed");
-    setLocalSuggestionState(topicId, suggestionKey, "dismissed");
-    try {
-      await dismissMemorySuggestionClient(topicId, suggestionKey);
-    } catch {
-      // local dismiss still applies
-    }
-    window.setTimeout(() => setHidden(true), 400);
-  };
-
-  const save = async () => {
-    setBusy(true);
-    setError(null);
-    setLifecycleState("saving");
-    try {
-      const scope = saveScope ?? (scopeCtx ? defaultMemoryScope(scopeCtx) : undefined);
-      const result =
-        typeof suggestionIndex === "number"
-          ? await saveSuggestedMemoryClient(topicId, suggestionIndex, { scope })
-          : await saveFileMemorySuggestionClient(topicId, {
-              text,
-              reason: artifact.meta?.reason,
-              sourceFileId: artifact.meta?.sourceFileId,
-              sourceChunkId: artifact.meta?.sourceChunkId,
-              sourceArtifactId: artifact.meta?.sourceArtifactId,
-              sourceMessageId: (artifact.meta as { sourceMessageId?: string } | undefined)?.sourceMessageId,
-              scope,
-            });
-      if (result.memory) actions.mergeMemoryEntry(result.memory);
-      const nextState: MemorySuggestionState = result.duplicate ? "already_saved" : "saved";
-      setLocalSuggestionState(topicId, suggestionKey, nextState);
-      setLifecycleState(nextState);
-      setServerLifecycle((prev) => ({ ...prev, [suggestionKey]: nextState }));
-      window.setTimeout(() => setHidden(true), result.duplicate ? 600 : 900);
-    } catch (err) {
-      setLifecycleState("failed");
-      setError(err instanceof Error ? err.message : "Could not save memory.");
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <div className="mt-2 w-full max-w-lg rounded-xl border border-cyan-200/80 bg-cyan-50/40 px-3 py-2.5">
-      <div className="flex items-start gap-2">
-        <BrainCircuit className="mt-0.5 h-4 w-4 shrink-0 text-cyan-700" />
-        <div className="min-w-0 flex-1">
-          <p className="text-[11px] font-semibold text-cyan-900">Save to memory?</p>
-          <p className="mt-0.5 text-[13px] leading-snug text-ink">{text}</p>
-          {artifact.meta?.reason && (
-            <p className="mt-1 text-[10px] text-ink-3">{artifact.meta.reason}</p>
-          )}
-          {error && <p className="mt-1 text-[10px] text-red-600">{error}</p>}
-          {isTerminal && !error && (
-            <p className="mt-1 text-[10px] text-emerald-700">
-              {resolvedState === "already_saved" ? "Already saved to memory." : "Saved to memory."}
-            </p>
-          )}
-          {scopeCtx && (
-            <div className="mt-2">
-              <MemoryScopeSelect
-                compact
-                ctx={scopeCtx}
-                value={saveScope ?? defaultMemoryScope(scopeCtx)}
-                onChange={setSaveScope}
-              />
-            </div>
-          )}
-          <div className="mt-2 flex flex-wrap gap-1.5">
-            <Button
-              variant="secondary"
-              size="sm"
-              className="h-7 text-[11px]"
-              disabled={busy || isTerminal}
-              onClick={() => void save()}
-            >
-              {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
-              {resolvedState === "saving"
-                ? "Saving…"
-                : resolvedState === "saved"
-                  ? "Saved"
-                  : resolvedState === "already_saved"
-                    ? "Already saved"
-                    : "Save"}
-            </Button>
-            <button
-              type="button"
-              onClick={() => void dismiss()}
-              disabled={busy || isTerminal}
-              className="inline-flex h-7 items-center gap-1 rounded-lg px-2 text-[11px] text-ink-3 hover:bg-muted hover:text-ink disabled:opacity-50"
-            >
-              <X className="h-3 w-3" />
-              Dismiss
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
+// NOTE: "Save to memory?" suggestions render in the topic/DM summary panel
+// (right rail — see TopicSummaryPanel) only. They used to also render as an
+// inline chat card here, but that surfaced a full-topic re-analysis result
+// that can reference older conversation context onto whichever message
+// happened to be newest — reading as a stale/unrelated suggestion attached
+// to the wrong message. Keep suggestion review/save/dismiss in one place.
 
 function ReadReceiptAvatars({
   seenBy,
@@ -682,8 +524,6 @@ export function RoomMessageItem({
 
   const isHuman = message.senderType === "human";
   const emailDrafts = message.artifacts?.filter((a) => a.type === "email_draft") ?? [];
-  const memorySuggestions =
-    message.artifacts?.filter((a) => a.type === "memory_suggestion") ?? [];
   const generatedArtifacts = message.artifacts?.filter((a) => a.type === "artifact") ?? [];
   const citationArtifacts =
     message.senderType === "ai"
@@ -739,7 +579,7 @@ export function RoomMessageItem({
       id={`msg-${message.id}`}
       data-message-id={message.id}
       className={cn(
-        "group/msg relative flex gap-3 rounded-[10px] px-0 transition-colors hover:bg-black/[0.015]",
+        "chat-message-enter group/msg relative flex gap-3 rounded-[10px] px-0 transition-colors hover:bg-black/[0.015]",
         grouped ? "py-0.5" : "py-2",
       )}
     >
@@ -889,15 +729,6 @@ export function RoomMessageItem({
             />
           );
         })}
-
-        {memorySuggestions.map((artifact) => (
-          <MemorySuggestionArtifact
-            key={artifact.id}
-            artifact={artifact}
-            topicId={message.topicId}
-            roomId={messageRoomId}
-          />
-        ))}
 
         {webSourceArtifacts.map((artifact) => (
           <CompactSourcesRow key={artifact.id} kind="web" artifact={artifact} />

@@ -321,6 +321,32 @@ body {
   }
 }
 
+/* Room/DM chat bubbles: a quick, subtle rise-and-fade on mount so a newly
+   arrived message settles into place instead of popping in instantly. React
+   only mounts genuinely new list items (existing ones keep their DOM node
+   across re-renders), so this naturally plays once per message, not on every
+   re-render. */
+@keyframes chatMessageIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.chat-message-enter {
+  animation: chatMessageIn 240ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chat-message-enter {
+    animation: none;
+  }
+}
+
 @keyframes hirePop {
   0% {
     transform: scale(0.4);
