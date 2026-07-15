@@ -137,10 +137,13 @@ export async function summarizeWorkspaceUsage(
 
   // If the wide select fails (often jsonb metadata / schema-cache), retry a
   // leaner projection so the hire-team breakdown cannot go dark.
-  let ledgerRows = ledgerRes;
+  let ledgerRows: {
+    data: LedgerRow[] | null;
+    error: { message?: string } | null;
+  } = ledgerRes as { data: LedgerRow[] | null; error: { message?: string } | null };
   if (ledgerRows.error) {
     console.error("[AdeHQ usage] ledger wide select failed, retrying lean", ledgerRows.error);
-    ledgerRows = await client
+    const lean = await client
       .from("ai_cost_ledger_entries")
       .select(
         "employee_id, work_type, provider_route, provider_name, model_id, work_hours_charged, actual_cost_usd, estimated_cost_usd, total_tokens, status, billable_to_workspace",
@@ -149,6 +152,10 @@ export async function summarizeWorkspaceUsage(
       .gte("created_at", startIso)
       .lt("created_at", endExclusiveIso)
       .limit(5000);
+    ledgerRows = {
+      data: (lean.data as LedgerRow[] | null) ?? null,
+      error: lean.error,
+    };
   }
 
   const empty: WorkspaceUsageSummary = {
