@@ -122,14 +122,15 @@ export async function summarizeWorkspaceUsage(
     totalWorkHours += workHours;
     totalCostUsd += costUsd;
 
-    if (row.employee_id) bump(employeeAgg, row.employee_id, workHours, costUsd);
+    // Always attribute hours so employee + work-type slices both sum to the period total.
+    bump(employeeAgg, row.employee_id ?? "unassigned", workHours, costUsd);
     bump(workTypeAgg, row.work_type ?? "other", workHours, costUsd);
     bump(providerAgg, row.provider_route ?? row.provider_name ?? "unknown", workHours, costUsd);
     if (row.model_id) bump(modelAgg, row.model_id, workHours, costUsd);
   }
 
   // Resolve employee names.
-  const employeeIds = [...employeeAgg.keys()];
+  const employeeIds = [...employeeAgg.keys()].filter((id) => id !== "unassigned");
   const nameById = new Map<string, string>();
   if (employeeIds.length) {
     const { data: employees } = await client
@@ -156,7 +157,9 @@ export async function summarizeWorkspaceUsage(
     capacity,
     weekStart,
     totalWorkHours: displayWorkHours(totalWorkHours),
-    byEmployee: toRows(employeeAgg, (id) => nameById.get(id) ?? "AI employee"),
+    byEmployee: toRows(employeeAgg, (id) =>
+      id === "unassigned" ? "Unassigned / system" : (nameById.get(id) ?? "AI employee"),
+    ),
     byWorkType: toRows(workTypeAgg, humanizeWorkType),
     byProvider: toRows(providerAgg, (p) => p),
     byModel: toRows(modelAgg, (m) => m),

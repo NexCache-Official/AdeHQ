@@ -6,10 +6,29 @@ import { PageHeader } from "@/components/Page";
 import { Card } from "@/components/ui";
 import { Gauge } from "lucide-react";
 
-function BreakdownCard({ title, rows }: { title: string; rows: UsageBreakdownRow[] }) {
+function sumHours(rows: UsageBreakdownRow[]): number {
+  return Math.round(rows.reduce((sum, row) => sum + row.workHours, 0) * 100) / 100;
+}
+
+function BreakdownCard({
+  title,
+  rows,
+  totalLabel,
+}: {
+  title: string;
+  rows: UsageBreakdownRow[];
+  totalLabel: string;
+}) {
+  const total = sumHours(rows);
   return (
     <Card className="p-6">
-      <h2 className="mb-3 text-sm font-semibold text-ink">{title}</h2>
+      <div className="mb-3 flex items-baseline justify-between gap-3">
+        <h2 className="text-sm font-semibold text-ink">{title}</h2>
+        <p className="shrink-0 text-sm font-semibold tabular-nums text-ink">
+          {total.toFixed(2)} hrs
+        </p>
+      </div>
+      <p className="mb-3 text-[11px] text-ink-3">{totalLabel}</p>
       {rows.length === 0 ? (
         <p className="text-sm text-ink-3">No AI activity yet this period.</p>
       ) : (
@@ -25,6 +44,12 @@ function BreakdownCard({ title, rows }: { title: string; rows: UsageBreakdownRow
               </span>
             </div>
           ))}
+          <div className="flex items-center justify-between border-t border-border-2 pt-2">
+            <span className="text-sm font-medium text-ink">Total</span>
+            <span className="text-sm font-semibold tabular-nums text-ink">
+              {total.toFixed(2)} hrs
+            </span>
+          </div>
         </div>
       )}
     </Card>
@@ -34,12 +59,13 @@ function BreakdownCard({ title, rows }: { title: string; rows: UsageBreakdownRow
 export default function SettingsUsagePage() {
   const { state } = useStore();
   const { data, loading, error } = useWorkspaceUsage(state.workspace.id);
+  const periodTotal = data?.totalWorkHours ?? 0;
 
   return (
     <>
       <PageHeader
         title="Usage"
-        subtitle="Where your AI Work Hours went this period, by employee and work type. Week resets Mon 00:00 UTC · also resets at month end."
+        subtitle="All billable AI Work Hours this period. Employee and work-type columns are two views of the same pool (not added together). Week resets Mon 00:00 UTC · also resets at month end."
         icon={<Gauge className="h-5 w-5" />}
       />
 
@@ -51,10 +77,10 @@ export default function SettingsUsagePage() {
         <>
           <Card className="mb-4 p-6">
             <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-3">
-              Total this period
+              Total AI Work Hours this period
             </p>
             <p className="mt-1 text-2xl font-semibold tabular-nums text-ink">
-              {(data?.totalWorkHours ?? 0).toFixed(2)} AI Work Hours
+              {periodTotal.toFixed(2)} AI Work Hours
             </p>
             <p className="mt-1 text-xs text-ink-3">
               {(data?.capacity.used ?? 0).toFixed(2)} of{" "}
@@ -65,8 +91,16 @@ export default function SettingsUsagePage() {
             </p>
           </Card>
           <div className="grid gap-4 md:grid-cols-2">
-            <BreakdownCard title="By AI employee" rows={data?.byEmployee ?? []} />
-            <BreakdownCard title="By work type" rows={data?.byWorkType ?? []} />
+            <BreakdownCard
+              title="By AI employee"
+              rows={data?.byEmployee ?? []}
+              totalLabel="Sum of hours attributed to each employee (same period total)."
+            />
+            <BreakdownCard
+              title="By work type"
+              rows={data?.byWorkType ?? []}
+              totalLabel="Sum of hours by work type (same period total)."
+            />
           </div>
         </>
       )}
