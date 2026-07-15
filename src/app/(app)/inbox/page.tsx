@@ -153,8 +153,18 @@ export default function InboxPage() {
   // --- Mailbox lookup -------------------------------------------------------
   const loadMailbox = useCallback(async () => {
     if (!workspaceId) return;
+    // Bound the request so a hung API never leaves the page on
+    // "Loading inbox…" forever (seen in CEO E2E + real usage).
     try {
-      const res = await fetchMailbox(workspaceId);
+      const res = await Promise.race([
+        fetchMailbox(workspaceId),
+        new Promise<never>((_, reject) => {
+          window.setTimeout(
+            () => reject(new Error("Inbox is taking too long to load. Try again.")),
+            25_000,
+          );
+        }),
+      ]);
       setMailbox(res);
       setMailboxError(null);
     } catch (err) {
@@ -164,6 +174,7 @@ export default function InboxPage() {
 
   useEffect(() => {
     setMailbox(null);
+    setMailboxError(null);
     folderCacheRef.current = {};
     setThreads([]);
     setDrafts([]);
@@ -801,7 +812,21 @@ export default function InboxPage() {
     return <CenterMessage text="Loading workspace…" spinner />;
   }
   if (mailboxError) {
-    return <CenterMessage text={mailboxError} />;
+    return (
+      <div className="flex h-full flex-col items-center justify-center gap-3 p-8 text-center">
+        <p className="max-w-sm text-sm text-ink-2">{mailboxError}</p>
+        <button
+          type="button"
+          onClick={() => {
+            setMailboxError(null);
+            void loadMailbox();
+          }}
+          className="rounded-[10px] border border-border bg-surface px-3 py-1.5 text-xs font-medium text-ink-2 hover:bg-muted"
+        >
+          Retry
+        </button>
+      </div>
+    );
   }
   if (!mailbox) {
     return <CenterMessage text="Loading inbox…" spinner />;

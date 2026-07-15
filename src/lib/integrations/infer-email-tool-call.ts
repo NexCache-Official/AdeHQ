@@ -42,6 +42,16 @@ function subjectAndBody(message: string, recipientName?: string): { subject: str
       body: `Hi ${name},\n\nJust wanted to check in and see how you're doing — hope life's treating you well.\n\nBest,`,
     };
   }
+  const walkthrough =
+    /\b(?:walkthrough|demo|product (?:tour|look)|20[- ]?min|twenty minutes?)\b/i.test(
+      message,
+    );
+  if (walkthrough) {
+    return {
+      subject: "Quick product walkthrough?",
+      body: `Hi ${name},\n\nWould you be open to a short 20-minute product walkthrough next week? Happy to work around your calendar — no pitch-deck spam, just a live look and honest questions both ways.\n\nThanks,`,
+    };
+  }
   return {
     subject: "Quick note",
     body: `Hi ${name},\n\nI wanted to reach out with a quick note.\n\nBest,`,

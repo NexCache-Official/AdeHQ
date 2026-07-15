@@ -71,7 +71,9 @@ async function waitShell(page, label = "shell") {
   while (Date.now() - t0 < SHELL_MS) {
     await autoShot(page, label);
     const loading = await page
-      .getByText(/Loading…|Loading\.\.\.|Loading workspace|Redirecting/i)
+      .getByText(
+        /Loading inbox|Loading…|Loading\.\.\.|Loading workspace|Redirecting|Signing in/i,
+      )
       .first()
       .isVisible()
       .catch(() => false);
@@ -217,6 +219,18 @@ async function roomSend(page, text) {
   await pace(400);
   await page.keyboard.press("Enter");
   note("send", text.slice(0, 140));
+  // Wait until the optimistic "Sending…" clears — otherwise we start the AI
+  // wait while the human message never landed and no agent run was queued.
+  const t0 = Date.now();
+  while (Date.now() - t0 < SHELL_MS) {
+    const stuck = await page.getByText(/^Sending…$|^Sending\.\.\.$/i).first().isVisible().catch(() => false);
+    if (!stuck) break;
+    await page.waitForTimeout(1000);
+  }
+  if (await page.getByText(/^Sending…$|^Sending\.\.\.$/i).first().isVisible().catch(() => false)) {
+    bug("P1", "Human message stuck in Sending… after 60s");
+    await shot(page, "send-stuck");
+  }
 }
 
 async function openAnyRoom(page) {
@@ -251,26 +265,51 @@ async function openAnyRoom(page) {
 }
 
 async function openDmEmployee(page, nameRe) {
+  // Prefer sidebar DM entry (always present when hired)
+  const side = page.locator("aside").getByText(nameRe).first();
+  if (await side.isVisible({ timeout: 3000 }).catch(() => false)) {
+    await side.click();
+    await page.waitForURL(/\/rooms\/dm_|\/rooms\//, { timeout: SHELL_MS }).catch(() => {});
+    await waitShell(page, "dm-side");
+    await pace(1000);
+    if (await messageBox(page).isVisible({ timeout: 5000 }).catch(() => false)) {
+      await shot(page, "dm-open");
+      return true;
+    }
+  }
+
   await page.goto(`${BASE}/dm`, { waitUntil: "domcontentloaded", timeout: SHELL_MS }).catch(() => {});
   await waitShell(page, "dm-index");
-  const link = page.getByRole("link", { name: nameRe }).first()
-    .or(page.locator("a, button").filter({ hasText: nameRe }).first());
-  if (await link.isVisible({ timeout: 5000 }).catch(() => false)) {
-    await link.click();
+  await shot(page, "dm-index");
+
+  // Card grid: click Open chat on the matching employee card
+  const card = page.locator("div, article, a").filter({ hasText: nameRe }).filter({ hasText: /Open chat|Message/i }).first();
+  const openChat = card.getByRole("button", { name: /Open chat|Message/i }).first()
+    .or(page.getByRole("button", { name: /Open chat/i }).first());
+  if (await openChat.isVisible({ timeout: 5000 }).catch(() => false)) {
+    // Prefer the Open chat that sits near the name
+    const near = page
+      .locator("div")
+      .filter({ hasText: nameRe })
+      .getByRole("button", { name: /Open chat/i })
+      .first();
+    if (await near.isVisible().catch(() => false)) await near.click();
+    else await openChat.click();
+    await page.waitForURL(/\/rooms\//, { timeout: SHELL_MS }).catch(() => {});
     await waitShell(page, "dm");
     await shot(page, "dm-open");
-    return true;
+    return Boolean(await messageBox(page).isVisible({ timeout: 5000 }).catch(() => false));
   }
-  // Workforce → open DM
+
   await page.goto(`${BASE}/workforce`, { waitUntil: "domcontentloaded", timeout: SHELL_MS });
   await waitShell(page, "wf-dm");
-  await shot(page, "workforce");
-  const card = page.locator("a, button").filter({ hasText: nameRe }).first();
-  if (await card.isVisible({ timeout: 4000 }).catch(() => false)) {
-    await card.click();
-    await pace(1500);
-    const dm = page.getByRole("button", { name: /Message|Open DM|Chat/i }).first();
-    if (await dm.isVisible().catch(() => false)) await dm.click();
+  const msgBtn = page
+    .locator("div")
+    .filter({ hasText: nameRe })
+    .getByRole("button", { name: /^Message$/i })
+    .first();
+  if (await msgBtn.isVisible({ timeout: 4000 }).catch(() => false)) {
+    await msgBtn.click();
     await waitShell(page, "dm2");
     await shot(page, "dm-from-wf");
     return Boolean(await messageBox(page).isVisible({ timeout: 5000 }).catch(() => false));
@@ -281,9 +320,37 @@ async function openDmEmployee(page, nameRe) {
 async function ensureInboxReady(page) {
   await page.goto(`${BASE}/inbox`, { waitUntil: "domcontentloaded", timeout: SHELL_MS });
   await waitShell(page, "inbox");
+  // Unclaimed mailboxes redirect to Settings → Inbox
+  if (page.url().includes("/settings/inbox")) {
+    note("flow", "Redirected to settings/inbox for claim");
+    await shot(page, "settings-inbox");
+    const local = page.getByPlaceholder(/hello|you|team|support/i).first()
+      .or(page.locator('input[type="text"]').first());
+    if (await local.isVisible({ timeout: 5000 }).catch(() => false)) {
+      await local.fill(`saas1${Date.now().toString(36).slice(-4)}`);
+      await pace(600);
+      const claim = page.getByRole("button", { name: /Claim address|Claim/i }).first();
+      if (await claim.isVisible().catch(() => false) && !(await claim.isDisabled().catch(() => true))) {
+        await claim.click();
+        await waitShell(page, "claimed");
+        await pace(1500);
+      }
+    }
+    await page.goto(`${BASE}/inbox`, { waitUntil: "domcontentloaded", timeout: SHELL_MS });
+    await waitShell(page, "inbox-after-claim");
+  }
   await shot(page, "inbox");
+  // Retry once if still spinning
+  if (await page.getByText(/Loading inbox/i).first().isVisible({ timeout: 1500 }).catch(() => false)) {
+    note("ux", "Inbox still loading — waiting up to 60s");
+    await waitShell(page, "inbox-retry");
+    if (await page.getByRole("button", { name: /Retry/i }).isVisible().catch(() => false)) {
+      await page.getByRole("button", { name: /Retry/i }).click();
+      await waitShell(page, "inbox-retry-click");
+    }
+  }
   if (await page.getByRole("button", { name: /Claim address/i }).isVisible({ timeout: 2500 }).catch(() => false)) {
-    note("flow", "Claiming mailbox");
+    note("flow", "Claiming mailbox on inbox page");
     const local = page.getByPlaceholder(/hello|you|team|support/i).first()
       .or(page.locator('input[type="text"]').first());
     if (await local.isVisible().catch(() => false)) {
@@ -523,7 +590,7 @@ async function waveInbox(page, s) {
 
 async function waveDmTask(page, s) {
   note("flow", `Wave ${wave}: DM task ${s}`);
-  const opened = await openDmEmployee(page, /Lane|Casey|Jules|SDR|Product|Success/i);
+  const opened = await openDmEmployee(page, /Lane Lloyd|Lane/i);
   if (!opened) {
     note("ux", "No DM target — skipping DM wave");
     return;
@@ -534,6 +601,33 @@ async function waveDmTask(page, s) {
   );
   await waitAi(page, `dm-task-${s}`, 18000);
   await shot(page, `dm-done-${s}`);
+
+  // Casey owns outbound — force a real inbox draft→approve path in DM
+  note("flow", `Wave ${wave}: Casey email DM ${s}`);
+  const casey = await openDmEmployee(page, /Casey Nguyen|Casey/i);
+  if (!casey) {
+    bug("P1", "Could not open Casey DM for email test");
+    return;
+  }
+  await roomSend(
+    page,
+    `Hey Casey — please send a short, friendly email to ${MAIL_TO} inviting them to a 20-minute FlowDesk walkthrough next week. Draft it in the workspace inbox, show me the draft card here, and ask me before it actually goes out. Conversational tone. (${s}-casey-mail)`,
+  );
+  await waitAi(page, `casey-mail-${s}`, 45000);
+  await shot(page, `casey-mail-${s}`);
+  const approve = page.getByRole("button", { name: /Approve|Confirm send|Yes, send|Send email/i }).first();
+  if (await approve.isVisible({ timeout: 5000 }).catch(() => false)) {
+    note("flow", "Approving Casey email send");
+    await approve.click();
+    await pace(4000);
+    await shot(page, `casey-approved-${s}`);
+  } else if (await page.getByText(/don'?t have the ability|cannot send|can'?t send email/i).first().isVisible().catch(() => false)) {
+    bug("P0", "Casey still refuses email send capability");
+    await shot(page, `casey-refuse-${s}`);
+    await roomSend(page, "Try again now — use the inbox draft tools and put it up for my approval.");
+    await waitAi(page, `casey-retry-${s}`, 45000);
+    await shot(page, `casey-retry-${s}`);
+  }
 }
 
 async function waveNavSmoke(page, s) {
