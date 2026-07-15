@@ -40,6 +40,8 @@ import { DrivePreviewModal } from "@/components/drive/DrivePreviewModal";
 import { PageContainer, PageHeader } from "@/components/Page";
 import { EmptyState } from "@/components/States";
 import { Button, Modal, ModalHeader } from "@/components/ui";
+import { ResizablePane } from "@/components/layout/ResizablePane";
+import { PANE_PRESETS } from "@/lib/layout/pane-prefs";
 import { cn } from "@/lib/utils";
 import {
   Camera,
@@ -481,46 +483,55 @@ export default function DrivePage() {
         </div>
       )}
 
-      <div className="flex flex-col gap-4 lg:flex-row">
-        <aside className="w-full shrink-0 lg:w-56">
-          <nav className="space-y-1 rounded-2xl border border-border bg-surface p-2">
-            {[...DRIVE_SECTIONS, { id: "quotas" as const, label: "Quotas" }].map((item) => (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => {
-                  setSection(item.id);
-                  if (item.id !== section) setFolderId(null);
-                }}
-                className={cn(
-                  "flex w-full items-center justify-between gap-2 rounded-xl px-3 py-2 text-left text-sm transition-colors",
-                  section === item.id
-                    ? "bg-accent-soft text-accent-d font-medium"
-                    : "text-ink-2 hover:bg-muted hover:text-ink",
-                )}
-              >
-                <span className="flex min-w-0 items-center gap-2">
-                  {item.id === "quotas" ? (
-                    <HardDrive className="h-4 w-4 shrink-0" />
-                  ) : item.id === "exports" ? (
-                    <FileSpreadsheet className="h-4 w-4 shrink-0" />
-                  ) : (
-                    (() => {
-                      const Icon = sectionIcon(item.id);
-                      return <Icon className="h-4 w-4 shrink-0" />;
-                    })()
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-stretch">
+        <ResizablePane
+          id={PANE_PRESETS.driveNav.id}
+          side="left"
+          limits={PANE_PRESETS.driveNav}
+          fluidBelowLg
+          className="lg:min-h-[420px]"
+          collapsedLabel="Drive"
+        >
+          <aside className="h-full w-full min-w-0">
+            <nav className="min-w-0 space-y-1 overflow-hidden rounded-2xl border border-border bg-surface p-2">
+              {[...DRIVE_SECTIONS, { id: "quotas" as const, label: "Quotas" }].map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => {
+                    setSection(item.id);
+                    if (item.id !== section) setFolderId(null);
+                  }}
+                  className={cn(
+                    "flex w-full items-center justify-between gap-2 rounded-xl px-3 py-2 text-left text-sm transition-colors",
+                    section === item.id
+                      ? "bg-accent-soft text-accent-d font-medium"
+                      : "text-ink-2 hover:bg-muted hover:text-ink",
                   )}
-                  <span className="truncate">{item.label}</span>
-                </span>
-                {sectionCounts && item.id in sectionCounts && (
-                  <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-ink-3">
-                    {sectionCounts[item.id as keyof typeof sectionCounts]}
+                >
+                  <span className="flex min-w-0 items-center gap-2">
+                    {item.id === "quotas" ? (
+                      <HardDrive className="h-4 w-4 shrink-0" />
+                    ) : item.id === "exports" ? (
+                      <FileSpreadsheet className="h-4 w-4 shrink-0" />
+                    ) : (
+                      (() => {
+                        const Icon = sectionIcon(item.id);
+                        return <Icon className="h-4 w-4 shrink-0" />;
+                      })()
+                    )}
+                    <span className="truncate">{item.label}</span>
                   </span>
-                )}
-              </button>
-            ))}
-          </nav>
-        </aside>
+                  {sectionCounts && item.id in sectionCounts && (
+                    <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-ink-3">
+                      {sectionCounts[item.id as keyof typeof sectionCounts]}
+                    </span>
+                  )}
+                </button>
+              ))}
+            </nav>
+          </aside>
+        </ResizablePane>
 
         <div className="min-w-0 flex-1">
           {section === "quotas" ? (

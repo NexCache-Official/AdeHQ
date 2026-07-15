@@ -519,8 +519,10 @@ export function TopicPanel({
 
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         <div className="shrink-0 border-b border-border-2 px-4 pb-3 pt-[15px]">
-          <h2 className="truncate text-[14.5px] font-bold tracking-tight text-ink">{panelTitle}</h2>
-          <p className="text-[11.5px] text-ink-2">{workstreamSubtitle}</p>
+          <h2 className="min-w-0 truncate text-[14.5px] font-bold tracking-tight text-ink">
+            {panelTitle}
+          </h2>
+          <p className="min-w-0 truncate text-[11.5px] text-ink-2">{workstreamSubtitle}</p>
           <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[10.5px] text-ink-3">
             <span>
               {topicEmployees.length} employee{topicEmployees.length === 1 ? "" : "s"} active
@@ -666,7 +668,7 @@ export function TopicPanel({
                         className="fixed inset-0 z-10"
                         onClick={() => setClearChatMenuOpen(false)}
                       />
-                      <div className="absolute left-0 top-full z-20 mt-1 w-64 overflow-hidden rounded-xl border border-border bg-surface shadow-lg">
+                      <div className="absolute left-0 top-full z-20 mt-1 w-[min(16rem,calc(100%-0.5rem))] overflow-hidden rounded-xl border border-border bg-surface shadow-lg">
                         {canClearTopicChat && (
                           <button
                             type="button"
@@ -805,10 +807,10 @@ export function TopicPanel({
               )}
               {onParticipationChange && !isMayaDm && (
                 <details className="group">
-                  <summary className="flex cursor-pointer list-none items-center gap-1.5 rounded-lg border border-border bg-muted px-2.5 py-1.5 text-xs text-ink-2 hover:bg-surface [&::-webkit-details-marker]:hidden">
+                  <summary className="flex min-w-0 cursor-pointer list-none items-center gap-1.5 rounded-lg border border-border bg-muted px-2.5 py-1.5 text-xs text-ink-2 hover:bg-surface [&::-webkit-details-marker]:hidden">
                     <ChevronDown className="h-3.5 w-3.5 shrink-0 text-ink-3 transition-transform group-open:rotate-180" />
-                    <span className="font-medium">AI participation</span>
-                    <span className="truncate text-ink-3">
+                    <span className="shrink-0 font-medium">AI participation</span>
+                    <span className="min-w-0 flex-1 truncate text-ink-3">
                       — {aiControl.aiStopped ? "Stopped" : participationModeLabel(participation)}
                     </span>
                   </summary>

@@ -33,21 +33,22 @@ export function EmployeeStatusBadge({
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-[8px] font-semibold",
+        "inline-flex max-w-full min-w-0 items-center gap-1.5 rounded-[8px] font-semibold",
         compact ? "px-2 py-0.5 text-[11px]" : "px-2.5 py-1 text-[11.5px]",
         className,
       )}
       style={{ color: meta.color, background: meta.soft }}
+      title={meta.label}
     >
       <span
         className={cn(
-          "rounded-full",
+          "shrink-0 rounded-full",
           compact ? "h-2 w-2" : "h-2 w-2",
           meta.dot,
           (status === "working" || status === "online") && "animate-pulse-ring",
         )}
       />
-      {meta.label}
+      <span className="min-w-0 truncate">{meta.label}</span>
     </span>
   );
 }

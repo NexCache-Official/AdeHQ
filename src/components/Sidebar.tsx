@@ -17,7 +17,6 @@ import { ENABLE_DEMO_MODE, WORKFORCE_CALLS_ENABLED } from "@/lib/config/features
 import { useShellUI } from "./AppShell";
 import { useDebugTrace } from "./DebugProvider";
 import { WorkspaceSwitcher } from "./WorkspaceSwitcher";
-import { NotificationsMenu } from "./NotificationsMenu";
 import { SidebarWorkHoursMeter } from "./SidebarWorkHoursMeter";
 import { roleLabel } from "@/lib/workspace/permissions";
 import { Toggle } from "./ui";
@@ -135,49 +134,46 @@ export function Sidebar() {
     ) : null;
 
   return (
-    <aside className="hidden w-[240px] shrink-0 flex-col border-r border-[var(--rail-edge)] bg-rail lg:flex">
-      <div className="flex min-h-0 flex-1 flex-col gap-[3px] overflow-y-auto px-3 py-3.5">
-        <div className="mb-2.5 flex items-start gap-2">
-          <div className="min-w-0 flex-1">
-            <WorkspaceSwitcher variant="rail" />
-          </div>
-          <div className="pt-1">
-            <NotificationsMenu variant="rail" />
-          </div>
-        </div>
+    <aside className="flex h-full w-full min-w-0 flex-col border-r border-[var(--rail-edge)] bg-rail">
+      {/* Fixed: workspace → search */}
+      <div className="shrink-0 space-y-2 border-b border-[var(--rail-edge)]/70 px-3 pb-2.5 pt-3.5">
+        <WorkspaceSwitcher variant="rail" />
         <SidebarWorkHoursMeter />
 
-        <div className="relative mb-2 mt-1">
+        <div className="relative">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-[15px] w-[15px] -translate-y-1/2 text-[var(--rail-ink-3)]" />
           <button
             type="button"
             onClick={ui.openCommand}
             className="flex w-full items-center justify-between rounded-[11px] border border-[var(--rail-border)] bg-[var(--rail-fill)] py-2 pl-9 pr-2.5 text-left text-[12.5px] text-[var(--rail-ink-2)] transition-colors hover:bg-[var(--rail-hover)] hover:text-[var(--rail-ink)]"
           >
-            <span>Search or command</span>
-            <span className="rounded-[5px] border border-[var(--rail-border)] px-1.5 py-px font-mono text-[10px] text-[var(--rail-ink-3)]">
+            <span className="min-w-0 flex-1 truncate">Search or command</span>
+            <span className="shrink-0 rounded-[5px] border border-[var(--rail-border)] px-1.5 py-px font-mono text-[10px] text-[var(--rail-ink-3)]">
               ⌘K
             </span>
           </button>
         </div>
+      </div>
 
-        <p className="px-2.5 pb-1 pt-2 text-[10.5px] font-semibold uppercase tracking-[0.08em] text-[var(--rail-ink-3)]">
+      {/* Scrollable middle nav */}
+      <div className="rail-scroll flex min-h-0 flex-1 flex-col gap-[3px] overflow-y-auto overflow-x-hidden px-3 py-2.5">
+        <p className="px-2.5 pb-1 pt-1 text-[10.5px] font-semibold uppercase tracking-[0.08em] text-[var(--rail-ink-3)]">
           Workspace
         </p>
         <Link href="/" className={cn("nav-link", isActive("/", true) && "nav-link-active")}>
           <Home className="h-[17px] w-[17px]" strokeWidth={1.8} />
-          <span className="flex-1">Home</span>
+          <span className="flex-1 truncate">Home</span>
         </Link>
 
         <Link href="/inbox" className={cn("nav-link", isActive("/inbox") && "nav-link-active")}>
           <Mail className="h-[17px] w-[17px]" strokeWidth={1.8} />
-          <span className="flex-1">Inbox</span>
+          <span className="flex-1 truncate">Inbox</span>
           {unreadBadge(inboxUnread)}
         </Link>
 
         <Link href="/drive" className={cn("nav-link", isActive("/drive") && "nav-link-active")}>
           <HardDrive className="h-[17px] w-[17px]" strokeWidth={1.8} />
-          <span className="flex-1">AdeHQ Drive</span>
+          <span className="flex-1 truncate">AdeHQ Drive</span>
         </Link>
 
         <SidebarCollapsibleSection
@@ -279,7 +275,7 @@ export function Sidebar() {
 
         <Link href="/calls" className={cn("nav-link", isActive("/calls") && "nav-link-active")}>
           <Phone className="h-[17px] w-[17px]" strokeWidth={1.8} />
-          <span className="flex-1">Calls</span>
+          <span className="flex-1 truncate">Calls</span>
           {!WORKFORCE_CALLS_ENABLED && (
             <span className="rounded-full bg-amber-500/10 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-amber-700">
               Soon
@@ -301,7 +297,7 @@ export function Sidebar() {
           return (
             <Link key={item.href} href={item.href} className={cn("nav-link", active && "nav-link-active")}>
               <item.icon className="h-[17px] w-[17px]" strokeWidth={1.8} />
-              <span className="flex-1">{item.label}</span>
+              <span className="flex-1 truncate">{item.label}</span>
               {badge > 0 && (
                 <span
                   className={cn(
@@ -319,21 +315,22 @@ export function Sidebar() {
         })}
       </div>
 
-      <div className="relative mt-auto shrink-0 space-y-2 border-t border-[var(--rail-edge)] px-3 pb-3 pt-3">
+      {/* Fixed: hire + profile */}
+      <div className="relative shrink-0 space-y-2 border-t border-[var(--rail-edge)] px-3 pb-3 pt-3">
         {workingCount > 0 && (
-          <div className="flex items-center gap-1.5 rounded-[10px] border border-green/20 bg-green-soft px-2.5 py-1.5 text-[11px] font-medium text-green">
+          <div className="flex min-w-0 items-center gap-1.5 rounded-[10px] border border-green/20 bg-green-soft px-2.5 py-1.5 text-[11px] font-medium text-green">
             <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-green animate-glowpulse" />
-            {workingCount} working now
+            <span className="min-w-0 truncate">{workingCount} working now</span>
           </div>
         )}
 
         <button
           type="button"
           onClick={ui.openHire}
-          className="flex w-full items-center justify-center gap-2 rounded-[11px] bg-accent px-3 py-2.5 text-[12.5px] font-semibold text-white shadow-glow transition-all hover:brightness-105 active:scale-[0.99]"
+          className="flex w-full min-w-0 items-center justify-center gap-2 rounded-[11px] bg-accent px-2.5 py-2.5 text-[12.5px] font-semibold text-white shadow-glow transition-all hover:brightness-105 active:scale-[0.99]"
         >
-          <UserPlus className="h-4 w-4" strokeWidth={2} />
-          Hire AI Employee
+          <UserPlus className="h-4 w-4 shrink-0" strokeWidth={2} />
+          <span className="min-w-0 truncate">Hire AI Employee</span>
         </button>
 
         <button
@@ -355,7 +352,7 @@ export function Sidebar() {
             <div className="truncate text-[12.5px] font-semibold text-[var(--rail-ink)]">
               {state.user?.name ?? "You"}
             </div>
-            <div className="text-[11px] text-[var(--rail-ink-3)]">
+            <div className="truncate text-[11px] text-[var(--rail-ink-3)]">
               {roleLabel(
                 state.workspaceMembers.find((m) => m.userId === state.user?.id)?.role,
               )}

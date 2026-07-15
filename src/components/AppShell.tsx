@@ -14,11 +14,13 @@ import { CommandBar } from "./CommandBar";
 import { CreateRoomModal } from "./CreateRoomModal";
 import { LoadingState } from "./States";
 import { DebugProvider, useDebugTraceListener } from "./DebugProvider";
+import { ResizablePane } from "./layout/ResizablePane";
 import { cn } from "@/lib/utils";
 import { DebugTerminal } from "./DebugTerminal";
 import { JUMP_TO_SOURCE_EVENT, type JumpSource } from "@/lib/navigation/jump-to-source";
 import { crmEntityHref } from "@/lib/crm/client";
 import { isPasswordRecoveryPending } from "@/lib/auth/recovery";
+import { PANE_PRESETS } from "@/lib/layout/pane-prefs";
 
 type ShellUI = {
   openCommand: () => void;
@@ -131,7 +133,15 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
   return (
     <ShellUIContext.Provider value={ui}>
       <div className="flex h-screen overflow-hidden bg-canvas text-ink">
-        <Sidebar />
+        <ResizablePane
+          id={PANE_PRESETS.appRail.id}
+          side="left"
+          limits={PANE_PRESETS.appRail}
+          className="hidden lg:flex"
+          collapsedLabel="Workspace"
+        >
+          <Sidebar />
+        </ResizablePane>
         <div className="flex min-w-0 flex-1 flex-col">
           {maintenanceMessage && (
             <div className="border-b border-amber-200 bg-amber-50 px-4 py-2 text-center text-sm text-amber-900">

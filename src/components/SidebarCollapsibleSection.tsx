@@ -56,8 +56,8 @@ export function SidebarCollapsibleSection({
   };
 
   return (
-    <div>
-      <div className="flex items-center gap-0.5">
+    <div className="min-w-0">
+      <div className="flex min-w-0 items-center gap-0.5">
         <button
           type="button"
           onClick={toggle}
@@ -78,9 +78,9 @@ export function SidebarCollapsibleSection({
           )}
         >
           <Icon className="h-[17px] w-[17px] shrink-0" strokeWidth={1.8} />
-          <span className="flex-1 truncate">{label}</span>
+          <span className="min-w-0 flex-1 truncate">{label}</span>
           {count !== undefined && count > 0 && (
-            <span className="rounded-md bg-[var(--rail-badge-bg)] px-1.5 py-px font-mono text-[10.5px] text-[var(--rail-badge-ink)]">
+            <span className="shrink-0 rounded-md bg-[var(--rail-badge-bg)] px-1.5 py-px font-mono text-[10.5px] text-[var(--rail-badge-ink)]">
               {count}
             </span>
           )}
@@ -88,7 +88,7 @@ export function SidebarCollapsibleSection({
             <span className="h-[7px] w-[7px] shrink-0 rounded-full bg-accent" />
           )}
         </Link>
-        {headerAction}
+        {headerAction ? <div className="shrink-0">{headerAction}</div> : null}
       </div>
       <div
         className={cn(

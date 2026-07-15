@@ -78,7 +78,7 @@ function TopicRow({
         <MainChatIcon isDm={!!isDm} />
         <span
           className={cn(
-            "flex-1 text-[13px] font-semibold",
+            "min-w-0 flex-1 truncate text-[13px] font-semibold",
             selected ? "text-accent-d" : "text-ink",
           )}
         >
@@ -218,36 +218,42 @@ export function TopicList({
     regularTopics.reduce((n, t) => n + unreadFor(t), 0) + (mainTopic ? unreadFor(mainTopic) : 0);
 
   return (
-    <div className="flex h-full flex-col border-r border-border bg-surface">
+    <div className="flex h-full min-w-0 flex-col border-r border-border bg-surface">
       {isDm && dmEmployee ? (
-        <div className="border-b border-border-2 p-4">
-          <div className="flex items-center gap-[11px]">
+        <div className="min-w-0 border-b border-border-2 p-4">
+          <div className="flex min-w-0 items-center gap-[11px]">
             <EmployeeAvatar
               employee={dmEmployee}
               size="md"
               className="!h-10 !w-10 !rounded-xl !text-sm"
             />
             <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-1.5">
-                <span className="truncate text-[14.5px] font-semibold text-ink">{dmEmployee.name}</span>
-                <span className="rounded-[5px] bg-accent-soft px-[5px] py-0.5 text-[9px] font-bold text-accent">
+              <div className="flex min-w-0 items-center gap-1.5">
+                <span className="min-w-0 truncate text-[14.5px] font-semibold text-ink">
+                  {dmEmployee.name}
+                </span>
+                <span className="shrink-0 rounded-[5px] bg-accent-soft px-[5px] py-0.5 text-[9px] font-bold text-accent">
                   AI
                 </span>
               </div>
               <p className="truncate text-xs text-ink-2">{dmEmployee.role}</p>
             </div>
           </div>
-          <div className="mt-[11px]">
-            <EmployeeStatusBadge status={effectiveEmployeeStatus(dmEmployee)} />
+          <div className="mt-[11px] min-w-0">
+            <EmployeeStatusBadge
+              status={effectiveEmployeeStatus(dmEmployee)}
+              className="max-w-full"
+              compact
+            />
           </div>
         </div>
       ) : room ? (
-        <div className="border-b border-border-2 p-4">
-          <div className="flex items-center gap-2.5">
+        <div className="min-w-0 border-b border-border-2 p-4">
+          <div className="flex min-w-0 items-center gap-2.5">
             <RoomIcon />
             <div className="min-w-0 flex-1">
               <div className="truncate text-[15px] font-semibold text-ink">{room.name}</div>
-              <div className="text-[11.5px] text-ink-2">Room · {totalUnread} unread</div>
+              <div className="truncate text-[11.5px] text-ink-2">Room · {totalUnread} unread</div>
             </div>
           </div>
           {onOpenMembers && (

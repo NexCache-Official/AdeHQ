@@ -99,11 +99,11 @@ export function WorkspaceSwitcher({
             {state.workspace.name || "Workspace"}
           </div>
           {isRail ? (
-            <div className="text-[11px] text-[var(--rail-ink-3)]">{myRoleLabel}</div>
+            <div className="truncate text-[11px] text-[var(--rail-ink-3)]">{myRoleLabel}</div>
           ) : null}
         </div>
         {pendingInvites.length > 0 ? (
-          <span className="rounded-full bg-amber-soft px-1.5 text-[10px] font-medium text-amber">
+          <span className="shrink-0 rounded-full bg-amber-soft px-1.5 text-[10px] font-medium text-amber">
             {pendingInvites.length}
           </span>
         ) : null}
@@ -121,8 +121,10 @@ export function WorkspaceSwitcher({
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -4 }}
               className={cn(
-                "absolute z-40 w-72 overflow-hidden rounded-xl border border-border bg-surface shadow-lift",
-                isRail ? "left-0 top-full mt-1" : "left-0 top-11",
+                "absolute z-40 overflow-hidden rounded-xl border border-border bg-surface shadow-lift",
+                isRail
+                  ? "left-0 right-0 top-full mt-1 w-auto min-w-[12rem]"
+                  : "left-0 top-11 w-72",
               )}
             >
               <div className="border-b border-border-2 px-3 py-2 text-xs font-medium uppercase tracking-wide text-ink-3">

@@ -32,6 +32,11 @@ export default function SettingsLayout({ children }: { children: React.ReactNode
   const pathname = usePathname();
   const { state } = useStore();
   const role = state.workspaceMembers.find((m) => m.userId === state.user?.id)?.role ?? "member";
+  const pendingInvites = state.workspaceInvitations.filter(
+    (invite) =>
+      invite.status === "pending" &&
+      invite.invitedEmail.toLowerCase() === (state.user?.email ?? "").toLowerCase(),
+  ).length;
 
   const items = NAV.filter((item) => item.show(role));
 
@@ -44,6 +49,7 @@ export default function SettingsLayout({ children }: { children: React.ReactNode
               ? pathname === "/settings"
               : pathname.startsWith(item.href);
           const Icon = item.icon;
+          const showInviteBadge = item.href === "/settings/notifications" && pendingInvites > 0;
           return (
             <Link
               key={item.href}
@@ -57,6 +63,11 @@ export default function SettingsLayout({ children }: { children: React.ReactNode
             >
               <Icon className="h-4 w-4" />
               {item.label}
+              {showInviteBadge ? (
+                <span className="rounded-full bg-amber px-1.5 text-[10px] font-semibold text-white">
+                  {pendingInvites}
+                </span>
+              ) : null}
             </Link>
           );
         })}

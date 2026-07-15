@@ -6,6 +6,8 @@ import { useStore } from "@/lib/demo-store";
 import { RoomChat } from "@/components/RoomChat";
 import { TopicList } from "@/components/TopicList";
 import { TopicPanel } from "@/components/TopicPanel";
+import { ResizablePane } from "@/components/layout/ResizablePane";
+import { PANE_PRESETS } from "@/lib/layout/pane-prefs";
 import { NewTopicModal } from "@/components/NewTopicModal";
 import { AddEmployeeToRoomModal } from "@/components/AddEmployeeToRoomModal";
 import { AutonomousLauncher } from "@/components/autonomy/AutonomousLauncher";
@@ -981,7 +983,13 @@ export default function RoomDetailPage() {
 
       <OrchestrationUiProvider>
       <div className="flex min-h-0 flex-1 overflow-hidden">
-        <div className="hidden w-[266px] shrink-0 lg:block">
+        <ResizablePane
+          id={PANE_PRESETS.roomTopics.id}
+          side="left"
+          limits={PANE_PRESETS.roomTopics}
+          className="hidden lg:flex"
+          collapsedLabel="Topics"
+        >
           <TopicList
             topics={roomTopics}
             topicMembers={roomTopicMembers}
@@ -1001,7 +1009,7 @@ export default function RoomDetailPage() {
             onDeleteTopic={deleteTopicById}
             topicActionBusy={topicActionBusy}
           />
-        </div>
+        </ResizablePane>
 
         {isMayaDm ? (
           <MayaRoomCoordinator
@@ -1038,7 +1046,13 @@ export default function RoomDetailPage() {
                   messageActions={messageActions}
                 />
               </div>
-              <div className="hidden w-[344px] shrink-0 xl:block">
+              <ResizablePane
+                id={PANE_PRESETS.roomContext.id}
+                side="right"
+                limits={PANE_PRESETS.roomContext}
+                className="hidden xl:flex"
+                collapsedLabel="Context"
+              >
                 {selectedTopic ? (
                   <TopicPanel
                     topic={selectedTopic}
@@ -1075,7 +1089,7 @@ export default function RoomDetailPage() {
                     Select a topic to see context
                   </div>
                 )}
-              </div>
+              </ResizablePane>
             </div>
           </MayaRoomCoordinator>
         ) : (
@@ -1109,7 +1123,13 @@ export default function RoomDetailPage() {
               />
         </div>
 
-        <div className="hidden w-[344px] shrink-0 xl:block">
+        <ResizablePane
+          id={PANE_PRESETS.roomContext.id}
+          side="right"
+          limits={PANE_PRESETS.roomContext}
+          className="hidden xl:flex"
+          collapsedLabel="Context"
+        >
           {selectedTopic ? (
             <TopicPanel
               topic={selectedTopic}
@@ -1145,7 +1165,7 @@ export default function RoomDetailPage() {
               Select a topic to see context
             </div>
           )}
-        </div>
+        </ResizablePane>
           </>
         )}
       </div>

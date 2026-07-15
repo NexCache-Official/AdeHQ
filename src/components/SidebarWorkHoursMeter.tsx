@@ -24,12 +24,12 @@ export function SidebarWorkHoursMeter() {
   return (
     <Link
       href="/settings/usage"
-      className="mb-1 mt-1 block rounded-[11px] border border-[var(--rail-border)] bg-[var(--rail-fill)] px-2.5 py-2 transition-colors hover:bg-[var(--rail-hover)]"
+      className="block rounded-[11px] border border-[var(--rail-border)] bg-[var(--rail-fill)] px-2.5 py-2 transition-colors hover:bg-[var(--rail-hover)]"
       title="Week resets Mon 00:00 UTC · also resets at month end"
     >
-      <div className="flex items-center justify-between gap-2 text-[10.5px] text-[var(--rail-ink-2)]">
-        <span className="font-medium text-[var(--rail-ink)]">AI Work Hours</span>
-        <span className="tabular-nums text-[var(--rail-ink-3)]">
+      <div className="flex min-w-0 items-center justify-between gap-2 text-[10.5px] text-[var(--rail-ink-2)]">
+        <span className="min-w-0 truncate font-medium text-[var(--rail-ink)]">AI Work Hours</span>
+        <span className="min-w-0 shrink truncate text-right tabular-nums text-[var(--rail-ink-3)]">
           {loading
             ? "…"
             : unlimited
@@ -38,8 +38,8 @@ export function SidebarWorkHoursMeter() {
         </span>
       </div>
       {!unlimited && (
-        <div className="mt-1.5 flex items-center gap-2">
-          <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-[var(--rail-border)]">
+        <div className="mt-1.5 flex min-w-0 items-center gap-2">
+          <div className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-[var(--rail-border)]">
             <div
               className={cn(
                 "h-full rounded-full transition-all",

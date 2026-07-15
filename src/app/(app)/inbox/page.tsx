@@ -21,6 +21,8 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useStore } from "@/lib/demo-store";
+import { ResizablePane } from "@/components/layout/ResizablePane";
+import { PANE_PRESETS } from "@/lib/layout/pane-prefs";
 import {
   fetchMailbox,
   fetchThreads,
@@ -819,19 +821,26 @@ export default function InboxPage() {
   return (
     <div className="relative flex h-full min-h-0 bg-canvas">
       {/* Folders — desktop always; mobile when mobileView=folders */}
-      <nav
+      <ResizablePane
+        id={PANE_PRESETS.inboxFolders.id}
+        side="left"
+        limits={PANE_PRESETS.inboxFolders}
+        fluidBelowMd
         className={cn(
-          "w-full shrink-0 flex-col border-r border-border bg-surface px-2 py-3 md:flex md:w-52",
-          mobileView === "folders" ? "flex" : "hidden",
+          "border-r border-border bg-surface",
+          mobileView === "folders" ? "flex" : "hidden md:flex",
         )}
+        collapsedLabel="Folders"
       >
+      <nav className="flex h-full min-h-0 w-full flex-col px-2 py-3">
         <div className="px-2 pb-3">
           <button
             onClick={() => setComposer({ open: true, initial: {} })}
             disabled={!mailbox.access.canSend}
-            className="flex w-full items-center justify-center gap-2 rounded-lg bg-accent px-3 py-2 text-sm font-medium text-white transition hover:opacity-90 disabled:opacity-40"
+            className="flex w-full min-w-0 items-center justify-center gap-2 rounded-lg bg-accent px-3 py-2 text-sm font-medium text-white transition hover:opacity-90 disabled:opacity-40"
           >
-            <PenSquare className="h-4 w-4" /> Compose
+            <PenSquare className="h-4 w-4 shrink-0" />
+            <span className="truncate">Compose</span>
           </button>
         </div>
         {brief && (
@@ -885,12 +894,12 @@ export default function InboxPage() {
               setMobileView("list");
             }}
             className={cn(
-              "relative flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-ink-2 transition hover:bg-muted",
+              "relative flex min-w-0 items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-ink-2 transition hover:bg-muted",
               folder === f.key && "bg-accent-soft font-medium text-accent-d hover:bg-accent-soft",
             )}
           >
-            <f.icon className="h-4 w-4" />
-            {f.label}
+            <f.icon className="h-4 w-4 shrink-0" />
+            <span className="min-w-0 truncate">{f.label}</span>
           </button>
         ))}
         {mailbox.access.canManage && (
@@ -934,14 +943,21 @@ export default function InboxPage() {
           </div>
         )}
       </nav>
+      </ResizablePane>
 
       {/* Thread list */}
-      <div
+      <ResizablePane
+        id={PANE_PRESETS.inboxList.id}
+        side="left"
+        limits={PANE_PRESETS.inboxList}
+        fluidBelowMd
         className={cn(
-          "flex min-h-0 w-full flex-col border-r border-border md:w-80 md:shrink-0",
+          "border-r border-border bg-surface",
           mobileView !== "list" && "hidden md:flex",
         )}
+        collapsedLabel="Mail"
       >
+      <div className="flex h-full min-h-0 w-full flex-col">
         <div className="space-y-2 border-b border-border px-4 py-3">
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-2">
@@ -953,7 +969,7 @@ export default function InboxPage() {
               >
                 <Folder className="h-4 w-4" />
               </button>
-              <h1 className="text-sm font-semibold capitalize text-ink">
+              <h1 className="min-w-0 truncate text-sm font-semibold capitalize text-ink">
                 {FOLDERS.find((f) => f.key === folder)?.label}
               </h1>
             </div>
@@ -1054,11 +1070,12 @@ export default function InboxPage() {
           )}
         </div>
       </div>
+      </ResizablePane>
 
-      {/* Reader / composer */}
+      {/* Reader / composer — main work view (not collapsible) */}
       <div
         className={cn(
-          "flex min-h-0 w-full flex-1 flex-col",
+          "flex min-h-0 w-full min-w-0 flex-1 flex-col",
           mobileView !== "thread" && "hidden md:flex",
         )}
       >
@@ -1174,7 +1191,7 @@ function ThreadRow({
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.2, delay: Math.min(index, 8) * 0.02 }}
       className={cn(
-        "relative flex w-full flex-col gap-0.5 border-b border-border-2 px-4 py-3 text-left transition-colors hover:bg-muted",
+        "relative flex w-full min-w-0 flex-col gap-0.5 border-b border-border-2 px-4 py-3 text-left transition-colors hover:bg-muted",
         active && "bg-accent-soft hover:bg-accent-soft",
         thread.hasUnread && "bg-accent-soft/40",
       )}
@@ -1207,17 +1224,17 @@ function ThreadRow({
         </div>
         <span className="shrink-0 text-xs text-ink-3">{relativeTime(thread.timestamp)}</span>
       </div>
-      <div className="flex items-center gap-1.5 pl-4">
+      <div className="flex min-w-0 items-center gap-1.5 pl-4">
         <span
           className={cn(
-            "truncate text-sm text-ink-2",
+            "min-w-0 flex-1 truncate text-sm text-ink-2",
             thread.hasUnread && "font-medium text-ink",
           )}
         >
           {thread.subject}
         </span>
       </div>
-      <div className="flex items-center gap-1.5 pl-4">
+      <div className="flex min-w-0 items-center gap-1.5 pl-4">
         {thread.hasAttachments && <Paperclip className="h-3 w-3 shrink-0 text-ink-3" />}
         {deliveryBad && (
           <span className="shrink-0 text-[10px] font-medium uppercase tracking-wide text-rose-600">
@@ -1234,7 +1251,7 @@ function ThreadRow({
             Drafting
           </span>
         )}
-        <span className="truncate text-xs text-ink-3">
+        <span className="min-w-0 flex-1 truncate text-xs text-ink-3">
           {thread.aiActivity || thread.snippet}
         </span>
       </div>
@@ -1263,16 +1280,18 @@ function DraftRow({ draft, onClick }: { draft: DraftDTO; onClick: () => void }) 
   return (
     <button
       onClick={onClick}
-      className="flex w-full flex-col gap-0.5 border-b border-border-2 px-4 py-3 text-left transition hover:bg-muted"
+      className="flex w-full min-w-0 flex-col gap-0.5 border-b border-border-2 px-4 py-3 text-left transition hover:bg-muted"
     >
-      <div className="flex items-center justify-between gap-2">
-        <span className="truncate text-sm text-ink-2">
+      <div className="flex min-w-0 items-center justify-between gap-2">
+        <span className="min-w-0 flex-1 truncate text-sm text-ink-2">
           {draft.to.length > 0 ? draft.to.join(", ") : "(no recipient)"}
         </span>
         <span className="shrink-0 text-xs text-ink-3">{relativeTime(draft.updatedAt)}</span>
       </div>
-      <span className="truncate text-sm text-ink">{draft.subject || "(no subject)"}</span>
-      <span className="truncate text-xs text-ink-3">{draft.textBody || ""}</span>
+      <span className="block min-w-0 truncate text-sm text-ink">
+        {draft.subject || "(no subject)"}
+      </span>
+      <span className="block min-w-0 truncate text-xs text-ink-3">{draft.textBody || ""}</span>
     </button>
   );
 }
