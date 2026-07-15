@@ -379,7 +379,14 @@ async function streamEmployeeQueuedResponse(
   meta: EmployeeQueuedRuntimeMeta,
   streaming: EmployeeReplyStreaming,
 ): Promise<EmployeeQueuedRouteResult> {
+  const ctx = options.context ?? {};
   const modelMode = meta.resolvedRunModelMode;
+  const capability = inferEmployeeReplyCapability({
+    userMessage: input.message,
+    artifactIntent: input.artifactIntent,
+    isGreetingRun: options.isGreetingRun,
+    conversationMode: options.conversationMode ?? meta.conversationMode,
+  });
   const { maxOutputTokens, temperature, timeoutMs } = resolveRouteGenerationParams(
     input.message,
     options,
@@ -396,64 +403,122 @@ async function streamEmployeeQueuedResponse(
   const model = resolveModel(input.employee.provider, modelMode, input.employee.model);
   const started = Date.now();
 
-  const result = await streamSiliconFlowText(
-    system,
-    prompt,
-    model,
-    maxOutputTokens,
-    timeoutMs,
-    temperature,
-    streaming.onReplyDelta,
-  );
+  let workUnitId: string | undefined;
+  if (ctx.client && ctx.workspaceId) {
+    const created = await createAiWorkUnit(ctx.client, {
+      workspaceId: ctx.workspaceId,
+      roomId: ctx.roomId,
+      topicId: ctx.topicId,
+      employeeId: input.employee.id,
+      workType: meta.workType ?? "employee_queued_response",
+      capability,
+      objective: "Streamed employee reply",
+      status: "created",
+      providerName: input.employee.provider,
+      modelId: model,
+      metadata: workUnitMetadata(input, meta, capability, "stream"),
+    });
+    workUnitId = created.id;
+    await startAiWorkUnit(ctx.client, ctx.workspaceId, workUnitId, {
+      modelId: model,
+      providerName: input.employee.provider,
+      metadata: { agentRunId: meta.runId, usageId: meta.usageId, stream: true },
+    });
+  }
 
-  // Streaming has no effects channel — recover executable calls from faux
-  // [TOOL_CALL] DSL when present; otherwise abort so structured path retries.
-  const recovered = recoverToolCallsFromLeakedReply(result.text);
-  if (!recovered.length && replyLeakedToolCallSyntax(result.text)) {
-    throw new Error(
-      "Streaming reply leaked tool-call syntax; retrying structured path.",
+  try {
+    const result = await streamSiliconFlowText(
+      system,
+      prompt,
+      model,
+      maxOutputTokens,
+      timeoutMs,
+      temperature,
+      streaming.onReplyDelta,
     );
+
+    // Streaming has no effects channel — recover executable calls from faux
+    // [TOOL_CALL] DSL when present; otherwise abort so structured path retries.
+    const recovered = recoverToolCallsFromLeakedReply(result.text);
+    if (!recovered.length && replyLeakedToolCallSyntax(result.text)) {
+      throw new Error(
+        "Streaming reply leaked tool-call syntax; retrying structured path.",
+      );
+    }
+
+    const reply =
+      sanitizeReplyForChat(result.text) ||
+      (recovered.length
+        ? "On it — I'm putting that together now."
+        : "");
+    if (!reply.trim()) {
+      throw new Error("Streaming produced an empty reply.");
+    }
+
+    const response = toEmployeeResponseFromReplyAndEffect(
+      input.employee.id,
+      input.employee.name,
+      reply,
+      {
+        workLog: [],
+        tasks: [],
+        memory: [],
+        approvals: [],
+        toolCalls: recovered,
+      },
+    );
+
+    const inputTokens = result.inputTokens ?? 0;
+    const outputTokens = result.outputTokens ?? 0;
+    const estimatedCostUsd = estimateCost(result.model, inputTokens, outputTokens);
+
+    if (ctx.client && ctx.workspaceId && workUnitId) {
+      await completeAiWorkUnit(ctx.client, ctx.workspaceId, workUnitId, {
+        actualCostUsd: estimatedCostUsd,
+        modelId: result.model,
+        metadata: {
+          ...workUnitMetadata(input, meta, capability, "stream"),
+          providerName: input.employee.provider,
+          workMinutesEstimated: Math.max(1, Math.round((Date.now() - started) / 60000)),
+          inputTokens,
+          outputTokens,
+          modelId: result.model,
+          modelMode,
+          intelligenceMode: intelligenceModeFromModelMode(modelMode),
+          stream: true,
+        },
+      });
+    }
+
+    return {
+      response,
+      aiMode: "siliconflow-stream",
+      metrics: {
+        model: result.model,
+        inputTokens,
+        outputTokens,
+        fallbackUsed: false,
+        estimatedCostUsd,
+        durationMs: Date.now() - started,
+      },
+      usedRuntime: false,
+      runtimeFallback: false,
+    };
+  } catch (error) {
+    if (ctx.client && ctx.workspaceId && workUnitId) {
+      try {
+        await failAiWorkUnit(
+          ctx.client,
+          ctx.workspaceId,
+          workUnitId,
+          error instanceof Error ? error.message : String(error),
+        );
+      } catch {
+        // observability only
+      }
+    }
+    throw error;
   }
-
-  const reply =
-    sanitizeReplyForChat(result.text) ||
-    (recovered.length
-      ? "On it — I'm putting that together now."
-      : "");
-  if (!reply.trim()) {
-    throw new Error("Streaming produced an empty reply.");
-  }
-
-  const response = toEmployeeResponseFromReplyAndEffect(
-    input.employee.id,
-    input.employee.name,
-    reply,
-    {
-      workLog: [],
-      tasks: [],
-      memory: [],
-      approvals: [],
-      toolCalls: recovered,
-    },
-  );
-
-  const inputTokens = result.inputTokens ?? 0;
-  const outputTokens = result.outputTokens ?? 0;
-
-  return {
-    response,
-    aiMode: "siliconflow-stream",
-    metrics: {
-      model: result.model,
-      inputTokens,
-      outputTokens,
-      fallbackUsed: false,
-      estimatedCostUsd: estimateCost(result.model, inputTokens, outputTokens),
-      durationMs: Date.now() - started,
-    },
-    usedRuntime: false,
-    runtimeFallback: false,
-  };
 }
 
 async function callLegacyQueuedRoute(

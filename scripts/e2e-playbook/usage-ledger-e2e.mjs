@@ -80,11 +80,46 @@ async function dismissPicker(page) {
 
 async function fetchUsage(page, workspaceId) {
   return page.evaluate(async (wid) => {
+    // Match app authHeaders(): Bearer from supabase session, not cookies alone.
+    let token = null;
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (!key || !key.includes("auth-token")) continue;
+      try {
+        const parsed = JSON.parse(localStorage.getItem(key) || "{}");
+        token =
+          parsed?.access_token ||
+          parsed?.currentSession?.access_token ||
+          parsed?.session?.access_token ||
+          null;
+        if (token) break;
+      } catch {
+        /* continue */
+      }
+    }
+    if (!token && typeof window !== "undefined") {
+      // supabase-js v2 often stores under sb-*-auth-token
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (!key || !key.startsWith("sb-")) continue;
+        try {
+          const parsed = JSON.parse(localStorage.getItem(key) || "{}");
+          token = parsed?.access_token || parsed?.currentSession?.access_token || null;
+          if (token) break;
+        } catch {
+          /* continue */
+        }
+      }
+    }
+    const headers = token
+      ? { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }
+      : { "Content-Type": "application/json" };
     const res = await fetch(`/api/workspaces/${wid}/usage`, {
       credentials: "include",
+      headers,
     });
-    const body = await res.json();
-    return { ok: res.ok, status: res.status, body };
+    const body = await res.json().catch(() => ({}));
+    return { ok: res.ok, status: res.status, body, hasToken: Boolean(token) };
   }, workspaceId);
 }
 
@@ -168,21 +203,29 @@ try {
   await page.goto(`${BASE}/`, { waitUntil: "domcontentloaded", timeout: 60000 });
   await dismissPicker(page);
 
-  // Prefer a hired employee DM (Emily) so the reply is attributed.
-  const emily = page.getByText(/Emily Carter/i).first();
-  if (await emily.isVisible({ timeout: 5000 }).catch(() => false)) {
-    await emily.click();
+  // Open Emily Carter DM from the Direct messages list (not room mentions).
+  const emilyDm = page
+    .locator("aside, nav")
+    .getByText(/^Emily Carter$/i)
+    .first();
+  if (await emilyDm.isVisible({ timeout: 8000 }).catch(() => false)) {
+    await emilyDm.click();
     note("ok", "opened Emily Carter DM");
   } else {
-    await page.getByText(/Sales Outreach/i).first().click();
-    await page.waitForTimeout(1000);
-    note("ok", "fallback: Sales Outreach room");
+    // Sidebar row may include status text — broader match under Direct messages.
+    const emilyRow = page.getByText(/Emily Carter/i).first();
+    await emilyRow.click();
+    note("ok", "opened Emily Carter (broad match)");
   }
-  await page.waitForTimeout(1200);
+  await page.waitForTimeout(1500);
   await shot(page, "chat");
 
   const before = await fetchUsage(page, wid);
-  if (!before.ok) throw new Error(`Usage before failed: ${before.status}`);
+  if (!before.ok) {
+    throw new Error(
+      `Usage before failed: ${before.status} hasToken=${before.hasToken} ${JSON.stringify(before.body).slice(0, 200)}`,
+    );
+  }
   report.beforeUsage = {
     totalWorkHours: before.body.totalWorkHours,
     teamWorkHours: before.body.teamWorkHours,
@@ -198,49 +241,104 @@ try {
   };
   note("usage-before", JSON.stringify(report.beforeUsage));
 
+  // Prefer Balanced chip when present (conversation mode UI).
+  const balancedChip = page.getByRole("button", { name: /^Balanced$/i }).first();
+  if (await balancedChip.isVisible({ timeout: 2000 }).catch(() => false)) {
+    await balancedChip.click();
+    note("ok", "selected Balanced mode chip");
+  }
+
   const box = page.getByPlaceholder(/Message/i).first();
+  await box.click();
+  await box.fill("");
   await box.fill(prompt);
-  await page.keyboard.press("Enter");
+  // Prefer explicit send control — Enter can be swallowed by mention/slash popovers.
+  const sendBtn = page.getByRole("button", { name: /Send message/i }).first();
+  if (await sendBtn.isEnabled({ timeout: 3000 }).catch(() => false)) {
+    await sendBtn.click();
+  } else {
+    await box.press("Enter");
+  }
   note("send", prompt);
 
-  // Wait for an AI reply containing a weekday-ish answer or any assistant bubble growth.
-  const deadline = Date.now() + 120000;
+  // Confirm composer cleared and marker appears outside the textarea.
+  const sendDeadline = Date.now() + 25000;
+  let sentVisible = false;
+  while (Date.now() < sendDeadline) {
+    const composerVal = await box.inputValue().catch(() => prompt);
+    const bubbleText = await page
+      .locator("main")
+      .evaluate((root, m) => {
+        const areas = root.querySelectorAll("textarea");
+        let text = root.innerText || "";
+        for (const area of areas) {
+          if (area.value) text = text.replace(area.value, "");
+        }
+        return text.includes(m);
+      }, marker)
+      .catch(() => false);
+    if (composerVal.trim() === "" && bubbleText) {
+      sentVisible = true;
+      break;
+    }
+    await page.waitForTimeout(500);
+  }
+  await shot(page, "after-send");
+  if (!sentVisible) {
+    report.bugs.push({
+      severity: "P0",
+      msg: "Outbound message with marker never appeared in chat (composer may not have submitted)",
+    });
+    throw new Error("Outbound message not visible — aborting usage check");
+  }
+  note("ok", "outbound message visible in transcript");
+
+  // Wait until our bubble leaves "Sending...", then for Emily text after the marker.
+  const deadline = Date.now() + 150000;
   let replied = false;
   while (Date.now() < deadline) {
-    const bodyText = await page.locator("main, [data-testid='chat'], body").first().innerText();
-    if (
-      new RegExp(marker, "i").test(bodyText) &&
-      /(monday|tuesday|wednesday|thursday|friday|saturday|sunday|weekday|viewing)/i.test(
-        bodyText,
-      )
-    ) {
-      replied = true;
-      break;
+    const stillSending = await page
+      .getByText(marker)
+      .locator("xpath=ancestor::*[contains(., 'Sending')][1]")
+      .isVisible()
+      .catch(() => false);
+    const mainText = await page.locator("main").innerText().catch(() => "");
+    const idx = mainText.lastIndexOf(marker);
+    if (idx >= 0 && !stillSending && !/Sending\.\.\./i.test(mainText.slice(idx))) {
+      const after = mainText.slice(idx + marker.length);
+      // New AI bubble after our send — require weekday answer near Emily.
+      if (
+        /Emily Carter/i.test(after) &&
+        /(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)/i.test(after)
+      ) {
+        replied = true;
+        break;
+      }
     }
-    // Also accept if we see a new employee message after send
-    if (
-      /Emily|Adrian|Priya|Wren/i.test(bodyText) &&
-      /(monday|tuesday|wednesday|thursday|friday|viewing|landlord)/i.test(bodyText) &&
-      Date.now() - deadline + 120000 > 15000
-    ) {
-      replied = true;
-      break;
-    }
-    await page.waitForTimeout(2000);
+    await page.waitForTimeout(2500);
   }
   await shot(page, "after-reply");
   if (!replied) {
-    report.bugs.push({ severity: "P1", msg: "No AI reply detected within timeout" });
+    report.bugs.push({ severity: "P1", msg: "No AI reply detected after marker within timeout" });
     note("fail", "no reply");
   } else {
-    note("ok", "AI reply detected");
+    note("ok", "AI reply detected after marker (send finished)");
   }
 
-  // Allow ledger write + period rollup
-  await page.waitForTimeout(8000);
+  // Poll usage until delta appears (ledger write can lag a few seconds).
+  let after = null;
+  const pollDeadline = Date.now() + 90000;
+  while (Date.now() < pollDeadline) {
+    after = await fetchUsage(page, wid);
+    if (after.ok) {
+      const b = Number(report.beforeUsage.totalWorkHours || 0);
+      const a = Number(after.body.totalWorkHours || 0);
+      if (a > b + 0.0001) break;
+    }
+    await page.waitForTimeout(4000);
+  }
 
-  const after = await fetchUsage(page, wid);
-  if (!after.ok) throw new Error(`Usage after failed: ${after.status}`);
+  if (!after?.ok) throw new Error(`Usage after failed: ${after?.status}`);
   report.afterUsage = {
     totalWorkHours: after.body.totalWorkHours,
     teamWorkHours: after.body.teamWorkHours,
