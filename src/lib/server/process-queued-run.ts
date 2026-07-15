@@ -55,11 +55,18 @@ import {
 } from "@/lib/ai/runtime/hot-path-shadow";
 import { canEmployeeUseBrowserResearch } from "@/lib/ai/browser-research/permissions";
 import { resolveEmployeePromptTier } from "@/lib/ai/employee-prompt-tier";
-import { messageLikelyNeedsStructuredEffects } from "@/lib/ai/message-intent";
+import {
+  messageLikelyNeedsStructuredEffects,
+  resolveToolWorkSourceMessage,
+} from "@/lib/ai/message-intent";
 import {
   inferRequiredArtifactToolCall,
   replyForInferredArtifactTool,
 } from "@/lib/integrations/infer-artifact-tool-call";
+import {
+  inferRequiredEmailToolCalls,
+  replyForInferredEmailTools,
+} from "@/lib/integrations/infer-email-tool-call";
 import {
   executePlannedResearch,
   getResearchCapabilities,
@@ -380,6 +387,8 @@ export async function processQueuedAgentRun(
       .maybeSingle();
 
     let content = options.content ?? (triggerMsg?.content ? String(triggerMsg.content) : "");
+    /** Human turn text before lead-reply scaffolding is appended — used for tool intent. */
+    const triggerUserContent = content;
 
     const stopDetection = detectWorkStopRequest(content);
     const workStopAck = Boolean(runMetadata.workStopAck) || stopDetection.isStop;
@@ -821,8 +830,22 @@ export async function processQueuedAgentRun(
       typeof runMetadata.conversationMode === "string"
         ? runMetadata.conversationMode
         : undefined;
+    // Short retries ("try again") inherit the prior human tool ask so we stay on
+    // the structured tool path instead of streaming a polite refusal.
+    const toolWorkSource = resolveToolWorkSourceMessage(
+      triggerUserContent,
+      ctx.room.messages,
+    );
+    const toolWorkNeeded = messageLikelyNeedsStructuredEffects(toolWorkSource);
+    const modelUserMessage =
+      toolWorkNeeded && toolWorkSource.trim() !== triggerUserContent.trim()
+        ? `${content}
+
+[Pending request to fulfill now with effects.toolCalls — use email.createDraft / email.sendDraft, CRM, tasks, or artifact tools as needed. Do NOT say you cannot do this from chat: ${toolWorkSource}]`
+        : content;
+
     const promptTier = resolveEmployeePromptTier({
-      message: content,
+      message: toolWorkNeeded ? toolWorkSource : content,
       isGreetingRun,
       collaborationRole,
       conversationMode,
@@ -850,7 +873,7 @@ export async function processQueuedAgentRun(
       isGreetingRun,
       conversationMode,
       collaborationRole,
-      userMessage: content,
+      userMessage: toolWorkNeeded ? toolWorkSource : content,
     });
     const isLive = options.mode !== "mock" && employee.provider.toLowerCase() !== "mock";
     const outputCap = isGreetingRun
@@ -1677,7 +1700,7 @@ export async function processQueuedAgentRun(
       room: roomWithMessages,
       topic: ctx.topic,
       topicSummary: ctx.topicSummary,
-      message: content,
+      message: modelUserMessage,
       allEmployees: ctx.employees,
       recentMemory: ctx.recentMemory,
       topicTasks: ctx.openTasks,
@@ -1735,11 +1758,10 @@ export async function processQueuedAgentRun(
         : undefined,
     );
 
-    // If the user clearly asked for CRM/Drive/task work but the model returned
-    // zero toolCalls (often narrating success or inventing prose instead), retry
+    // If the user clearly asked for CRM/Drive/task/email work but the model returned
+    // zero toolCalls (often narrating success, inventing prose, or refusing), retry
     // once on a stronger structured model with an explicit tool reminder.
-    const needsTools =
-      messageLikelyNeedsStructuredEffects(content) || driveArtifactAsk;
+    const needsTools = toolWorkNeeded || driveArtifactAsk;
     let gotTools = (response.effect?.toolCalls?.length ?? 0) > 0;
     if (needsTools && !gotTools && !failed && aiMode !== "error") {
       const retryMode: ModelMode = "strong";
@@ -1749,11 +1771,12 @@ export async function processQueuedAgentRun(
         aiMode,
         fromMode: modelMode,
         retryMode,
+        toolWorkSource: toolWorkSource.slice(0, 160),
       });
       const retry = await dispatchEmployeeQueuedResponse(
         {
           ...routeInput,
-          message: `${content}
+          message: `${modelUserMessage}
 
 [System reminder: This request requires real effects.toolCalls in your JSON response (e.g. artifact.createPdfReport, artifact.createDocx, artifact.createPresentation, artifact.createSpreadsheet, crm.createContact, tasks.createTask, email.createDraft, email.sendDraft). For send/mail requests: emit email.createDraft with recipientEmail + full body, then email.sendDraft — never reply that you cannot email from chat. Do not only say you will follow up — emit the tool call(s) now with complete args. Fill every section/slide/row with concrete content from the user message. create* already saves to Drive; do not also call artifact.saveToDrive.]`,
         },
@@ -1781,31 +1804,44 @@ export async function processQueuedAgentRun(
       }
     }
 
-    // Last resort for explicit Drive artifact asks: MiniMax/etc. sometimes burn
-    // tokens and still leave effects.toolCalls empty → "I'll follow up" no-op.
+    // Last resort: synthesize toolCalls when the model still refuses or no-ops.
     if (needsTools && !gotTools && !failed && aiMode !== "error") {
-      const inferred = inferRequiredArtifactToolCall(content);
-      if (inferred) {
-        console.warn("[AdeHQ process-queued-run] synthesizing artifact toolCall", {
+      const inferredArtifact = inferRequiredArtifactToolCall(toolWorkSource);
+      const inferredEmail = inferRequiredEmailToolCalls(toolWorkSource);
+      const inferred = inferredArtifact
+        ? [inferredArtifact]
+        : inferredEmail.length
+          ? inferredEmail
+          : [];
+      if (inferred.length) {
+        console.warn("[AdeHQ process-queued-run] synthesizing toolCalls", {
           runId,
           employeeId: employee.id,
-          tool: inferred.tool,
+          tools: inferred.map((t) => t.tool),
         });
         const narratedOnly =
           /^Got it — I'll follow up/i.test(response.reply.trim()) ||
+          (/can'?t send emails?|cannot send emails?|outside what i can do|not something i can do/i.test(
+            response.reply,
+          ) &&
+            response.reply.trim().length < 420) ||
           (/generat(?:e|ing)|creating|drafting|building/i.test(response.reply) &&
             /drive/i.test(response.reply) &&
             response.reply.trim().length < 320);
+        const reply = narratedOnly
+          ? inferredArtifact
+            ? replyForInferredArtifactTool(inferredArtifact.tool)
+            : replyForInferredEmailTools()
+          : response.reply;
         response = {
           ...response,
-          reply: narratedOnly
-            ? replyForInferredArtifactTool(inferred.tool)
-            : response.reply,
+          reply,
           effect: {
             ...response.effect,
-            toolCalls: [inferred],
+            toolCalls: inferred,
           },
         };
+        gotTools = true;
       }
     }
 

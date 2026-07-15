@@ -16,7 +16,7 @@ export type ResolveEmployeePromptTierInput = {
 };
 
 const WORK_SIGNAL =
-  /\b(?:write|draft|compose|rewrite|summari[sz]e|outline|brainstorm|plan|create|make|edit|review|analy[sz]e|research|build|prepare|turn this into|follow up|email|task|report|deck|spreadsheet|doc)\b/i;
+  /\b(?:write|draft|compose|rewrite|summari[sz]e|outline|brainstorm|plan|create|make|edit|review|analy[sz]e|research|build|prepare|turn this into|follow up|email|mail|task|report|deck|spreadsheet|doc|try again|retry|send it|go ahead)\b/i;
 
 export function resolveEmployeePromptTier(
   input: ResolveEmployeePromptTierInput,

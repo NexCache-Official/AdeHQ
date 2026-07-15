@@ -28,19 +28,12 @@ import {
   observeToolCallResult,
 } from "./hydrate-tool-args";
 import { isHeavyArtifactTool } from "@/lib/tasks/work-classes";
+import { messageWantsEmailSend } from "@/lib/ai/message-intent";
+
+export { messageWantsEmailSend };
 
 /** Cap per response — mirrors workspace max_tool_runs_per_task guardrails. */
 export const MAX_TOOL_CALLS_PER_RESPONSE = 6;
-
-/** User asked to send mail — after a successful inbox draft, request send approval. */
-export function messageWantsEmailSend(message: string | undefined): boolean {
-  if (!message?.trim()) return false;
-  const text = message.trim();
-  if (/\b(?:send|sending)\b[\s\S]{0,100}\b(?:e?-?mails?|mails?)\b/i.test(text)) return true;
-  if (/\b(?:e?-?mails?|mails?)\b[\s\S]{0,100}\b(?:send|sending)\b/i.test(text)) return true;
-  if (/\b(?:email|mail)\s+to\b/i.test(text)) return true;
-  return false;
-}
 
 export type EmployeeToolCallOutcome = {
   results: ToolCallResult[];

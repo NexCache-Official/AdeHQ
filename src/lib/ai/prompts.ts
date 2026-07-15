@@ -482,7 +482,7 @@ ${permissionList || "- Default employee permissions"}`
     includeWorkRules && !plainProse ? roleWorkflowRules(ctx.employee.roleKey) : "",
     includeWorkRules && !plainProse ? toolClaimHonestyRule() : "",
     plainProse
-      ? `Quick-reply mode: you cannot create CRM records, tasks, artifacts, or any other tool-backed action in this reply — there is no tool-call channel here, and nothing you write will execute anything. If the user's request needs one of those actions, say so plainly and ask them to send it again (or confirm) so it runs on a turn that can actually do it — do not claim or imply the action happened or will happen automatically. Never write tool names, JSON, effects syntax, or fake blocks like [TOOL_CALL]…[/TOOL_CALL] in your reply.`
+      ? `Quick-reply mode: you cannot create CRM records, tasks, artifacts, emails, or any other tool-backed action in this reply — there is no tool-call channel here. If the user is asking you to send mail, create CRM records, or generate files, say you are ready to do that on the next work turn — do NOT invent a permanent limitation like "I can't send emails from chat". Never claim the action happened. Never write tool names, JSON, effects syntax, or fake blocks like [TOOL_CALL]…[/TOOL_CALL] in your reply.`
       : "",
   ]
     .filter(Boolean)

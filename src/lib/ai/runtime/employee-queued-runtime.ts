@@ -43,7 +43,7 @@ import {
   resolveEmployeeIntelligencePolicy,
 } from "@/lib/ai/intelligence-policy";
 import { recordRouteOutcome } from "@/lib/ai/runtime/route-health";
-import { messageLikelyNeedsStructuredEffects } from "@/lib/ai/message-intent";
+import { conversationLikelyNeedsStructuredEffects } from "@/lib/ai/message-intent";
 
 export type EmployeeQueuedRuntimeDispatch = "old" | "shadow" | "legacy-guarded" | "runtime-on";
 
@@ -357,7 +357,16 @@ function capabilityAllowsStreaming(
   meta: EmployeeQueuedRuntimeMeta,
 ): boolean {
   if (input.artifactIntent) return false;
-  if (messageLikelyNeedsStructuredEffects(input.message)) return false;
+  // Include short retries ("try again") that continue a prior tool ask — those
+  // must not take the plain-prose stream path (empty effects).
+  if (
+    conversationLikelyNeedsStructuredEffects(
+      input.message,
+      input.room?.messages as Array<{ senderType?: string; content?: string }> | undefined,
+    )
+  ) {
+    return false;
+  }
   const capability = inferEmployeeReplyCapability({
     userMessage: input.message,
     artifactIntent: input.artifactIntent,

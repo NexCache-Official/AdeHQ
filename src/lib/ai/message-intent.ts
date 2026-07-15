@@ -40,6 +40,20 @@ const EXPLICIT_ARTIFACT_TOOL_INTENT =
 const CRM_OR_TASK_DELIVERY_INTENT =
   /\b(?:crm|contacts?|deals?|companies|tasks?|follow[- ]ups?)\b[\s\S]{0,100}\b(?:add|create|log|save|update|new)\b|\b(?:add|create|log|save|update|new)\b[\s\S]{0,100}\b(?:crm|contacts?|deals?|companies|tasks?|follow[- ]ups?)\b/i;
 
+/**
+ * Short follow-ups that retry a prior tool ask ("try again", "do it", "go ahead").
+ * Alone they look conversational — without recent-context lookup they wrongly take
+ * the plain-prose stream path (empty effects) and the model doubles down on refusal.
+ */
+const SHORT_TOOL_RETRY =
+  /^(?:try\s+again|retry|again|do\s+it(?:\s+now)?|please\s+do\s+it|go\s+ahead|send\s+it|just\s+send(?:\s+it)?|yes(?:\s+please)?|yep|yeah|ok(?:ay)?(?:\s+do\s+it)?|please|continue|proceed|make\s+it\s+happen|do\s+that|same\s+again)\.?$/i;
+
+export type RecentIntentMessage = {
+  role?: string;
+  senderType?: string;
+  content?: string;
+};
+
 export function messageLikelyNeedsStructuredEffects(message: string): boolean {
   const text = message.trim();
   if (!text) return false;
@@ -49,5 +63,75 @@ export function messageLikelyNeedsStructuredEffects(message: string): boolean {
   if (CRM_OR_TASK_DELIVERY_INTENT.test(text)) return true;
   // Shared Drive-file detector (covers "Excel scorecard … save to Drive").
   if (isDriveArtifactAsk(text)) return true;
+  return false;
+}
+
+export function isShortToolRetryMessage(message: string): boolean {
+  return SHORT_TOOL_RETRY.test(message.trim());
+}
+
+function isHumanMessage(message: RecentIntentMessage): boolean {
+  const role = String(message.role ?? "").toLowerCase();
+  const sender = String(message.senderType ?? "").toLowerCase();
+  if (sender === "human" || sender === "user") return true;
+  if (role === "user" || role === "human") return true;
+  // Room messages often use authorType / kind — treat non-ai as human when contentful.
+  if (sender && sender !== "ai" && sender !== "assistant" && sender !== "employee") {
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Walk recent messages newest→oldest and return the latest human tool-work ask.
+ * Used when the current turn is a short retry like "try again".
+ */
+export function findPriorToolWorkMessage(
+  recentMessages: RecentIntentMessage[] | undefined,
+): string | null {
+  if (!recentMessages?.length) return null;
+  for (let i = recentMessages.length - 1; i >= 0; i -= 1) {
+    const msg = recentMessages[i];
+    const content = typeof msg.content === "string" ? msg.content.trim() : "";
+    if (!content) continue;
+    if (!isHumanMessage(msg)) continue;
+    if (isShortToolRetryMessage(content)) continue;
+    if (messageLikelyNeedsStructuredEffects(content)) return content;
+  }
+  return null;
+}
+
+/**
+ * Effective user text that should drive tool routing for this turn.
+ * Prefer the current message when it itself needs tools; otherwise, for short
+ * retries, fall back to the prior human tool ask in the thread.
+ */
+export function resolveToolWorkSourceMessage(
+  currentMessage: string,
+  recentMessages?: RecentIntentMessage[],
+): string {
+  const current = currentMessage.trim();
+  if (messageLikelyNeedsStructuredEffects(current)) return current;
+  if (!isShortToolRetryMessage(current)) return current;
+  return findPriorToolWorkMessage(recentMessages) ?? current;
+}
+
+/** True when this turn (or a short retry of a prior tool ask) needs toolCalls. */
+export function conversationLikelyNeedsStructuredEffects(
+  currentMessage: string,
+  recentMessages?: RecentIntentMessage[],
+): boolean {
+  return messageLikelyNeedsStructuredEffects(
+    resolveToolWorkSourceMessage(currentMessage, recentMessages),
+  );
+}
+
+/** User asked to send mail — after a successful inbox draft, request send approval. */
+export function messageWantsEmailSend(message: string | undefined): boolean {
+  if (!message?.trim()) return false;
+  const text = message.trim();
+  if (/\b(?:send|sending)\b[\s\S]{0,100}\b(?:e?-?mails?|mails?)\b/i.test(text)) return true;
+  if (/\b(?:e?-?mails?|mails?)\b[\s\S]{0,100}\b(?:send|sending)\b/i.test(text)) return true;
+  if (/\b(?:email|mail)\s+to\b/i.test(text)) return true;
   return false;
 }
