@@ -119,23 +119,11 @@ export async function assertWorkspaceOwner(
   return { id: String(data.id), name: String(data.name) };
 }
 
-/** Permanently deletes a workspace and all cascaded data. */
-export async function purgeWorkspace(
+async function deleteWorkspaceRow(
   serviceClient: SupabaseClient,
   workspaceId: string,
   userId: string,
-  confirmName: string,
 ): Promise<{ deletedWorkspaceId: string; remainingWorkspaceIds: string[] }> {
-  const workspace = await assertWorkspaceOwner(serviceClient, workspaceId, userId);
-
-  if (confirmName.trim() !== workspace.name.trim()) {
-    throw new AccountLifecycleError(
-      "confirm_name_mismatch",
-      "Workspace name does not match. Deletion cancelled.",
-      400,
-    );
-  }
-
   const { error } = await serviceClient.from("workspaces").delete().eq("id", workspaceId);
   if (error) {
     throw new AccountLifecycleError(
@@ -157,6 +145,59 @@ export async function purgeWorkspace(
     deletedWorkspaceId: workspaceId,
     remainingWorkspaceIds: (remaining ?? []).map((r) => String(r.workspace_id)),
   };
+}
+
+/** Permanently deletes a workspace and all cascaded data. */
+export async function purgeWorkspace(
+  serviceClient: SupabaseClient,
+  workspaceId: string,
+  userId: string,
+  confirmName: string,
+): Promise<{ deletedWorkspaceId: string; remainingWorkspaceIds: string[] }> {
+  const workspace = await assertWorkspaceOwner(serviceClient, workspaceId, userId);
+
+  if (confirmName.trim() !== workspace.name.trim()) {
+    throw new AccountLifecycleError(
+      "confirm_name_mismatch",
+      "Workspace name does not match. Deletion cancelled.",
+      400,
+    );
+  }
+
+  return deleteWorkspaceRow(serviceClient, workspaceId, userId);
+}
+
+/**
+ * Owner-only purge for workspaces that never finished onboarding.
+ * No name/password confirm — used to discard abandoned HQ shells from the switcher.
+ */
+export async function purgeIncompleteWorkspace(
+  serviceClient: SupabaseClient,
+  workspaceId: string,
+  userId: string,
+): Promise<{ deletedWorkspaceId: string; remainingWorkspaceIds: string[] }> {
+  await assertWorkspaceOwner(serviceClient, workspaceId, userId);
+
+  const { data, error } = await serviceClient
+    .from("workspaces")
+    .select("id, onboarding_complete")
+    .eq("id", workspaceId)
+    .maybeSingle();
+
+  if (error) throw error;
+  if (!data) {
+    throw new AccountLifecycleError("workspace_not_found", "Workspace not found.", 404);
+  }
+
+  if (Boolean(data.onboarding_complete)) {
+    throw new AccountLifecycleError(
+      "onboarding_already_complete",
+      "This workspace already finished setup. Delete it from Settings if you still want it removed.",
+      400,
+    );
+  }
+
+  return deleteWorkspaceRow(serviceClient, workspaceId, userId);
 }
 
 /** Deletes owned workspaces (optional) then removes the auth user and profile. */

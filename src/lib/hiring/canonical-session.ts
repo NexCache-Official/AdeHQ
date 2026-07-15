@@ -33,6 +33,8 @@ export type HiringSessionScope = {
   /** /hire page and onboarding flows */
   hireRoute?: boolean;
   source?: HiringSessionSource;
+  /** When set, sessionStorage key is isolated per HQ (required for multi-workspace). */
+  workspaceId?: string | null;
 };
 
 export type CanonicalHiringSessionMeta = {
@@ -50,17 +52,32 @@ export type CanonicalHiringSessionMeta = {
   lastUserMessageId?: string | null;
 };
 
+function workspaceKeyPrefix(workspaceId?: string | null): string {
+  if (workspaceId) return `ws:${workspaceId}:`;
+  // Fall back to active HQ so hire journeys never share a key across workspaces.
+  if (typeof window !== "undefined") {
+    try {
+      const active = window.localStorage.getItem("adehq_active_workspace_id");
+      if (active) return `ws:${active}:`;
+    } catch {
+      /* ignore */
+    }
+  }
+  return "ws:unknown:";
+}
+
 export function hiringSessionStorageKey(scope: HiringSessionScope): string {
+  const ws = workspaceKeyPrefix(scope.workspaceId);
   if (scope.mayaTopicId && !scope.directChat && !scope.hireRoute) {
-    return `adehq-hiring-session:topic:${scope.mayaTopicId}`;
+    return `adehq-hiring-session:${ws}topic:${scope.mayaTopicId}`;
   }
   if (scope.hireRoute) {
-    return `adehq-hiring-session:hire-route`;
+    return `adehq-hiring-session:${ws}hire-route`;
   }
   if (scope.directChat) {
-    return `adehq-hiring-session:direct:${scope.mayaRoomId}`;
+    return `adehq-hiring-session:${ws}direct:${scope.mayaRoomId}`;
   }
-  return `adehq-hiring-session:room:${scope.mayaRoomId}`;
+  return `adehq-hiring-session:${ws}room:${scope.mayaRoomId}`;
 }
 
 export function deriveSessionStatus(state: HiringSessionState): HiringSessionStatus {

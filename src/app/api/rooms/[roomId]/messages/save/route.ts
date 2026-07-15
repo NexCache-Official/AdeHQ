@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { AuthError, requireAuthUser, requireWorkspaceMembership } from "@/lib/supabase/auth-server";
+import { AuthError, requireAuthUser, requireWorkspaceMembership, getRequestWorkspaceId } from "@/lib/supabase/auth-server";
 import { assertCanSendRoomMessage } from "@/lib/server/room-access";
 import {
   debugErrorPayload,
@@ -50,7 +50,7 @@ export async function POST(
       return messageError("message_required", "Message content is required.", 400);
     }
 
-    const workspaceId = await getWorkspaceIdForRoom(client, params.roomId);
+    const workspaceId = await getWorkspaceIdForRoom(client, params.roomId, getRequestWorkspaceId(request));
     if (!workspaceId) {
       return messageError("room_not_found", "Room not found.", 404);
     }

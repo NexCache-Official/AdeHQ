@@ -69,6 +69,7 @@ export function OnboardingFlow({
   const router = useRouter();
   const [stage, setStage] = useState(0);
   const [escaping, setEscaping] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
   const [outcomeId, setOutcomeId] = useState<WorkforceOutcomeId | null>(null);
   const [goalText, setGoalText] = useState("");
   const [domainText, setDomainText] = useState("");
@@ -309,28 +310,63 @@ export function OnboardingFlow({
               <span className="truncate text-[15px] font-bold tracking-tight">{companyName}</span>
             </div>
           </div>
-          {escapeWorkspace ? (
-            <button
-              type="button"
-              disabled={escaping || busy}
-              onClick={() => {
-                if (escaping) return;
-                setEscaping(true);
-                void (async () => {
-                  try {
-                    await actions.switchWorkspace(escapeWorkspace.id);
-                    router.replace("/");
-                  } finally {
-                    setEscaping(false);
-                  }
-                })();
-              }}
-              className="inline-flex w-fit items-center gap-1.5 rounded-full border border-white/15 bg-white/5 px-3 py-1.5 text-xs font-medium text-white/70 transition hover:border-white/25 hover:bg-white/10 hover:text-white disabled:opacity-60"
-            >
-              <ArrowLeft className="h-3.5 w-3.5" />
-              {escaping ? "Switching…" : `Back to ${escapeWorkspace.name}`}
-            </button>
-          ) : null}
+          <div className="flex flex-wrap items-center gap-2">
+            {escapeWorkspace ? (
+              <button
+                type="button"
+                disabled={escaping || busy || cancelling}
+                onClick={() => {
+                  if (escaping) return;
+                  setEscaping(true);
+                  void (async () => {
+                    try {
+                      await actions.switchWorkspace(escapeWorkspace.id);
+                      router.replace("/");
+                    } finally {
+                      setEscaping(false);
+                    }
+                  })();
+                }}
+                className="inline-flex w-fit items-center gap-1.5 rounded-full border border-white/15 bg-white/5 px-3 py-1.5 text-xs font-medium text-white/70 transition hover:border-white/25 hover:bg-white/10 hover:text-white disabled:opacity-60"
+              >
+                <ArrowLeft className="h-3.5 w-3.5" />
+                {escaping ? "Switching…" : `Back to ${escapeWorkspace.name}`}
+              </button>
+            ) : null}
+            {state.workspace.id ? (
+              <button
+                type="button"
+                disabled={cancelling || busy || escaping}
+                onClick={() => {
+                  if (cancelling) return;
+                  const name = state.workspace.name || "this workspace";
+                  const ok = window.confirm(
+                    `Cancel onboarding and permanently delete “${name}”? Rooms and hires in this unfinished HQ will be removed. Your account and other workspaces stay intact.`,
+                  );
+                  if (!ok) return;
+                  setCancelling(true);
+                  setError(null);
+                  void (async () => {
+                    try {
+                      await actions.cancelIncompleteWorkspace(state.workspace.id);
+                      router.replace(escapeWorkspace ? "/" : "/workspaces/new");
+                    } catch (err) {
+                      setError(
+                        err instanceof Error
+                          ? err.message
+                          : "Could not cancel onboarding.",
+                      );
+                    } finally {
+                      setCancelling(false);
+                    }
+                  })();
+                }}
+                className="inline-flex w-fit items-center gap-1.5 rounded-full border border-rose-400/25 bg-rose-500/10 px-3 py-1.5 text-xs font-medium text-rose-100/90 transition hover:border-rose-300/40 hover:bg-rose-500/20 disabled:opacity-60"
+              >
+                {cancelling ? "Deleting…" : "Cancel onboarding"}
+              </button>
+            ) : null}
+          </div>
         </header>
 
         <OnboardingOrgGraph

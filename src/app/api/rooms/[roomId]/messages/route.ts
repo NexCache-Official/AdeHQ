@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { AuthError, requireAuthUser, requireWorkspaceMembership } from "@/lib/supabase/auth-server";
+import { AuthError, requireAuthUser, requireWorkspaceMembership, getRequestWorkspaceId } from "@/lib/supabase/auth-server";
 import { assertCanSendRoomMessage } from "@/lib/server/room-access";
 import {
+  AmbiguousRoomWorkspaceError,
   ensureMentionedEmployeesInRoom,
   getWorkspaceIdForRoom,
   insertHumanMessage,
@@ -98,7 +99,7 @@ export async function POST(
       return messageError("message_required", "Message content is required.", 400);
     }
 
-    const workspaceId = await getWorkspaceIdForRoom(client, params.roomId);
+    const workspaceId = await getWorkspaceIdForRoom(client, params.roomId, getRequestWorkspaceId(request));
     if (!workspaceId) {
       return messageError("room_not_found", "Room not found.", 404);
     }
@@ -722,6 +723,12 @@ export async function POST(
   } catch (error) {
     if (error instanceof AuthError) {
       return messageError("not_room_member", error.message, error.status);
+    }
+    if (error instanceof AmbiguousRoomWorkspaceError) {
+      return NextResponse.json(
+        { error: error.message, code: "ambiguous_room_workspace" },
+        { status: error.status },
+      );
     }
     if (humanMessageSaved && humanMessageId) {
       return NextResponse.json(

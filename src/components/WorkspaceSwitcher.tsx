@@ -25,6 +25,7 @@ export function WorkspaceSwitcher({
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [busyToken, setBusyToken] = useState<string | null>(null);
+  const [discardingId, setDiscardingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const isRail = variant === "rail";
@@ -145,28 +146,68 @@ export function WorkspaceSwitcher({
                 ).map(
                   (ws) => {
                     const active = ws.id === state.workspace.id;
+                    const incomplete = backend === "supabase" && !ws.onboardingComplete;
                     return (
-                      <button
+                      <div
                         key={ws.id}
-                        type="button"
-                        onClick={() => {
-                          setOpen(false);
-                          if (!active && backend === "supabase") void actions.switchWorkspace(ws.id);
-                        }}
                         className={cn(
-                          "flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-sm",
-                          active ? "bg-accent-soft text-accent-d" : "text-ink hover:bg-muted",
+                          "flex w-full items-center gap-1 rounded-lg px-1 py-0.5",
+                          active ? "bg-accent-soft" : "hover:bg-muted",
                         )}
                       >
-                        <div className="min-w-0 flex-1">
-                          <div className="truncate font-medium">{ws.name}</div>
-                          <div className="text-xs text-ink-3">
-                            {roleLabel(ws.role)}
-                            {ENABLE_DEMO_MODE && ws.workspaceMode === "demo" ? " · demo" : ""}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setOpen(false);
+                            if (!active && backend === "supabase") void actions.switchWorkspace(ws.id);
+                          }}
+                          className={cn(
+                            "flex min-w-0 flex-1 items-center gap-2 rounded-lg px-1.5 py-2 text-left text-sm",
+                            active ? "text-accent-d" : "text-ink",
+                          )}
+                        >
+                          <div className="min-w-0 flex-1">
+                            <div className="truncate font-medium">{ws.name}</div>
+                            <div className="text-xs text-ink-3">
+                              {incomplete ? "Setup incomplete" : roleLabel(ws.role)}
+                              {ENABLE_DEMO_MODE && ws.workspaceMode === "demo" ? " · demo" : ""}
+                            </div>
                           </div>
-                        </div>
-                        {active ? <Check className="h-4 w-4 shrink-0 text-accent" /> : null}
-                      </button>
+                          {active ? <Check className="h-4 w-4 shrink-0 text-accent" /> : null}
+                        </button>
+                        {incomplete ? (
+                          <button
+                            type="button"
+                            disabled={discardingId === ws.id}
+                            title="Discard unfinished workspace"
+                            onClick={() => {
+                              const ok = window.confirm(
+                                `Discard “${ws.name}”? This unfinished workspace will be permanently deleted.`,
+                              );
+                              if (!ok) return;
+                              setDiscardingId(ws.id);
+                              setError(null);
+                              void (async () => {
+                                try {
+                                  await actions.cancelIncompleteWorkspace(ws.id);
+                                  setOpen(false);
+                                } catch (err) {
+                                  setError(
+                                    err instanceof Error
+                                      ? err.message
+                                      : "Could not discard workspace.",
+                                  );
+                                } finally {
+                                  setDiscardingId(null);
+                                }
+                              })();
+                            }}
+                            className="shrink-0 rounded-md px-2 py-1 text-[11px] font-medium text-rose-600 hover:bg-rose-50 disabled:opacity-60"
+                          >
+                            {discardingId === ws.id ? "…" : "Discard"}
+                          </button>
+                        ) : null}
+                      </div>
                     );
                   },
                 )}

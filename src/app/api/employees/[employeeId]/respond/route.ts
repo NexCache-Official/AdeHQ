@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { AuthError, requireAuthUser, requireWorkspaceMembership } from "@/lib/supabase/auth-server";
+import { AuthError, requireAuthUser, requireWorkspaceMembership, getRequestWorkspaceId } from "@/lib/supabase/auth-server";
 import { assertCanSendRoomMessage } from "@/lib/server/room-access";
 import {
+  AmbiguousRoomWorkspaceError,
   getWorkspaceIdForRoom,
   loadRoomContext,
 } from "@/lib/server/room-messages";
@@ -14,6 +15,7 @@ type RespondBody = {
   triggerMessageId?: string;
   content: string;
   mode?: "mock" | "live";
+  workspaceId?: string;
 };
 
 export async function POST(
@@ -28,7 +30,9 @@ export async function POST(
       return NextResponse.json({ error: "roomId and content are required." }, { status: 400 });
     }
 
-    const workspaceId = await getWorkspaceIdForRoom(client, body.roomId);
+    const preferredWorkspaceId =
+      getRequestWorkspaceId(request) || body.workspaceId?.trim() || null;
+    const workspaceId = await getWorkspaceIdForRoom(client, body.roomId, preferredWorkspaceId);
     if (!workspaceId) {
       return NextResponse.json({ error: "Room not found." }, { status: 404 });
     }
@@ -61,6 +65,9 @@ export async function POST(
     );
   } catch (error) {
     if (error instanceof AuthError) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
+    if (error instanceof AmbiguousRoomWorkspaceError) {
       return NextResponse.json({ error: error.message }, { status: error.status });
     }
     console.error("[AdeHQ respond route]", error);

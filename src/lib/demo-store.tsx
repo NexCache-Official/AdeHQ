@@ -232,6 +232,8 @@ type StoreActions = {
   resetDemoData: () => void;
   clearWorkspaceData: () => void;
   switchWorkspace: (workspaceId: string) => Promise<void>;
+  /** Owner-only: permanently delete an incomplete onboarding workspace. */
+  cancelIncompleteWorkspace: (workspaceId: string) => Promise<void>;
 };
 
 type StoreValue = {
@@ -264,25 +266,32 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     mayaDmRoomId: string;
   }> | null>(null);
   const remoteQueueRef = useRef<Promise<void>>(Promise.resolve());
+  /** Monotonic load generation — discard stale loadRemote results after workspace switch. */
+  const loadSeqRef = useRef(0);
 
   stateRef.current = state;
   backendRef.current = backend;
 
   const setRemoteState = useCallback((loaded: DemoState) => {
     setState((previous) => {
-      const roomsWithMergedMessages = loaded.rooms.map((loadedRoom) => {
-        const previousRoom = previous.rooms.find((room) => room.id === loadedRoom.id);
-        if (!previousRoom) return loadedRoom;
-        return {
-          ...loadedRoom,
-          messages: mergeRoomMessages(previousRoom.messages, loadedRoom.messages),
-        };
-      });
-
       const workspaceId = loaded.workspace.id;
+      const sameWorkspace = previous.workspace.id === workspaceId && Boolean(workspaceId);
+
+      // Cross-workspace: never merge. Shared ids (emp-maya, dm-emp-maya) would otherwise
+      // leak employees and Maya chat history from HQ A into HQ B.
+      const roomsWithMergedMessages = sameWorkspace
+        ? loaded.rooms.map((loadedRoom) => {
+            const previousRoom = previous.rooms.find((room) => room.id === loadedRoom.id);
+            if (!previousRoom) return loadedRoom;
+            return {
+              ...loadedRoom,
+              messages: mergeRoomMessages(previousRoom.messages, loadedRoom.messages),
+            };
+          })
+        : loaded.rooms;
+
       const sealed =
         Boolean(workspaceId) && onboardingSealedRef.current.has(workspaceId);
-      const sameWorkspace = previous.workspace.id === workspaceId && Boolean(workspaceId);
       // Never let a stale realtime reload undo a just-completed onboarding seal.
       const onboardingComplete =
         sealed ||
@@ -303,8 +312,13 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
               onboardingComplete || Boolean(loaded.workspace.onboardingComplete),
           },
           rooms: roomsWithMergedMessages,
-          employees: mergeEmployeesById(previous.employees, loaded.employees),
-          settings: previous.settings ?? loaded.settings,
+          employees: sameWorkspace
+            ? mergeEmployeesById(previous.employees, loaded.employees)
+            : loaded.employees,
+          // Settings are per-workspace; do not carry HQ A settings into HQ B.
+          settings: sameWorkspace
+            ? (previous.settings ?? loaded.settings)
+            : loaded.settings,
         },
         loaded.user?.id,
         loaded.user?.name
@@ -331,10 +345,38 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       }
 
       authUserRef.current = user;
+      const seq = ++loadSeqRef.current;
       const workspaceId = preferredWorkspaceId ?? getActiveWorkspaceId() ?? undefined;
       const loaded = await loadWorkspaceState(user, workspaceId);
+
+      // Another switch/load started while we were fetching — drop this result.
+      if (seq !== loadSeqRef.current) {
+        return {
+          onboardingComplete: stateRef.current.onboardingComplete,
+          hasWorkspace: Boolean(stateRef.current.workspace.id),
+        };
+      }
+
+      // Prefer the workspace we asked for; ignore mismatched stale payloads.
+      if (
+        preferredWorkspaceId &&
+        loaded.workspace.id &&
+        loaded.workspace.id !== preferredWorkspaceId
+      ) {
+        return {
+          onboardingComplete: stateRef.current.onboardingComplete,
+          hasWorkspace: Boolean(stateRef.current.workspace.id),
+        };
+      }
+
       if (loaded.workspace.id) setActiveWorkspaceId(loaded.workspace.id);
       const workspaces = await listUserWorkspaces(user.id);
+      if (seq !== loadSeqRef.current) {
+        return {
+          onboardingComplete: stateRef.current.onboardingComplete,
+          hasWorkspace: Boolean(stateRef.current.workspace.id),
+        };
+      }
       setUserWorkspaces(
         workspaces.map((ws) =>
           onboardingSealedRef.current.has(ws.id)
@@ -482,7 +524,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       if (refreshTimer) clearTimeout(refreshTimer);
       refreshTimer = setTimeout(() => {
         const user = authUserRef.current;
-        if (user) void loadRemote(user);
+        // Always reload the subscribed workspace — never the (possibly switched) active id alone.
+        if (user) void loadRemote(user, workspaceId);
       }, 250);
     };
 
@@ -1174,6 +1217,12 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 
       hireEmployee: (employee) => {
         const current = stateRef.current;
+        // Capture HQ at hire time — do not use whatever workspace is active when the queue runs.
+        const hireWorkspaceId = current.workspace.id;
+        if (!hireWorkspaceId) {
+          throw new Error("Cannot hire without an active workspace.");
+        }
+
         const defaultRoom = employee.defaultRoomId
           ? current.rooms.find((room) => room.id === employee.defaultRoomId)
           : undefined;
@@ -1195,19 +1244,31 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           ? updatedRooms.find((room) => room.id === validDefaultRoomId)
           : undefined;
 
-        set((s) => ({
-          ...s,
-          employees: [...s.employees, safeEmployee],
-          rooms: updatedRooms,
-        }));
-
-        runRemote(async (workspaceId) => {
-          if (assignedRoom) await persistRoom(workspaceId, assignedRoom);
-          await persistEmployee(workspaceId, safeEmployee);
-          if (validDefaultRoomId) {
-            await persistRoomMember(workspaceId, validDefaultRoomId, "ai", safeEmployee.id);
-          }
+        set((s) => {
+          // If the user already switched HQs, do not inject this employee into the wrong roster.
+          if (s.workspace.id !== hireWorkspaceId) return s;
+          return {
+            ...s,
+            employees: [...s.employees, safeEmployee],
+            rooms: updatedRooms,
+          };
         });
+
+        if (backendRef.current === "supabase") {
+          remoteQueueRef.current = remoteQueueRef.current
+            .catch(() => undefined)
+            .then(async () => {
+              if (assignedRoom) await persistRoom(hireWorkspaceId, assignedRoom);
+              await persistEmployee(hireWorkspaceId, safeEmployee);
+              if (validDefaultRoomId) {
+                await persistRoomMember(hireWorkspaceId, validDefaultRoomId, "ai", safeEmployee.id);
+              }
+            })
+            .catch((err) => {
+              console.error("[AdeHQ hireEmployee persist]", err);
+              setError(errorMessage(err));
+            });
+        }
 
         return safeEmployee;
       },
@@ -2181,8 +2242,75 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       switchWorkspace: async (workspaceId: string) => {
         const user = authUserRef.current;
         if (!user || backendRef.current !== "supabase") return;
+        if (workspaceId === stateRef.current.workspace.id) return;
+
+        // Invalidate in-flight loads and clear cross-HQ ghosts immediately.
+        loadSeqRef.current += 1;
         setActiveWorkspaceId(workspaceId);
+        setState((current) => {
+          if (!current.user) return current;
+          // Wipe roster/rooms immediately so HQ A never paints on HQ B during load.
+          const cleared = buildFreshWorkspaceState(
+            current.user,
+            {
+              id: workspaceId,
+              name: "…",
+              plan: "Free",
+              workspaceMode: "real",
+            },
+            false,
+            [],
+            [],
+          );
+          stateRef.current = cleared;
+          return cleared;
+        });
         await loadRemote(user, workspaceId);
+      },
+
+      cancelIncompleteWorkspace: async (workspaceId: string) => {
+        const user = authUserRef.current;
+        if (!user || backendRef.current !== "supabase") {
+          throw new Error("Not signed in.");
+        }
+
+        const { authHeaders } = await import("@/lib/api/auth-client");
+        const headers = await authHeaders(workspaceId);
+        const response = await fetch(`/api/workspaces/${workspaceId}/cancel-onboarding`, {
+          method: "POST",
+          headers,
+        });
+        const payload = (await response.json().catch(() => ({}))) as {
+          error?: string;
+          remainingWorkspaceIds?: string[];
+          nextWorkspaceId?: string | null;
+        };
+        if (!response.ok) {
+          throw new Error(payload.error || "Could not cancel onboarding.");
+        }
+
+        onboardingSealedRef.current.delete(workspaceId);
+        const remaining = payload.remainingWorkspaceIds ?? [];
+        setUserWorkspaces((prev) => prev.filter((ws) => ws.id !== workspaceId));
+
+        const nextId =
+          payload.nextWorkspaceId ??
+          remaining.find((id) => id !== workspaceId) ??
+          null;
+
+        if (nextId) {
+          setActiveWorkspaceId(nextId);
+          await loadRemote(user, nextId);
+        } else {
+          clearActiveWorkspaceId();
+          loadSeqRef.current += 1;
+          const currentUser = stateRef.current.user;
+          const empty = buildSignedOutState();
+          if (currentUser) empty.user = currentUser;
+          setState(empty);
+          stateRef.current = empty;
+          setUserWorkspaces([]);
+        }
       },
     };
   }, [loadRemote, runRemote, setRemoteState]);

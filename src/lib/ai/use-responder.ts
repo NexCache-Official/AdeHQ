@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useRef } from "react";
+import { authHeaders } from "@/lib/api/auth-client";
 import { useStore } from "@/lib/demo-store";
 import { sendMessageToEmployee } from "./employee-engine";
 import { EmployeeResponse, MessageArtifact, SendMessageInput } from "@/lib/types";
@@ -13,15 +14,18 @@ function truncate(s: string, n = 40) {
 async function requestEmployeeResponse(
   input: SendMessageInput,
   mode: "mock" | "live",
+  workspaceId?: string | null,
 ): Promise<EmployeeResponse> {
   try {
+    const headers = await authHeaders(workspaceId);
     const response = await fetch(`/api/employees/${input.employee.id}/respond`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers,
       body: JSON.stringify({
         roomId: input.room.id,
         content: input.message,
         mode,
+        workspaceId: workspaceId ?? undefined,
       }),
     });
 
@@ -70,7 +74,7 @@ export function useResponder() {
         allEmployees: s.employees,
         recentMemory: s.memory.filter((m) => m.roomId === roomId).slice(0, 6),
       };
-      const resp = await requestEmployeeResponse(input, s.settings.mode);
+      const resp = await requestEmployeeResponse(input, s.settings.mode, s.workspace?.id);
 
       const artifacts: MessageArtifact[] = [];
 

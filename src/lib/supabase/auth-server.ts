@@ -22,6 +22,17 @@ export function getBearerToken(request: NextRequest): string | null {
   return header.slice("Bearer ".length).trim() || null;
 }
 
+/** Active workspace from client header — required when room ids are reused across HQs (Maya DM). */
+export function getRequestWorkspaceId(request: NextRequest): string | null {
+  const header =
+    request.headers.get("x-adehq-workspace-id")?.trim() ||
+    request.headers.get("x-workspace-id")?.trim() ||
+    null;
+  if (header) return header;
+  const fromQuery = request.nextUrl.searchParams.get("workspaceId")?.trim();
+  return fromQuery || null;
+}
+
 export async function requireAuthUser(request: NextRequest): Promise<{
   user: User;
   client: SupabaseClient;

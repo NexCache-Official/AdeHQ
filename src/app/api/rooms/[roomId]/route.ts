@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { AuthError, requireAuthUser, requireWorkspaceMembership } from "@/lib/supabase/auth-server";
+import { AuthError, requireAuthUser, requireWorkspaceMembership, getRequestWorkspaceId } from "@/lib/supabase/auth-server";
 import { assertCanAccessRoom } from "@/lib/server/room-access";
 import {
   permanentlyDeleteRoom,
@@ -24,7 +24,7 @@ export async function PATCH(
 ) {
   try {
     const { user, client } = await requireAuthUser(request);
-    const workspaceId = await getWorkspaceIdForRoom(client, params.roomId);
+    const workspaceId = await getWorkspaceIdForRoom(client, params.roomId, getRequestWorkspaceId(request));
     if (!workspaceId) {
       return NextResponse.json({ error: "Room not found." }, { status: 404 });
     }
@@ -76,7 +76,7 @@ export async function DELETE(
 ) {
   try {
     const { user, client } = await requireAuthUser(request);
-    const workspaceId = await getWorkspaceIdForRoom(client, params.roomId);
+    const workspaceId = await getWorkspaceIdForRoom(client, params.roomId, getRequestWorkspaceId(request));
     if (!workspaceId) {
       return NextResponse.json({ error: "Room not found." }, { status: 404 });
     }

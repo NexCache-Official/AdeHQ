@@ -53,31 +53,43 @@ export function useHiringSessionSync({
   const dmFirst = surfaceConfig?.dmFirst ?? dmFirstProp ?? false;
   const source = surfaceConfig?.source ?? sourceProp;
   const startFresh = surfaceConfig?.startFresh ?? false;
+
+  const { state: appState, backend } = useStore();
+  const workspaceId = appState.workspace?.id;
+  const userId = appState.user?.id;
+
   const scope = useMemo<HiringSessionScope>(
-    () =>
-      surfaceConfig?.scope ?? {
+    () => ({
+      ...(surfaceConfig?.scope ?? {
         mayaRoomId,
         mayaTopicId,
         directChat: directChatProp,
         hireRoute: hireRouteProp,
         source: sourceProp,
-      },
-    [surfaceConfig, mayaRoomId, mayaTopicId, directChatProp, hireRouteProp, sourceProp],
+      }),
+      workspaceId: workspaceId ?? null,
+    }),
+    [
+      surfaceConfig,
+      mayaRoomId,
+      mayaTopicId,
+      directChatProp,
+      hireRouteProp,
+      sourceProp,
+      workspaceId,
+    ],
   );
 
   const sessionScopeKey =
-    surfaceConfig?.sessionScopeKey ??
-    (mayaTopicId && !directChatProp && !hireRouteProp
-      ? mayaTopicId
-      : hireRouteProp
-        ? "hire-route"
-        : directChatProp
-          ? `direct-${mayaRoomId}`
-          : `room-${mayaRoomId}`);
-
-  const { state: appState, backend } = useStore();
-  const workspaceId = appState.workspace?.id;
-  const userId = appState.user?.id;
+    `${workspaceId ?? "none"}:` +
+    (surfaceConfig?.sessionScopeKey ??
+      (mayaTopicId && !directChatProp && !hireRouteProp
+        ? mayaTopicId
+        : hireRouteProp
+          ? "hire-route"
+          : directChatProp
+            ? `direct-${mayaRoomId}`
+            : `room-${mayaRoomId}`));
 
   const sessionIdRef = useRef<string | null>(null);
   const hireInFlightRef = useRef(false);

@@ -1429,15 +1429,44 @@ export async function persistEmployeeEffects(
   return { aiMessage, artifacts };
 }
 
+export class AmbiguousRoomWorkspaceError extends Error {
+  status = 409;
+  constructor(roomId: string, count: number) {
+    super(
+      `Ambiguous room id "${roomId}" across ${count} workspaces. Pass x-adehq-workspace-id.`,
+    );
+    this.name = "AmbiguousRoomWorkspaceError";
+  }
+}
+
+/**
+ * Resolve workspace for a room. Room ids like `dm-emp-maya` are intentionally
+ * reused per workspace — never pick an arbitrary row when preferred is missing.
+ */
 export async function getWorkspaceIdForRoom(
   client: SupabaseClient,
   roomId: string,
+  preferredWorkspaceId?: string | null,
 ): Promise<string | null> {
+  if (preferredWorkspaceId) {
+    const { data, error } = await client
+      .from("rooms")
+      .select("workspace_id")
+      .eq("id", roomId)
+      .eq("workspace_id", preferredWorkspaceId)
+      .maybeSingle();
+    if (error) throw error;
+    return data?.workspace_id ? String(data.workspace_id) : null;
+  }
+
   const { data, error } = await client
     .from("rooms")
     .select("workspace_id")
-    .eq("id", roomId)
-    .limit(1);
+    .eq("id", roomId);
   if (error) throw error;
-  return data?.[0]?.workspace_id ? String(data[0].workspace_id) : null;
+  const rows = (data ?? []).filter((row) => row.workspace_id);
+  if (rows.length === 0) return null;
+  if (rows.length === 1) return String(rows[0].workspace_id);
+  // Shared deterministic ids (Maya DM) must include x-adehq-workspace-id.
+  throw new AmbiguousRoomWorkspaceError(roomId, rows.length);
 }

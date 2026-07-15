@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { AuthError, requireAuthUser, requireWorkspaceMembership } from "@/lib/supabase/auth-server";
+import { AuthError, requireAuthUser, requireWorkspaceMembership, getRequestWorkspaceId } from "@/lib/supabase/auth-server";
 import { assertCanAccessRoom } from "@/lib/server/room-access";
 import { getWorkspaceIdForRoom } from "@/lib/server/room-messages";
 import { fetchPendingTopicSuggestions } from "@/lib/orchestration/persistence";
@@ -21,7 +21,7 @@ export async function GET(
 ) {
   try {
     const { user, client } = await requireAuthUser(request);
-    const workspaceId = await getWorkspaceIdForRoom(client, params.roomId);
+    const workspaceId = await getWorkspaceIdForRoom(client, params.roomId, getRequestWorkspaceId(request));
     if (!workspaceId) {
       return NextResponse.json({ error: "Room not found." }, { status: 404 });
     }
