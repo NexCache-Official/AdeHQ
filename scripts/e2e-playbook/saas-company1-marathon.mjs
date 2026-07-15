@@ -548,7 +548,7 @@ async function waveCollab(page, s) {
   }
   await roomSend(
     page,
-    `Quick sync — FlowDesk mid-market push. I need a crisp one-liner for the Approvals Inbox module, who we should demo first next week, and what we should refuse to promise. Keep it honest. (${s}-collab)`,
+    `@Lane Lloyd @Casey Nguyen @Jules Drake — quick sync on the FlowDesk mid-market push. I need a crisp one-liner for the Approvals Inbox module, who we should demo first next week, and what we should refuse to promise. Keep it honest. (${s}-collab)`,
   );
   await shot(page, `collab-sent-${s}`);
   await waitAi(page, `collab-${s}`, 12000);
@@ -793,7 +793,7 @@ try {
       if (await openAnyRoom(page)) {
         await roomSend(
           page,
-          `Heads up team — if ${MAIL_TO} replies to any of those emails, do not act until I explicitly say go. Draft a response only after I approve. (${s}-perm)`,
+          `@Lane Lloyd @Casey Nguyen @Jules Drake — heads up: if ${MAIL_TO} replies to any of those emails, do not act until I explicitly say go. Draft a response only after I approve. (${s}-perm)`,
         );
         await waitAi(page, `perm-${s}`, 8000);
       }

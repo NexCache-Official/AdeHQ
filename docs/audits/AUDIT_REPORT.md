@@ -27,7 +27,9 @@ Scope of this pass: Phase 1 (partial), Phase 2/3 (partial via Maya/Elena/David),
 | P2 | Duplicate SaaS Company 1 switcher rows / incomplete onboarding clone | Known; marathon skips onboarding rows |
 | P1 | AI Work Hours rail stuck at `0.00 / 10.00` despite active AI work | **Fixed** — period total now floors raw ledger sum; leaf-first floor no longer zeros the meter (`round-display.ts`, `summary.ts`) — needs prod deploy |
 | P1 | Marathon/E2E `waitAi` treated leftover draft cards as success → room collab looked “done” while AI silent | **Fixed** — require new `[data-message-id]` growth; ignore stale draft cards |
-| P1 | Lane CRM ask became a Tasks card; `/crm` stayed empty (false-pass in CRM wave) | Retest via Casey DM + assert `/crm` not empty (`saas-crm-tasks-wave.mjs`) |
+| P1 | Lane CRM ask became a Tasks card; `/crm` stayed empty (false-pass in CRM wave) | **Verified** Casey DM creates Contact + Deal + Task; CRM shows $18k Qualified (duplicate deal cards noted as P2) |
+| P1 | Room collab silent after AI tool cards (ambient governance) | **Fixed** — work intents (`task_request`, `direct_question`, collab, etc.) bypass after-AI skip (`ambient-governance.ts`); marathon now `@mentions` team |
+| P2 | Duplicate identical CRM deals from repeated Casey asks | Observed; defer de-dupe |
 
 ### Scripts
 - `scripts/e2e-playbook/saas-company1-marathon.mjs` (~70m waves)
