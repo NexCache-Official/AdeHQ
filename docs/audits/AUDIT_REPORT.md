@@ -25,13 +25,14 @@ Scope of this pass: Phase 1 (partial), Phase 2/3 (partial via Maya/Elena/David),
 | P1 | Approval chips in chat were non-clickable (no Approve UI) | **Fixed** — inline `ApprovalCard` + Review link (`RoomMessageItem.tsx`) |
 | — | Casey → draft → Approvals → Approve for `skumar@nexcache.com` | **Verified** Casey E2E `bugs: []`; bulk-approve script clearing stacked cards |
 | P2 | Duplicate SaaS Company 1 switcher rows / incomplete onboarding clone | Known; marathon skips onboarding rows |
-| P1 | AI Work Hours rail stuck at `0.00 / 10.00` despite active AI work | **Fixed** — (1) floor raw period total for display (2) `finalizeAiRun` now mirrors into `ai_cost_ledger_entries` (Usage was empty because only shadow work-units wrote the ledger) |
+| P1 | AI Work Hours rail stuck at `0.00 / 10.00` despite active AI work | **Fixed** — (1) floor raw period total (2) `finalizeAiRun` mirrors into `ai_cost_ledger_entries` (3) min 0.01h per finalized reply so high `AI_WORK_HOUR_USD` cannot zero the 2dp meter |
+| P1 | "At capacity" on Casey DMs (abandoned interactive slot) | **Fixed** — skip admission for `dm_*` rooms + 60s stale interactive reap |
 | P1 | Marathon/E2E `waitAi` treated leftover draft cards as success → room collab looked “done” while AI silent | **Fixed** — require new `[data-message-id]` growth; ignore stale draft cards |
 | P1 | Lane CRM ask became a Tasks card; `/crm` stayed empty (false-pass in CRM wave) | **Verified** Casey DM creates Contact + Deal + Task; CRM shows $18k Qualified (duplicate deal cards noted as P2) |
 | P1 | Room collab silent after AI tool cards (ambient governance) | **Fixed** — work intents (`task_request`, `direct_question`, collab, etc.) bypass after-AI skip (`ambient-governance.ts`); marathon now `@mentions` team |
 | P1 | Drive stuck on "Loading Drive…" (no Retry) | **Fixed** — 25s list timeout + Retry (`drive/page.tsx`)
 | — | Jules DOCX + email draft to skumar@nexcache.com | **Verified** `saas-jules-drive-wave.mjs` bugs: [] |
-| P1 | "At capacity — logged in task book" after abandoned agent runs | **Fixed** — reap stale interactive runs (2m) + skip admission on @mentions (`admission.ts`, `run-topic-burst.ts`)
+| P1 | "At capacity — logged in task book" after abandoned agent runs | **Fixed** — 60s stale reap + @mention skip + DM rooms skip admission (`admission.ts`, `queue-agent-runs.ts`)
 | — | Engineering @mention collab (Casey+Lane one-liner) | **Verified** after wait baseline fix |
 | P2 | Duplicate identical CRM deals from repeated Casey asks | Observed; defer de-dupe |
 

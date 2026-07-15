@@ -16,6 +16,7 @@ import { recordAiRuntime } from "@/lib/ai/runtime-log";
 import { checkWorkspaceAiCapacity } from "@/lib/billing/usage/periods";
 import { calculateModelCost } from "@/lib/billing/costing/calculate-model-cost";
 import { recordCostEvent } from "@/lib/billing/costing/record-cost-event";
+import { getWorkHourUsdRate } from "@/lib/billing/costing/work-hours";
 
 export type BeginAiRunContext = {
   client: SupabaseClient;
@@ -293,6 +294,14 @@ async function recordCommercialUsageFromFinalizedRun(
   // capacity — charge a tiny floor so the Work Hours meter cannot stay stuck at 0.
   if (costUsd <= 0) {
     costUsd = 0.0001;
+    costSource = "estimated";
+  }
+  // Customer meter floors to 2dp. If AI_WORK_HOUR_USD is high, a real short
+  // reply can still convert to <0.01h and display as 0.00 — enforce a
+  // visible minimum of 0.01 Work Hours per finalized employee reply.
+  const minBillableCost = getWorkHourUsdRate() * 0.01;
+  if (costUsd < minBillableCost) {
+    costUsd = minBillableCost;
     costSource = "estimated";
   }
 
