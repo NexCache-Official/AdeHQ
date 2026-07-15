@@ -14,6 +14,9 @@ const TOOL_LABELS: Record<string, string> = {
   "crm.createDeal": "CRM deal",
   "crm.updateDealStage": "deal stage update",
   "email.createDraft": "email draft",
+  "email.sendDraft": "email send",
+  "email.listRecent": "inbox list",
+  "email.getThread": "inbox thread",
   "tasks.createTask": "follow-up task",
   "artifact.createSpreadsheet": "spreadsheet",
   "artifact.createPdfReport": "PDF report",
@@ -49,14 +52,17 @@ export function toolReceiptArtifact(result: ToolCallResult): MessageArtifact | n
   if (result.status === "approval_pending" || (result.status === "preview" && result.approvalId)) {
     if (hasArtifactType(result, ["approval"])) return null;
     const title = result.preview?.title ?? `Prepare ${label}`;
+    const emailSend = result.tool === "email.sendDraft";
     return {
       type: "tool_result",
       id: result.approvalId ?? result.toolRunId ?? `${result.tool}-approval`,
-      label: `Prepared for approval: ${title.replace(/^Create deal — /i, "").replace(/^Create /i, "")}`,
+      label: `Prepared for approval: ${title.replace(/^Create deal — /i, "").replace(/^Create /i, "").replace(/^Send email — /i, "")}`,
       meta: {
         toolName: result.tool,
         toolStatus: "approval_pending",
-        subtitle: "Review and approve before this is saved to CRM.",
+        subtitle: emailSend
+          ? "Approve to send from the workspace inbox."
+          : "Review and approve before this is saved to CRM.",
       },
     };
   }
@@ -86,6 +92,8 @@ export function toolReceiptArtifact(result: ToolCallResult): MessageArtifact | n
 
     if (result.tool === "email.createDraft" && objectId) {
       const title = String(output?.payload?.title ?? output?.payload?.subject ?? "Email draft");
+      const inboxDraftId = output?.payload?.inboxDraftId ?? output?.payload?.draftId;
+      const artifactId = output?.payload?.artifactId;
       return {
         type: "tool_result",
         id: objectId,
@@ -93,8 +101,32 @@ export function toolReceiptArtifact(result: ToolCallResult): MessageArtifact | n
         meta: {
           toolName: result.tool,
           toolStatus: "success",
-          href: `/drive?artifact=${objectId}`,
-          subtitle: "Reviewable draft — not sent",
+          href: inboxDraftId
+            ? "/inbox?folder=drafts"
+            : artifactId
+              ? `/drive?artifact=${artifactId}`
+              : `/drive?artifact=${objectId}`,
+          subtitle: inboxDraftId
+            ? "Saved to Inbox drafts — not sent yet"
+            : "Reviewable draft — not sent",
+        },
+      };
+    }
+
+    if (result.tool === "email.sendDraft" && objectId) {
+      const subject = String(output?.payload?.subject ?? "Email");
+      const to = Array.isArray(output?.payload?.to)
+        ? output.payload.to.map(String).join(", ")
+        : "";
+      return {
+        type: "tool_result",
+        id: objectId,
+        label: to ? `Queued send: ${subject} → ${to}` : `Queued send: ${subject}`,
+        meta: {
+          toolName: result.tool,
+          toolStatus: "success",
+          href: "/inbox?folder=sent",
+          subtitle: "Sending from workspace inbox (undo window applies)",
         },
       };
     }

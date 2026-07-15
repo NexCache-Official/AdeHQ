@@ -22,7 +22,7 @@ const TOOL_WORK_VERB =
   /\b(?:add|create|creating|make|making|draft|drafting|write|writing|send|sending|log|logging|schedule|scheduling|set ?up|setting ?up|build|building|generate|generating|update|updating|put|find|prepare|compile|produce|export)\b/i;
 
 const TOOL_WORK_NOUN =
-  /\b(?:crm|contacts?|leads?|deals?|pipelines?|emails?|outreach|tasks?|to-?dos?|follow[- ]ups?|reminders?|campaigns?|posts?|calendar|meetings?|invoices?|spreadsheets?|workbooks?|excel|tables?|xlsx|csv|trackers?|scorecards?|decks?|presentations?|slides?|powerpoint|pptx|reports?|docs?|documents?|docx|pdfs?|memos?|prds?|specs?|specifications?|proposals?|briefs?|artifacts?|market\s+briefs?)\b/i;
+  /\b(?:crm|contacts?|leads?|deals?|pipelines?|e?-?mails?|mails?|outreach|tasks?|to-?dos?|follow[- ]ups?|reminders?|campaigns?|posts?|calendar|meetings?|invoices?|spreadsheets?|workbooks?|excel|tables?|xlsx|csv|trackers?|scorecards?|decks?|presentations?|slides?|powerpoint|pptx|reports?|docs?|documents?|docx|pdfs?|memos?|prds?|specs?|specifications?|proposals?|briefs?|artifacts?|market\s+briefs?)\b/i;
 
 /**
  * Verb-less delivery asks still need tools — e.g. "Lead list spreadsheet in Drive

@@ -868,7 +868,7 @@ export async function processQueuedAgentRun(
         "- The user message is a privacy-safe Email bridge for an inbox thread.",
         "- That bridge IS your email context (subject, summary, key points, excerpt).",
         "- Do NOT say you cannot see the email, need a sync, or lack inbox access when those fields are present.",
-        "- Do NOT send external email. Drafts stay approval-gated if you use email tools.",
+        "- Do NOT send external email yourself. Use email.createDraft then email.sendDraft so a human approves send from the workspace Inbox.",
         typeof runMetadata.emailThreadId === "string"
           ? `- emailThreadId: ${runMetadata.emailThreadId}`
           : null,
@@ -1755,7 +1755,7 @@ export async function processQueuedAgentRun(
           ...routeInput,
           message: `${content}
 
-[System reminder: This request requires real effects.toolCalls in your JSON response (e.g. artifact.createPdfReport, artifact.createDocx, artifact.createPresentation, artifact.createSpreadsheet, crm.createContact, tasks.createTask). Do not only say you will follow up — emit the tool call(s) now with complete args. Fill every section/slide/row with concrete content from the user message. create* already saves to Drive; do not also call artifact.saveToDrive.]`,
+[System reminder: This request requires real effects.toolCalls in your JSON response (e.g. artifact.createPdfReport, artifact.createDocx, artifact.createPresentation, artifact.createSpreadsheet, crm.createContact, tasks.createTask, email.createDraft, email.sendDraft). For send/mail requests: emit email.createDraft with recipientEmail + full body, then email.sendDraft — never reply that you cannot email from chat. Do not only say you will follow up — emit the tool call(s) now with complete args. Fill every section/slide/row with concrete content from the user message. create* already saves to Drive; do not also call artifact.saveToDrive.]`,
         },
         {
           ...routeOptions,

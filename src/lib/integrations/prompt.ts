@@ -77,15 +77,23 @@ export function buildIntegrationToolsPrompt(employee: IntegrationEmployee): stri
   const salesBundleExample = hasSalesBundleExample
     ? `
 - Example for "create a company, add a contact, log a deal, draft an email, add a follow-up task, make a spreadsheet": emit crm.createCompany, crm.createContact, crm.createDeal, email.createDraft, tasks.createTask, and artifact.createSpreadsheet in effects.toolCalls.
+- Example for "Send a mail to jane@acme.com asking how she's doing": emit email.createDraft then email.sendDraft in the same effects.toolCalls. Never reply that you cannot send email from chat when these tools are listed.
+- To check recent inbox mail: email.listRecent, then email.getThread for a specific thread.
 
 Complete Sales bundle example for "Create a company called GreenEdge Robotics, add Praveen as the contact, log a £5,000 qualified deal, draft an outreach email, create a follow-up task, and make a spreadsheet summary":
 [
   { "tool": "crm.createCompany", "mode": "execute", "args": { "name": "GreenEdge Robotics" } },
   { "tool": "crm.createContact", "mode": "execute", "args": { "firstName": "Praveen", "companyName": "GreenEdge Robotics", "source": "AdeHQ chat" } },
   { "tool": "crm.createDeal", "mode": "execute", "args": { "name": "GreenEdge Robotics — pilot deal", "amount": 5000, "currency": "GBP", "stage": "Qualified", "contactName": "Praveen", "companyName": "GreenEdge Robotics" } },
-  { "tool": "email.createDraft", "mode": "execute", "args": { "subject": "Quick follow-up — GreenEdge Robotics", "body": "Hi Praveen,\\n\\nI wanted to follow up on GreenEdge Robotics and the pilot opportunity. Would you be open to a quick conversation this week?\\n\\nBest,", "recipientName": "Praveen", "recipientOrganization": "GreenEdge Robotics" } },
+  { "tool": "email.createDraft", "mode": "execute", "args": { "subject": "Quick follow-up — GreenEdge Robotics", "body": "Hi Praveen,\\n\\nI wanted to follow up on GreenEdge Robotics and the pilot opportunity. Would you be open to a quick conversation this week?\\n\\nBest,", "recipientName": "Praveen", "recipientEmail": "praveen@greenedge.example", "recipientOrganization": "GreenEdge Robotics" } },
   { "tool": "tasks.createTask", "mode": "execute", "args": { "title": "Follow up with Praveen re GreenEdge Robotics", "description": "Follow up on the £5,000 qualified deal.", "priority": "medium" } },
   { "tool": "artifact.createSpreadsheet", "mode": "execute", "args": { "title": "GreenEdge Robotics pipeline summary", "template": "sales_pipeline", "columns": ["Company", "Contact", "Stage", "Amount", "Currency", "Notes"], "rows": [["GreenEdge Robotics", "Praveen", "Qualified", 5000, "GBP", "Created from sales chat"]] } }
+]
+
+Send-email example for "Send a mail to skumar@nexcache.com asking Shubham how he's doing":
+[
+  { "tool": "email.createDraft", "mode": "execute", "args": { "subject": "Quick check-in", "body": "Hi Shubham,\\n\\nJust wanted to check in and see how you're doing — hope life's treating you well.\\n\\nBest,", "recipientName": "Shubham", "recipientEmail": "skumar@nexcache.com" } },
+  { "tool": "email.sendDraft", "mode": "execute", "args": { "draftId": "<use inboxDraftId from createDraft result — the runtime hydrates this when omitted>" } }
 ]
 
 Research lead-list example for "Give me 5 Zone 2 flat leads under £900k as a table spreadsheet":

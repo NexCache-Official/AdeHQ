@@ -73,6 +73,28 @@ export const CreateEmailDraftArgsSchema = z.object({
 });
 export type CreateEmailDraftArgs = z.infer<typeof CreateEmailDraftArgsSchema>;
 
+export const SendEmailDraftArgsSchema = z.object({
+  /** Workspace inbox draft id from email.createDraft (payload.inboxDraftId / draftId). */
+  draftId: z.string().min(1),
+  /** Optional display fields for the approval card (hydrated from the prior draft). */
+  subject: z.string().optional(),
+  recipientEmail: z.string().optional(),
+  bodyPreview: z.string().optional(),
+});
+export type SendEmailDraftArgs = z.infer<typeof SendEmailDraftArgsSchema>;
+
+export const ListRecentEmailsArgsSchema = z.object({
+  folder: z.enum(["inbox", "sent", "archived"]).optional(),
+  limit: z.number().int().positive().max(25).optional(),
+});
+export type ListRecentEmailsArgs = z.infer<typeof ListRecentEmailsArgsSchema>;
+
+export const GetEmailThreadArgsSchema = z.object({
+  threadId: z.string().min(1),
+  messageLimit: z.number().int().positive().max(20).optional(),
+});
+export type GetEmailThreadArgs = z.infer<typeof GetEmailThreadArgsSchema>;
+
 export const CreateTaskArgsSchema = z.object({
   title: z.string().min(1),
   description: z.string().optional(),
@@ -420,21 +442,92 @@ const createEmailDraft: ToolDefinition<CreateEmailDraftArgs> = {
   name: "email.createDraft",
   domain: "email",
   provider: "internal",
-  description: "Create a reviewable email draft artifact (never sends).",
+  description:
+    "Create a reviewable email draft in chat/Drive and the workspace inbox (never sends).",
   readOnly: false,
   risk: "low",
   approval: "none",
   argsSchema: CreateEmailDraftArgsSchema,
   promptUsage:
-    'email.createDraft — args: { "subject": "...", "body": "...", "recipientName"?, "recipientEmail"?, "recipientOrganization"? }',
+    'email.createDraft — args: { "subject": "...", "body": "...", "recipientEmail": "user@example.com", "recipientName"?, "recipientOrganization"? }. Always include recipientEmail when the user gave an address. Saves a draft only — then call email.sendDraft to request send approval.',
   buildPreview: (args) => ({
     title: `Email draft — ${args.subject}`,
-    summary: `Draft email${args.recipientName ? ` to ${args.recipientName}` : ""}: "${args.subject}".`,
+    summary: `Draft email${args.recipientEmail ? ` to ${args.recipientEmail}` : args.recipientName ? ` to ${args.recipientName}` : ""}: "${args.subject}".`,
     fields: fields([
-      ["To", args.recipientName],
+      ["To", args.recipientEmail ?? args.recipientName],
       ["Organization", args.recipientOrganization],
       ["Subject", args.subject],
     ]),
+    risk: "low",
+  }),
+};
+
+const sendEmailDraft: ToolDefinition<SendEmailDraftArgs> = {
+  name: "email.sendDraft",
+  domain: "email",
+  provider: "internal",
+  description:
+    "Request approval to send an inbox draft via the workspace mailbox (never sends without human approval).",
+  readOnly: false,
+  risk: "high",
+  approval: "required",
+  argsSchema: SendEmailDraftArgsSchema,
+  promptUsage:
+    'email.sendDraft — args: { "draftId": "<inboxDraftId from email.createDraft>" }. Always use mode "execute"; the system shows an approval card. Never claim the email was sent until this tool succeeds after approval.',
+  buildPreview: (args) => ({
+    title: args.subject
+      ? `Send email — ${args.subject}`
+      : "Send email from workspace inbox",
+    summary: args.recipientEmail
+      ? `Send to ${args.recipientEmail} from the workspace inbox after approval.`
+      : `Send inbox draft after human approval.`,
+    fields: fields([
+      ["To", args.recipientEmail],
+      ["Subject", args.subject],
+      ["Preview", args.bodyPreview?.slice(0, 160)],
+      ["Draft id", args.draftId],
+    ]),
+    risk: "high",
+  }),
+};
+
+const listRecentEmails: ToolDefinition<ListRecentEmailsArgs> = {
+  name: "email.listRecent",
+  domain: "email",
+  provider: "internal",
+  description: "List recent threads from the workspace inbox (read-only).",
+  readOnly: true,
+  risk: "low",
+  approval: "none",
+  argsSchema: ListRecentEmailsArgsSchema,
+  promptUsage:
+    'email.listRecent — args: { "folder"?: "inbox"|"sent"|"archived", "limit"?: 10 }',
+  buildPreview: (args) => ({
+    title: "List recent inbox threads",
+    summary: `List recent ${args.folder ?? "inbox"} threads.`,
+    fields: fields([
+      ["Folder", args.folder ?? "inbox"],
+      ["Limit", args.limit != null ? String(args.limit) : "10"],
+    ]),
+    risk: "low",
+  }),
+};
+
+const getEmailThread: ToolDefinition<GetEmailThreadArgs> = {
+  name: "email.getThread",
+  domain: "email",
+  provider: "internal",
+  description: "Read a workspace inbox thread and recent messages (read-only).",
+  readOnly: true,
+  risk: "low",
+  approval: "none",
+  argsSchema: GetEmailThreadArgsSchema,
+  promptUsage:
+    'email.getThread — args: { "threadId": "...", "messageLimit"?: 8 }',
+  buildPreview: (args) => ({
+    title: "Read inbox thread",
+    summary: `Read thread ${args.threadId}.`,
+    fields: fields([["Thread id", args.threadId]]),
     risk: "low",
   }),
 };
@@ -910,6 +1003,9 @@ const TOOL_DEFINITIONS = [
   listContacts,
   listDeals,
   createEmailDraft,
+  sendEmailDraft,
+  listRecentEmails,
+  getEmailThread,
   createTask,
   createSpreadsheet,
   createPdfReport,

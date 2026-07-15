@@ -18,7 +18,12 @@ import {
   draftPost,
   scheduleDraft,
 } from "@/lib/integrations/adapters/adehq-content";
-import { createEmailDraft } from "@/lib/integrations/adapters/adehq-email";
+import {
+  createEmailDraft,
+  getEmailThread,
+  listRecentEmails,
+  sendEmailDraft,
+} from "@/lib/integrations/adapters/adehq-email";
 import {
   createFirm,
   createFollowUp,
@@ -37,6 +42,9 @@ const INTERNAL_HANDLERS: AdapterHandlerMap = {
   "crm.listContacts": listContacts as AdapterHandler,
   "crm.listDeals": listDeals as AdapterHandler,
   "email.createDraft": createEmailDraft as AdapterHandler,
+  "email.sendDraft": sendEmailDraft as AdapterHandler,
+  "email.listRecent": listRecentEmails as AdapterHandler,
+  "email.getThread": getEmailThread as AdapterHandler,
   "tasks.createTask": createTask as AdapterHandler,
   "social.createCampaign": createCampaign as AdapterHandler,
   "calendar.createCampaign": createCampaign as AdapterHandler,

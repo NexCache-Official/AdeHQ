@@ -22,7 +22,13 @@ export type ToolHydrationState = {
   campaignName?: string;
   firmName?: string;
   roleKey?: string;
+  inboxDraftId?: string;
+  emailSubject?: string;
+  recipientEmail?: string;
+  emailBodyPreview?: string;
 };
+
+const EMAIL_RE = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/;
 
 function hasText(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0;
@@ -115,6 +121,8 @@ function inferState(userMessage?: string): ToolHydrationState {
   state.stage = extractStage(userMessage);
   state.amount = money.amount;
   state.currency = money.currency;
+  const emailMatch = userMessage.match(EMAIL_RE);
+  if (emailMatch?.[0]) state.recipientEmail = emailMatch[0].toLowerCase();
   return state;
 }
 
@@ -192,12 +200,24 @@ export function hydrateToolCallArgs(
     case "email.createDraft": {
       if (!args.recipientName && state.contactName) args.recipientName = state.contactName;
       if (!args.recipientOrganization && state.companyName) args.recipientOrganization = state.companyName;
+      if (!args.recipientEmail && state.recipientEmail) args.recipientEmail = state.recipientEmail;
+      if (!args.recipientEmail && state.userMessage) {
+        const match = state.userMessage.match(EMAIL_RE);
+        if (match?.[0]) args.recipientEmail = match[0].toLowerCase();
+      }
       if (!args.subject) {
         args.subject = state.companyName
           ? `Quick follow-up — ${state.companyName}`
           : "Quick follow-up";
       }
       if (!args.body) args.body = defaultEmailBody(args, state);
+      break;
+    }
+    case "email.sendDraft": {
+      if (!args.draftId && state.inboxDraftId) args.draftId = state.inboxDraftId;
+      if (!args.subject && state.emailSubject) args.subject = state.emailSubject;
+      if (!args.recipientEmail && state.recipientEmail) args.recipientEmail = state.recipientEmail;
+      if (!args.bodyPreview && state.emailBodyPreview) args.bodyPreview = state.emailBodyPreview;
       break;
     }
     case "tasks.createTask": {
@@ -393,5 +413,16 @@ export function observeToolCallResult(
     const payload = result.output?.payload ?? {};
     if (hasText(payload.companyName)) state.companyName = payload.companyName.trim();
     if (hasText(payload.fullName)) state.contactName = payload.fullName.trim();
+    if (tool === "email.createDraft") {
+      const draftId = payload.inboxDraftId ?? payload.draftId;
+      if (hasText(draftId)) state.inboxDraftId = String(draftId).trim();
+      if (hasText(payload.subject)) state.emailSubject = String(payload.subject).trim();
+      if (hasText(payload.recipientEmail)) {
+        state.recipientEmail = String(payload.recipientEmail).trim().toLowerCase();
+      }
+      if (hasText(payload.body)) {
+        state.emailBodyPreview = String(payload.body).trim().slice(0, 200);
+      }
+    }
   }
 }

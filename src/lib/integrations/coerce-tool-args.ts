@@ -306,6 +306,13 @@ export function coerceToolArgs(
   if (tool === "email.createDraft") {
     if (!args.recipientOrganization && args.companyName) args.recipientOrganization = args.companyName;
     if (!args.recipientName && args.contactName) args.recipientName = args.contactName;
+    if (!args.recipientEmail && args.email) args.recipientEmail = args.email;
+    if (!args.recipientEmail && args.to) args.recipientEmail = args.to;
+  }
+
+  if (tool === "email.sendDraft") {
+    if (!args.draftId && args.inboxDraftId) args.draftId = args.inboxDraftId;
+    if (!args.draftId && args.id) args.draftId = args.id;
   }
 
   if (

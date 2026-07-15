@@ -22,9 +22,9 @@ export const CAPABILITY_DOMAINS: Record<CapabilityDomain, CapabilityDomainInfo> 
   },
   email: {
     domain: "email",
-    label: "Email (drafts)",
+    label: "Email / Inbox",
     description:
-      "Create reviewable email drafts inside AdeHQ (not Gmail and not workspace inbox send).",
+      "Draft and send via the workspace Inbox with human approval; list and read recent threads.",
     catalogToolId: "adehq-email",
   },
   tasks: {

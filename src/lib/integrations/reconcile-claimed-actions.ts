@@ -37,6 +37,7 @@ export const TOOL_BACKED_WORK_LOG_ACTIONS = new Set([
   "investor_pipeline_fit_scored",
   "investor_follow_up_created",
   "created_email_draft",
+  "sent_email",
   "coordinated_with_teammate",
   "task_created",
 ]);

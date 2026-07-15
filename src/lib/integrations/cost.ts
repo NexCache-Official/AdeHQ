@@ -25,6 +25,9 @@ const TOOL_COST_TABLE: Record<string, ToolRunCostEstimate> = {
   "crm.listContacts": { costUsd: 0, workMinutes: 0 },
   "crm.listDeals": { costUsd: 0, workMinutes: 0 },
   "email.createDraft": { costUsd: 0, workMinutes: 0.1 },
+  "email.sendDraft": { costUsd: 0, workMinutes: 0.2 },
+  "email.listRecent": { costUsd: 0, workMinutes: 0 },
+  "email.getThread": { costUsd: 0, workMinutes: 0 },
   "tasks.createTask": { costUsd: 0, workMinutes: 0 },
   // Phase 2 async artifacts — placeholder estimates until worker reports actuals.
   "artifact.createSpreadsheet": { costUsd: 0.002, workMinutes: 1 },

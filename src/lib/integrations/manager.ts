@@ -32,6 +32,16 @@ import { isHeavyArtifactTool } from "@/lib/tasks/work-classes";
 /** Cap per response — mirrors workspace max_tool_runs_per_task guardrails. */
 export const MAX_TOOL_CALLS_PER_RESPONSE = 6;
 
+/** User asked to send mail — after a successful inbox draft, request send approval. */
+export function messageWantsEmailSend(message: string | undefined): boolean {
+  if (!message?.trim()) return false;
+  const text = message.trim();
+  if (/\b(?:send|sending)\b[\s\S]{0,100}\b(?:e?-?mails?|mails?)\b/i.test(text)) return true;
+  if (/\b(?:e?-?mails?|mails?)\b[\s\S]{0,100}\b(?:send|sending)\b/i.test(text)) return true;
+  if (/\b(?:email|mail)\s+to\b/i.test(text)) return true;
+  return false;
+}
+
 export type EmployeeToolCallOutcome = {
   results: ToolCallResult[];
   messageArtifacts: MessageArtifact[];
@@ -176,6 +186,38 @@ export async function executeEmployeeToolCalls(
     }
     const drained = await drainQueuedToolResult(client, params.workspaceId, result);
     results.push(drained);
+  }
+
+  // Safe send path: if the human asked to send mail and we created an inbox
+  // draft but the model never requested send approval, open the approval card.
+  const alreadySend = hydratedCalls.some((c) => c.tool === "email.sendDraft")
+    || results.some((r) => r.tool === "email.sendDraft");
+  const draftId = hydrationState.inboxDraftId;
+  if (
+    draftId
+    && !alreadySend
+    && messageWantsEmailSend(triggerMessageText)
+    && results.length < MAX_TOOL_CALLS_PER_RESPONSE
+  ) {
+    const sendArgs = hydrateToolCallArgs(
+      "email.sendDraft",
+      { draftId },
+      { userMessage: triggerMessageText, state: hydrationState },
+    );
+    hydratedCalls.push({ tool: "email.sendDraft", mode: "execute", args: sendArgs });
+    const sendResult = await runToolCall(
+      client,
+      ctx,
+      {
+        tool: "email.sendDraft",
+        mode: "execute",
+        args: sendArgs,
+        employeeId: employee.id,
+      },
+      { employee },
+    );
+    observeToolCallResult("email.sendDraft", sendArgs, sendResult, hydrationState);
+    results.push(sendResult);
   }
 
   return {
