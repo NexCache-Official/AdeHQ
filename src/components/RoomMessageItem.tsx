@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import type { AIEmployee, MessageArtifact, RoomMessage } from "@/lib/types";
 import { useStore } from "@/lib/demo-store";
 import { EmployeeAvatar, HumanAvatar } from "./EmployeeAvatar";
@@ -27,6 +28,7 @@ import {
   isPreviewableChatFile,
 } from "@/lib/chat/file-preview-kind";
 import { MessageMarkdown } from "./MessageMarkdown";
+import { ApprovalCard } from "./ApprovalCard";
 import {
   BrainCircuit,
   Bot,
@@ -842,22 +844,56 @@ export function RoomMessageItem({
           );
         })}
 
-        {(otherArtifacts.length > 0 || debugWorkLogArtifacts.length > 0) && (
+        {/* Pending email/tool approvals: render the real card with Approve/Reject
+            in-chat. A dead amber chip that only said "Approval: …" left CEOs
+            unable to finish inbox sends from the conversation where the ask
+            happened (SaaS Company 1 E2E). */}
+        {otherArtifacts
+          .filter((a) => a.type === "approval")
+          .map((a) => {
+            const approval = state.approvals.find((x) => x.id === a.id);
+            if (approval) {
+              return (
+                <div key={a.id} className="mt-2.5 max-w-lg">
+                  <ApprovalCard approval={approval} />
+                </div>
+              );
+            }
+            return (
+              <Link
+                key={a.id + a.label}
+                href="/approvals"
+                className="mt-2.5 inline-flex items-center gap-1.5 rounded-lg bg-amber-50 px-2 py-1 text-[11px] font-medium text-amber-700 hover:bg-amber-100"
+              >
+                <ShieldAlert className="h-3 w-3" />
+                {a.label}
+                <span className="text-amber-600/80">· Review</span>
+              </Link>
+            );
+          })}
+
+        {(otherArtifacts.some((a) => a.type !== "approval") || debugWorkLogArtifacts.length > 0) && (
           <div className="mt-2.5 flex flex-wrap gap-1.5">
-            {[...otherArtifacts, ...debugWorkLogArtifacts].map((a) => {
-              if (a.type !== "task" && a.type !== "memory" && a.type !== "approval" && a.type !== "work_log") {
+            {[...otherArtifacts.filter((a) => a.type !== "approval"), ...debugWorkLogArtifacts].map((a) => {
+              if (a.type !== "task" && a.type !== "memory" && a.type !== "work_log") {
                 return null;
               }
               const meta = ARTIFACT_META[a.type];
               const Icon = meta.icon;
+              const chipClass = cn(
+                "inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-[11px] font-medium",
+                meta.color,
+              );
+              if (meta.href) {
+                return (
+                  <Link key={a.id + a.label} href={meta.href} className={cn(chipClass, "hover:opacity-90")}>
+                    <Icon className="h-3 w-3" />
+                    {a.label}
+                  </Link>
+                );
+              }
               return (
-                <span
-                  key={a.id + a.label}
-                  className={cn(
-                    "inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-[11px] font-medium",
-                    meta.color,
-                  )}
-                >
+                <span key={a.id + a.label} className={chipClass}>
                   <Icon className="h-3 w-3" />
                   {a.label}
                 </span>

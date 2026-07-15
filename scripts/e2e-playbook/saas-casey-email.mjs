@@ -175,7 +175,23 @@ try {
       approved = true;
     }
   }
-  if (!approved) bug("P1", "No approve button after Casey email ask");
+  if (!approved) {
+    // Chat may only show a chip — finish on Approvals page (Allow once / Approve).
+    note("flow", "Opening /approvals to finish send");
+    await page.goto(`${BASE}/approvals`, { waitUntil: "domcontentloaded", timeout: SHELL_MS });
+    await waitShell(page);
+    await shot(page, "approvals-page");
+    const allow = page.getByRole("button", { name: /Allow once|^Approve$/i }).first();
+    if (await allow.isVisible({ timeout: 8000 }).catch(() => false)) {
+      note("flow", "Approving on Approvals page");
+      await allow.click();
+      await page.waitForTimeout(5000);
+      await shot(page, "approved-page");
+      approved = true;
+    } else {
+      bug("P1", "No approve button in chat or on Approvals page");
+    }
+  }
 
   // Check inbox sent
   await page.goto(`${BASE}/inbox`, { waitUntil: "domcontentloaded", timeout: SHELL_MS });
