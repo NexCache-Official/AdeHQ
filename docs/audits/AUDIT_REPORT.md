@@ -21,7 +21,9 @@ Scope of this pass: Phase 1 (partial), Phase 2/3 (partial via Maya/Elena/David),
 | P1 | Inbox stuck on "Loading inbox…" (Compose missing until slow fetch) | **Fixed** — 25s mailbox timeout + Retry button (`inbox/page.tsx`) |
 | P1 | Subject field hard to target in E2E | **Fixed** — `aria-label`/`placeholder` on Composer Subject |
 | P1 | Agent process `Failed to fetch` left employees silent | **Fixed** — one retry on transient network errors (`RoomChat.tsx`) |
-| P0 | Lane previously refused email ("don't have the ability") — still in stale topic summary | Tool-path + infer-email already on `main`; production deploy lag; focused Casey email E2E running |
+| P0 | Lane previously refused email ("don't have the ability") — still in stale topic summary | Tool-path + infer-email on `main`; Casey DM path verified drafting + Approvals |
+| P1 | Approval chips in chat were non-clickable (no Approve UI) | **Fixed** — inline `ApprovalCard` + Review link (`RoomMessageItem.tsx`) |
+| — | Casey → draft → Approvals → Approve for `skumar@nexcache.com` | **Verified** Casey E2E `bugs: []`; bulk-approve script clearing stacked cards |
 | P2 | Duplicate SaaS Company 1 switcher rows / incomplete onboarding clone | Known; marathon skips onboarding rows |
 
 ### Scripts
