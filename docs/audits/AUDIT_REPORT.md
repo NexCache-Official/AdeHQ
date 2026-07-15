@@ -28,7 +28,7 @@ Scope of this pass: Phase 1 (partial), Phase 2/3 (partial via Maya/Elena/David),
 | P1 | AI Work Hours rail stuck at `0.00 / 10.00` despite active AI work | **Fixed** — (1) floor raw period total (2) `finalizeAiRun` mirrors into `ai_cost_ledger_entries` (3) min 0.01h per finalized reply (4) Usage summary falls back to `workspace_usage_periods.ai_work_hours_used` when ledger select is empty/errors so the meter cannot go dark |
 | P1 | Email/DOCX artifact insert used `art_*` ids but `artifacts.id` is uuid → storage sync `22P02` | **Fixed** — `randomUUID()` for artifact PKs; storage events ignore non-uuid `user_id` (emp_*) |
 | P1 | DM open spams 400/`22P02` for `topic-general-dm_*` on summary/files/artifacts/read/agent-runs | **Fixed** — guard non-uuid topic ids before querying |
-| P1 | SaaS Usage API returned `0.00` while DB period had ~0.15h (probe + period fallback + resilient period lookup) | **In progress** — usage route probes ledger/period; period lookup tolerates timestamptz equality drift |
+| P1 | SaaS Usage API returned `0.00` while DB period had ~0.15h | **Fixed / verified** — resilient period lookup + probe fallback; post-deploy SaaS Usage shows **0.16 / 10.00** |
 | P1 | "At capacity" on Casey DMs (abandoned interactive slot) | **Fixed** — skip admission for `dm_*` rooms + 60s stale interactive reap |
 | P1 | Marathon/E2E `waitAi` treated leftover draft cards as success → room collab looked “done” while AI silent | **Fixed** — require new `[data-message-id]` growth; ignore stale draft cards |
 | P1 | Lane CRM ask became a Tasks card; `/crm` stayed empty (false-pass in CRM wave) | **Verified** Casey DM creates Contact + Deal + Task; CRM shows $18k Qualified (duplicate deal cards noted as P2) |

@@ -39,6 +39,9 @@ npx playwright install chrome
 | `saas-room-collab-wave.mjs` | Engineering `@mention` collab (post ambient-governance fix) |
 | `saas-nav-workforce-wave.mjs` | Home / workforce / calendar / usage / drive / inbox smoke |
 | `saas-investor-update-wave.mjs` | Lane investor DOCX + Casey email approve path |
+| `saas-usage-meter-check.mjs` | Casey DM reply → Settings Usage meter assert |
+| `saas-maya-hire-status.mjs` | Maya workforce-manager check-in |
+| `saas-inbound-permission-wave.mjs` | Inbox scan + Engineering permission reminder for inbound replies |
 
 ## Run examples
 
