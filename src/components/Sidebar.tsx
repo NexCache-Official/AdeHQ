@@ -137,7 +137,10 @@ export function Sidebar() {
     <aside className="flex h-full w-full min-w-0 flex-col border-r border-[var(--rail-edge)] bg-rail">
       {/* Fixed: workspace → search */}
       <div className="shrink-0 space-y-2 border-b border-[var(--rail-edge)]/70 px-3 pb-2.5 pt-3.5">
-        <WorkspaceSwitcher variant="rail" />
+        <WorkspaceSwitcher
+          variant="rail"
+          onCreateWorkspace={() => router.push("/workspaces/new")}
+        />
         <SidebarWorkHoursMeter />
 
         <div className="relative">

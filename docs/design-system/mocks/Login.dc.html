@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+
+<helmet>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=Geist+Mono:wght@400;500;600&family=Newsreader:ital,wght@0,400;0,500;1,400;1,500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="_ds/adehq-design-system-e7369172-d959-4682-9ed3-9320bc3582a7/tokens/fonts.css">
+  <link rel="stylesheet" href="_ds/adehq-design-system-e7369172-d959-4682-9ed3-9320bc3582a7/tokens/colors.css">
+  <link rel="stylesheet" href="_ds/adehq-design-system-e7369172-d959-4682-9ed3-9320bc3582a7/tokens/typography.css">
+  <link rel="stylesheet" href="_ds/adehq-design-system-e7369172-d959-4682-9ed3-9320bc3582a7/tokens/spacing.css">
+  <link rel="stylesheet" href="_ds/adehq-design-system-e7369172-d959-4682-9ed3-9320bc3582a7/styles.css">
+  <script src="_ds/adehq-design-system-e7369172-d959-4682-9ed3-9320bc3582a7/_ds_bundle.js"></script>
+  <style>
+    *{box-sizing:border-box}
+    body{margin:0;-webkit-font-smoothing:antialiased}
+    ::selection{background:#111113;color:#fff}
+    input:focus{outline:none}
+    @keyframes lgFadeUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
+    @keyframes lgFadeIn{from{opacity:0}to{opacity:1}}
+    @keyframes lgScaleIn{from{opacity:0;transform:translateY(10px) scale(.96)}to{opacity:1;transform:translateY(0) scale(1)}}
+    @keyframes lgFloatA{0%,100%{transform:translateY(0) translateX(0)}50%{transform:translateY(-14px) translateX(4px)}}
+    @keyframes lgFloatB{0%,100%{transform:translateY(0) translateX(0)}50%{transform:translateY(12px) translateX(-6px)}}
+    @keyframes lgFloatC{0%,100%{transform:translateY(0)}50%{transform:translateY(-9px)}}
+    @keyframes lgAurora{0%,100%{transform:translate(0,0) scale(1)}50%{transform:translate(30px,-20px) scale(1.08)}}
+    @keyframes lgSpin{to{transform:rotate(360deg)}}
+    @keyframes lgPulseRing{0%{transform:scale(.85);opacity:.7}70%{transform:scale(1.35);opacity:0}100%{opacity:0}}
+    @keyframes lgPop{0%{transform:scale(.5)}60%{transform:scale(1.15)}100%{transform:scale(1)}}
+    @keyframes lgDot{0%,80%,100%{transform:translateY(0);opacity:.35}40%{transform:translateY(-4px);opacity:1}}
+    .lg-scroll::-webkit-scrollbar{width:8px}
+    .lg-scroll::-webkit-scrollbar-thumb{background:rgba(17,17,19,.15);border-radius:8px}
+  </style>
+</helmet>
+
+<div class="surface-marketing" style="min-height:100vh;display:grid;grid-template-columns:min(480px,42vw) 1fr;background:#fff;font-family:var(--font-sans);color:var(--text-strong)">
+
+  <!-- ============ LEFT — FORM PANEL ============ -->
+  <div style="display:flex;flex-direction:column;padding:40px 48px;position:relative;min-height:100vh">
+    <div style="display:flex;align-items:center;gap:10px">
+      <div style="width:28px;height:28px;border-radius:8px;background:#111113;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:15px;letter-spacing:-.5px;flex:none">A</div>
+      <span style="font-weight:600;font-size:16px;letter-spacing:-.3px">AdeHQ</span>
+    </div>
+
+    <div style="flex:1;display:flex;align-items:center;justify-content:center">
+      <div style="width:100%;max-width:340px">
+
+        <!-- ---- SIGN IN / SIGN UP (tabs + forms) ---- -->
+        <sc-if value="{{ showAuthForms }}" hint-placeholder-val="{{ true }}">
+          <div key="{{ mode }}" style="animation:lgFadeUp .5s cubic-bezier(.2,.7,.3,1) both">
+
+            <div style="margin-bottom:26px">
+              <x-import component-from-global-scope="AdeHQDesignSystem_e73691.SegmentedControl" items="{{ segItems }}" value="{{ mode }}" onChange="{{ onSegChange }}" hint-size="auto,40px"></x-import>
+            </div>
+
+            <sc-if value="{{ isSignin }}" hint-placeholder-val="{{ true }}">
+              <h1 style="font-size:27px;font-weight:600;letter-spacing:-.5px;line-height:1.15;margin:0 0 8px">Welcome back.</h1>
+              <p style="font-size:14.5px;color:var(--text-muted);line-height:1.5;margin:0 0 28px">Sign in to see what your <em style="font-family:var(--font-serif);font-style:italic">AI workforce</em> got done.</p>
+
+              <div style="display:flex;flex-direction:column;gap:16px">
+                <x-import component-from-global-scope="AdeHQDesignSystem_e73691.Input" label="Email" type="email" placeholder="you@company.com" value="{{ email }}" onChange="{{ onEmailChange }}" size="lg" hint-size="100%,54px"></x-import>
+
+                <label class="ade-field">
+                  <span class="ade-field__label" style="display:flex;align-items:center;justify-content:space-between">Password <a href="#" onClick="{{ noop }}" style="font-size:12px;color:var(--text-muted);text-decoration:none" style-hover="color:#111113">Forgot?</a></span>
+                  <div class="ade-input-wrap ade-input-wrap--lg">
+                    <input class="ade-input ade-input--lg" type="{{ passwordFieldType }}" placeholder="••••••••" value="{{ password }}" onInput="{{ onPasswordChange }}" onKeyDown="{{ onSigninKeyDown }}" />
+                    <span onClick="{{ togglePasswordVisibility }}" style="cursor:pointer;color:var(--text-subtle);display:flex" style-hover="color:#111113">{{ eyeIcon }}</span>
+                  </div>
+                </label>
+
+                <x-import component-from-global-scope="AdeHQDesignSystem_e73691.Button" variant="primary" size="lg" block="{{ true }}" disabled="{{ signinButtonDisabled }}" onClick="{{ submitSignin }}" icon-right="{{ signinIcon }}" hint-size="100%,48px">{{ signinLabel }}</x-import>
+
+                <sc-if value="{{ signinSuccess }}" hint-placeholder-val="{{ false }}">
+                  <div style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--green);animation:lgFadeIn .3s ease both;margin-top:-4px">
+                    <span style="animation:lgPop .4s cubic-bezier(.2,.8,.3,1.2) both">{{ checkIcon }}</span> Signed in — welcome back.
+                  </div>
+                </sc-if>
+              </div>
+
+              <p style="text-align:center;font-size:13.5px;color:var(--text-muted);margin:26px 0 0">New to AdeHQ? <a href="#" onClick="{{ goSignup }}" style="color:#111113;font-weight:600;text-decoration:none" style-hover="text-decoration:underline">Create a workspace</a></p>
+            </sc-if>
+
+            <sc-if value="{{ isSignup }}" hint-placeholder-val="{{ false }}">
+              <h1 style="font-size:27px;font-weight:600;letter-spacing:-.5px;line-height:1.15;margin:0 0 8px">Build your workforce.</h1>
+              <p style="font-size:14.5px;color:var(--text-muted);line-height:1.5;margin:0 0 24px">Free to start. No credit card, no recruiters — just describe the role.</p>
+
+              <div style="display:flex;flex-direction:column;gap:14px">
+                <x-import component-from-global-scope="AdeHQDesignSystem_e73691.Input" label="Full name" type="text" placeholder="Shubham Kumar" value="{{ name }}" onChange="{{ onNameChange }}" size="lg" hint-size="100%,54px"></x-import>
+                <x-import component-from-global-scope="AdeHQDesignSystem_e73691.Input" label="Work email" type="email" placeholder="you@company.com" value="{{ email }}" onChange="{{ onEmailChange }}" size="lg" hint-size="100%,54px"></x-import>
+
+                <label class="ade-field">
+                  <span class="ade-field__label">Password</span>
+                  <div class="ade-input-wrap ade-input-wrap--lg">
+                    <input class="ade-input ade-input--lg" type="{{ passwordFieldType }}" placeholder="At least 8 characters" value="{{ password }}" onInput="{{ onPasswordChange }}" />
+                    <span onClick="{{ togglePasswordVisibility }}" style="cursor:pointer;color:var(--text-subtle);display:flex" style-hover="color:#111113">{{ eyeIcon }}</span>
+                  </div>
+                  <sc-if value="{{ showPasswordMeter }}" hint-placeholder-val="{{ false }}">
+                    <div style="display:flex;align-items:center;gap:8px;margin-top:2px">
+                      <div style="flex:1;height:4px;border-radius:999px;background:rgba(17,17,19,.08);overflow:hidden">
+                        <div style="{{ passwordBarStyle }}"></div>
+                      </div>
+                      <span style="{{ passwordLabelStyle }}">{{ passwordLabel }}</span>
+                    </div>
+                  </sc-if>
+                </label>
+
+                <x-import component-from-global-scope="AdeHQDesignSystem_e73691.Input" label="Workspace name" type="text" placeholder="Acme HQ" value="{{ workspaceName }}" onChange="{{ onWorkspaceChange }}" size="lg" hint-size="100%,54px"></x-import>
+
+                <x-import component-from-global-scope="AdeHQDesignSystem_e73691.Button" variant="primary" size="lg" block="{{ true }}" disabled="{{ signupButtonDisabled }}" onClick="{{ submitSignup }}" icon-right="{{ signupIcon }}" style="margin-top:6px" hint-size="100%,48px">{{ signupLabel }}</x-import>
+              </div>
+
+              <p style="text-align:center;font-size:13.5px;color:var(--text-muted);margin:22px 0 0">Already have a workspace? <a href="#" onClick="{{ goSignin }}" style="color:#111113;font-weight:600;text-decoration:none" style-hover="text-decoration:underline">Sign in</a></p>
+            </sc-if>
+          </div>
+        </sc-if>
+
+        <!-- ---- VERIFY EMAIL ---- -->
+        <sc-if value="{{ isVerify }}" hint-placeholder-val="{{ false }}">
+          <div style="animation:lgScaleIn .5s cubic-bezier(.2,.7,.3,1) both;text-align:center">
+            <div style="position:relative;width:76px;height:76px;margin:0 auto 26px">
+              <div style="position:absolute;inset:0;border-radius:999px;background:var(--mk-ai-grad);opacity:.16;animation:lgPulseRing 2.2s ease-out infinite"></div>
+              <div style="position:absolute;inset:8px;border-radius:999px;background:var(--mk-ai-grad);opacity:.16;animation:lgPulseRing 2.2s ease-out .5s infinite"></div>
+              <div style="position:relative;width:76px;height:76px;border-radius:999px;background:#111113;display:flex;align-items:center;justify-content:center;color:#fff;animation:lgPop .5s cubic-bezier(.2,.8,.3,1.2) both">{{ envelopeIcon }}</div>
+            </div>
+            <h1 style="font-size:25px;font-weight:600;letter-spacing:-.4px;margin:0 0 10px">Check your inbox.</h1>
+            <p style="font-size:14.5px;color:var(--text-muted);line-height:1.55;margin:0 0 28px">We've sent a confirmation link to<br><strong style="color:#111113;font-weight:600">{{ email }}</strong>. One click and your workspace goes live.</p>
+
+            <x-import component-from-global-scope="AdeHQDesignSystem_e73691.Button" variant="secondary" size="lg" block="{{ true }}" disabled="{{ resendDisabled }}" onClick="{{ resendEmail }}" hint-size="100%,48px">{{ resendLabel }}</x-import>
+
+            <p style="font-size:13px;color:var(--text-subtle);margin:20px 0 0">Wrong inbox? <a href="#" onClick="{{ goSignup }}" style="color:#111113;font-weight:600;text-decoration:none" style-hover="text-decoration:underline">Use a different email</a></p>
+          </div>
+        </sc-if>
+
+      </div>
+    </div>
+
+    <p style="font-size:12px;color:var(--text-subtle);margin:0">By continuing you agree to AdeHQ's Terms & Privacy Policy.</p>
+  </div>
+
+  <!-- ============ RIGHT — LIVE SCENE ============ -->
+  <div onMouseMove="{{ onSceneMove }}" onMouseLeave="{{ onSceneLeave }}" style="position:relative;overflow-y:auto;overflow-x:hidden;background:#0c0c0e;display:flex;flex-direction:column;justify-content:space-between;gap:20px;padding:36px 52px">
+
+    <div style="position:absolute;top:-160px;left:-140px;width:520px;height:520px;border-radius:999px;background:radial-gradient(circle,#6366F1,transparent 70%);opacity:.35;filter:blur(60px);animation:lgAurora 14s ease-in-out infinite"></div>
+    <div style="position:absolute;bottom:-200px;right:-160px;width:560px;height:560px;border-radius:999px;background:radial-gradient(circle,#22D3EE,transparent 70%);opacity:.28;filter:blur(70px);animation:lgAurora 16s ease-in-out infinite reverse"></div>
+
+    <div key="{{ mode }}" style="position:relative;z-index:2;animation:lgFadeUp .55s cubic-bezier(.2,.7,.3,1) both">
+      <div style="display:inline-flex;align-items:center;gap:7px;padding:5px 12px;border:1px solid rgba(255,255,255,.14);border-radius:999px;font-family:var(--font-mono);font-size:10.5px;letter-spacing:.07em;text-transform:uppercase;color:rgba(255,255,255,.6);margin-bottom:22px">
+        <span style="width:6px;height:6px;border-radius:999px;background:#22D3EE;box-shadow:0 0 0 3px rgba(34,211,238,.2)"></span>{{ eyebrow }}
+      </div>
+      <h2 style="font-family:var(--font-sans);font-size:32px;font-weight:600;letter-spacing:-.03em;line-height:1.1;color:#fff;margin:0 0 10px;max-width:460px">{{ headline }}</h2>
+      <p style="font-size:14.5px;line-height:1.5;color:rgba(255,255,255,.55);max-width:400px;margin:0">{{ subhead }}</p>
+    </div>
+
+    <div style="position:relative;z-index:2;flex:none;display:flex;align-items:center;justify-content:center;min-height:150px">
+      <div style="position:relative;width:260px;height:150px">
+        <div style="{{ centerOrbStyle }}"></div>
+        <div style="{{ chip1Style }}">En</div>
+        <div style="{{ chip2Style }}">Sa</div>
+        <div style="{{ chip3Style }}">Mk</div>
+        <div style="{{ chip4Style }}">Pr</div>
+      </div>
+    </div>
+
+    <div style="position:relative;z-index:2;flex:none;background:rgba(255,255,255,.06);backdrop-filter:blur(14px);border:1px solid rgba(255,255,255,.1);border-radius:18px;padding:18px 22px;max-width:400px">
+      <p style="font-family:var(--font-serif);font-style:italic;font-size:15.5px;line-height:1.45;color:#fff;margin:0 0 12px">"Our AI account manager drafted, sent, and followed up on forty client emails before I'd finished my coffee."</p>
+      <div style="display:flex;align-items:center;gap:9px">
+        <div style="width:26px;height:26px;border-radius:999px;background:var(--grad-violet);flex:none"></div>
+        <span style="font-size:12.5px;color:rgba(255,255,255,.55)">Early workspace owner</span>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  state = {
+    mode: 'signin',
+    email: '', password: '', name: '', workspaceName: '',
+    showPassword: false,
+    signinLoading: false, signinSuccess: false,
+    signupLoading: false,
+    resendSeconds: 0,
+    mx: 0, my: 0,
+  };
+
+  _resendTimer = null;
+  _actionTimer = null;
+
+  componentWillUnmount() {
+    if (this._resendTimer) clearInterval(this._resendTimer);
+    if (this._actionTimer) clearTimeout(this._actionTimer);
+  }
+
+  onEmailChange = (e) => this.setState({ email: e.target.value });
+  onPasswordChange = (e) => this.setState({ password: e.target.value });
+  onNameChange = (e) => this.setState({ name: e.target.value });
+  onWorkspaceChange = (e) => this.setState({ workspaceName: e.target.value });
+  togglePasswordVisibility = () => this.setState(s => ({ showPassword: !s.showPassword }));
+  noop = (e) => e.preventDefault();
+
+  onSegChange = (v) => this.setState({ mode: v, signinSuccess: false });
+  goSignup = (e) => { e.preventDefault(); this.setState({ mode: 'signup', signinSuccess: false }); };
+  goSignin = (e) => { e.preventDefault(); this.setState({ mode: 'signin', signinSuccess: false }); };
+
+  onSigninKeyDown = (e) => { if (e.key === 'Enter') this.submitSignin(); };
+
+  isEmailValid(email) { return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email); }
+
+  passwordScore(pw) {
+    let s = 0;
+    if (pw.length >= 8) s++;
+    if (/[A-Z]/.test(pw)) s++;
+    if (/[0-9]/.test(pw)) s++;
+    if (/[^A-Za-z0-9]/.test(pw)) s++;
+    return s;
+  }
+
+  submitSignin = () => {
+    const { email, password } = this.state;
+    if (!this.isEmailValid(email) || password.length === 0 || this.state.signinLoading) return;
+    this.setState({ signinLoading: true });
+    this._actionTimer = setTimeout(() => {
+      this.setState({ signinLoading: false, signinSuccess: true });
+    }, 900);
+  };
+
+  submitSignup = () => {
+    const { name, email, password, workspaceName } = this.state;
+    const ok = name.trim().length > 1 && this.isEmailValid(email) && password.length >= 8 && workspaceName.trim().length > 0;
+    if (!ok || this.state.signupLoading) return;
+    this.setState({ signupLoading: true });
+    this._actionTimer = setTimeout(() => {
+      this.setState({ signupLoading: false, mode: 'verify' });
+    }, 1100);
+  };
+
+  resendEmail = () => {
+    if (this.state.resendSeconds > 0) return;
+    this.setState({ resendSeconds: 30 });
+    this._resendTimer = setInterval(() => {
+      this.setState(s => {
+        const next = s.resendSeconds - 1;
+        if (next <= 0) { clearInterval(this._resendTimer); return { resendSeconds: 0 }; }
+        return { resendSeconds: next };
+      });
+    }, 1000);
+  };
+
+  onSceneMove = (e) => {
+    const r = e.currentTarget.getBoundingClientRect();
+    const nx = ((e.clientX - r.left) / r.width) * 2 - 1;
+    const ny = ((e.clientY - r.top) / r.height) * 2 - 1;
+    this.setState({ mx: nx, my: ny });
+  };
+  onSceneLeave = () => this.setState({ mx: 0, my: 0 });
+
+  icon(paths, size = 16) {
+    return React.createElement('svg', { width: size, height: size, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 1.8, strokeLinecap: 'round', strokeLinejoin: 'round' },
+      paths.map((d, i) => React.createElement('path', { key: i, d })));
+  }
+
+  renderVals() {
+    const s = this.state;
+    const mode = s.mode;
+    const isSignin = mode === 'signin';
+    const isSignup = mode === 'signup';
+    const isVerify = mode === 'verify';
+    const emailValid = this.isEmailValid(s.email);
+    const score = this.passwordScore(s.password);
+    const labels = ['Weak', 'Weak', 'Fair', 'Good', 'Strong'];
+    const colors = ['#D9483B', '#D9483B', '#CB8A1B', '#2F6FED', '#1BA672'];
+
+    const signinButtonDisabled = !(emailValid && s.password.length > 0) || s.signinLoading;
+    const signupButtonDisabled = !(s.name.trim().length > 1 && emailValid && s.password.length >= 8 && s.workspaceName.trim().length > 0) || s.signupLoading;
+
+    const eyeOpen = this.icon(['M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z', 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z']);
+    const eyeOff = this.icon(['M3 3l18 18', 'M10.6 5.1A10.9 10.9 0 0 1 12 5c6.5 0 10 7 10 7a17.9 17.9 0 0 1-3.2 4.1M6.5 6.6C3.7 8.4 2 12 2 12a17.6 17.6 0 0 0 5.1 5.6A10.6 10.6 0 0 0 12 19c1 0 2-.15 2.9-.44', 'M9.9 9.9a3 3 0 0 0 4.2 4.2']);
+    const checkIcon = this.icon(['M20 6 9 17l-5-5'], 15);
+    const arrowIcon = this.icon(['M5 12h14', 'M13 5l7 7-7 7']);
+    const spinnerIcon = React.createElement('span', { style: { width: 15, height: 15, borderRadius: 999, border: '2px solid rgba(255,255,255,.35)', borderTopColor: '#fff', display: 'inline-block', animation: 'lgSpin .7s linear infinite' } });
+    const envelopeIcon = this.icon(['M3 6h18v12H3z', 'm3 7 9 6 9-6'], 30);
+
+    const centerGrad = 'linear-gradient(140deg,#6366F1,#22D3EE)';
+    const centerOrbStyle = `position:absolute;left:50%;top:50%;width:96px;height:96px;margin:-48px 0 0 -48px;border-radius:32px;background:${centerGrad};box-shadow:0 20px 50px -14px rgba(99,102,241,.55);transform:translate(${s.mx * 8}px,${s.my * 8}px);transition:transform .2s ease-out`;
+
+    const chipBase = 'position:absolute;width:46px;height:46px;border-radius:14px;display:flex;align-items:center;justify-content:center;font-family:var(--font-mono);font-size:12px;font-weight:600;color:#fff;box-shadow:0 10px 24px -10px rgba(0,0,0,.5)';
+    const chip1Style = `${chipBase};left:6px;top:6px;background:var(--grad-indigo);animation:lgFloatA 5s ease-in-out infinite;transform:translate(${s.mx * -16}px,${s.my * -16}px) ;transition:transform .2s ease-out`;
+    const chip2Style = `${chipBase};right:2px;top:26px;background:var(--grad-coral);animation:lgFloatB 6s ease-in-out infinite .3s;transform:translate(${s.mx * 18}px,${s.my * -10}px);transition:transform .2s ease-out`;
+    const chip3Style = `${chipBase};left:26px;bottom:0px;background:var(--grad-green);animation:lgFloatC 4.5s ease-in-out infinite .6s;transform:translate(${s.mx * -12}px,${s.my * 14}px);transition:transform .2s ease-out`;
+    const chip4Style = `${chipBase};right:22px;bottom:14px;background:var(--grad-violet);animation:lgFloatA 5.5s ease-in-out infinite .2s;transform:translate(${s.mx * 14}px,${s.my * 16}px);transition:transform .2s ease-out`;
+
+    const copy = {
+      signin: { eyebrow: 'Welcome back', headline: 'Your workforce never clocks out.', subhead: "Sign back in and see what shipped while you were away." },
+      signup: { eyebrow: 'Get started', headline: 'Hire your first AI employee.', subhead: 'Describe the role — Ade Recruiter handles sourcing, briefing, and onboarding.' },
+      verify: { eyebrow: 'Almost there', headline: 'One click from live.', subhead: 'Confirm your email and your workspace switches on instantly.' },
+    }[mode];
+
+    return {
+      mode, isSignin, isSignup, isVerify,
+      showAuthForms: !isVerify,
+      segItems: [{ value: 'signin', label: 'Sign in' }, { value: 'signup', label: 'Sign up' }],
+      onSegChange: this.onSegChange,
+      email: s.email, onEmailChange: this.onEmailChange,
+      password: s.password, onPasswordChange: this.onPasswordChange,
+      name: s.name, onNameChange: this.onNameChange,
+      workspaceName: s.workspaceName, onWorkspaceChange: this.onWorkspaceChange,
+      passwordFieldType: s.showPassword ? 'text' : 'password',
+      togglePasswordVisibility: this.togglePasswordVisibility,
+      eyeIcon: s.showPassword ? eyeOff : eyeOpen,
+      checkIcon,
+      noop: this.noop,
+      onSigninKeyDown: this.onSigninKeyDown,
+      goSignup: this.goSignup, goSignin: this.goSignin,
+      signinButtonDisabled, signupButtonDisabled,
+      submitSignin: this.submitSignin, submitSignup: this.submitSignup,
+      signinLabel: s.signinLoading ? 'Signing in…' : 'Sign in',
+      signupLabel: s.signupLoading ? 'Creating workspace…' : 'Create workspace',
+      signinIcon: s.signinLoading ? spinnerIcon : arrowIcon,
+      signupIcon: s.signupLoading ? spinnerIcon : arrowIcon,
+      signinSuccess: s.signinSuccess,
+      showPasswordMeter: s.password.length > 0,
+      passwordLabel: labels[score],
+      passwordLabelStyle: `font-size:11.5px;font-weight:600;font-family:var(--font-mono);color:${colors[score]}`,
+      passwordBarStyle: `height:100%;border-radius:999px;background:${colors[score]};width:${(score / 4) * 100}%;transition:width .25s ease-out,background .25s ease-out`,
+      envelopeIcon,
+      resendLabel: s.resendSeconds > 0 ? `Resend in ${s.resendSeconds}s` : 'Resend email',
+      resendDisabled: s.resendSeconds > 0,
+      resendEmail: this.resendEmail,
+      onSceneMove: this.onSceneMove, onSceneLeave: this.onSceneLeave,
+      eyebrow: copy.eyebrow, headline: copy.headline, subhead: copy.subhead,
+      centerOrbStyle, chip1Style, chip2Style, chip3Style, chip4Style,
+    };
+  }
+}
+</script>
+</body>
+</html>

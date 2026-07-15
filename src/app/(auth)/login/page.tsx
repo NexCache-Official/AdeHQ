@@ -3,7 +3,7 @@
 import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { AuthShell } from "@/components/AuthShell";
+import { AuthModeTabs, AuthShell } from "@/components/AuthShell";
 import { ResendConfirmation } from "@/components/auth/ResendConfirmation";
 import { Button } from "@/components/ui";
 import { useStore } from "@/lib/demo-store";
@@ -87,16 +87,17 @@ function LoginForm() {
   };
 
   return (
-    <AuthShell>
-      <h1 className="text-[30px] font-semibold leading-tight tracking-[-0.03em] text-slate-950">
+    <AuthShell scene="signin">
+      <AuthModeTabs mode="signin" nextPath={nextPath} />
+      <h1 className="mb-2 text-[27px] font-semibold leading-[1.15] tracking-[-0.03em] text-[#111113]">
         Welcome back.
       </h1>
-      <p className="mt-2 text-[15px] leading-relaxed text-slate-500">
+      <p className="mb-7 text-[14.5px] leading-relaxed text-[#111113]/55">
         Sign in to see what your <span className="font-serif italic">AI workforce</span> got done.
       </p>
 
       <form
-        className="mt-7 space-y-4"
+        className="space-y-4"
         onSubmit={(e) => {
           e.preventDefault();
           enter();
@@ -193,13 +194,13 @@ function LoginForm() {
         </>
       )}
 
-      <p className="mt-6 text-center text-sm text-slate-500">
-        New here?{" "}
+      <p className="mt-[26px] text-center text-[13.5px] text-[#111113]/55">
+        New to AdeHQ?{" "}
         <Link
           href={nextPath ? `/signup?next=${encodeURIComponent(nextPath)}` : "/signup"}
-          className="font-medium text-accent-600 hover:text-accent-700"
+          className="font-semibold text-[#111113] hover:underline"
         >
-          Create your AI workforce
+          Create a workspace
         </Link>
       </p>
     </AuthShell>

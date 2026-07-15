@@ -3,7 +3,7 @@
 import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { AuthShell } from "@/components/AuthShell";
+import { AuthModeTabs, AuthShell } from "@/components/AuthShell";
 import { Button } from "@/components/ui";
 import { useStore } from "@/lib/demo-store";
 import { ResendConfirmation } from "@/components/auth/ResendConfirmation";
@@ -112,12 +112,13 @@ function SignupForm() {
   };
 
   return (
-    <AuthShell>
-      <h1 className="text-[30px] font-semibold leading-tight tracking-[-0.03em] text-slate-950">
-        Create your HQ.
+    <AuthShell scene="signup">
+      <AuthModeTabs mode="signup" nextPath={nextPath} />
+      <h1 className="mb-2 text-[27px] font-semibold leading-[1.15] tracking-[-0.03em] text-[#111113]">
+        Build your workforce.
       </h1>
-      <p className="mt-2 text-[15px] leading-relaxed text-slate-500">
-        Start with a secure workspace and your first AI teammate can join minutes later.
+      <p className="mb-6 text-[14.5px] leading-relaxed text-[#111113]/55">
+        Free to start. No credit card, no recruiters — just describe the role.
       </p>
 
       {signupsDisabled && (
@@ -166,7 +167,7 @@ function SignupForm() {
       ) : (
         <>
           <form
-            className="mt-7 space-y-4"
+            className="space-y-3.5"
             onSubmit={(e) => {
               e.preventDefault();
               create();
@@ -292,13 +293,13 @@ function SignupForm() {
             </>
           )}
 
-          <p className="mt-6 text-center text-sm text-slate-500">
+          <p className="mt-[26px] text-center text-[13.5px] text-[#111113]/55">
             Already have a workspace?{" "}
             <Link
               href={nextPath ? `/login?next=${encodeURIComponent(nextPath)}` : "/login"}
-              className="font-medium text-accent-600 hover:text-accent-700"
+              className="font-semibold text-[#111113] hover:underline"
             >
-              Enter workspace
+              Sign in
             </Link>
           </p>
         </>

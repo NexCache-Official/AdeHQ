@@ -1,119 +1,213 @@
 "use client";
 
-import { motion } from "framer-motion";
+import { useState, type ReactNode } from "react";
 import Link from "next/link";
-import { BrandLockup, BrandMark } from "@/components/brand/Brand";
+import { cn } from "@/lib/utils";
 
-const AGENT_CHIPS = [
-  { label: "Ops", className: "left-6 top-7 bg-[#2f6fed]" },
-  { label: "CRM", className: "right-8 top-10 bg-[#21b89d]" },
-  { label: "Hire", className: "bottom-8 left-10 bg-[#111113]" },
-  { label: "Mail", className: "bottom-6 right-4 bg-[#6b7cff]" },
+export type AuthScene = "signin" | "signup" | "verify" | "createWorkspace";
+
+const SCENE_COPY: Record<
+  AuthScene,
+  { eyebrow: string; headline: string; subhead: string }
+> = {
+  signin: {
+    eyebrow: "Welcome back",
+    headline: "Your workforce never clocks out.",
+    subhead: "Sign back in and see what shipped while you were away.",
+  },
+  signup: {
+    eyebrow: "Get started",
+    headline: "Hire your first AI employee.",
+    subhead: "Describe the role — Ade Recruiter handles sourcing, briefing, and onboarding.",
+  },
+  verify: {
+    eyebrow: "Almost there",
+    headline: "One click from live.",
+    subhead: "Confirm your email and your workspace switches on instantly.",
+  },
+  createWorkspace: {
+    eyebrow: "New headquarters",
+    headline: "Spin up another workspace.",
+    subhead: "Same rules, fresh rooms — onboard this HQ before your team moves in.",
+  },
+};
+
+const CHIPS = [
+  {
+    label: "En",
+    pos: "left-1.5 top-1.5",
+    tone: "bg-gradient-to-br from-indigo-500 to-indigo-600",
+    anim: "animate-[lgFloatA_5s_ease-in-out_infinite]",
+    parallax: [-16, -16] as const,
+  },
+  {
+    label: "Sa",
+    pos: "right-0.5 top-[26px]",
+    tone: "bg-gradient-to-br from-rose-400 to-orange-400",
+    anim: "animate-[lgFloatB_6s_ease-in-out_infinite]",
+    parallax: [18, -10] as const,
+  },
+  {
+    label: "Mk",
+    pos: "bottom-0 left-[26px]",
+    tone: "bg-gradient-to-br from-emerald-400 to-teal-500",
+    anim: "animate-[lgFloatC_4.5s_ease-in-out_infinite]",
+    parallax: [-12, 14] as const,
+  },
+  {
+    label: "Pr",
+    pos: "bottom-3.5 right-[22px]",
+    tone: "bg-gradient-to-br from-violet-500 to-purple-500",
+    anim: "animate-[lgFloatA_5.5s_ease-in-out_infinite]",
+    parallax: [14, 16] as const,
+  },
 ];
 
-export function AuthShell({ children }: { children: React.ReactNode }) {
+export function AuthModeTabs({
+  mode,
+  nextPath,
+}: {
+  mode: "signin" | "signup";
+  nextPath?: string | null;
+}) {
+  const qs = nextPath ? `?next=${encodeURIComponent(nextPath)}` : "";
   return (
-    <div className="grid min-h-screen bg-[#f7f6f2] text-[var(--ink)] lg:grid-cols-[minmax(420px,470px)_1fr]">
-      <div className="flex min-h-screen flex-col bg-gradient-to-b from-white to-[#fbfaf7] px-6 py-7 sm:px-10 lg:px-12">
-        <Link href="/login" className="inline-flex w-fit">
-          <BrandLockup size={38} />
+    <div className="mb-[26px] flex rounded-[12px] bg-[#111113]/[0.06] p-1">
+      {(
+        [
+          { value: "signin" as const, label: "Sign in", href: `/login${qs}` },
+          { value: "signup" as const, label: "Sign up", href: `/signup${qs}` },
+        ] as const
+      ).map((item) => {
+        const active = item.value === mode;
+        return (
+          <Link
+            key={item.value}
+            href={item.href}
+            className={cn(
+              "flex h-10 flex-1 items-center justify-center rounded-[10px] text-[13.5px] font-semibold transition-colors",
+              active
+                ? "bg-white text-[#111113] shadow-sm"
+                : "text-[#111113]/55 hover:text-[#111113]",
+            )}
+          >
+            {item.label}
+          </Link>
+        );
+      })}
+    </div>
+  );
+}
+
+export function AuthShell({
+  children,
+  scene = "signin",
+}: {
+  children: ReactNode;
+  scene?: AuthScene;
+}) {
+  const copy = SCENE_COPY[scene];
+  const [mx, setMx] = useState(0);
+  const [my, setMy] = useState(0);
+
+  return (
+    <div className="grid min-h-screen bg-white font-sans text-[#111113] lg:grid-cols-[min(480px,42vw)_1fr]">
+      {/* Left — form panel */}
+      <div className="relative flex min-h-screen flex-col px-6 py-10 sm:px-12 lg:px-12">
+        <Link href="/login" className="inline-flex items-center gap-2.5">
+          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[#111113] text-[15px] font-bold tracking-tight text-white">
+            A
+          </span>
+          <span className="text-base font-semibold tracking-tight">AdeHQ</span>
         </Link>
-        <motion.div
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
-          className="flex flex-1 items-center justify-center py-10"
-        >
-          <div className="w-full max-w-[380px]">{children}</div>
-        </motion.div>
-        <p className="text-xs leading-relaxed text-slate-400">
-          By continuing you agree to AdeHQ&apos;s Terms and Privacy Policy.
+
+        <div className="flex flex-1 items-center justify-center py-10">
+          <div className="w-full max-w-[340px] animate-[lgFadeUp_0.5s_cubic-bezier(0.2,0.7,0.3,1)_both]">
+            {children}
+          </div>
+        </div>
+
+        <p className="text-xs text-[#111113]/45">
+          By continuing you agree to AdeHQ&apos;s Terms &amp; Privacy Policy.
         </p>
       </div>
 
-      <div className="relative hidden min-h-screen flex-col justify-between overflow-hidden bg-[#101114] px-12 py-10 text-white lg:flex xl:px-14">
-        <motion.div
+      {/* Right — live scene */}
+      <div
+        className="relative hidden min-h-screen flex-col justify-between gap-5 overflow-x-hidden overflow-y-auto bg-[#0c0c0e] px-9 py-9 text-white lg:flex xl:px-[52px]"
+        onMouseMove={(e) => {
+          const r = e.currentTarget.getBoundingClientRect();
+          setMx(((e.clientX - r.left) / r.width) * 2 - 1);
+          setMy(((e.clientY - r.top) / r.height) * 2 - 1);
+        }}
+        onMouseLeave={() => {
+          setMx(0);
+          setMy(0);
+        }}
+      >
+        <div
           aria-hidden
-          className="absolute -left-40 -top-44 h-[34rem] w-[34rem] rounded-full bg-[#4568ff]/30 blur-[72px]"
-          animate={{ x: [0, 24, 0], y: [0, -18, 0], scale: [1, 1.08, 1] }}
-          transition={{ duration: 14, repeat: Infinity, ease: "easeInOut" }}
+          className="pointer-events-none absolute -left-[140px] -top-[160px] h-[520px] w-[520px] rounded-full bg-[radial-gradient(circle,#6366F1,transparent_70%)] opacity-35 blur-[60px] animate-[lgAurora_14s_ease-in-out_infinite]"
         />
-        <motion.div
+        <div
           aria-hidden
-          className="absolute -bottom-56 -right-44 h-[37rem] w-[37rem] rounded-full bg-[#22c7a9]/25 blur-[80px]"
-          animate={{ x: [0, -22, 0], y: [0, 16, 0], scale: [1.04, 1, 1.04] }}
-          transition={{ duration: 16, repeat: Infinity, ease: "easeInOut" }}
+          className="pointer-events-none absolute -bottom-[200px] -right-[160px] h-[560px] w-[560px] rounded-full bg-[radial-gradient(circle,#22D3EE,transparent_70%)] opacity-28 blur-[70px] animate-[lgAurora_16s_ease-in-out_infinite_reverse]"
         />
-        <div className="absolute inset-0 bg-[linear-gradient(120deg,rgba(255,255,255,0.08),transparent_34%,rgba(78,201,176,0.08))]" />
 
-        <motion.div
-          initial={{ opacity: 0, y: 18 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.55, ease: [0.2, 0.7, 0.3, 1] }}
-          className="relative z-10"
+        <div
+          key={scene}
+          className="relative z-10 animate-[lgFadeUp_0.55s_cubic-bezier(0.2,0.7,0.3,1)_both]"
         >
-          <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-white/15 px-3 py-1.5 font-mono text-[10.5px] uppercase tracking-[0.07em] text-white/65">
-            <span className="h-1.5 w-1.5 rounded-full bg-[#35dec0] shadow-[0_0_0_4px_rgba(53,222,192,0.16)]" />
-            AI workforce online
+          <div className="mb-[22px] inline-flex items-center gap-[7px] rounded-full border border-white/14 px-3 py-[5px] font-mono text-[10.5px] uppercase tracking-[0.07em] text-white/60">
+            <span className="h-1.5 w-1.5 rounded-full bg-[#22D3EE] shadow-[0_0_0_3px_rgba(34,211,238,0.2)]" />
+            {copy.eyebrow}
           </div>
-          <h2 className="max-w-lg text-balance text-4xl font-semibold leading-[1.06] tracking-[-0.04em] text-white">
-            Your company&apos;s AI headquarters.
+          <h2 className="m-0 max-w-[460px] text-[32px] font-semibold leading-[1.1] tracking-[-0.03em] text-white">
+            {copy.headline}
           </h2>
-          <p className="mt-3 max-w-md text-[15px] leading-relaxed text-white/60">
-            Sign in, launch a workspace, and let your AI employees keep moving work across rooms,
-            memory, approvals, and tools.
+          <p className="mt-2.5 max-w-[400px] text-[14.5px] leading-relaxed text-white/55">
+            {copy.subhead}
           </p>
-        </motion.div>
+        </div>
 
-        <div className="relative z-10 flex min-h-[280px] items-center justify-center">
-          <div className="relative h-[240px] w-[320px]">
-            <motion.div
-              className="absolute inset-3 rounded-full border border-white/15"
-              animate={{ rotate: 360 }}
-              transition={{ duration: 24, repeat: Infinity, ease: "linear" }}
+        <div className="relative z-10 flex min-h-[150px] items-center justify-center">
+          <div className="relative h-[150px] w-[260px]">
+            <div
+              className="absolute left-1/2 top-1/2 h-24 w-24 -translate-x-1/2 -translate-y-1/2 rounded-[32px] bg-[linear-gradient(140deg,#6366F1,#22D3EE)] shadow-[0_20px_50px_-14px_rgba(99,102,241,0.55)] transition-transform duration-200 ease-out"
+              style={{ transform: `translate(calc(-50% + ${mx * 8}px), calc(-50% + ${my * 8}px))` }}
             />
-            <motion.div
-              className="absolute left-1/2 top-1/2 flex h-[118px] w-[118px] -translate-x-1/2 -translate-y-1/2 items-center justify-center overflow-hidden rounded-[31px] bg-white text-accent shadow-[0_28px_70px_-20px_rgba(0,0,0,0.65)] ring-1 ring-white/20"
-              animate={{ y: [0, -8, 0], rotate: [0, 1.5, 0] }}
-              transition={{ duration: 5.5, repeat: Infinity, ease: "easeInOut" }}
-            >
-              <motion.span
-                aria-hidden
-                className="absolute inset-x-[-70%] inset-y-[-80%] bg-[linear-gradient(180deg,transparent,rgba(47,111,237,0.22),transparent)]"
-                animate={{ y: ["-45%", "45%"] }}
-                transition={{ duration: 3.6, repeat: Infinity, ease: "easeInOut" }}
-              />
-              <BrandMark size={78} className="relative z-10 text-accent" />
-            </motion.div>
-            {AGENT_CHIPS.map((chip, index) => (
-              <motion.div
+            {CHIPS.map((chip) => (
+              <div
                 key={chip.label}
-                className={`absolute flex h-[54px] w-[54px] items-center justify-center rounded-[17px] font-mono text-xs font-semibold text-white shadow-[0_16px_30px_-14px_rgba(0,0,0,0.7)] ${chip.className}`}
-                animate={{ y: [0, index % 2 === 0 ? -10 : 10, 0], x: [0, index % 2 === 0 ? 5 : -7, 0] }}
-                transition={{ duration: 5 + index * 0.5, repeat: Infinity, ease: "easeInOut" }}
+                className={cn("absolute transition-transform duration-200 ease-out", chip.pos)}
+                style={{
+                  transform: `translate(${chip.parallax[0] * mx}px, ${chip.parallax[1] * my}px)`,
+                }}
               >
-                {chip.label}
-              </motion.div>
+                <div
+                  className={cn(
+                    "flex h-[46px] w-[46px] items-center justify-center rounded-[14px] font-mono text-xs font-semibold text-white shadow-[0_10px_24px_-10px_rgba(0,0,0,0.5)]",
+                    chip.tone,
+                    chip.anim,
+                  )}
+                >
+                  {chip.label}
+                </div>
+              </div>
             ))}
           </div>
         </div>
 
-        <motion.div
-          initial={{ opacity: 0, y: 18 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.7, ease: [0.2, 0.7, 0.3, 1] }}
-          className="relative z-10 max-w-md rounded-[18px] border border-white/10 bg-white/[0.065] px-5 py-4 backdrop-blur"
-        >
-          <p className="font-serif text-base italic leading-relaxed text-white">
-            &quot;AdeHQ feels like a room full of people already moving work forward.&quot;
+        <div className="relative z-10 max-w-[400px] rounded-[18px] border border-white/10 bg-white/[0.06] px-[22px] py-[18px] backdrop-blur-[14px]">
+          <p className="m-0 font-serif text-[15.5px] italic leading-[1.45] text-white">
+            &quot;Our AI account manager drafted, sent, and followed up on forty client emails before
+            I&apos;d finished my coffee.&quot;
           </p>
-          <div className="mt-4 flex items-center gap-2.5">
-            <span className="flex h-8 w-8 items-center justify-center rounded-[10px] bg-white text-accent">
-              <BrandMark size={20} />
-            </span>
-            <span className="text-xs text-white/55">Workspace owner</span>
+          <div className="mt-3 flex items-center gap-[9px]">
+            <span className="h-[26px] w-[26px] shrink-0 rounded-full bg-gradient-to-br from-violet-500 to-indigo-500" />
+            <span className="text-[12.5px] text-white/55">Early workspace owner</span>
           </div>
-        </motion.div>
+        </div>
       </div>
     </div>
   );

@@ -51,6 +51,7 @@ import {
   acceptWorkspaceInvitation as acceptWorkspaceInvitationRemote,
   createWorkspaceInvitation as createWorkspaceInvitationRemote,
   bootstrapWorkspaceRemote,
+  createWorkspaceRemote,
   declineWorkspaceInvitation as declineWorkspaceInvitationRemote,
   revokeWorkspaceInvitation as revokeWorkspaceInvitationRemote,
   deleteEmployee,
@@ -136,6 +137,7 @@ type StoreActions = {
   ) => Promise<{ needsEmailConfirmation: boolean; repeatedSignup?: boolean }>;
   login: (email: string, password: string) => Promise<{ onboardingComplete: boolean }>;
   bootstrapWorkspace: (workspaceName?: string) => Promise<void>;
+  createWorkspace: (workspaceName: string) => Promise<{ workspaceId: string; workspaceName: string }>;
   setupOnboardingWorkspace: (payload: {
     workspaceName: string;
     room: { name: string; accent: string; description?: string };
@@ -703,6 +705,53 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         }
       },
 
+      createWorkspace: async (workspaceName) => {
+        authBusyRef.current = true;
+        try {
+          const user = authUserRef.current;
+          if (!user) throw new Error("Sign in to continue.");
+          if (!isEmailConfirmed(user)) {
+            throw new Error("Confirm your email before creating a workspace.");
+          }
+          const name = workspaceName.trim();
+          if (!name) throw new Error("Workspace name is required.");
+
+          if (backendRef.current !== "supabase") {
+            const workspaceId = uid("ws");
+            set((s) => ({
+              ...s,
+              workspace: {
+                ...s.workspace,
+                id: workspaceId,
+                name,
+                onboardingComplete: false,
+              },
+              onboardingComplete: false,
+              rooms: [],
+              employees: [],
+            }));
+            setUserWorkspaces((prev) => [
+              ...prev,
+              {
+                id: workspaceId,
+                name,
+                role: "admin",
+                workspaceMode: "demo",
+                onboardingComplete: false,
+              },
+            ]);
+            return { workspaceId, workspaceName: name };
+          }
+
+          const created = await createWorkspaceRemote(name);
+          setActiveWorkspaceId(created.workspaceId);
+          await loadRemote(user, created.workspaceId);
+          return created;
+        } finally {
+          authBusyRef.current = false;
+        }
+      },
+
       setupOnboardingWorkspace: async ({ workspaceName, room: roomInput }) => {
         if (setupOnboardingInFlightRef.current) {
           return setupOnboardingInFlightRef.current;
@@ -736,7 +785,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
             }
 
             if (backendRef.current !== "supabase") {
-              const workspaceId = uid("ws");
+              const workspaceId = stateRef.current.workspace.id || uid("ws");
               const timestamp = nowISO();
               const roomId = uid("room");
               // Demo mode: first room keeps the requested name (no suffix race).
@@ -791,8 +840,20 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
               };
             }
 
-            const bootstrapped = await bootstrapWorkspaceRemote(name);
-            await loadRemote(user, bootstrapped.workspaceId);
+            // Prefer the active workspace (e.g. just created via POST /api/workspaces).
+            // Only bootstrap when the user has no workspace yet — bootstrap is idempotent
+            // and would otherwise trap additional HQs onto the first membership.
+            let workspaceId = stateRef.current.workspace.id;
+            if (workspaceId) {
+              if (name && name !== stateRef.current.workspace.name) {
+                await persistWorkspace(workspaceId, { name });
+              }
+              await loadRemote(user, workspaceId);
+            } else {
+              const bootstrapped = await bootstrapWorkspaceRemote(name);
+              workspaceId = bootstrapped.workspaceId;
+              await loadRemote(user, workspaceId);
+            }
 
             const { authHeaders } = await import("@/lib/api/auth-client");
             const headers = await authHeaders();
@@ -801,7 +862,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
               method: "POST",
               headers,
               body: JSON.stringify({
-                workspaceId: bootstrapped.workspaceId,
+                workspaceId,
                 ...(profileFirstName ? { firstName: profileFirstName } : {}),
               }),
             });
@@ -813,12 +874,12 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
                   : "Could not set up Maya.",
               );
             }
-            await loadRemote(user, bootstrapped.workspaceId);
+            await loadRemote(user, workspaceId);
 
             const alreadyProvisioned = stateRef.current.rooms.find((r) => r.kind === "room");
             if (alreadyProvisioned) {
               return {
-                workspaceId: bootstrapped.workspaceId,
+                workspaceId,
                 firstRoomId: alreadyProvisioned.id,
                 roomName: alreadyProvisioned.name,
                 mayaDmRoomId: resolveMayaDmRoomId(stateRef.current.rooms),
@@ -830,7 +891,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
               method: "POST",
               headers,
               body: JSON.stringify({
-                workspaceId: bootstrapped.workspaceId,
+                workspaceId,
                 name: roomInput.name.trim() || "Launch Room",
                 accent: roomInput.accent,
                 description: roomInput.description,
@@ -844,10 +905,10 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
                   : "Could not create your first room.",
               );
             }
-            await loadRemote(user, bootstrapped.workspaceId);
+            await loadRemote(user, workspaceId);
 
             return {
-              workspaceId: bootstrapped.workspaceId,
+              workspaceId,
               firstRoomId: String(roomPayload.roomId),
               roomName: String(roomPayload.roomName),
               mayaDmRoomId: resolveMayaDmRoomId(stateRef.current.rooms),
@@ -937,8 +998,15 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
               ? user.user_metadata.workspace_name
               : "My AI Workspace");
 
-          const bootstrapped = await bootstrapWorkspaceRemote(name);
-          const workspaceId = bootstrapped.workspaceId;
+          let workspaceId = stateRef.current.workspace.id;
+          if (workspaceId) {
+            if (name && name !== stateRef.current.workspace.name) {
+              await persistWorkspace(workspaceId, { name });
+            }
+          } else {
+            const bootstrapped = await bootstrapWorkspaceRemote(name);
+            workspaceId = bootstrapped.workspaceId;
+          }
 
           await persistRoom(workspaceId, room);
           await Promise.all([

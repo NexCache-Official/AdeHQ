@@ -342,12 +342,13 @@ export type UserWorkspaceSummary = {
   name: string;
   role: WorkspaceMemberRole;
   workspaceMode: Workspace["workspaceMode"];
+  onboardingComplete: boolean;
 };
 
 export async function listUserWorkspaces(userId: string): Promise<UserWorkspaceSummary[]> {
   const { data, error } = await supabase
     .from("workspace_members")
-    .select("role, workspaces ( id, name, workspace_mode )")
+    .select("role, workspaces ( id, name, workspace_mode, onboarding_complete )")
     .eq("user_id", userId);
 
   if (error) throw error;
@@ -355,8 +356,18 @@ export async function listUserWorkspaces(userId: string): Promise<UserWorkspaceS
   return (data ?? [])
     .map((row) => {
       const joined = row.workspaces as
-        | { id: string; name: string; workspace_mode: string }
-        | { id: string; name: string; workspace_mode: string }[]
+        | {
+            id: string;
+            name: string;
+            workspace_mode: string;
+            onboarding_complete?: boolean | null;
+          }
+        | {
+            id: string;
+            name: string;
+            workspace_mode: string;
+            onboarding_complete?: boolean | null;
+          }[]
         | null;
       const ws = Array.isArray(joined) ? joined[0] : joined;
       if (!ws) return null;
@@ -365,9 +376,32 @@ export async function listUserWorkspaces(userId: string): Promise<UserWorkspaceS
         name: ws.name,
         role: normalizeWorkspaceRole(String(row.role)),
         workspaceMode: ws.workspace_mode === "demo" ? "demo" : "real",
+        onboardingComplete: Boolean(ws.onboarding_complete),
       } satisfies UserWorkspaceSummary;
     })
     .filter((row): row is UserWorkspaceSummary => row !== null);
+}
+
+/** Always creates a new workspace (not bootstrap). */
+export async function createWorkspaceRemote(
+  workspaceName: string,
+): Promise<{ workspaceId: string; workspaceName: string }> {
+  const headers = await authHeaders();
+  const res = await fetch("/api/workspaces", {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ workspaceName }),
+  });
+  const payload = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(
+      typeof payload.error === "string" ? payload.error : "Could not create workspace.",
+    );
+  }
+  return {
+    workspaceId: String(payload.workspaceId),
+    workspaceName: String(payload.workspaceName),
+  };
 }
 
 export async function loadWorkspaceState(

@@ -131,7 +131,18 @@ export function WorkspaceSwitcher({
                 Workspaces
               </div>
               <div className="max-h-64 overflow-y-auto p-1.5">
-                {(backend === "supabase" ? userWorkspaces : [{ id: state.workspace.id, name: state.workspace.name, role: current?.role ?? "admin", workspaceMode: state.workspace.workspaceMode }]).map(
+                {(backend === "supabase"
+                  ? userWorkspaces
+                  : [
+                      {
+                        id: state.workspace.id,
+                        name: state.workspace.name,
+                        role: current?.role ?? "admin",
+                        workspaceMode: state.workspace.workspaceMode,
+                        onboardingComplete: state.onboardingComplete,
+                      },
+                    ]
+                ).map(
                   (ws) => {
                     const active = ws.id === state.workspace.id;
                     return (

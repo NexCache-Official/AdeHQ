@@ -53,7 +53,7 @@ function ConfirmEmailInner() {
   }
 
   return (
-    <AuthShell>
+    <AuthShell scene="verify">
       <div className="relative mb-7 h-[82px] w-[82px]">
         <span className="absolute inset-0 animate-ping rounded-full bg-accent/15" />
         <span className="absolute inset-2 animate-ping rounded-full bg-emerald-400/15 [animation-delay:500ms]" />
@@ -61,12 +61,12 @@ function ConfirmEmailInner() {
           <Mail className="h-8 w-8" />
         </div>
       </div>
-      <h1 className="text-[30px] font-semibold leading-tight tracking-[-0.03em] text-slate-950">
+      <h1 className="mb-2 text-[27px] font-semibold leading-[1.15] tracking-[-0.03em] text-[#111113]">
         Confirm your email.
       </h1>
-      <p className="mt-2 text-[15px] leading-relaxed text-slate-500">
+      <p className="text-[14.5px] leading-relaxed text-[#111113]/55">
         We sent a workspace activation link to{" "}
-        {email ? <span className="font-semibold text-slate-950">{email}</span> : "your inbox"}.
+        {email ? <span className="font-semibold text-[#111113]">{email}</span> : "your inbox"}.
       </p>
 
       <div className="mt-6 rounded-[18px] border border-amber-200 bg-amber-50 px-5 py-4 text-left text-sm text-amber-950">

@@ -219,6 +219,8 @@ export const ONBOARDING_ROOM_KEY = "adehq-onboarding-room";
 export const ONBOARDING_CONTEXT_KEY = "adehq-onboarding-context";
 /** Allows the Launch (step 5) screen to stay visible after onboarding_complete is persisted. */
 export const ONBOARDING_LAUNCH_PENDING_KEY = "adehq-onboarding-launch-pending";
+/** Optional focus text from /workspaces/new → seeds onboarding goalText. */
+export const NEW_WORKSPACE_FOCUS_KEY = "adehq-new-workspace-focus";
 
 export function readOnboardingContext(): import("./types").OnboardingContext | null {
   if (typeof window === "undefined") return null;
@@ -255,4 +257,5 @@ export function clearOnboardingDrafts() {
   sessionStorage.removeItem(ONBOARDING_ROOM_KEY);
   sessionStorage.removeItem(ONBOARDING_CONTEXT_KEY);
   sessionStorage.removeItem(ONBOARDING_LAUNCH_PENDING_KEY);
+  sessionStorage.removeItem(NEW_WORKSPACE_FOCUS_KEY);
 }

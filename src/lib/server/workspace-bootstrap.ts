@@ -11,6 +11,15 @@ import { getSiteUrl } from "@/lib/site-url";
 
 type DbRow = Record<string, unknown>;
 
+export type CreateWorkspaceResult = {
+  workspaceId: string;
+  workspaceName: string;
+};
+
+export type BootstrapWorkspaceResult = CreateWorkspaceResult & {
+  created: boolean;
+};
+
 async function sendWelcomeEmail(user: User, workspaceId: string): Promise<void> {
   if (!user.email) return;
   const meta = user.user_metadata ?? {};
@@ -28,12 +37,6 @@ async function sendWelcomeEmail(user: User, workspaceId: string): Promise<void> 
     console.warn("[AdeHQ welcome email]", error);
   }
 }
-
-export type BootstrapWorkspaceResult = {
-  workspaceId: string;
-  workspaceName: string;
-  created: boolean;
-};
 
 async function findExistingWorkspaceId(
   client: SupabaseClient,
@@ -93,6 +96,67 @@ async function seedWorkspaceTools(client: SupabaseClient, workspaceId: string): 
   if (error) throw error;
 }
 
+function resolveWorkspaceName(user: User, workspaceName?: string): string {
+  return (
+    workspaceName?.trim() ||
+    (typeof user.user_metadata?.workspace_name === "string"
+      ? user.user_metadata.workspace_name
+      : "My AI Workspace")
+  );
+}
+
+/**
+ * Always inserts a new workspace + admin membership + tool/Maya/provider seed.
+ * Used for additional HQs; bootstrap uses this only when the user has none yet.
+ */
+export async function createWorkspaceForUser(
+  client: SupabaseClient,
+  user: User,
+  workspaceName?: string,
+  options?: { sendWelcome?: boolean },
+): Promise<CreateWorkspaceResult> {
+  if (!isEmailConfirmed(user)) {
+    throw new AccountLifecycleError(
+      "email_not_confirmed",
+      "Confirm your email before creating a workspace.",
+      403,
+    );
+  }
+
+  const name = resolveWorkspaceName(user, workspaceName);
+
+  const { data: workspaceRow, error: workspaceError } = await client
+    .from("workspaces")
+    .insert({
+      name,
+      plan: "Founder",
+      workspace_mode: "real",
+      owner_id: user.id,
+      onboarding_complete: false,
+    })
+    .select("*")
+    .single();
+
+  if (workspaceError) throw workspaceError;
+
+  const workspaceId = String((workspaceRow as DbRow).id);
+
+  await ensureMemberRow(client, workspaceId, user.id);
+  await seedWorkspaceTools(client, workspaceId);
+  await ensureMayaForWorkspace(client, workspaceId);
+  await ensureWorkspaceProviderAllocations(client, workspaceId, user.id).catch((error) => {
+    console.warn("[AdeHQ provider allocations create]", error);
+  });
+
+  // Mailbox is claim-first — owners claim via /inbox. Do not auto-provision.
+
+  if (options?.sendWelcome) {
+    void sendWelcomeEmail(user, workspaceId);
+  }
+
+  return { workspaceId, workspaceName: name };
+}
+
 /** Idempotent — returns existing workspace or creates exactly one. */
 export async function bootstrapWorkspaceForUser(
   client: SupabaseClient,
@@ -107,12 +171,7 @@ export async function bootstrapWorkspaceForUser(
     );
   }
 
-  const name =
-    workspaceName?.trim() ||
-    (typeof user.user_metadata?.workspace_name === "string"
-      ? user.user_metadata.workspace_name
-      : "My AI Workspace");
-
+  const name = resolveWorkspaceName(user, workspaceName);
   const existingId = await findExistingWorkspaceId(client, user.id);
   if (existingId) {
     await ensureMemberRow(client, existingId, user.id);
@@ -132,19 +191,10 @@ export async function bootstrapWorkspaceForUser(
     };
   }
 
-  const { data: workspaceRow, error: workspaceError } = await client
-    .from("workspaces")
-    .insert({
-      name,
-      plan: "Founder",
-      workspace_mode: "real",
-      owner_id: user.id,
-      onboarding_complete: false,
-    })
-    .select("*")
-    .single();
-
-  if (workspaceError) {
+  try {
+    const created = await createWorkspaceForUser(client, user, name, { sendWelcome: true });
+    return { ...created, created: true };
+  } catch (workspaceError) {
     const raced = await findExistingWorkspaceId(client, user.id);
     if (raced) {
       const { data, error } = await client
@@ -157,22 +207,4 @@ export async function bootstrapWorkspaceForUser(
     }
     throw workspaceError;
   }
-
-  const workspaceId = String((workspaceRow as DbRow).id);
-
-  await ensureMemberRow(client, workspaceId, user.id);
-  await seedWorkspaceTools(client, workspaceId);
-  await ensureMayaForWorkspace(client, workspaceId);
-  await ensureWorkspaceProviderAllocations(client, workspaceId, user.id).catch((error) => {
-    console.warn("[AdeHQ provider allocations bootstrap]", error);
-  });
-
-  // Mailbox is claim-first (Slice B) — owners claim via /inbox. Do not auto-provision.
-
-  // First workspace created (post email-confirmation) — send the branded
-  // Welcome email. Preference-gated (product_updates) and best-effort: never
-  // block onboarding on email delivery.
-  void sendWelcomeEmail(user, workspaceId);
-
-  return { workspaceId, workspaceName: name, created: true };
 }

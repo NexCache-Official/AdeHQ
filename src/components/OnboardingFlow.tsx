@@ -14,6 +14,7 @@ import {
 import { BrandMark } from "@/components/brand/Brand";
 import { useStore } from "@/lib/demo-store";
 import {
+  NEW_WORKSPACE_FOCUS_KEY,
   ONBOARDING_CONTEXT_KEY,
   ONBOARDING_ROOM_KEY,
   clearOnboardingLaunchPending,
@@ -81,6 +82,18 @@ export function OnboardingFlow() {
 
   const companyName = state.workspace.name || "My AI Workspace";
   const ownerInitial = (companyName.trim()[0] || "N").toUpperCase();
+
+  useEffect(() => {
+    try {
+      const focus = sessionStorage.getItem(NEW_WORKSPACE_FOCUS_KEY);
+      if (focus?.trim()) {
+        setGoalText(focus.trim());
+        sessionStorage.removeItem(NEW_WORKSPACE_FOCUS_KEY);
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
 
   const presets = useMemo(
     () => (outcomeId ? workstreamPresetsForOutcome(outcomeId) : []),
