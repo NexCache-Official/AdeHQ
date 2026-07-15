@@ -21,20 +21,66 @@ export async function GET(
     }
 
     const service = createSupabaseSecretClient();
+
+    // Probe the same sources summarize uses — if these disagree with the
+    // summary, the secret client is not actually bypassing RLS / reading
+    // the commercial tables for this workspace.
+    const { startIso, endExclusiveIso } = await import("@/lib/ai/work-hours/periods").then((m) =>
+      m.getCurrentUsagePeriodRange(new Date()),
+    );
+    const [periodProbe, ledgerProbe] = await Promise.all([
+      service
+        .from("workspace_usage_periods")
+        .select("id, ai_work_hours_used, period_start, period_end")
+        .eq("workspace_id", params.workspaceId)
+        .eq("period_start", startIso)
+        .eq("period_end", endExclusiveIso)
+        .maybeSingle(),
+      service
+        .from("ai_cost_ledger_entries")
+        .select("id", { count: "exact", head: true })
+        .eq("workspace_id", params.workspaceId)
+        .gte("created_at", startIso)
+        .lt("created_at", endExclusiveIso),
+    ]);
+    if (periodProbe.error || ledgerProbe.error) {
+      console.error("[AdeHQ usage GET] probe failed", {
+        workspaceId: params.workspaceId,
+        periodError: periodProbe.error,
+        ledgerError: ledgerProbe.error,
+      });
+    } else {
+      console.info("[AdeHQ usage GET] probe", {
+        workspaceId: params.workspaceId,
+        periodUsed: periodProbe.data?.ai_work_hours_used ?? null,
+        ledgerCount: ledgerProbe.count ?? 0,
+        startIso,
+        endExclusiveIso,
+      });
+    }
+
     const summary = await summarizeWorkspaceUsage(service, params.workspaceId, {
       includeCost: false,
     });
 
     // Summary already floors leaves and rolls parents up — pass through one shared total.
-    const totalWorkHours = floorDisplayHours(summary.totalWorkHours);
-    const teamWorkHours = floorDisplayHours(summary.teamWorkHours);
-    const guideWorkHours = floorDisplayHours(summary.guideWorkHours);
+    // Prefer period counter when summarize somehow returns 0 despite probe usage.
+    const periodUsedRaw = Number(periodProbe.data?.ai_work_hours_used ?? 0);
+    const periodUsed = floorDisplayHours(periodUsedRaw);
+    let totalWorkHours = floorDisplayHours(summary.totalWorkHours);
+    let teamWorkHours = floorDisplayHours(summary.teamWorkHours);
+    let guideWorkHours = floorDisplayHours(summary.guideWorkHours);
+    if (totalWorkHours <= 0 && periodUsed > 0) {
+      totalWorkHours = periodUsed;
+      teamWorkHours = periodUsed;
+      guideWorkHours = 0;
+    }
     const allowance = summary.capacity.unlimited ? null : summary.capacity.allowance;
     const remaining = summary.capacity.unlimited
       ? null
       : Math.max(0, Math.round(((allowance ?? 0) - totalWorkHours) * 100) / 100);
 
-    return NextResponse.json({
+    const body: Record<string, unknown> = {
       capacity: {
         allowance,
         used: totalWorkHours,
@@ -78,7 +124,23 @@ export async function GET(
           workHours: wt.workHours,
         })),
       })),
-    });
+    };
+
+    if (request.nextUrl.searchParams.get("debug") === "1") {
+      body.debug = {
+        workspaceId: params.workspaceId,
+        startIso,
+        endExclusiveIso,
+        periodProbe: periodProbe.data,
+        periodError: periodProbe.error,
+        ledgerCount: ledgerProbe.count ?? 0,
+        ledgerError: ledgerProbe.error,
+        summaryTotal: summary.totalWorkHours,
+        summaryCapacityUsed: summary.capacity.used,
+      };
+    }
+
+    return NextResponse.json(body);
   } catch (error) {
     if (error instanceof AuthError) {
       return NextResponse.json({ error: error.message }, { status: error.status });

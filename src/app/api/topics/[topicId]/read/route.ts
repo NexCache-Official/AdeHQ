@@ -3,6 +3,7 @@ import { AuthError, requireAuthUser, requireWorkspaceMembership } from "@/lib/su
 import { assertCanAccessRoom } from "@/lib/server/room-access";
 import { topicFromRow } from "@/lib/server/topic-helpers";
 import { nowISO } from "@/lib/utils";
+import { isPersistedTopicId } from "@/lib/server/topic-id";
 
 export const runtime = "nodejs";
 
@@ -16,6 +17,9 @@ export async function POST(
 ) {
   try {
     const { user, client } = await requireAuthUser(request);
+    if (!isPersistedTopicId(params.topicId)) {
+      return NextResponse.json({ ok: true, skipped: true });
+    }
     const body = (await request.json()) as ReadBody;
 
     const { data: topicRow, error: topicError } = await client

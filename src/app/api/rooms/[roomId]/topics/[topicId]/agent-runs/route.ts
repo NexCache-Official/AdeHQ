@@ -3,6 +3,7 @@ import { AuthError, requireAuthUser, requireWorkspaceMembership, getRequestWorks
 import { assertCanAccessRoom } from "@/lib/server/room-access";
 import { getWorkspaceIdForRoom } from "@/lib/server/room-messages";
 import { assertTopicInRoom } from "@/lib/server/topic-helpers";
+import { isPersistedTopicId } from "@/lib/server/topic-id";
 import type { ConversationPlan } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -60,6 +61,9 @@ export async function GET(
 
     const { role } = await requireWorkspaceMembership(client, workspaceId, user.id);
     await assertCanAccessRoom(client, workspaceId, params.roomId, user.id, role);
+    if (!isPersistedTopicId(params.topicId)) {
+      return NextResponse.json({ runs: [] });
+    }
     await assertTopicInRoom(client, workspaceId, params.roomId, params.topicId);
 
     const sinceMs = 10 * 60 * 1000;

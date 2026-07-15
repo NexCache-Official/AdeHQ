@@ -3,6 +3,7 @@ import { AuthError, requireAuthUser, requireWorkspaceMembership } from "@/lib/su
 import { assertCanAccessRoom } from "@/lib/server/room-access";
 import { artifactFromRow } from "@/lib/files/records";
 import { roomIdFromRow } from "@/lib/server/db-row";
+import { isPersistedTopicId } from "@/lib/server/topic-id";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -13,6 +14,9 @@ export async function GET(
 ) {
   try {
     const { user, client } = await requireAuthUser(request);
+    if (!isPersistedTopicId(params.topicId)) {
+      return NextResponse.json({ artifacts: [] });
+    }
     const { data: topicRow, error: topicError } = await client
       .from("topics")
       .select("workspace_id, room_id")

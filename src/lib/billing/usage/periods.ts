@@ -134,7 +134,10 @@ export async function getOrCreateCurrentPeriod(
   const { startIso, endExclusiveIso } = getCurrentUsagePeriodRange(new Date());
   const { planSlug, allowance, unlimited } = await getWorkspaceAllowance(client, workspaceId);
 
-  const existing = await client
+  // Prefer exact match, then a range scan — some PostgREST/timestamptz
+  // round-trips disagree on `.000Z` vs `+00:00` equality and would otherwise
+  // invent a fresh zeroed period while the real counter sits unread.
+  let existing = await client
     .from("workspace_usage_periods")
     .select("*")
     .eq("workspace_id", workspaceId)
@@ -143,6 +146,38 @@ export async function getOrCreateCurrentPeriod(
     .maybeSingle();
 
   if (existing.error) throw existing.error;
+  if (!existing.data) {
+    const ranged = await client
+      .from("workspace_usage_periods")
+      .select("*")
+      .eq("workspace_id", workspaceId)
+      .gte("period_start", startIso)
+      .lte("period_start", startIso)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (ranged.error) throw ranged.error;
+    if (ranged.data) existing = ranged;
+  }
+  if (!existing.data) {
+    const active = await client
+      .from("workspace_usage_periods")
+      .select("*")
+      .eq("workspace_id", workspaceId)
+      .eq("status", "active")
+      .order("period_start", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (active.error) throw active.error;
+    if (active.data) {
+      const rowStart = String(active.data.period_start ?? "");
+      const rowEnd = String(active.data.period_end ?? "");
+      if (rowStart.startsWith(startIso.slice(0, 10)) && rowEnd.startsWith(endExclusiveIso.slice(0, 10))) {
+        existing = active;
+      }
+    }
+  }
+
   if (existing.data) {
     // Keep allowance in sync if the plan/credits changed mid-period.
     const current = rowToPeriod(existing.data, unlimited);
