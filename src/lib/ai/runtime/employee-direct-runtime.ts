@@ -108,7 +108,10 @@ export async function generateEmployeeDirectResponseRuntime(
       roomId: ctx.roomId,
       topicId: ctx.topicId,
       employeeId: input.employee.id,
-      workType: "employee_direct_response",
+      workType:
+        capability === "artifact_generation"
+          ? "artifact_generation"
+          : "employee_direct_response",
       capability,
       objective: "Direct employee reply via Runtime V2",
       status: "created",

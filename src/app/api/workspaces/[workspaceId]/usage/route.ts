@@ -25,6 +25,7 @@ export async function GET(
     });
 
     const round2 = (n: number) => Math.round(n * 100) / 100;
+
     return NextResponse.json({
       capacity: {
         allowance: summary.capacity.unlimited ? null : round2(summary.capacity.allowance),
@@ -39,8 +40,26 @@ export async function GET(
       },
       weekStart: summary.weekStart,
       totalWorkHours: summary.totalWorkHours,
-      byEmployee: summary.byEmployee.map((r) => ({ label: r.label, workHours: r.workHours })),
-      byWorkType: summary.byWorkType.map((r) => ({ label: r.label, workHours: r.workHours })),
+      teamWorkHours: summary.teamWorkHours,
+      guideWorkHours: summary.guideWorkHours,
+      byEmployee: summary.byEmployee.map((r) => ({
+        label: r.label,
+        workHours: round2(r.workHours),
+      })),
+      byWorkType: summary.byWorkType.map((r) => ({
+        label: r.label,
+        workHours: round2(r.workHours),
+      })),
+      byEmployeeWorkType: summary.byEmployeeWorkType.map((emp) => ({
+        employeeId: emp.employeeId,
+        label: emp.label,
+        workHours: round2(emp.workHours),
+        byWorkType: emp.byWorkType.map((wt) => ({
+          key: wt.key,
+          label: wt.label,
+          workHours: round2(wt.workHours),
+        })),
+      })),
     });
   } catch (error) {
     if (error instanceof AuthError) {

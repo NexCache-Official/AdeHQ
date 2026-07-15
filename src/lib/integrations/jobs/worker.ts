@@ -9,6 +9,7 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { IntegrationJobRecord } from "@/lib/integrations/types";
+import { recordIntegrationJobCost } from "@/lib/billing/costing/record-integration-job-cost";
 import { finalizeToolRun } from "@/lib/integrations/tool-runs";
 import { workMinutesForCost } from "@/lib/integrations/cost";
 import { jobFromRow } from "./queue";
@@ -114,6 +115,12 @@ export async function processIntegrationJob(
         costUsd,
         workMinutes: workMinutesForCost(costUsd),
       }).catch((err) => console.warn("[AdeHQ integrations] job tool-run finalize failed", err));
+    }
+
+    // Bill artifact / integration job cost to the commercial Work Hours ledger
+    // under the employee who ran it (idempotent per job id).
+    if (costUsd > 0) {
+      await recordIntegrationJobCost(client, job, costUsd);
     }
 
     return finalizeJobOutcome(client, {

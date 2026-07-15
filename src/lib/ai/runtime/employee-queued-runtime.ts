@@ -162,7 +162,11 @@ export async function generateEmployeeQueuedResponseRuntime(
       roomId: ctx.roomId,
       topicId: ctx.topicId,
       employeeId: input.employee.id,
-      workType: meta.workType ?? "employee_queued_response",
+      workType:
+        meta.workType ??
+        (capability === "artifact_generation"
+          ? "artifact_generation"
+          : "employee_queued_response"),
       capability,
       objective: "Queued employee reply via Runtime V2",
       status: "created",

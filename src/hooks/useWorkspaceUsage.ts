@@ -17,12 +17,22 @@ export type WorkspaceUsageCapacity = {
 
 export type UsageBreakdownRow = { label: string; workHours: number };
 
+export type EmployeeWorkTypeUsage = {
+  employeeId: string;
+  label: string;
+  workHours: number;
+  byWorkType: Array<{ key: string; label: string; workHours: number }>;
+};
+
 export type WorkspaceUsageResponse = {
   capacity: WorkspaceUsageCapacity;
   weekStart: string;
   totalWorkHours: number;
+  teamWorkHours?: number;
+  guideWorkHours?: number;
   byEmployee: UsageBreakdownRow[];
   byWorkType: UsageBreakdownRow[];
+  byEmployeeWorkType?: EmployeeWorkTypeUsage[];
 };
 
 export function useWorkspaceUsage(workspaceId: string | null) {
