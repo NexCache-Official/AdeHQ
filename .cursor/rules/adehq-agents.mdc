@@ -1,0 +1,13 @@
+---
+description: AdeHQ agent entrypoint — read AGENTS.md and design-system map before large changes
+alwaysApply: true
+---
+
+# AdeHQ agent defaults
+
+- Start from [`AGENTS.md`](../../AGENTS.md) and [`docs/README.md`](../../docs/README.md).
+- Design tokens / rail / panes: [`docs/design-system/README.md`](../../docs/design-system/README.md).
+- Scripts: [`scripts/README.md`](../../scripts/README.md). Log QA in [`docs/audits/AUDIT_REPORT.md`](../../docs/audits/AUDIT_REPORT.md).
+- Workspace roles are `admin` | `member` only. Do not reintroduce owner/manager/guest in product types.
+- Never commit `.env*` or secrets. Prefer migrations over editing production by hand.
+- Avoid drive-by refactors; keep changes scoped to the task.

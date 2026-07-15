@@ -47,4 +47,4 @@ Artifacts land under `/tmp/adehq-*` (see each script’s `OUT` path) with `repor
 - Prompts should sound like a business owner (specific, human, non-generic).
 - Prefer unique product/workstream names so topic-title cooldown does not suppress banners.
 - On failure, stop and capture a screenshot — do not invent green passes.
-- Log product bugs into `AUDIT_REPORT.md` at the repo root.
+- Log product bugs into `docs/audits/AUDIT_REPORT.md`.

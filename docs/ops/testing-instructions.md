@@ -58,13 +58,13 @@ README). Prefer extending those over creating new one-off `tmp-*.mjs` files.
 
 ## 4. Where findings go
 
-- Log everything to **`AUDIT_REPORT.md`** at the repo root (create it if
+- Log everything to **`docs/audits/AUDIT_REPORT.md`** (create it if
   missing) — one running table/log of test steps + a "Remaining work / open
   items" section for anything not fixed yet. This file is the persistent
   memory of what's been tested and what's still broken across sessions.
 - If asked to also fix bugs: root-cause each one (don't just patch the
   symptom), fix it, verify the fix with a real test (not just "looks
-  right"), then note the fix + verification in `AUDIT_REPORT.md`.
+  right"), then note the fix + verification in `docs/audits/AUDIT_REPORT.md`.
 - Git hygiene: commit fixes in small, logically separate commits with real
   descriptive messages — not one giant commit — and never bundle unrelated
   changes together. Never commit files you didn't intentionally change

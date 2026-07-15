@@ -156,7 +156,7 @@ export function orchestrationPlanToLegacyResult(
   // with no visibility into the lead's answer and produce a full duplicate reply
   // instead of building on it (observed: two employees independently giving the
   // same research answer because "offer_help" was missing from the old
-  // allowlist-based gate here — see AUDIT_REPORT.md).
+  // allowlist-based gate here — see docs/audits/AUDIT_REPORT.md).
   const simultaneousIntents: OrchestrationPlan["intent"][] = ["social_broadcast", "social_ack"];
 
   if (

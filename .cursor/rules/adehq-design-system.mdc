@@ -1,0 +1,13 @@
+---
+description: AdeHQ UI tokens, rail layout, and resizable pane conventions
+globs: src/components/**/*.{tsx,ts},src/app/**/*.{tsx,css},tailwind.config.ts
+alwaysApply: false
+---
+
+# Design system conventions
+
+- Tokens: `src/app/globals.css` (`--c-*`) + `tailwind.config.ts`. Light theme only.
+- Primitives: `src/components/ui.tsx`. Brand: `src/components/brand/Brand.tsx`.
+- Rail: pinned header (workspace → search) and footer (hire + profile); middle uses `.rail-scroll`.
+- Side panes: `ResizablePane` — content flush to the seam; handles overlay; main work view is never collapsible.
+- Narrow panes: `min-w-0` + `truncate` on flex text. Prefer existing AdeHQ patterns over new visual languages.

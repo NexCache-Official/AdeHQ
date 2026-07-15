@@ -315,7 +315,7 @@ Each step: shadow mode first → terminal tests → enable `AI_RUNTIME_V2_MODE=o
 
 - [x] All five low-risk groups migrated with off/shadow/on + fallback pattern
 - [x] `npm run test:ai-callers` — 32/32 PASS (includes forced fallback + off rollback)
-- [x] Readiness report: [`docs/ai-runtime-low-risk-readiness.md`](./ai-runtime-low-risk-readiness.md)
+- [x] Readiness report: [`ai-runtime-low-risk-readiness.md`](./ai-runtime-low-risk-readiness.md)
 - **Verdict:** GO for V19.9.0d-1 (hot path shadow instrumentation only — do not enable `on` on employee replies yet)
 
 ### V19.9.0d — Employee hot path (last)
@@ -409,7 +409,7 @@ npm run audit:ai-callers
 
 This release added only:
 
-- `docs/ai-runtime-migration-checklist.md`
+- `docs/audits/archive/ai-runtime-migration-checklist.md`
 - `scripts/audit-ai-callers.mjs`
 
 **No runtime, UI, or API behavior changes.**

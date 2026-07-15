@@ -8,12 +8,15 @@ all backed by Supabase with SiliconFlow-powered employee replies.
 
 ## Documentation
 
-Product and developer docs live in a separate Mintlify repo:
+| Audience | Where |
+|----------|--------|
+| Product & developer docs | **[Mintlify](https://github.com/NexCache-Official/docs)** (user guides, PRDs, API, schema) |
+| Engineering docs (this repo) | [`docs/README.md`](./docs/README.md) — architecture, inbox, audits, ops |
+| Design system (tokens / rail / panes) | [`docs/design-system/README.md`](./docs/design-system/README.md) |
+| AI coding agents | [`AGENTS.md`](./AGENTS.md) |
+| Scripts index | [`scripts/README.md`](./scripts/README.md) |
 
-**[github.com/NexCache-Official/docs](https://github.com/NexCache-Official/docs)**
-
-- **Documentation** tab — user guides, concepts, quickstart
-- **Developer** tab — PRDs, architecture, API reference, database schema
+Mintlify remains the canonical product/developer site. In-repo `docs/` is for engineers and agents working in this codebase.
 
 ## Quick start
 
@@ -177,7 +180,8 @@ npm run build
 npm start
 ```
 
-## Intentionally not built
+## Intentionally deferred / partial
 
-Browserbase, virtual computers, MCP, ChatGPT App, real Slack/GitHub integrations,
-billing, real calls, external OAuth, BYOK encryption, multi-model marketplace.
+Some surfaces are shipped in a limited form (inbox, billing/checkout, browser research,
+provider credentials). Treat Mintlify + `docs/architecture/` as the current truth for
+what is production-ready versus experimental.

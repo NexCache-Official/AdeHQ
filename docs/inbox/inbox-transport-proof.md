@@ -46,9 +46,9 @@ This document records findings. Core transport is **GO** based on live productio
 
 | Path | Purpose |
 | --- | --- |
-| [`src/lib/inbox-transport-proof/`](../src/lib/inbox-transport-proof/) | Config, file store, webhook verify helpers |
-| [`src/app/api/dev/inbox-transport-proof/webhook/route.ts`](../src/app/api/dev/inbox-transport-proof/webhook/route.ts) | Gated proof webhook |
-| [`scripts/inbox-transport-proof.ts`](../scripts/inbox-transport-proof.ts) | CLI |
+| [`src/lib/inbox-transport-proof/`](../../src/lib/inbox-transport-proof/) | Config, file store, webhook verify helpers |
+| [`src/app/api/dev/inbox-transport-proof/webhook/route.ts`](../../src/app/api/dev/inbox-transport-proof/webhook/route.ts) | Gated proof webhook |
+| [`scripts/inbox-transport-proof.ts`](../../scripts/inbox-transport-proof.ts) | CLI |
 
 Production path (not removable): `/api/inbox/webhooks/resend`, `src/lib/inbox/**`.
 

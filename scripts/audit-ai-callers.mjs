@@ -64,7 +64,7 @@ const paths = [
   "src/lib/ai/siliconflow-client.ts",
   "src/lib/ai/siliconflow-call.ts",
   "src/lib/supabase/ai-runtime.ts",
-  "docs/ai-runtime-migration-checklist.md",
+  "docs/audits/archive/ai-runtime-migration-checklist.md",
 ];
 for (const p of paths) {
   console.log(`  [${verifyPath(p)}] ${p}`);
@@ -96,7 +96,7 @@ console.log(`
     AI_RUNTIME_V2_MODE=off|shadow|on
     AI_RUNTIME_V2_PROVIDER_PREF=auto|siliconflow|vercel|mock
 
-  Full checklist: docs/ai-runtime-migration-checklist.md
+  Full checklist: docs/audits/archive/ai-runtime-migration-checklist.md
 `);
 
 section("Done");

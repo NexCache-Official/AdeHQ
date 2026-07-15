@@ -155,16 +155,16 @@ AdeHQ has **two separate email systems**. Do not mix them.
 | Resend account | `RESEND_API_KEY` (transactional domain) | `RESEND_INBOX_API_KEY` (inbox domain) |
 | Store | `email_send_log` | `email_threads` / `email_messages` / outbox |
 | AI | Not involved | Cost-aware steward; on-demand drafts; approval gate |
-| Docs | This file | [`docs/workspace-inbox-foundation.md`](./workspace-inbox-foundation.md), [`docs/inbox-transport-proof.md`](./inbox-transport-proof.md) |
+| Docs | This file | [`workspace-inbox-foundation.md`](./workspace-inbox-foundation.md), [`../inbox/inbox-transport-proof.md`](../inbox/inbox-transport-proof.md) |
 
 Workspace inbox is claim-first, permissioned via mailbox grants, and never auto-sends AI mail without version-locked approval.
 
 ## Workspace inbox (Slice 0–C)
 
 Conversational shared-inbox transport was proven in Slice 0
-([`docs/inbox-transport-proof.md`](inbox-transport-proof.md)). Slices A–C add the
+([`../inbox/inbox-transport-proof.md`](../inbox/inbox-transport-proof.md)). Slices A–C add the
 secure foundation, human UI, and AI steward —
-[`docs/workspace-inbox-foundation.md`](workspace-inbox-foundation.md).
+[`workspace-inbox-foundation.md`](workspace-inbox-foundation.md).
 
 Do not reuse `noreply@adehq.com` / `sendEmail()` for workspace mailbox traffic.
 Use `RESEND_INBOX_API_KEY` and `POST /api/inbox/webhooks/resend`.

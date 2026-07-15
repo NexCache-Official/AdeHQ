@@ -49,5 +49,8 @@ next-env.d.ts
 .claude/
 .env*
 
-# stray design/export downloads (not source)
+# stray design/export downloads (not source; keep deliberate mocks under docs/)
 AdeHQ.dc*.html
+/AdeHQ*.dc.html
+*.dc.html
+!docs/design-system/mocks/**

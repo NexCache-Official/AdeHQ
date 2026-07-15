@@ -281,5 +281,5 @@ Do **not** set `AI_RUNTIME_V2_MODE=on` on the employee hot path until d-2+ is te
 
 ## Related docs
 
-- [`docs/ai-runtime-migration-checklist.md`](./ai-runtime-migration-checklist.md) — full migration inventory
+- [`ai-runtime-migration-checklist.md`](./ai-runtime-migration-checklist.md) — full migration inventory
 - [`scripts/test-ai-callers.ts`](../scripts/test-ai-callers.ts) — terminal smoke + audit tests

@@ -7,7 +7,7 @@ Temporary harness for proving Resend send/receive on `inbox.adehq.com`.
 - this directory
 - `src/app/api/dev/inbox-transport-proof/`
 - `scripts/inbox-transport-proof.ts`
-- `docs/inbox-transport-proof.md`
+- `docs/inbox/inbox-transport-proof.md`
 - `.tmp/inbox-transport-proof/` (local only)
 
 Do not import this module from product inbox code.
