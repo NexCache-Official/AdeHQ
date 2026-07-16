@@ -113,7 +113,7 @@ export async function callSiliconFlowImage(params: {
 
   let parsed: {
     images?: Array<{ url?: string; image?: string; b64_json?: string }>;
-    data?: Array<{ url?: string; b64_json?: string }>;
+    data?: Array<{ url?: string; image?: string; b64_json?: string }>;
     seed?: number;
   };
   try {

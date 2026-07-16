@@ -8,12 +8,22 @@ import {
   Copy,
   FileSpreadsheet,
   FileText,
+  Film,
   FolderOpen,
+  Image as ImageIcon,
   Save,
   ScrollText,
 } from "lucide-react";
 
-type ArtifactType = "prd" | "report" | "brief" | "proposal" | "decision" | "note";
+type ArtifactType =
+  | "prd"
+  | "report"
+  | "brief"
+  | "proposal"
+  | "decision"
+  | "note"
+  | "image"
+  | "video";
 type ArtifactStatus = "draft" | "saved";
 
 const TYPE_META: Record<ArtifactType, { label: string; icon: typeof FileText; tone: string }> = {
@@ -23,6 +33,8 @@ const TYPE_META: Record<ArtifactType, { label: string; icon: typeof FileText; to
   proposal: { label: "Proposal", icon: FolderOpen, tone: "bg-amber-50 text-amber-700" },
   decision: { label: "Decision", icon: Check, tone: "bg-cyan-50 text-cyan-700" },
   note: { label: "Note", icon: FileText, tone: "bg-muted text-ink-2" },
+  image: { label: "Image", icon: ImageIcon, tone: "bg-violet-50 text-violet-700" },
+  video: { label: "Video", icon: Film, tone: "bg-rose-50 text-rose-700" },
 };
 
 export function ArtifactCard({
