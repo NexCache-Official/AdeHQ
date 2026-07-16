@@ -27,7 +27,7 @@ import {
   queueFollowUpRuns,
   queueSelfContinuationIfNeeded,
 } from "@/lib/server/queue-follow-up-runs";
-import { GREETING_MAX_OUTPUT_TOKENS } from "@/lib/server/room-governance";
+import { GREETING_MAX_OUTPUT_TOKENS, isDeferredWorkPromise } from "@/lib/server/room-governance";
 import type { QueuedRun } from "@/lib/server/queue-agent-runs";
 import type { CollaborationRole, ConversationPlan } from "@/lib/types";
 import {
@@ -63,7 +63,9 @@ import {
 } from "@/lib/integrations/infer-artifact-tool-call";
 import {
   inferRequiredEmailToolCalls,
+  inferRequiredEmailReadToolCalls,
   replyForInferredEmailTools,
+  replyForInferredEmailReadTool,
 } from "@/lib/integrations/infer-email-tool-call";
 import {
   executePlannedResearch,
@@ -1816,7 +1818,7 @@ export async function processQueuedAgentRun(
           ...routeInput,
           message: `${modelUserMessage}
 
-[System reminder: This request requires real effects.toolCalls in your JSON response (e.g. artifact.createPdfReport, artifact.createDocx, artifact.createPresentation, artifact.createSpreadsheet, crm.createContact, tasks.createTask, email.createDraft, email.sendDraft). For send/mail requests: emit email.createDraft with recipientEmail + full body, then email.sendDraft — never reply that you cannot email from chat. Do not only say you will follow up — emit the tool call(s) now with complete args. Fill every section/slide/row with concrete content from the user message. create* already saves to Drive; do not also call artifact.saveToDrive.]`,
+[System reminder: This request requires real effects.toolCalls in your JSON response (e.g. artifact.createPdfReport, artifact.createDocx, artifact.createPresentation, artifact.createSpreadsheet, crm.createContact, tasks.createTask, email.createDraft, email.sendDraft, email.listRecent, email.getThread). For send/mail requests: emit email.createDraft with recipientEmail + full body, then email.sendDraft — never reply that you cannot email from chat. For "what's in the inbox / who emailed / latest thread" requests: emit email.listRecent (and email.getThread for a specific thread) and answer from its real result — do not reply "checking now" or "I'll report back" without the tool call attached. For reminders/call scheduling: emit tasks.createTask with a concrete dueDate — there is no separate calendar-event tool. Do not only say you will follow up — emit the tool call(s) now with complete args. Fill every section/slide/row with concrete content from the user message. create* already saves to Drive; do not also call artifact.saveToDrive.]`,
         },
         {
           ...routeOptions,
@@ -1846,11 +1848,14 @@ export async function processQueuedAgentRun(
     if (needsTools && !gotTools && !failed && aiMode !== "error") {
       const inferredArtifact = inferRequiredArtifactToolCall(toolWorkSource);
       const inferredEmail = inferRequiredEmailToolCalls(toolWorkSource);
+      const inferredEmailRead = inferRequiredEmailReadToolCalls(toolWorkSource);
       const inferred = inferredArtifact
         ? [inferredArtifact]
         : inferredEmail.length
           ? inferredEmail
-          : [];
+          : inferredEmailRead.length
+            ? inferredEmailRead
+            : [];
       if (inferred.length) {
         console.warn("[AdeHQ process-queued-run] synthesizing toolCalls", {
           runId,
@@ -1865,11 +1870,14 @@ export async function processQueuedAgentRun(
             response.reply.trim().length < 420) ||
           (/generat(?:e|ing)|creating|drafting|building/i.test(response.reply) &&
             /drive/i.test(response.reply) &&
-            response.reply.trim().length < 320);
+            response.reply.trim().length < 320) ||
+          (isDeferredWorkPromise(response.reply) && !inferredArtifact && !inferredEmail.length);
         const reply = narratedOnly
           ? inferredArtifact
             ? replyForInferredArtifactTool(inferredArtifact.tool)
-            : replyForInferredEmailTools()
+            : inferredEmail.length
+              ? replyForInferredEmailTools()
+              : replyForInferredEmailReadTool()
           : response.reply;
         response = {
           ...response,

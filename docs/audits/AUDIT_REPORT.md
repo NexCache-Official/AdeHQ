@@ -22,6 +22,28 @@ Scope of this pass: Phase 1 (partial), Phase 2/3 (partial via Maya/Elena/David),
 
 ---
 
+## Session 2026-07-16 (later) — Stall recurred: “Checking the inbox now — pulling the latest thread…” with no follow-through
+
+**Observed:** Casey (role `sales`, so `roleWorkflowRules` already told her to use `email.listRecent`/`email.getThread`) stalled again on a multi-part ask (check inbox + invent product + propose reply + create a calendar reminder). Her reply narrated the check ("Checking the inbox now — pulling the latest thread to report back on…") but emitted zero `effects.toolCalls`, and the run ended there.
+
+**Root causes (layered, all contributed):**
+1. `isDeferredWorkPromise()`'s regexes were too narrow — they matched `"checking (that|it|this|now)"` and `"pulling (that|it|this) up"` but not the natural phrasing `"Checking the inbox now"` / `"pulling the latest thread"`, so the self-continuation safety net never fired for this exact wording.
+2. The retry-with-stronger-model system reminder (`process-queued-run.ts`, fires when `needsTools && !gotTools`) only named artifact/CRM/task/email-draft tools — it never told the model to call `email.listRecent`/`email.getThread` for read/check-inbox asks, or `tasks.createTask` for reminders (there is no separate calendar-event tool).
+3. The last-resort tool-call synthesis (same file) only had inferrers for artifacts and email draft/send — a narrated-but-toolless "let me check the inbox" reply had no synthesis path, so nothing was ever attached even as a fallback.
+4. Non-`sales`/`pm`/`fundraising` roles (`default` case in `roleWorkflowRules`, e.g. `support`, `operations`) were never told about `email.listRecent`/`email.getThread` at all — any employee handling inbox work in that bucket would have the same failure mode with even less prompt help.
+
+**Fix (code):**
+- Broadened `DEFERRED_WORK_PROMISE_PATTERNS` in `room-governance.ts` to catch `"checking … now"`, `"pulling … thread/inbox/context"`, `"report back"`, `"I'll get/circle back"`.
+- Added `inferRequiredEmailReadToolCalls()` / `replyForInferredEmailReadTool()` in `infer-email-tool-call.ts` — last-resort synthesis now attaches a real `email.listRecent` execute call (and swaps the narrated reply for one referencing the real result) when the model stalls on a check-inbox ask.
+- Wired the new inferrer into `process-queued-run.ts`'s last-resort block, and widened `narratedOnly` there to also cover `isDeferredWorkPromise()` matches.
+- Expanded the retry system reminder in `process-queued-run.ts` to explicitly name `email.listRecent`, `email.getThread`, and `tasks.createTask` (for reminders/call scheduling) and to forbid "checking now"/"I'll report back" narration.
+- Added an explicit `support` case to `roleWorkflowRules()` and enhanced the `default` case in `prompts.ts` so every role is told to call `email.listRecent`/`email.getThread` for inbox reads and `tasks.createTask` for reminders (no calendar-event tool exists — a due-dated task is the reminder).
+- Strengthened the self-continuation nudge in `queue-follow-up-runs.ts` to name `email.listRecent`/`email.getThread` explicitly instead of a generic "tools required" line.
+
+**Verify:** Re-run `scripts/e2e-playbook/saas-slice-f-collab-wave.mjs` against a multi-part inbox+product+calendar ask; Casey should either deliver real inbox data via `email.listRecent` in-turn, or the last-resort synthesis should attach it even if she narrates instead of calling the tool.
+
+---
+
 ## Session 2026-07-15 evening — SaaS Company 1 CEO marathon (Playwright)
 
 **Persona:** Founder/CEO, SaaS Company 1 (FlowDesk / mid-market ops). Production `https://app.adehq.com`. Artifacts: `/tmp/adehq-saas-marathon`, `/tmp/adehq-saas-casey-email`.

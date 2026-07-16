@@ -50,6 +50,12 @@ const DEFERRED_WORK_PROMISE_PATTERNS = [
   /\b(looking into|pulling (that|it|this) up|checking (that|it|this|now)|one sec)\b/i,
   /\b(just a (sec|second|moment)|sec(?:ond)?\.{0,3})\s*$/i,
   /\b(on it|working on it|give me a beat)\b[.!]?\s*$/i,
+  // Broader "narrating the check instead of doing it" phrasing, e.g.
+  // "Checking the inbox now — pulling the latest thread to report back on…".
+  /\bchecking\s+[\w\s]{0,24}\bnow\b/i,
+  /\bpulling\s+[\w\s]{0,28}\b(?:thread|inbox|context|email|message)s?\b/i,
+  /\b(?:to\s+)?report\s+back\b/i,
+  /\bi'?ll\s+(?:get|circle)\s+back\b/i,
 ];
 
 /** Max one automatic self-continuation per root trigger (same employee). */

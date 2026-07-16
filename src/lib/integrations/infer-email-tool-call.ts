@@ -89,3 +89,30 @@ export function inferRequiredEmailToolCalls(message: string): ToolCallEffect[] {
 export function replyForInferredEmailTools(): string {
   return "Drafting that email now — I'll put it up for your approval before anything sends.";
 }
+
+const INBOX_READ_INTENT =
+  /\b(?:check(?:ing)?|read(?:ing)?|look(?:ing)?\s+at|pull(?:ing)?\s+up|open(?:ing)?|see|show|what'?s?\s+in|who\s+emailed|latest\s+(?:inbound\s+)?(?:email|mail|thread|message))\b[\s\S]{0,80}\b(?:inbox|thread|mailbox|email|mail|message)s?\b/i;
+
+/**
+ * Last-resort synthesis for read-only inbox checks. Only fires when the model
+ * narrated an intent to check mail ("checking now", "pulling that up", "I'll
+ * report back") without emitting email.listRecent — never for draft/send asks,
+ * those are handled by {@link inferRequiredEmailToolCalls} first.
+ */
+export function inferRequiredEmailReadToolCalls(message: string): ToolCallEffect[] {
+  const text = message.trim();
+  if (!text) return [];
+  if (wantsEmailDraftOrSend(text)) return [];
+  if (!INBOX_READ_INTENT.test(text)) return [];
+  return [
+    {
+      tool: "email.listRecent",
+      mode: "execute",
+      args: { folder: "inbox", limit: 10 },
+    },
+  ];
+}
+
+export function replyForInferredEmailReadTool(): string {
+  return "Pulling the latest inbox threads now — details below.";
+}

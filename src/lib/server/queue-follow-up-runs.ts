@@ -347,8 +347,9 @@ export async function queueSelfContinuationIfNeeded(
     `[System continuation — do not address the human as if this is a new chat.]`,
     `Your previous reply only promised to look/work ("${params.aiReply.trim().slice(0, 120)}").`,
     `The human's request still needs a real answer or tool action now.`,
-    `Do the work in this turn. Do NOT say "give me a sec", "one moment", or "I'll check" again.`,
-    `If tools are required (email draft, calendar, CRM, tasks), emit effects.toolCalls immediately.`,
+    `Do the work in this turn. Do NOT say "give me a sec", "checking now", "pulling that up", "one moment", "I'll check", or "I'll report back" again.`,
+    `If the ask was to check/read mail, emit email.listRecent (then email.getThread for a specific thread) and answer from the real result.`,
+    `If other tools are required (email draft/send, tasks.createTask for reminders, CRM), emit effects.toolCalls immediately with complete args.`,
   ].join(" ");
 
   const { queued } = await queueAgentRuns(client, {
