@@ -87,7 +87,7 @@ Rules:
 - For health supplements, regulated products, or medical claims: include a brief compliance caveat in summary or keyFacts when relevant (not medical/legal advice; verify regulations).
 - Use "No decision yet" as currentDecision only when no decision was made; otherwise use null when unclear.
 - openQuestions, keyFacts, nextActions, and suggestedMemory should be short bullet-quality items.
-- NEVER include raw message IDs, UUIDs, or [msg_...] references inside text fields — use sourceMessageId only.
+- NEVER include raw message IDs, UUIDs, [msg_...], (msg_...), wt_..., or similar internal ids inside text fields — use sourceMessageId only.
 - Preserve sourceMessageId from message IDs in brackets when an item came from a specific message.
 - suggestedMemory is a suggestion only — never imply it was saved.
 - Do NOT suggest memory for transactional tool activity already captured elsewhere: "created contact/deal/company/task", "CRM setup started", "email draft created", "spreadsheet generated", or summaries of recent tool execution. Those belong in CRM, Tasks, Drive, or Work Log.

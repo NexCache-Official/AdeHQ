@@ -237,16 +237,14 @@ export async function wakeEmployeeForEmailThread(
   const complexity = Array.isArray(stewardMeta.safetyFlags)
     ? (stewardMeta.safetyFlags as string[]).length > 0
     : false;
+  // Keep chat user-facing; AI conduct for email_inbound_wake lives in process-queued-run.
   const content = [
     formatEmailWorkBridgeMessage(ctx),
     "",
     `@${employee.name} — a new inbound reply arrived on a thread you own.`,
-    "Briefly tell the human what changed and what the sender is asking.",
-    "Ask only the 1–2 questions that materially affect the reply, then recommend a concrete response stance.",
     complexity
-      ? "This may need another perspective. Explain which teammate role would help and ask before starting a brainstorm."
-      : "If this is straightforward, ask whether you should draft the reply now.",
-    "Do not send, accept a meeting, promise pricing, or claim an external action happened.",
+      ? `This one may need another perspective — ${employee.name} will check in before looping anyone else in.`
+      : `${employee.name} will summarize what changed and ask how you want to reply.`,
   ].join("\n");
   const message = await insertSystemMessage(
     client,

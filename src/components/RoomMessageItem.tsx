@@ -28,6 +28,11 @@ import {
   isPreviewableChatFile,
 } from "@/lib/chat/file-preview-kind";
 import { MessageMarkdown } from "./MessageMarkdown";
+import { EmailBridgeMessageCard } from "@/components/chat/EmailBridgeMessageCard";
+import {
+  isEmailBridgeClientMessageId,
+  isEmailBridgeMessageContent,
+} from "@/lib/inbox/email-bridge-display";
 import { ApprovalCard } from "./ApprovalCard";
 import {
   BrainCircuit,
@@ -563,11 +568,24 @@ export function RoomMessageItem({
     [state.employees, state.workspaceMembers],
   );
 
+  const isEmailBridge =
+    isEmailBridgeClientMessageId(message.clientMessageId) ||
+    isEmailBridgeMessageContent(message.content);
+
   if (message.senderType === "system") {
+    if (isEmailBridge) {
+      return (
+        <div className="flex justify-center py-2 px-1">
+          <EmailBridgeMessageCard content={message.content} compact />
+        </div>
+      );
+    }
     return (
       <div className="flex justify-center py-2">
-        <span className="rounded-full bg-muted px-3 py-1 text-[11px] text-ink-3">
-          {message.content}
+        <span className="max-w-md rounded-full bg-muted px-3 py-1 text-center text-[11px] text-ink-3">
+          {message.content.length > 180
+            ? `${message.content.slice(0, 177).trim()}…`
+            : message.content}
         </span>
       </div>
     );
@@ -707,13 +725,17 @@ export function RoomMessageItem({
                 message.pending ? "text-ink-2" : "text-ink",
               )}
             >
-              <MessageMarkdown
-                content={message.content}
-                compact
-                roomScale
-                mentionsJson={message.mentionsJson}
-                mentionParticipants={mentionParticipants}
-              />
+              {isEmailBridge ? (
+                <EmailBridgeMessageCard content={message.content} compact />
+              ) : (
+                <MessageMarkdown
+                  content={message.content}
+                  compact
+                  roomScale
+                  mentionsJson={message.mentionsJson}
+                  mentionParticipants={mentionParticipants}
+                />
+              )}
             </div>
             <div className="mt-1 flex flex-wrap items-center justify-end gap-2">
               <DeliveryStatus message={message} isDm={isDm} />

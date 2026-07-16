@@ -39,11 +39,25 @@ const OUTRO_PATTERNS = [
   /\n+connect gmail.*$/is,
 ];
 
-const MSG_ID_RE = /\s*\[msg_[a-z0-9_-]+\]\s*/gi;
+/** Bracketed refs the model sometimes emits: [msg_…] */
+const BRACKETED_MSG_ID_RE = /\s*\[msg_[a-z0-9_-]+\]\s*/gi;
+/** Parenthetical citation dumps: (msg_a, msg_b) or (wt_…) */
+const PAREN_INTERNAL_IDS_RE =
+  /\s*\(\s*(?:(?:msg_|wt_|run_|task_|approval_)[a-z0-9_-]+\s*,\s*)*(?:msg_|wt_|run_|task_|approval_)[a-z0-9_-]+\s*\)\s*/gi;
+/** Bare internal ids left in prose */
+const BARE_INTERNAL_ID_RE = /\b(?:msg_|wt_|run_|task_|approval_)[a-z0-9_-]+\b/gi;
 const UUID_RE = /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi;
 
 export function stripInternalRefs(text: string): string {
-  return text.replace(MSG_ID_RE, " ").replace(UUID_RE, "").replace(/\s{2,}/g, " ").trim();
+  return text
+    .replace(PAREN_INTERNAL_IDS_RE, " ")
+    .replace(BRACKETED_MSG_ID_RE, " ")
+    .replace(BARE_INTERNAL_ID_RE, " ")
+    .replace(UUID_RE, "")
+    .replace(/\s+([,.;:])/g, "$1")
+    .replace(/\(\s*\)/g, "")
+    .replace(/\s{2,}/g, " ")
+    .trim();
 }
 
 export function stripCommentary(text: string): string {

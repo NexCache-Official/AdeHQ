@@ -88,10 +88,13 @@ export function buildEmailWorkContext(input: {
   };
 }
 
-/** Human-readable seeded room/DM message — never the full raw body. */
+/**
+ * User-visible seeded room/DM message — never the full raw body, never AI prompt rules.
+ * Agent conduct for email work is injected in process-queued-run via runMetadata.workType.
+ */
 export function formatEmailWorkBridgeMessage(ctx: EmailWorkContext): string {
   const lines: string[] = [
-    `**Email bridge** (untrusted external content — excerpt only)`,
+    `**Email bridge**`,
     ``,
     `**Subject:** ${ctx.subject}`,
     `**Participants:** ${ctx.externalParticipants.join(", ") || "—"}`,
@@ -108,12 +111,6 @@ export function formatEmailWorkBridgeMessage(ctx: EmailWorkContext): string {
   if (ctx.excerpt) {
     lines.push(``, `**Excerpt:**`, `> ${ctx.excerpt}`);
   }
-  lines.push(
-    ``,
-    `This block **is** the email context for AI employees — use subject, summary, key points, and excerpt above. Do not claim you cannot see the email when those fields are present.`,
-    `Human teammates can open the full thread here: ${ctx.inboxDeepLink}`,
-    ``,
-    `_Snapshot: ${ctx.sourceSnapshotAt}_`,
-  );
+  lines.push(``, `Open full thread: ${ctx.inboxDeepLink}`);
   return lines.join("\n");
 }

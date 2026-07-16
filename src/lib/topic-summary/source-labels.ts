@@ -19,7 +19,11 @@ export function sanitizeSummaryText(text: string): string {
 }
 
 export function sanitizeDisplayText(text: string): string {
-  return stripInternalRefs(text);
+  // Also drop dangling hyphen/ellipsis leftovers after ID stripping ("send-b", "…").
+  return stripInternalRefs(text)
+    .replace(/\s+[a-z]-$/i, "")
+    .replace(/\s+[—–-]\s*$/g, "")
+    .trim();
 }
 
 function isHiddenSender(name: string): boolean {

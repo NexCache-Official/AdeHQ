@@ -706,15 +706,14 @@ export async function startBrainstormFromEmail(
         : uniqueIds[0]);
 
     const names = employees.map((e) => e.name).join(", ");
+    const leadName = employees.find((e) => e.id === leadId)?.name ?? "Lead";
     const bridge = formatEmailWorkBridgeMessage(ctx);
+    // AI brainstorm rules are enforced via runMetadata.workType in process-queued-run.
     const content = [
       bridge,
       "",
-      `Brainstorm (human-confirmed): @${names.replace(/, /g, " @")}`,
-      `- Goal: recommend a response stance and draft outline for this email.`,
-      `- Do not send external email. Do not claim a send or booking unless a tool succeeds.`,
-      `- Peers: share 2–4 concrete points from your specialty.`,
-      `- @${employees.find((e) => e.id === leadId)?.name ?? "Lead"}: synthesize a single recommended reply after peers weigh in, then ask the human before drafting.`,
+      `Brainstorm with @${names.replace(/, /g, " @")} on this email.`,
+      `@${leadName} will synthesize a recommended reply after the team weighs in.`,
     ].join("\n");
 
     const message = await insertHumanMessage(
@@ -905,7 +904,7 @@ export async function askEmployeeFromEmail(
     topicId = topic.id;
 
     const bridge = formatEmailWorkBridgeMessage(ctx);
-    const content = `${bridge}\n\n@${empMeta.name} — please help with this email. This is an internal work request only; do not send external email.`;
+    const content = `${bridge}\n\n@${empMeta.name} — please help with this email.`;
     const message = await insertHumanMessage(
       base.client,
       base.workspaceId,
