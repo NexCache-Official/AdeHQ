@@ -9,7 +9,6 @@ import {
   candidateOneLineSummary,
   limitBullets,
 } from "@/lib/hiring/candidate-display";
-import { commonModelFamiliesLabel } from "@/lib/hiring/intelligence-labels";
 import { MAYA_INTELLIGENCE_ROUTING_COPY } from "@/lib/hiring/maya";
 import { AdeOrb } from "./HireChrome";
 
@@ -44,7 +43,6 @@ export function ApplicantCard({
   const strengths = limitBullets(a.strengths, 3);
   const watchOuts = limitBullets(a.watchOuts, 2);
   const traits = limitBullets(a.personalityTags, 4);
-  const modelsLabel = a.commonModels || commonModelFamiliesLabel(a.modelMode);
 
   return (
     <div
@@ -111,10 +109,10 @@ export function ApplicantCard({
         </div>
         <div className="border-t border-border/60 pt-2">
           <div className="text-[11px] font-semibold uppercase tracking-wide text-ink-3">
-            Default intelligence
+            Intelligence
           </div>
           <p className="mt-0.5 text-[13px] text-ink-2">
-            {a.defaultIntelligence} by default. {a.routingBehavior}
+            Auto — AdeHQ picks the brain per task. {a.routingBehavior}
           </p>
         </div>
       </div>
@@ -192,16 +190,16 @@ export function ApplicantCard({
       {advOpen && (
         <div className="mt-2.5 rounded-[10px] bg-ink p-3.5 text-xs">
           <div className="flex justify-between py-1 text-white/55">
-            <span>Default intelligence</span>
-            <span className="text-white/80">{a.defaultIntelligence}</span>
+            <span>Intelligence</span>
+            <span className="text-white/80">Auto</span>
           </div>
           <div className="flex justify-between py-1 text-white/55">
             <span>Routing preference</span>
             <span className="text-right text-white/80 capitalize">{a.routingPreference.replace("_", " ")}</span>
           </div>
           <div className="flex justify-between py-1 text-white/55">
-            <span>Common models</span>
-            <span className="text-right text-white/80">{modelsLabel}</span>
+            <span>Brain assembly</span>
+            <span className="text-right text-white/80">Per task · intensity chips set depth</span>
           </div>
           <div className="flex justify-between py-1 text-white/55">
             <span>Browser / tools</span>
@@ -329,7 +327,7 @@ export function InterviewOverlay({
           <div className="mt-4 text-[19px] font-semibold tracking-tight">{a.name}</div>
           <div className="mb-3.5 text-[13px] text-ink-2">{a.title}</div>
           <p className="border-t border-border pt-3.5 text-[12.5px] leading-relaxed text-ink-3">
-            {a.operatingStyle} · {a.defaultIntelligence} intelligence · {a.commonModels || commonModelFamiliesLabel(a.modelMode)}
+            {a.operatingStyle} · Auto intelligence · AdeHQ picks the brain per task
           </p>
           <div className="mt-auto flex flex-col gap-2 pt-6">
             <button type="button" onClick={onHire} className="rounded-[10px] bg-ink py-2.5 text-sm text-white">
@@ -453,7 +451,7 @@ export function OfferScreen({
             </div>
             <p className="text-sm text-ink-2">{a.title}</p>
             <p className="mt-1 text-xs text-ink-3">
-              {a.defaultIntelligence} · {a.routingBehavior}
+              Auto intelligence · {a.routingBehavior}
             </p>
           </div>
         ))}

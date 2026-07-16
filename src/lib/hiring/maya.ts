@@ -16,7 +16,7 @@ export const MAYA_RECRUITER_TAGLINE =
 export const MAYA_HIRE_LANGUAGE_RULE = `Use hire/find/match/shortlist language — never say "build an AI", "build a sharp AI", or "building your workforce". The user hires AI employees that fit their team; Maya helps them find the right match.`;
 
 export const MAYA_INTELLIGENCE_ROUTING_COPY =
-  "I'll route this employee to the right intelligence level automatically. You can keep them cost-efficient by default and let AdeHQ upgrade for harder work.";
+  "I'll put them on Auto — AdeHQ assembles the right brain for each task. Intensity chips in chat set depth only; you never pick a model.";
 
 export const MAYA_WORKFORCE_BADGE = "Workforce manager";
 

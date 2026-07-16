@@ -158,21 +158,23 @@ async function invokeWithRouting<T>(
   });
 
   const catalogOffers = await resolveCatalogOffers();
-  const routing = routeCapability(
-    {
-      workspaceId: params.workspaceId,
-      employeeId: params.employeeId,
-      capability: params.capability,
-      runtimeMode: params.runtimeMode,
-      modelMode: params.modelMode,
-      message: "prompt" in params ? params.prompt : undefined,
-      routingPreference: params.routingPreference,
-      requiresJson: params.requiresJson ?? ("schema" in params),
-      needsLongContext: Boolean(params.metadata?.needsLongContext),
-      catalogOffers,
-    },
-    flags.providerPref,
-  );
+  const routeInput = {
+    workspaceId: params.workspaceId,
+    employeeId: params.employeeId,
+    capability: params.capability,
+    runtimeMode: params.runtimeMode,
+    modelMode: params.modelMode,
+    intensity: params.intensity,
+    message: "prompt" in params ? params.prompt : undefined,
+    routingPreference: params.routingPreference,
+    requiresJson: params.requiresJson ?? ("schema" in params),
+    needsLongContext: Boolean(params.metadata?.needsLongContext),
+    catalogOffers,
+  };
+  // Brain V1: eligibility + intensity USD ranges on the live hot path.
+  const routing = isBrainV1Enabled()
+    ? routeCapabilityV2(routeInput, flags.providerPref)
+    : routeCapability(routeInput, flags.providerPref);
 
   if (isRuntimeOff(flags.mode)) {
     throw new DisabledError();
@@ -242,18 +244,19 @@ export async function embed(
   });
 
   const catalogOffers = await resolveCatalogOffers();
-  const routing = routeCapability(
-    {
-      workspaceId: params.workspaceId,
-      employeeId: params.employeeId,
-      capability: params.capability,
-      runtimeMode: params.runtimeMode ?? "embedding",
-      modelMode: params.modelMode,
-      message: params.texts.join("\n").slice(0, 500),
-      catalogOffers,
-    },
-    flags.providerPref,
-  );
+  const routeInput = {
+    workspaceId: params.workspaceId,
+    employeeId: params.employeeId,
+    capability: params.capability,
+    runtimeMode: params.runtimeMode ?? "embedding" as const,
+    modelMode: params.modelMode,
+    intensity: params.intensity,
+    message: params.texts.join("\n").slice(0, 500),
+    catalogOffers,
+  };
+  const routing = isBrainV1Enabled()
+    ? routeCapabilityV2(routeInput, flags.providerPref)
+    : routeCapability(routeInput, flags.providerPref);
 
   if (isRuntimeOff(flags.mode)) {
     throw new DisabledError();

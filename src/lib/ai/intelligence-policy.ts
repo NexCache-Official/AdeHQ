@@ -103,8 +103,9 @@ export const BROWSER_ACCESS_LABELS: Record<BrowserAccess, string> = {
 };
 
 const DEFAULT_POLICY: EmployeeIntelligencePolicy = {
-  defaultMode: "balanced",
-  allowedModes: ["efficient", "balanced", "strong"],
+  defaultMode: "auto",
+  allowedModes: ["auto"],
+  preferredIntensityFloor: null,
   routingPreference: "auto",
   browserAccess: "none",
   workHourProfile: "moderate",
@@ -241,16 +242,17 @@ export function buildIntelligencePolicyForHire(params: {
   routingPreference?: RoutingPreference;
   notes?: string;
 }): EmployeeIntelligencePolicy {
-  const defaultMode = intelligenceModeFromModelMode(params.modelMode);
+  // Hires always start on Auto. Former tier becomes intensity floor bias only
+  // (dropped the first time an admin edits the policy).
+  const legacyMode = intelligenceModeFromModelMode(params.modelMode);
   const browserAccess =
     params.browserAccess ??
     (params.roleKey === "research" ? "research_only" : "none");
 
   return normalizeIntelligencePolicy({
-    defaultMode,
-    allowedModes: ["efficient", "balanced", "strong", "long_context", "coding"].includes(defaultMode)
-      ? [defaultMode, "balanced", "efficient"]
-      : DEFAULT_POLICY.allowedModes,
+    defaultMode: "auto",
+    allowedModes: ["auto"],
+    preferredIntensityFloor: preferredIntensityFloorFromMode(legacyMode),
     routingPreference: params.routingPreference ?? "auto",
     browserAccess,
     workHourProfile: params.workHourProfile ?? "moderate",
@@ -272,7 +274,8 @@ export function formatEmployeeIntelligenceSummary(
   employee: Pick<AIEmployee, "intelligencePolicy" | "modelMode" | "roleKey">,
 ): string {
   const policy = resolveEmployeeIntelligencePolicy(employee);
-  return `${INTELLIGENCE_MODE_LABELS[policy.defaultMode as IntelligenceMode] ?? "Balanced"} intelligence`;
+  if (policy.defaultMode === "auto") return "Auto intelligence";
+  return `${INTELLIGENCE_MODE_LABELS[policy.defaultMode as IntelligenceMode] ?? "Auto"} intelligence`;
 }
 
 export function formatIntelligencePolicyLines(
@@ -284,10 +287,13 @@ export function formatIntelligencePolicyLines(
   const workHourProfile = normalizeWorkHourProfile(normalized.workHourProfile);
   const browserAccess = normalizeBrowserAccess(normalized.browserAccess);
 
-  return [
+  const lines: Array<{ label: string; value: string }> = [
     {
       label: "Intelligence",
-      value: INTELLIGENCE_MODE_LABELS[mode],
+      value:
+        mode === "auto"
+          ? "Auto — AdeHQ picks the brain per task"
+          : INTELLIGENCE_MODE_LABELS[mode],
     },
     {
       label: "Routing",
@@ -302,6 +308,8 @@ export function formatIntelligencePolicyLines(
       value: BROWSER_ACCESS_LABELS[browserAccess],
     },
   ];
+
+  return lines;
 }
 
 export function applyIntelligencePolicyUpdate(

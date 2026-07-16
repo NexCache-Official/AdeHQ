@@ -65,6 +65,10 @@ export type EmployeeQueuedRuntimeMeta = {
   workType?: string;
   emailThreadId?: string;
   emailMessageId?: string;
+  /** Brain Auto metadata from process-queued-run. */
+  brainAuto?: boolean;
+  brainIntensity?: "fast" | "standard" | "deep" | "research";
+  intelligenceMode?: string;
 };
 
 export type EmployeeQueuedRouteResult = {
@@ -220,12 +224,19 @@ export async function generateEmployeeQueuedResponseRuntime(
       });
     }
 
+    const intensity =
+      (typeof meta.brainIntensity === "string"
+        ? (meta.brainIntensity as "fast" | "standard" | "deep" | "research")
+        : undefined) ??
+      (intelligencePolicy.preferredIntensityFloor ?? "standard");
+
     const result = await runtimeGenerateObject({
       workspaceId: ctx.workspaceId,
       employeeId: input.employee.id,
       workUnitId,
       capability,
       modelMode,
+      intensity,
       routingPreference: intelligencePolicy.routingPreference as import("@/lib/ai/intelligence-policy").RoutingPreference,
       requiresJson: true,
       reasoningProfile: reasoningProfileForCapability(capability),
@@ -242,6 +253,9 @@ export async function generateEmployeeQueuedResponseRuntime(
         roomId: ctx.roomId,
         topicId: ctx.topicId,
         source: "employee_queued_response",
+        brainAuto: meta.brainAuto === true,
+        brainIntensity: intensity,
+        intelligenceMode: meta.intelligenceMode ?? intelligencePolicy.defaultMode,
       },
     });
 

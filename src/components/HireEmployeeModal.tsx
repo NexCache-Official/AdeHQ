@@ -3,11 +3,8 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ENABLE_DEMO_MODE, WORKFORCE_CALLS_ENABLED } from "@/lib/config/features";
-import {
-  defaultModelModeForRole,
-  MODEL_MODE_LABELS,
-  type ModelMode,
-} from "@/lib/ai/model-catalog";
+import { defaultModelModeForRole, type ModelMode } from "@/lib/ai/model-catalog";
+import { buildIntelligencePolicyForHire } from "@/lib/ai/intelligence-policy";
 import { Button, Modal, ModalHeader, Toggle } from "./ui";
 import { useStore } from "@/lib/demo-store";
 import {
@@ -141,6 +138,11 @@ export function HireEmployeeModal({
       provider: provider === "mock" ? "mock" : "siliconflow",
       model: "",
       modelMode,
+      intelligencePolicy: buildIntelligencePolicyForHire({
+        modelMode,
+        roleKey: template.key,
+        routingPreference: "auto",
+      }),
       seniority,
       status: "idle",
       currentTask: undefined,
@@ -285,28 +287,14 @@ export function HireEmployeeModal({
                       ))}
                     </select>
                   </Field>
-                  <Field label="Provider / intelligence">
-                    <div className="grid gap-2 sm:grid-cols-2">
-                      <select className="input-field" value={provider} onChange={(e) => setProvider(e.target.value)}>
-                        <option value="siliconflow">SiliconFlow (recommended)</option>
-                        {ENABLE_DEMO_MODE && <option value="mock">Mock (scripted)</option>}
-                      </select>
-                      {provider !== "mock" && (
-                        <select
-                          className="input-field"
-                          value={modelMode}
-                          onChange={(e) => setModelMode(e.target.value as ModelMode)}
-                        >
-                          {(Object.keys(MODEL_MODE_LABELS) as ModelMode[])
-                            .filter((m) => m !== "creative")
-                            .map((m) => (
-                              <option key={m} value={m}>
-                                {MODEL_MODE_LABELS[m]}
-                              </option>
-                            ))}
-                        </select>
-                      )}
-                    </div>
+                  <Field label="Provider">
+                    <select className="input-field" value={provider} onChange={(e) => setProvider(e.target.value)}>
+                      <option value="siliconflow">SiliconFlow (recommended)</option>
+                      {ENABLE_DEMO_MODE && <option value="mock">Mock (scripted)</option>}
+                    </select>
+                    <p className="mt-1.5 text-xs text-slate-500">
+                      Intelligence is Auto — AdeHQ picks the brain per task. Chat intensity chips set depth only.
+                    </p>
                   </Field>
                 </div>
                 <Field label="Standing instructions">
@@ -419,7 +407,10 @@ export function HireEmployeeModal({
                   </div>
                   <div>
                     <div className="text-lg font-semibold text-slate-900">{name}</div>
-                    <div className="text-sm text-slate-500">{roleTitle} · {seniority} · {provider}{provider !== "mock" ? ` · ${modelMode}` : ""}</div>
+                    <div className="text-sm text-slate-500">
+                      {roleTitle} · {seniority} · {provider}
+                      {provider !== "mock" ? " · Auto intelligence" : ""}
+                    </div>
                   </div>
                 </div>
                 <ReviewRow label="Standing instructions" value={instructions} />

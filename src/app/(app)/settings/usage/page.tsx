@@ -67,7 +67,7 @@ export default function SettingsUsagePage() {
               </p>
             </div>
             <p className="mb-4 text-xs text-ink-3">
-              Hours per hired employee, by intelligence (Balanced, Strong, etc.) and work type.
+              Hours per hired employee, by Auto / work type and capability.
               These rows explain the plan total above — they are not added on top of it.
             </p>
 

@@ -11,6 +11,7 @@ import {
   type ModelMode,
 } from "@/lib/ai/model-catalog";
 import { resolveRunModelMode } from "@/lib/ai/resolve-run-model-mode";
+import { resolveBrainAwareModelMode } from "@/lib/brain/resolve-auto-run";
 import { isDriveArtifactAsk } from "@/lib/ai/detect-drive-artifact-ask";
 import {
   appendRunStep,
@@ -870,7 +871,7 @@ export async function processQueuedAgentRun(
       { runId },
     );
 
-    const modelMode: ModelMode = resolveRunModelMode({
+    const heuristicModelMode: ModelMode = resolveRunModelMode({
       roleKey: employee.roleKey,
       employeeModelMode: employee.modelMode,
       isGreetingRun,
@@ -878,6 +879,15 @@ export async function processQueuedAgentRun(
       collaborationRole,
       userMessage: toolWorkNeeded ? toolWorkSource : content,
     });
+    const brainRun = resolveBrainAwareModelMode({
+      employee,
+      heuristicModelMode,
+      workMode,
+    });
+    const modelMode: ModelMode = brainRun.modelMode;
+    runMetadata.brainAuto = brainRun.auto;
+    runMetadata.brainIntensity = brainRun.intensity;
+    runMetadata.intelligenceMode = brainRun.intelligenceMode;
     const isLive = options.mode !== "mock" && employee.provider.toLowerCase() !== "mock";
     const outputCap = isGreetingRun
       ? GREETING_MAX_OUTPUT_TOKENS
@@ -1736,6 +1746,9 @@ export async function processQueuedAgentRun(
         typeof runMetadata.emailMessageId === "string"
           ? runMetadata.emailMessageId
           : undefined,
+      brainAuto: brainRun.auto,
+      brainIntensity: brainRun.intensity,
+      intelligenceMode: brainRun.intelligenceMode,
     };
 
     const routeInput = {

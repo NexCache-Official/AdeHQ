@@ -23,3 +23,9 @@ export {
   newBrainRunId,
 } from "./decisions/persist";
 export { loadWhReceipt, type WhReceipt } from "./receipts/load-wh-receipt";
+export {
+  applyIntensityFloor,
+  modelModeFromIntensity,
+  resolveEffectiveIntensity,
+  resolveBrainAwareModelMode,
+} from "./resolve-auto-run";

@@ -38,6 +38,8 @@ export type RouteOptions = {
   mode?: "mock" | "live";
   provider?: string;
   modelMode?: ModelMode;
+  /** Composer intensity chip — drives Brain Auto routing when enabled. */
+  workMode?: string;
   maxOutputTokens?: number;
   timeoutMs?: number;
   isGreetingRun?: boolean;

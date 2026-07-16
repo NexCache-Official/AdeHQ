@@ -1,21 +1,23 @@
 import type { ModelMode } from "@/lib/ai/model-catalog";
 
+/** @deprecated Member UI uses Auto — keep for kill-switch / admin diagnostics only. */
 export const INTELLIGENCE_MODE_LABELS: Record<ModelMode, string> = {
-  cheap: "Efficient Intelligence",
-  balanced: "Balanced Intelligence",
-  strong: "Strong Intelligence",
-  long_context: "Long Context Intelligence",
-  coding: "Coding Intelligence",
-  creative: "Balanced Intelligence",
+  cheap: "Auto",
+  balanced: "Auto",
+  strong: "Auto",
+  long_context: "Auto",
+  coding: "Auto",
+  creative: "Auto",
 };
 
+/** @deprecated Member UI uses Auto — keep for kill-switch / admin diagnostics only. */
 export const RUNTIME_MODE_LABELS: Record<ModelMode, string> = {
-  cheap: "Efficient",
-  balanced: "Balanced",
-  strong: "Strong",
-  long_context: "Long context",
-  coding: "Coding",
-  creative: "Creative",
+  cheap: "Auto",
+  balanced: "Auto",
+  strong: "Auto",
+  long_context: "Auto",
+  coding: "Auto",
+  creative: "Auto",
 };
 
 export const CONTEXT_PROFILE_LABELS: Record<ModelMode, string> = {
@@ -33,22 +35,11 @@ export function displayEngineModel(modelId: string): string {
   return slug;
 }
 
-/** Friendly model families — no provider branding or raw IDs in customer UI. */
-export function commonModelFamiliesLabel(mode: ModelMode): string {
-  switch (mode) {
-    case "cheap":
-      return "DeepSeek, Qwen";
-    case "coding":
-      return "Qwen Coder, DeepSeek";
-    case "strong":
-      return "DeepSeek, Qwen";
-    case "long_context":
-      return "DeepSeek, Qwen";
-    default:
-      return "DeepSeek, Qwen Coder";
-  }
+/** @deprecated Not shown in member hire UI under Brain Auto. */
+export function commonModelFamiliesLabel(_mode: ModelMode): string {
+  return "AdeHQ Auto";
 }
 
-export function defaultIntelligenceShort(mode: ModelMode): string {
-  return RUNTIME_MODE_LABELS[mode] ?? "Balanced";
+export function defaultIntelligenceShort(_mode: ModelMode): string {
+  return "Auto";
 }

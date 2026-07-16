@@ -53,9 +53,9 @@ const WORK_MODES: Array<{
   hint: string;
 }> = [
   { id: "fast", emoji: "⚡", label: "Fast", hint: "Quick response with minimal reasoning" },
-  { id: "standard", emoji: "⚖️", label: "Standard", hint: "Balanced speed and depth" },
-  { id: "deep", emoji: "🧠", label: "Deep Thinking", hint: "More reasoning for complex decisions" },
-  { id: "research", emoji: "🌍", label: "Research", hint: "Use current sources and research tools" },
+  { id: "standard", emoji: "⚖️", label: "Standard", hint: "Default depth — AdeHQ Auto picks the brain" },
+  { id: "deep", emoji: "🧠", label: "Deep Thinking", hint: "Higher reasoning budget for complex decisions" },
+  { id: "research", emoji: "🌍", label: "Research", hint: "Current sources and research tools" },
   { id: "collaboration", emoji: "🤝", label: "Collaboration", hint: "Coordinate relevant teammates" },
 ];
 

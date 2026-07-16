@@ -6,10 +6,13 @@ export type CandidateArchetype = {
   tier: CandidateTier;
   badge: string;
   operatingStyle: string;
+  /** Member-facing intelligence label — always Auto under Brain V1. */
   defaultIntelligence: string;
+  /** Internal hire seed only (intensity floor + kill-switch fallback). Not shown as a tier picker. */
   modelMode: ModelMode;
   routingPreference: RoutingPreference;
   routingBehavior: string;
+  /** @deprecated Not shown in member hire UI. */
   commonModels: string;
   personalityTags: string[];
   grad: string;
@@ -20,11 +23,11 @@ export const CANDIDATE_ARCHETYPES: Record<CandidateTier, CandidateArchetype> = {
     tier: "high_capacity",
     badge: "Fast Executor",
     operatingStyle: "Fast executor",
-    defaultIntelligence: "Efficient",
+    defaultIntelligence: "Auto",
     modelMode: "cheap",
     routingPreference: "cost_saver",
-    routingBehavior: "Uses efficient models first. Upgrades when the work gets complex.",
-    commonModels: "DeepSeek, Qwen",
+    routingBehavior: "AdeHQ picks the brain per task. Prefers lighter routes and upgrades when work gets complex.",
+    commonModels: "",
     personalityTags: ["energetic", "practical", "direct", "fast-moving"],
     grad: "linear-gradient(135deg,#fbbf24,#f97316 55%,#ef4444)",
   },
@@ -32,11 +35,11 @@ export const CANDIDATE_ARCHETYPES: Record<CandidateTier, CandidateArchetype> = {
     tier: "recommended",
     badge: "Balanced Partner",
     operatingStyle: "Balanced operator",
-    defaultIntelligence: "Balanced",
+    defaultIntelligence: "Auto",
     modelMode: "balanced",
     routingPreference: "auto",
-    routingBehavior: "Balances speed, cost, and quality automatically.",
-    commonModels: "DeepSeek, Qwen Coder",
+    routingBehavior: "AdeHQ assembles the right brain for each task — speed, cost, and quality.",
+    commonModels: "",
     personalityTags: ["collaborative", "reliable", "organized", "clear"],
     grad: "linear-gradient(135deg,#6366f1,#3b82f6 55%,#8b5cf6)",
   },
@@ -44,11 +47,11 @@ export const CANDIDATE_ARCHETYPES: Record<CandidateTier, CandidateArchetype> = {
     tier: "premium",
     badge: "Senior Strategist",
     operatingStyle: "Senior strategist",
-    defaultIntelligence: "Strong",
+    defaultIntelligence: "Auto",
     modelMode: "strong",
     routingPreference: "quality_first",
-    routingBehavior: "Prioritizes quality for complex or high-stakes work, but can route down for simple tasks.",
-    commonModels: "DeepSeek, Qwen",
+    routingBehavior: "AdeHQ picks the brain per task, with a deeper default for complex or high-stakes work.",
+    commonModels: "",
     personalityTags: ["strategic", "precise", "senior", "thoughtful"],
     grad: "linear-gradient(135deg,#64748b,#7c3aed 65%,#1e293b)",
   },

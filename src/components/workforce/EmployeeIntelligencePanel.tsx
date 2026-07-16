@@ -69,12 +69,27 @@ export function EmployeeIntelligencePanel({
 
       {!editable ? (
         <dl className="space-y-3">
-          {lines.map((line) => (
+          {(brainOn
+            ? lines.map((line) =>
+                line.label === "Intelligence"
+                  ? {
+                      label: line.label,
+                      value: "Auto — AdeHQ picks the brain per task",
+                    }
+                  : line,
+              )
+            : lines
+          ).map((line) => (
             <div key={line.label}>
               <dt className="text-xs font-medium uppercase tracking-wide text-slate-400">{line.label}</dt>
               <dd className="mt-1 text-sm text-slate-700">{line.value}</dd>
             </div>
           ))}
+          {brainOn ? (
+            <p className="pt-1 text-xs text-slate-500">
+              Chat intensity chips (Fast / Standard / Deep / Research) set budget and depth only — never a model SKU.
+            </p>
+          ) : null}
         </dl>
       ) : (
         <div className="space-y-4">

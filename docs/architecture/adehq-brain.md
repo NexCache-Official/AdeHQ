@@ -1,8 +1,8 @@
 # AdeHQ Brain — V1 Engineering Plan
 
 > Living doc. Supersedes [intelligence-v2-plan.md](intelligence-v2-plan.md) for routing/metering/costing concerns.
-> Status: **V1 landed (PR-1…PR-10). Catalog alignment PR-11 landed (CATALOG_VERSION=2).**  
-> Next: PR-12 remove legacy intelligence UX → PR-13 Step-3.5 shadow → PR-14 search → vision/media slices.  
+> Status: **V1 landed (PR-1…PR-10). Catalog PR-11 landed. PR-12 Auto UX + hot-path intensity wiring landed.**  
+> Next: PR-13 Step-3.5 promote only after agreement harness proves parity → PR-14 search → vision/media.  
 > Last grounded against the codebase 2026-07-16.
 
 ## Product lock

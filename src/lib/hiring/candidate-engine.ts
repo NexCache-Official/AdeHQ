@@ -94,7 +94,7 @@ export function buildDeterministicApplicant(
     roleTitle: brief.roleTitle,
     modelMode,
     resolvedModelId,
-    engineLabel: `${archetype.defaultIntelligence} intelligence`,
+    engineLabel: "Auto intelligence",
     operatingStyle: copy?.operatingStyle ?? archetype.operatingStyle,
     defaultIntelligence: copy?.defaultIntelligence ?? archetype.defaultIntelligence,
     routingPreference,

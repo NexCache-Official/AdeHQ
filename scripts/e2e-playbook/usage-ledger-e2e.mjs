@@ -242,11 +242,11 @@ try {
   };
   note("usage-before", JSON.stringify(report.beforeUsage));
 
-  // Prefer Balanced chip when present (conversation mode UI).
-  const balancedChip = page.getByRole("button", { name: /^Balanced$/i }).first();
-  if (await balancedChip.isVisible({ timeout: 2000 }).catch(() => false)) {
-    await balancedChip.click();
-    note("ok", "selected Balanced mode chip");
+  // Prefer Standard intensity chip when present (Brain Auto UX).
+  const standardChip = page.getByRole("button", { name: /^Standard$/i }).first();
+  if (await standardChip.isVisible({ timeout: 2000 }).catch(() => false)) {
+    await standardChip.click();
+    note("ok", "selected Standard intensity chip");
   }
 
   const box = page.getByPlaceholder(/Message/i).first();

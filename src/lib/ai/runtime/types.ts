@@ -63,6 +63,8 @@ export type RuntimeBaseParams = {
   capability: AiCapability;
   runtimeMode?: RuntimeMode;
   modelMode?: ModelMode;
+  /** Brain intensity from chat chips + employee floor (fast|standard|deep|research). */
+  intensity?: "fast" | "standard" | "deep" | "research";
   reasoningProfile?: ReasoningProfile;
   budgetPolicy?: RuntimeBudgetPolicy;
   metadata?: Record<string, unknown>;
@@ -162,6 +164,8 @@ export type CapabilityRouteInput = {
   speedPreference?: "fastest" | "balanced" | "quality";
   qualityPreference?: "efficient" | "balanced" | "premium";
   modelMode?: ModelMode;
+  /** Brain intensity for USD ranges + routing policy (V2). */
+  intensity?: "fast" | "standard" | "deep" | "research";
   runtimeMode?: RuntimeMode;
   /** V20.0.1b+ — browser research provider (mock, Tavily, Browserbase). */
   researchProvider?: "mock" | "tavily" | "browserbase";

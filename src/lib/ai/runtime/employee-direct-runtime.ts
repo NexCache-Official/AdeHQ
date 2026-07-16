@@ -34,6 +34,7 @@ import {
   intelligenceModeFromModelMode,
   resolveEmployeeIntelligencePolicy,
 } from "@/lib/ai/intelligence-policy";
+import { resolveBrainAwareModelMode } from "@/lib/brain/resolve-auto-run";
 import { recordRouteOutcome } from "@/lib/ai/runtime/route-health";
 
 export type EmployeeDirectRuntimeDispatch = "old" | "shadow" | "legacy-guarded" | "runtime-on";
@@ -87,10 +88,18 @@ export async function generateEmployeeDirectResponseRuntime(
   options: EmployeeDirectRouteOptions = {},
 ): Promise<EmployeeDirectRouteResult> {
   const ctx = options.context ?? {};
-  const modelMode = resolveDirectEmployeeModelMode(
+  const heuristicModelMode = resolveDirectEmployeeModelMode(
     (options.modelMode ?? input.employee.modelMode) as ModelMode | undefined,
     input.employee.roleKey,
   );
+  const workMode = options.workMode;
+  const brainRun = resolveBrainAwareModelMode({
+    employee: input.employee,
+    heuristicModelMode,
+    workMode,
+  });
+  const modelMode = brainRun.modelMode;
+  const intensity = brainRun.intensity;
   const { maxOutputTokens, temperature, timeoutMs } = resolveRouteGenerationParams(
     input.message,
     options,
@@ -169,6 +178,7 @@ export async function generateEmployeeDirectResponseRuntime(
       workUnitId,
       capability,
       modelMode,
+      intensity,
       routingPreference: intelligencePolicy.routingPreference as import("@/lib/ai/intelligence-policy").RoutingPreference,
       requiresJson: true,
       reasoningProfile: reasoningProfileForCapability(capability),
@@ -183,6 +193,9 @@ export async function generateEmployeeDirectResponseRuntime(
         agentRunId: ctx.agentRunId,
         roomId: ctx.roomId,
         topicId: ctx.topicId,
+        brainAuto: brainRun.auto,
+        brainIntensity: intensity,
+        intelligenceMode: brainRun.intelligenceMode,
       },
     });
 
