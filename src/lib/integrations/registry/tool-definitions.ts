@@ -279,6 +279,42 @@ export const SaveToDriveArgsSchema = z.object({
 });
 export type SaveToDriveArgs = z.infer<typeof SaveToDriveArgsSchema>;
 
+export const CreateImageArgsSchema = z.object({
+  intent: z.enum(["quick", "business_graphic", "premium"]),
+  prompt: z.string().min(3),
+  title: z.string().optional(),
+  negativePrompt: z.string().optional(),
+  imageSize: z
+    .enum(["512x512", "768x1024", "1024x576", "576x1024", "1024x1024", "1328x1328"])
+    .optional(),
+  taskId: z.string().optional(),
+  /** Set true after the human confirms WH estimate / low-balance warning. */
+  confirmed: z.boolean().optional(),
+});
+export type CreateImageArgs = z.infer<typeof CreateImageArgsSchema>;
+
+export const EditImageArgsSchema = z.object({
+  prompt: z.string().min(3),
+  title: z.string().optional(),
+  sourceFileId: z.string().optional(),
+  sourceArtifactId: z.string().optional(),
+  sourceExportId: z.string().optional(),
+  parentArtifactId: z.string().optional(),
+  taskId: z.string().optional(),
+  confirmed: z.boolean().optional(),
+});
+export type EditImageArgs = z.infer<typeof EditImageArgsSchema>;
+
+export const RegenerateImageArgsSchema = z.object({
+  parentArtifactId: z.string().min(1),
+  prompt: z.string().min(3).optional(),
+  intent: z.enum(["quick", "business_graphic", "premium"]).optional(),
+  title: z.string().optional(),
+  taskId: z.string().optional(),
+  confirmed: z.boolean().optional(),
+});
+export type RegenerateImageArgs = z.infer<typeof RegenerateImageArgsSchema>;
+
 // ---------------------------------------------------------------------------
 // Preview helpers
 // ---------------------------------------------------------------------------
@@ -1020,6 +1056,102 @@ const webSearch: ToolDefinition<WebSearchArgs> = {
   }),
 };
 
+const createImage: ToolDefinition<CreateImageArgs> = {
+  name: "image.create",
+  domain: "artifact",
+  provider: "internal",
+  description:
+    "Create an image artifact in Drive (quick visual, business graphic, or premium). Never invent model names — discuss Work Hours tiers fairly and clarify the brief first.",
+  readOnly: false,
+  risk: "low",
+  approval: "none",
+  asyncJobType: "image_create",
+  argsSchema: CreateImageArgsSchema,
+  promptUsage:
+    'image.create — args: { "intent": "quick"|"business_graphic"|"premium", "prompt": "...", "title"?, "confirmed"?: true }. ' +
+    "Member actions: Create image (~0.5 WH), Create business graphic (~2 WH), Create premium visual (~6 WH). " +
+    "Ask clarifying questions (subject, text-on-image, style, aspect) before generating. " +
+    "For premium always state the WH estimate and set confirmed:true only after the human agrees. " +
+    "When Work Hours are low, ask before quick/business too. Never name underlying models.",
+  buildPreview: (args) => {
+    const wh =
+      args.intent === "premium" ? "6" : args.intent === "business_graphic" ? "2" : "0.5";
+    const label =
+      args.intent === "premium"
+        ? "Create premium visual"
+        : args.intent === "business_graphic"
+          ? "Create business graphic"
+          : "Create image";
+    return {
+      title: `${label} — ${args.title ?? "untitled"}`,
+      summary: `${label} (~${wh} WH): ${args.prompt.slice(0, 140)}`,
+      fields: fields([
+        ["Action", label],
+        ["Work Hours", `~${wh} WH`],
+        ["Title", args.title],
+        ["Prompt", args.prompt.slice(0, 200)],
+        ["Confirmed", args.confirmed ? "yes" : "pending"],
+      ]),
+      risk: args.intent === "premium" ? "medium" : "low",
+    };
+  },
+};
+
+const editImage: ToolDefinition<EditImageArgs> = {
+  name: "image.edit",
+  domain: "artifact",
+  provider: "internal",
+  description:
+    "Edit an uploaded image or a prior image artifact and save a new Drive version (~4 WH). Clarify the edit and confirm WH when needed.",
+  readOnly: false,
+  risk: "low",
+  approval: "none",
+  asyncJobType: "image_edit",
+  argsSchema: EditImageArgsSchema,
+  promptUsage:
+    'image.edit — args: { "prompt": "replace the sky with sunset", "sourceFileId"|"sourceArtifactId"|"sourceExportId"|"parentArtifactId", "title"?, "confirmed"?: true }. ' +
+    "Member action: Edit image (~4 WH). Always mention the estimate and set confirmed:true after the human agrees. Never name models.",
+  buildPreview: (args) => ({
+    title: `Edit image — ${args.title ?? "untitled"}`,
+    summary: `Edit image (~4 WH): ${args.prompt.slice(0, 140)}`,
+    fields: fields([
+      ["Action", "Edit image"],
+      ["Work Hours", "~4 WH"],
+      ["Source file", args.sourceFileId],
+      ["Source artifact", args.sourceArtifactId ?? args.parentArtifactId],
+      ["Confirmed", args.confirmed ? "yes" : "pending"],
+    ]),
+    risk: "medium",
+  }),
+};
+
+const regenerateImage: ToolDefinition<RegenerateImageArgs> = {
+  name: "image.regenerate",
+  domain: "artifact",
+  provider: "internal",
+  description:
+    "Regenerate a prior image artifact (new version in Drive) with an optional revised prompt. Reuses provenance links.",
+  readOnly: false,
+  risk: "low",
+  approval: "none",
+  asyncJobType: "image_regenerate",
+  argsSchema: RegenerateImageArgsSchema,
+  promptUsage:
+    'image.regenerate — args: { "parentArtifactId": "...", "prompt"?, "intent"?: "quick"|"business_graphic"|"premium", "confirmed"?: true }. ' +
+    "Creates a new version on the same artifact lineage. Confirm WH for premium/edit-cost tiers.",
+  buildPreview: (args) => ({
+    title: `Regenerate image — ${args.title ?? args.parentArtifactId}`,
+    summary: `Regenerate prior image artifact ${args.parentArtifactId}.`,
+    fields: fields([
+      ["Parent artifact", args.parentArtifactId],
+      ["Intent", args.intent],
+      ["Prompt", args.prompt?.slice(0, 200)],
+      ["Confirmed", args.confirmed ? "yes" : "pending"],
+    ]),
+    risk: "low",
+  }),
+};
+
 // ---------------------------------------------------------------------------
 // Registry access
 // ---------------------------------------------------------------------------
@@ -1056,6 +1188,9 @@ const TOOL_DEFINITIONS = [
   suggestColleagues,
   coordinate,
   webSearch,
+  createImage,
+  editImage,
+  regenerateImage,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
 ] as ToolDefinition<any>[];
 

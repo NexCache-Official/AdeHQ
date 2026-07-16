@@ -152,6 +152,35 @@ export const ROUTING_POLICY: RoutingPolicyEntry[] = [
     primaryRouteId: "route_vision_qwen3_vl_32b_sf",
     backupRouteIds: ["route_vision_qwen3_vl_8b_sf"],
   },
+  // PR-16: intent→route is selected in brain/image; policy documents live primaries.
+  {
+    capability: "image_generation",
+    intensity: "fast",
+    environment: "production",
+    primaryRouteId: "route_image_z_image_turbo",
+    backupRouteIds: ["route_image_qwen_image"],
+  },
+  {
+    capability: "image_generation",
+    intensity: "standard",
+    environment: "production",
+    primaryRouteId: "route_image_qwen_image",
+    backupRouteIds: ["route_image_z_image_turbo", "route_image_flux2_flex"],
+  },
+  {
+    capability: "image_generation",
+    intensity: "deep",
+    environment: "production",
+    primaryRouteId: "route_image_flux2_flex",
+    backupRouteIds: ["route_image_qwen_image"],
+  },
+  {
+    capability: "image_edit",
+    intensity: "standard",
+    environment: "production",
+    primaryRouteId: "route_image_qwen_image_edit",
+    backupRouteIds: [],
+  },
 ];
 
 export function resolveRoutingPolicy(

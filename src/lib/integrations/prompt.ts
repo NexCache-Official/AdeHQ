@@ -73,6 +73,9 @@ export function buildIntegrationToolsPrompt(employee: IntegrationEmployee): stri
     "artifact.convertFile",
     "artifact.updateSpreadsheet",
     "artifact.saveToDrive",
+    "image.create",
+    "image.edit",
+    "image.regenerate",
   ].filter((tool) => availableNames.has(tool));
   const salesBundleExample = hasSalesBundleExample
     ? `
@@ -101,10 +104,25 @@ Research lead-list example for "Give me 5 Zone 2 flat leads under £900k as a ta
   { "tool": "artifact.createSpreadsheet", "mode": "execute", "args": { "title": "Zone 2 flats under £900k — lead list", "template": "lead_list", "columns": ["Name", "Company", "Area", "Portfolio", "Email / Phone", "Source URL", "Priority", "Why now"], "rows": [["James Whitfield", "Whitfield Properties Ltd", "Stratford", "3 flats", "—", "https://example.com", "H", "Active buyer — looking to expand Zone 2"]] } }
 ]`
     : "";
+  const imageToolsAvailable =
+    availableNames.has("image.create") ||
+    availableNames.has("image.edit") ||
+    availableNames.has("image.regenerate");
+  const imageRule = imageToolsAvailable
+    ? `
+
+Image artifacts (Drive-backed — never chat-only pixels):
+- Actions (member language only — never name models): Create image (~0.5 WH), Create business graphic (~2 WH), Edit image (~4 WH), Create premium visual (~6 WH).
+- Ask clarifying questions first (subject, any on-image text, style, aspect, brand constraints). Offer fair WH options before generating.
+- Standard Create image / business graphic: no confirmation unless Work Hours are low — then ask once.
+- Create premium visual and Edit image: always state the WH estimate and wait for agreement (then call with confirmed:true).
+- Every generation becomes a Drive artifact with prompt provenance + version history; use image.regenerate / image.edit for revisions.
+- Another employee can reuse the Drive export / artifact — link taskId when the work belongs to a task.`
+    : "";
   const asyncArtifactRule = artifactAsyncTools.length
     ? `\n- ${artifactAsyncTools.join(", ")} run in the background — tell the user the file is generating and will appear in Drive when ready.
-- artifact.createSpreadsheet / createPdfReport / createDocx / createPresentation already save the binary to Drive. Never also call artifact.saveToDrive in the same turn — that creates a duplicate "Generating Drive export…" chip.`
-    : "";
+- artifact.createSpreadsheet / createPdfReport / createDocx / createPresentation and image.create / image.edit / image.regenerate already save binaries to Drive. Never also call artifact.saveToDrive in the same turn — that creates a duplicate "Generating Drive export…" chip.${imageRule}`
+    : imageRule;
 
   const teamworkRule = availableNames.has("team.coordinate")
     ? `

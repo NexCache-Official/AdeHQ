@@ -521,7 +521,8 @@ export type SavedArtifactType =
   | "checklist"
   | "decision"
   | "note"
-  | "other";
+  | "other"
+  | "image";
 
 export type SavedArtifactStatus = "draft" | "saved" | "archived";
 

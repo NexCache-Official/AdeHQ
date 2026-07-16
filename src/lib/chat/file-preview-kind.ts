@@ -30,6 +30,7 @@ export function extensionFromToolName(toolName?: string | null): string | undefi
   if (toolName.includes("Pdf") || toolName.includes("pdf")) return "pdf";
   if (toolName.includes("Docx") || toolName.includes("docx")) return "docx";
   if (toolName.includes("Presentation") || toolName.includes("presentation")) return "pptx";
+  if (toolName.startsWith("image.")) return "png";
   return undefined;
 }
 

@@ -25,6 +25,9 @@ const TOOL_LABELS: Record<string, string> = {
   "artifact.updateSpreadsheet": "spreadsheet update",
   "artifact.convertFile": "file conversion",
   "artifact.saveToDrive": "Drive export",
+  "image.create": "image",
+  "image.edit": "image edit",
+  "image.regenerate": "image",
   "social.createCampaign": "campaign",
   "calendar.createCampaign": "campaign",
   "social.draftPost": "social post",
@@ -280,7 +283,10 @@ export function toolReceiptArtifact(result: ToolCallResult): MessageArtifact | n
         result.tool === "artifact.createPresentation" ||
         result.tool === "artifact.convertFile" ||
         result.tool === "artifact.saveToDrive" ||
-        result.tool === "artifact.updateSpreadsheet") &&
+        result.tool === "artifact.updateSpreadsheet" ||
+        result.tool === "image.create" ||
+        result.tool === "image.edit" ||
+        result.tool === "image.regenerate") &&
       objectId
     ) {
       const payload = (output?.payload ?? {}) as Record<string, unknown>;
@@ -288,6 +294,7 @@ export function toolReceiptArtifact(result: ToolCallResult): MessageArtifact | n
       const fileExtension =
         (payload.targetFormat ? String(payload.targetFormat) : undefined) ??
         (payload.exportFormat ? String(payload.exportFormat) : undefined) ??
+        (result.tool.startsWith("image.") ? "png" : undefined) ??
         extensionFromToolName(result.tool);
       const titleFromPayload = payload.title ? cleanChatFileTitle(String(payload.title)) : undefined;
       const summary = output?.summary

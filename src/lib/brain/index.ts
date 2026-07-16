@@ -31,8 +31,10 @@ export {
 } from "./resolve-auto-run";
 export * from "./search";
 export * from "./vision";
+export * from "./image";
 export {
   isBrainSearchV1Enabled,
   isBrainSearchCacheEnabled,
   isBrainVisionV1Enabled,
+  isBrainImageV1Enabled,
 } from "./flags";

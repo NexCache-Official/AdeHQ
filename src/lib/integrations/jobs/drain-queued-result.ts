@@ -30,6 +30,11 @@ function artifactSummary(tool: string, payload: Record<string, unknown>): string
   if (tool === "artifact.updateSpreadsheet") {
     return `Updated spreadsheet "${title}" — saved to Drive.`;
   }
+  if (tool === "image.create" || tool === "image.edit" || tool === "image.regenerate") {
+    const wh = payload.estimatedWh != null ? ` (~${payload.estimatedWh} WH)` : "";
+    const version = payload.versionNumber != null ? ` v${payload.versionNumber}` : "";
+    return `${payload.memberLabel ? String(payload.memberLabel) : "Image"} "${title}"${version}${wh} — saved to Drive.`;
+  }
   return `Generated ${title} — saved to Drive.`;
 }
 

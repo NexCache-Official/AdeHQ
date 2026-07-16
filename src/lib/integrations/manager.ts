@@ -90,6 +90,9 @@ export async function executeEmployeeToolCalls(
     "artifact.createPresentation",
     "artifact.convertFile",
     "artifact.updateSpreadsheet",
+    "image.create",
+    "image.edit",
+    "image.regenerate",
   ]);
 
   const rawCalls = (params.toolCalls ?? []).filter(

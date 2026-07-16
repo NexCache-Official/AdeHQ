@@ -1,8 +1,8 @@
 # AdeHQ Brain — V1 Engineering Plan
 
 > Living doc. Supersedes [intelligence-v2-plan.md](intelligence-v2-plan.md) for routing/metering/costing concerns.
-> Status: **V1 landed (PR-1…PR-12). PR-14 Exa-first search + PR-15 vision landed (CATALOG_VERSION=4).**  
-> Next: PR-13 Step-3.5 promote only after agreement harness proves parity → image/video media slices.  
+> Status: **V1 landed (PR-1…PR-12). PR-14 search + PR-15 vision + PR-16 image create/edit landed (CATALOG_VERSION=5).**  
+> Next: PR-13 Step-3.5 promote only after agreement harness proves parity → video media slices.  
 > Last grounded against the codebase 2026-07-16.
 
 ## Product lock
@@ -280,16 +280,16 @@ src/lib/brain/catalog/
   routes.ts             # CapabilityRoute — NO prices; lifecycle states
   pricing-snapshots.ts  # immutable seed + accessors
   routing-policy.ts     # production scoring only (shadow/eval excluded)
-  version.ts            # CATALOG_VERSION = "4"
+  version.ts            # CATALOG_VERSION = "5"
 ```
 
 ```ts
 environment: "production" | "fallback" | "shadow" | "evaluation" | "disabled"
 ```
 
-**Production (live scoring):** V4 Flash, V4 Pro (+ SF failover), MiniMax M2.5 (+ native Gateway + SF fallbacks), Qwen3 Coder, Qwen3-8B classifier, Qwen3 Embedding, **Exa (search primary)**, **Perplexity (search fallback)**, **Tavily (final search fallback)**, Browserbase (interaction only), **Qwen3-VL-8B (vision primary)**, **Qwen3-VL-32B-Thinking (vision complex / escalate)**.
+**Production (live scoring):** V4 Flash, V4 Pro (+ SF failover), MiniMax M2.5 (+ native Gateway + SF fallbacks), Qwen3 Coder, Qwen3-8B classifier, Qwen3 Embedding, **Exa (search primary)**, **Perplexity (search fallback)**, **Tavily (final search fallback)**, Browserbase (interaction only), **Qwen3-VL-8B / VL-32B-Thinking (vision)**, **Z-Image-Turbo / Qwen-Image / Qwen-Image-Edit / FLUX.2-flex (image create+edit; member labels only)**.
 
-**Shadow (catalogued, not live):** Step-3.5-Flash, Z-Image-Turbo, Qwen-Image, Qwen-Image-Edit, FLUX.2-flex, Wan T2V/I2V, CosyVoice2, IndexTTS-2, Fish Speech.
+**Shadow (catalogued, not live):** Step-3.5-Flash, Wan T2V/I2V, CosyVoice2, IndexTTS-2, Fish Speech.
 
 **Evaluation:** Kimi-K2.7-Code, Qwen3.6-35B/27B, GLM-5.2, MiniMax M3.
 
@@ -432,7 +432,7 @@ Cursor plan index: `.cursor/plans/adehq_brain_roadmap_7879533e.plan.md` (points 
 
 - **Phase 2:** intensity → enforced thinking/tool/search budgets; Step-3.5-Flash micro-routing shadow→prod; Flash→Pro and Coder→Kimi escalations as new attempts; search WH via snapshots (Perplexity/Exa/Tavily).
 - **Phase 3:** multi-agent Steward — lead selection, work leases, shared findings blackboard, single final response; DM one voice; room mention-wins.
-- **Phase 4:** **Vision live (PR-15)** — VL-8B→VL-32B with token metering, attachment normalize, Rooms/DMs/Drive/Inbox image paths, kill switch `ADEHQ_BRAIN_VISION_V1`. Remaining: image/video generation per catalog + Drive artifacts + approvals; customer generate verbs only when adapters + metering + confirm UX are green.
+- **Phase 4:** **Vision live (PR-15)** + **Image create/edit live (PR-16)** — Drive artifacts with prompt provenance, versions, regenerate/edit, WH receipts, tools `image.create` / `image.edit` / `image.regenerate`, kill switches `ADEHQ_BRAIN_VISION_V1` / `ADEHQ_BRAIN_IMAGE_V1`. Remaining: video generation + voice.
 - **Phase 5:** TTS live; STT chosen + priced before any voice marketing.
 - **Phase 6:** canary/shadow optimizer, quality scoring, provider health, enterprise route allowlists.
 

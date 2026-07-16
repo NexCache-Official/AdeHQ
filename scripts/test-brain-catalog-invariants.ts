@@ -185,7 +185,7 @@ const APPROVED: Array<{
   {
     id: "route_image_z_image_turbo",
     model: "Tongyi-MAI/Z-Image-Turbo",
-    environment: "shadow",
+    environment: "production",
     unitType: "image",
     provider: "siliconflow",
     rates: { perImage: 0.005 },
@@ -193,7 +193,7 @@ const APPROVED: Array<{
   {
     id: "route_image_qwen_image",
     model: "Qwen/Qwen-Image",
-    environment: "shadow",
+    environment: "production",
     unitType: "image",
     provider: "siliconflow",
     rates: { perImage: 0.02 },
@@ -201,7 +201,7 @@ const APPROVED: Array<{
   {
     id: "route_image_qwen_image_edit",
     model: "Qwen/Qwen-Image-Edit",
-    environment: "shadow",
+    environment: "production",
     unitType: "image",
     provider: "siliconflow",
     rates: { perImage: 0.04 },
@@ -209,7 +209,7 @@ const APPROVED: Array<{
   {
     id: "route_image_flux2_flex",
     model: "black-forest-labs/FLUX.2-flex",
-    environment: "shadow",
+    environment: "production",
     unitType: "image",
     provider: "siliconflow",
     rates: { perImage: 0.06 },
@@ -326,7 +326,7 @@ const APPROVED: Array<{
 ];
 
 function main() {
-  assert(CATALOG_VERSION === "4", "CATALOG_VERSION must be 4 after PR-15 vision");
+  assert(CATALOG_VERSION === "5", "CATALOG_VERSION must be 5 after PR-16 image");
 
   const ids = BRAIN_ROUTES.map((r) => r.id);
   assert(new Set(ids).size === ids.length, "route ids must be unique");
@@ -427,7 +427,7 @@ function main() {
   const newId = nextSnapshotId("route_text_v4flash_sf", "2026-08-01T00:00:00.000Z");
   assert(newId !== old.id, "rate change must allocate a new snapshot id");
 
-  // PR-15 vision is production; image/video/TTS remain shadow
+  // PR-15 vision + PR-16 image are production; video/TTS remain shadow
   for (const id of ["route_vision_qwen3_vl_8b_sf", "route_vision_qwen3_vl_32b_sf"]) {
     const r = getBrainRoute(id);
     assert(r?.environment === "production", `${id} must be production`);
@@ -435,9 +435,15 @@ function main() {
   }
   for (const id of [
     "route_image_z_image_turbo",
-    "route_video_wan22_t2v",
-    "route_tts_cosyvoice2",
+    "route_image_qwen_image",
+    "route_image_qwen_image_edit",
+    "route_image_flux2_flex",
   ]) {
+    const r = getBrainRoute(id);
+    assert(r?.environment === "production", `${id} must be production`);
+    assert(r?.unitType === "image", `${id} bills per image`);
+  }
+  for (const id of ["route_video_wan22_t2v", "route_tts_cosyvoice2"]) {
     const r = getBrainRoute(id);
     assert(r && r.environment !== "production", `${id} must not be production yet`);
   }

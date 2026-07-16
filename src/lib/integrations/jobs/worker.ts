@@ -17,8 +17,9 @@ import { getJobHandler } from "./registry";
 import { reconcileChatArtifactsForJob } from "./reconcile-message-for-job";
 import { nowISO } from "@/lib/utils";
 
-// Register Phase 2 artifact job handlers.
+// Register Phase 2 artifact job handlers + PR-16 image jobs.
 import "./artifact-handlers";
+import "./image-handlers";
 
 type DbRow = Record<string, unknown>;
 
