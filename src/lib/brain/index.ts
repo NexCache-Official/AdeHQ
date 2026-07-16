@@ -32,9 +32,11 @@ export {
 export * from "./search";
 export * from "./vision";
 export * from "./image";
+export * from "./video";
 export {
   isBrainSearchV1Enabled,
   isBrainSearchCacheEnabled,
   isBrainVisionV1Enabled,
   isBrainImageV1Enabled,
+  isBrainVideoV1Enabled,
 } from "./flags";

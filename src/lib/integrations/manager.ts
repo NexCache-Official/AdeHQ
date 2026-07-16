@@ -93,6 +93,7 @@ export async function executeEmployeeToolCalls(
     "image.create",
     "image.edit",
     "image.regenerate",
+    "video.create",
   ]);
 
   const rawCalls = (params.toolCalls ?? []).filter(

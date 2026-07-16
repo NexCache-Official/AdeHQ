@@ -35,6 +35,12 @@ function artifactSummary(tool: string, payload: Record<string, unknown>): string
     const version = payload.versionNumber != null ? ` v${payload.versionNumber}` : "";
     return `${payload.memberLabel ? String(payload.memberLabel) : "Image"} "${title}"${version}${wh} — saved to Drive.`;
   }
+  if (tool === "video.create") {
+    const status = payload.status ? String(payload.status) : "ready";
+    if (status === "cancelled") return `Cancelled video "${title}".`;
+    if (status === "failed") return `Video "${title}" failed.`;
+    return `Video "${title}" ready — Create one five-second video. Estimated usage: 29 Work Hours.`;
+  }
   return `Generated ${title} — saved to Drive.`;
 }
 
@@ -77,6 +83,11 @@ export async function drainQueuedToolResult(
   result: ToolCallResult,
 ): Promise<ToolCallResult> {
   if (result.status !== "queued" || !result.jobId) return result;
+
+  // Video jobs poll for minutes — leave queued for the chat chip / jobs GET poller.
+  if (result.tool === "video.create" || result.tool.startsWith("video.")) {
+    return result;
+  }
 
   let job = await processIntegrationJob(client, workspaceId, result.jobId);
   if (!job) {

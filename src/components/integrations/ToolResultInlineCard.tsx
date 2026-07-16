@@ -17,10 +17,11 @@ import {
 } from "@/lib/chat/file-preview-kind";
 import { useStore } from "@/lib/demo-store";
 import { cn } from "@/lib/utils";
-import { AlertCircle, CheckCircle2, Clock, Loader2, RefreshCw, ShieldAlert } from "lucide-react";
+import { AlertCircle, CheckCircle2, Clock, Loader2, RefreshCw, ShieldAlert, X } from "lucide-react";
 import { Button } from "@/components/ui";
 import { ChatFileMiniViewer } from "@/components/chat/ChatFileMiniViewer";
 import { notifyDriveUpdated } from "@/lib/drive/client";
+import { VIDEO_ESTIMATE_CARD_SUMMARY } from "@/lib/brain/video/types";
 
 type ToolResultContext = {
   workspaceId?: string;
@@ -44,7 +45,9 @@ type IntegrationJobResponse = {
 };
 
 function isDriveFileTool(toolName?: string): boolean {
-  if (!toolName?.startsWith("artifact.")) return false;
+  if (!toolName) return false;
+  if (toolName.startsWith("image.") || toolName === "video.create") return true;
+  if (!toolName.startsWith("artifact.")) return false;
   return (
     toolName.includes("Spreadsheet") ||
     toolName.includes("Pdf") ||
@@ -68,6 +71,7 @@ export function ToolResultInlineCard({
   const [display, setDisplay] = useState<MessageArtifact>(artifact);
   const [checking, setChecking] = useState(artifact.meta?.toolStatus === "queued");
   const [retrying, setRetrying] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
   const [retryMessage, setRetryMessage] = useState<string | null>(null);
   const persistedRef = useRef(false);
   const prevStatusRef = useRef(artifact.meta?.toolStatus);
@@ -96,7 +100,13 @@ export function ToolResultInlineCard({
 
   const persistResolvedArtifact = (resolved: MessageArtifact, resolvedJobId: string) => {
     if (persistedRef.current || !context?.roomId || !context?.messageId) return;
-    if (resolved.meta?.toolStatus !== "success" && resolved.meta?.toolStatus !== "failed") return;
+    if (
+      resolved.meta?.toolStatus !== "success" &&
+      resolved.meta?.toolStatus !== "failed" &&
+      resolved.meta?.toolStatus !== "cancelled"
+    ) {
+      return;
+    }
 
     const room = stateRef.current.rooms.find((r) => r.id === context.roomId);
     const message = room?.messages.find((m) => m.id === context.messageId);
@@ -149,7 +159,7 @@ export function ToolResultInlineCard({
     let attempts = 0;
 
     const applyTerminal = (
-      terminal: "success" | "failed",
+      terminal: "success" | "failed" | "cancelled",
       bodyJob: NonNullable<IntegrationJobResponse["job"]>,
     ) => {
       const snapshot = artifactRef.current;
@@ -172,6 +182,23 @@ export function ToolResultInlineCard({
         persistResolvedArtifact(resolved, jobId);
         return;
       }
+      if (terminal === "cancelled") {
+        const resolved: MessageArtifact = {
+          ...snapshot,
+          label: `Cancelled: ${toolName?.split(".").pop() ?? "action"}`,
+          meta: {
+            ...snapshot.meta,
+            toolStatus: "cancelled",
+            error: bodyJob.errorMessage ?? "Cancelled.",
+            subtitle: bodyJob.errorMessage ?? "Cancelled before the video finished.",
+          },
+        };
+        locallyResolvedJobRef.current = jobId;
+        setDisplay(resolved);
+        setChecking(false);
+        persistResolvedArtifact(resolved, jobId);
+        return;
+      }
       const resolved: MessageArtifact = {
         ...snapshot,
         label: `Failed: ${toolName?.split(".").pop() ?? "action"}`,
@@ -188,8 +215,12 @@ export function ToolResultInlineCard({
       persistResolvedArtifact(resolved, jobId);
     };
 
+    // Video SF jobs can take several minutes — keep polling longer than sheets/images.
+    const maxAttempts = toolName === "video.create" ? 300 : 45;
+    const pollMs = toolName === "video.create" ? 3000 : 2000;
+
     const poll = async () => {
-      if (cancelled || attempts > 45) {
+      if (cancelled || attempts > maxAttempts) {
         if (!cancelled) setChecking(false);
         return;
       }
@@ -203,7 +234,7 @@ export function ToolResultInlineCard({
         if (!res.ok) {
           if (!cancelled) {
             if (attempts >= 3) setChecking(false);
-            window.setTimeout(() => void poll(), attempts === 1 ? 0 : 2000);
+            window.setTimeout(() => void poll(), attempts === 1 ? 0 : pollMs);
           }
           return;
         }
@@ -223,13 +254,17 @@ export function ToolResultInlineCard({
           applyTerminal("failed", body.job);
           return;
         }
+        if (body.job.status === "cancelled") {
+          applyTerminal("cancelled", body.job);
+          return;
+        }
       } catch {
         // keep polling
       }
 
       if (!cancelled) {
         if (attempts === 1) setChecking(false);
-        window.setTimeout(() => void poll(), 2000);
+        window.setTimeout(() => void poll(), pollMs);
       }
     };
 
@@ -381,6 +416,53 @@ export function ToolResultInlineCard({
   };
 
   const showQueued = status === "queued" && !checking;
+  const canCancelVideo =
+    Boolean(jobId) &&
+    display.meta?.toolName === "video.create" &&
+    (status === "queued" || checking) &&
+    status !== "cancelled";
+
+  const cancelVideoJob = async () => {
+    if (!jobId || cancelling) return;
+    setCancelling(true);
+    setRetryMessage(null);
+    try {
+      const headers = await authHeaders();
+      const res = await fetch(`/api/integrations/jobs/${encodeURIComponent(jobId)}/cancel`, {
+        method: "POST",
+        headers,
+        credentials: "include",
+      });
+      const body = (await res.json()) as {
+        error?: string;
+        job?: { status?: string; errorMessage?: string; result?: Record<string, unknown> };
+      };
+      if (!res.ok) throw new Error(body.error ?? "Unable to cancel video.");
+      if (body.job?.status === "cancelled" || body.job?.status === "failed") {
+        const resolved: MessageArtifact = {
+          ...display,
+          label: "Cancelled: video",
+          meta: {
+            ...display.meta,
+            toolStatus: "cancelled",
+            error: body.job.errorMessage ?? "Cancelled.",
+            subtitle: body.job.errorMessage ?? "Cancelled before the video finished.",
+          },
+        };
+        locallyResolvedJobRef.current = jobId;
+        setDisplay(resolved);
+        setChecking(false);
+        persistResolvedArtifact(resolved, jobId);
+      } else {
+        setRetryMessage("Cancel requested — stopping when the next status check completes.");
+      }
+    } catch (error) {
+      setRetryMessage(error instanceof Error ? error.message : "Unable to cancel video.");
+    } finally {
+      setCancelling(false);
+    }
+  };
+
   const fileExtension =
     display.meta?.fileExtension ?? extensionFromToolName(display.meta?.toolName);
   const previewKind = chatFilePreviewKind({
@@ -444,7 +526,9 @@ export function ToolResultInlineCard({
             ? ShieldAlert
             : status === "blocked"
               ? ShieldAlert
-              : AlertCircle;
+              : status === "cancelled"
+                ? X
+                : AlertCircle;
   const tone =
     checking
       ? "border-border bg-surface text-ink-2"
@@ -456,7 +540,14 @@ export function ToolResultInlineCard({
             ? "border-amber-200 bg-amber-50 text-amber-950"
             : status === "blocked"
               ? "border-amber-200 bg-amber-50 text-amber-900"
-              : "border-rose-200 bg-rose-50 text-rose-900";
+              : status === "cancelled"
+                ? "border-border bg-surface text-ink-2"
+                : "border-rose-200 bg-rose-50 text-rose-900";
+
+  const queuedHint =
+    display.meta?.toolName === "video.create"
+      ? `Processing… ${VIDEO_ESTIMATE_CARD_SUMMARY}`
+      : "Generating file — will update when ready.";
 
   const body = (
     <>
@@ -468,7 +559,11 @@ export function ToolResultInlineCard({
       />
       <div className="min-w-0 flex-1">
         <div className="font-medium">
-          {checking ? "Checking file status…" : display.label}
+          {checking
+            ? display.meta?.toolName === "video.create"
+              ? "Checking video status…"
+              : "Checking file status…"
+            : display.label}
         </div>
         {display.meta?.subtitle && !checking && (
           <p className="mt-1 text-xs opacity-90">{display.meta.subtitle}</p>
@@ -476,27 +571,42 @@ export function ToolResultInlineCard({
         {showQueued && !display.meta?.subtitle && (
           <p className="mt-1 flex items-center gap-1 text-xs opacity-80">
             <Clock className="h-3 w-3" />
-            Generating file — will update when ready.
+            {queuedHint}
           </p>
         )}
         {retryMessage && status !== "success" && (
           <p className="mt-1 text-xs opacity-90">{retryMessage}</p>
         )}
-        {canRetry && (
-          <Button
-            type="button"
-            variant="secondary"
-            size="sm"
-            className="mt-2 h-7 gap-1 text-xs"
-            disabled={retrying}
-            onClick={() => void retry()}
-          >
-            <RefreshCw className={cn("h-3 w-3", retrying && "animate-spin")} />
-            Retry
-          </Button>
-        )}
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          {canCancelVideo && (
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              className="h-7 gap-1 text-xs"
+              disabled={cancelling}
+              onClick={() => void cancelVideoJob()}
+            >
+              <X className={cn("h-3 w-3", cancelling && "animate-pulse")} />
+              Cancel video
+            </Button>
+          )}
+          {canRetry && (
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              className="h-7 gap-1 text-xs"
+              disabled={retrying}
+              onClick={() => void retry()}
+            >
+              <RefreshCw className={cn("h-3 w-3", retrying && "animate-spin")} />
+              Retry
+            </Button>
+          )}
+        </div>
       </div>
-      {href && !canRetry && !checking && (
+      {href && !canRetry && !checking && status !== "queued" && status !== "cancelled" && (
         <span className="shrink-0 text-xs font-medium opacity-80">Open →</span>
       )}
     </>

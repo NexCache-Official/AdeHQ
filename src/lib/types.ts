@@ -278,7 +278,7 @@ export type MessageArtifact = {
     suggestionKey?: string;
     mayaArtifactKind?: string;
     toolName?: string;
-    toolStatus?: "queued" | "failed" | "blocked" | "success" | "approval_pending";
+    toolStatus?: "queued" | "failed" | "blocked" | "success" | "approval_pending" | "cancelled";
     error?: string;
     toolRunId?: string;
     jobId?: string;
@@ -522,7 +522,8 @@ export type SavedArtifactType =
   | "decision"
   | "note"
   | "other"
-  | "image";
+  | "image"
+  | "video";
 
 export type SavedArtifactStatus = "draft" | "saved" | "archived";
 

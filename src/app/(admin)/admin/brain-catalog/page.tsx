@@ -55,7 +55,7 @@ export default function AdminBrainCatalogPage() {
     <div className="space-y-8">
       <AdminPageHeader
         title="Brain catalog"
-        subtitle={`CATALOG_VERSION=${CATALOG_VERSION}. Exact routes, prices, and lifecycle states. Vision + image create/edit are live; video/voice generation remain shadow.`}
+        subtitle={`CATALOG_VERSION=${CATALOG_VERSION}. Exact routes, prices, and lifecycle states. Vision + image + video are live; voice/TTS remains shadow.`}
       />
 
       <div className="grid gap-3 sm:grid-cols-5">

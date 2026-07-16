@@ -217,7 +217,7 @@ const APPROVED: Array<{
   {
     id: "route_video_wan22_t2v",
     model: "Wan-AI/Wan2.2-T2V-A14B",
-    environment: "shadow",
+    environment: "production",
     unitType: "video",
     provider: "siliconflow",
     rates: { perVideo: 0.29 },
@@ -225,7 +225,7 @@ const APPROVED: Array<{
   {
     id: "route_video_wan22_i2v",
     model: "Wan-AI/Wan2.2-I2V-A14B",
-    environment: "shadow",
+    environment: "production",
     unitType: "video",
     provider: "siliconflow",
     rates: { perVideo: 0.29 },
@@ -326,7 +326,7 @@ const APPROVED: Array<{
 ];
 
 function main() {
-  assert(CATALOG_VERSION === "5", "CATALOG_VERSION must be 5 after PR-16 image");
+  assert(CATALOG_VERSION === "6", "CATALOG_VERSION must be 6 after PR-17 video");
 
   const ids = BRAIN_ROUTES.map((r) => r.id);
   assert(new Set(ids).size === ids.length, "route ids must be unique");
@@ -427,7 +427,7 @@ function main() {
   const newId = nextSnapshotId("route_text_v4flash_sf", "2026-08-01T00:00:00.000Z");
   assert(newId !== old.id, "rate change must allocate a new snapshot id");
 
-  // PR-15 vision + PR-16 image are production; video/TTS remain shadow
+  // PR-15 vision + PR-16 image + PR-17 video are production; TTS remains shadow
   for (const id of ["route_vision_qwen3_vl_8b_sf", "route_vision_qwen3_vl_32b_sf"]) {
     const r = getBrainRoute(id);
     assert(r?.environment === "production", `${id} must be production`);
@@ -443,7 +443,12 @@ function main() {
     assert(r?.environment === "production", `${id} must be production`);
     assert(r?.unitType === "image", `${id} bills per image`);
   }
-  for (const id of ["route_video_wan22_t2v", "route_tts_cosyvoice2"]) {
+  for (const id of ["route_video_wan22_t2v", "route_video_wan22_i2v"]) {
+    const r = getBrainRoute(id);
+    assert(r?.environment === "production", `${id} must be production`);
+    assert(r?.unitType === "video", `${id} bills per video`);
+  }
+  for (const id of ["route_tts_cosyvoice2"]) {
     const r = getBrainRoute(id);
     assert(r && r.environment !== "production", `${id} must not be production yet`);
   }

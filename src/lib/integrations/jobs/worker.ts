@@ -17,9 +17,10 @@ import { getJobHandler } from "./registry";
 import { reconcileChatArtifactsForJob } from "./reconcile-message-for-job";
 import { nowISO } from "@/lib/utils";
 
-// Register Phase 2 artifact job handlers + PR-16 image jobs.
+// Register Phase 2 artifact job handlers + PR-16 image + PR-17 video jobs.
 import "./artifact-handlers";
 import "./image-handlers";
+import "./video-handlers";
 
 type DbRow = Record<string, unknown>;
 
@@ -95,11 +96,12 @@ export async function processIntegrationJob(
   try {
     const outcome = await handler(client, job);
     const costUsd = outcome.costUsd ?? 0;
+    const cancelledResult = outcome.result?.status === "cancelled";
 
     await client
       .from("integration_jobs")
       .update({
-        status: "success",
+        status: cancelledResult ? "cancelled" : "success",
         attempts,
         result: outcome.result,
         completed_at: nowISO(),
@@ -111,22 +113,23 @@ export async function processIntegrationJob(
       await finalizeToolRun(client, {
         toolRunId: job.toolRunId,
         workspaceId,
-        status: "success",
+        status: cancelledResult ? "failed" : "success",
         outputPayload: outcome.result,
-        costUsd,
-        workMinutes: workMinutesForCost(costUsd),
+        costUsd: cancelledResult ? 0 : costUsd,
+        workMinutes: cancelledResult ? 0 : workMinutesForCost(costUsd),
+        errorMessage: cancelledResult ? "Cancelled by user." : undefined,
       }).catch((err) => console.warn("[AdeHQ integrations] job tool-run finalize failed", err));
     }
 
     // Bill artifact / integration job cost to the commercial Work Hours ledger
     // under the employee who ran it (idempotent per job id).
-    if (costUsd > 0) {
+    if (costUsd > 0 && !cancelledResult) {
       await recordIntegrationJobCost(client, job, costUsd);
     }
 
     return finalizeJobOutcome(client, {
       ...job,
-      status: "success",
+      status: cancelledResult ? "cancelled" : "success",
       attempts,
       result: outcome.result,
     });
@@ -137,21 +140,22 @@ export async function processIntegrationJob(
         : typeof error === "object" && error && "message" in error
           ? String((error as { message: unknown }).message)
           : "Job failed.";
-    const exhausted = attempts >= job.maxAttempts;
+    const cancelled = /^CANCELLED\b/i.test(message) || /\bcancelled\b/i.test(message);
+    const exhausted = cancelled || attempts >= job.maxAttempts;
 
     await client
       .from("integration_jobs")
       .update({
-        status: exhausted ? "failed" : "queued",
+        status: cancelled ? "cancelled" : exhausted ? "failed" : "queued",
         attempts,
         error_message: message,
-        completed_at: exhausted ? nowISO() : null,
+        completed_at: exhausted || cancelled ? nowISO() : null,
         started_at: null,
       })
       .eq("workspace_id", workspaceId)
       .eq("id", job.id);
 
-    if (exhausted && job.toolRunId) {
+    if ((exhausted || cancelled) && job.toolRunId) {
       await finalizeToolRun(client, {
         toolRunId: job.toolRunId,
         workspaceId,
@@ -162,7 +166,7 @@ export async function processIntegrationJob(
 
     return finalizeJobOutcome(client, {
       ...job,
-      status: exhausted ? "failed" : "queued",
+      status: cancelled ? "cancelled" : exhausted ? "failed" : "queued",
       attempts,
       errorMessage: message,
     });

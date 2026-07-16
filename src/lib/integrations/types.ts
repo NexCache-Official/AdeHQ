@@ -177,7 +177,7 @@ export type IntegrationJobRecord = {
   employeeId?: string;
   jobType: string;
   toolRunId?: string;
-  status: "queued" | "running" | "success" | "failed";
+  status: "queued" | "running" | "success" | "failed" | "cancelled";
   payload: Record<string, unknown>;
   result?: Record<string, unknown>;
   attempts: number;

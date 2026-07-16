@@ -5,7 +5,8 @@ function resolveBoolFlag(
     | "adehq_brain_v1"
     | "adehq_brain_search_v1"
     | "adehq_brain_vision_v1"
-    | "adehq_brain_image_v1",
+    | "adehq_brain_image_v1"
+    | "adehq_brain_video_v1",
   envKey: string,
   defaultOn: boolean,
 ): boolean {
@@ -65,4 +66,13 @@ export function isBrainVisionV1Enabled(): boolean {
  */
 export function isBrainImageV1Enabled(): boolean {
   return resolveBoolFlag("adehq_brain_image_v1", "ADEHQ_BRAIN_IMAGE_V1", true);
+}
+
+/**
+ * PR-17 video kill switch.
+ * When off: video tools refuse generation; catalog routes stay for Control.
+ * ADEHQ_BRAIN_VIDEO_V1=0 disables live video artifact workflows.
+ */
+export function isBrainVideoV1Enabled(): boolean {
+  return resolveBoolFlag("adehq_brain_video_v1", "ADEHQ_BRAIN_VIDEO_V1", true);
 }

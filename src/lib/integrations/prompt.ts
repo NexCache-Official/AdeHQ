@@ -76,6 +76,7 @@ export function buildIntegrationToolsPrompt(employee: IntegrationEmployee): stri
     "image.create",
     "image.edit",
     "image.regenerate",
+    "video.create",
   ].filter((tool) => availableNames.has(tool));
   const salesBundleExample = hasSalesBundleExample
     ? `
@@ -108,6 +109,7 @@ Research lead-list example for "Give me 5 Zone 2 flat leads under £900k as a ta
     availableNames.has("image.create") ||
     availableNames.has("image.edit") ||
     availableNames.has("image.regenerate");
+  const videoToolsAvailable = availableNames.has("video.create");
   const imageRule = imageToolsAvailable
     ? `
 
@@ -119,10 +121,21 @@ Image artifacts (Drive-backed — never chat-only pixels):
 - Every generation becomes a Drive artifact with prompt provenance + version history; use image.regenerate / image.edit for revisions.
 - Another employee can reuse the Drive export / artifact — link taskId when the work belongs to a task.`
     : "";
+  const videoRule = videoToolsAvailable
+    ? `
+
+Video artifacts (Drive-backed MP4 — never invent a finished video):
+- Exact estimate card copy: "Create one five-second video. Estimated usage: 29 Work Hours."
+- Always approval-gated before execution. Async: processing → ready / failed / cancelled.
+- Check WORK HOURS BUDGET first. If remaining WH < 29, do NOT call video.create — explain the job would interrupt/fail, suggest adding Work Hours or waiting for reset, and offer a cheaper image when that still helps.
+- Prefer clarifying questions (motion, subject, camera, aspect). For image→video, link the source image artifact/file.
+- Never name models or providers. Discuss cost only in Work Hours.`
+    : "";
+  const mediaRule = `${imageRule}${videoRule}`;
   const asyncArtifactRule = artifactAsyncTools.length
     ? `\n- ${artifactAsyncTools.join(", ")} run in the background — tell the user the file is generating and will appear in Drive when ready.
-- artifact.createSpreadsheet / createPdfReport / createDocx / createPresentation and image.create / image.edit / image.regenerate already save binaries to Drive. Never also call artifact.saveToDrive in the same turn — that creates a duplicate "Generating Drive export…" chip.${imageRule}`
-    : imageRule;
+- artifact.createSpreadsheet / createPdfReport / createDocx / createPresentation, image.create / image.edit / image.regenerate, and video.create already save binaries to Drive. Never also call artifact.saveToDrive in the same turn — that creates a duplicate "Generating Drive export…" chip.${mediaRule}`
+    : mediaRule;
 
   const teamworkRule = availableNames.has("team.coordinate")
     ? `

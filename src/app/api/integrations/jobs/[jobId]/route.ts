@@ -33,7 +33,10 @@ export async function GET(
     if (job?.status === "queued") {
       const processed = await processIntegrationJob(client, workspaceId, job.id);
       if (processed) job = processed;
-    } else if (job && (job.status === "success" || job.status === "failed")) {
+    } else if (
+      job &&
+      (job.status === "success" || job.status === "failed" || job.status === "cancelled")
+    ) {
       // Heal stuck "Generating…" chips when the job already finished.
       await reconcileChatArtifactsForJob(client, job).catch(() => undefined);
     }

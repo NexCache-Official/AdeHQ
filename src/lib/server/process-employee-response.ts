@@ -19,6 +19,8 @@ import {
   retrieveFileContext,
 } from "@/lib/server/file-context";
 import { executeVisionUnderstanding, shouldRunVision } from "@/lib/brain/vision";
+import { buildWorkHoursBudgetPrompt } from "@/lib/brain/video";
+import { isBrainVideoV1Enabled, isBrainImageV1Enabled } from "@/lib/brain/flags";
 import { inferArtifactsFromReply } from "@/lib/artifacts/intelligence";
 import { resolveRunModelMode } from "@/lib/ai/resolve-run-model-mode";
 import { ensureDefaultEmployeeToolGrants } from "@/lib/integrations/permissions";
@@ -151,6 +153,20 @@ export async function processEmployeeResponse(
     } catch (error) {
       console.warn(
         "[AdeHQ vision] skipped (direct)",
+        error instanceof Error ? error.message : error,
+      );
+    }
+  }
+
+  if (isBrainVideoV1Enabled() || isBrainImageV1Enabled()) {
+    try {
+      const budgetPrompt = await buildWorkHoursBudgetPrompt(client, ctx.workspaceId);
+      if (budgetPrompt) {
+        fileContextPrompt = [fileContextPrompt, budgetPrompt].filter(Boolean).join("\n\n");
+      }
+    } catch (error) {
+      console.warn(
+        "[AdeHQ video] WH budget context skipped (direct)",
         error instanceof Error ? error.message : error,
       );
     }

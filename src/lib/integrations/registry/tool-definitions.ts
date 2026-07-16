@@ -315,6 +315,19 @@ export const RegenerateImageArgsSchema = z.object({
 });
 export type RegenerateImageArgs = z.infer<typeof RegenerateImageArgsSchema>;
 
+export const CreateVideoArgsSchema = z.object({
+  intent: z.enum(["text_to_video", "image_to_video"]),
+  prompt: z.string().min(3),
+  title: z.string().optional(),
+  negativePrompt: z.string().optional(),
+  imageSize: z.enum(["1280x720", "720x1280", "960x960"]).optional(),
+  sourceFileId: z.string().optional(),
+  sourceArtifactId: z.string().optional(),
+  sourceExportId: z.string().optional(),
+  taskId: z.string().optional(),
+});
+export type CreateVideoArgs = z.infer<typeof CreateVideoArgsSchema>;
+
 // ---------------------------------------------------------------------------
 // Preview helpers
 // ---------------------------------------------------------------------------
@@ -1152,6 +1165,41 @@ const regenerateImage: ToolDefinition<RegenerateImageArgs> = {
   }),
 };
 
+const createVideo: ToolDefinition<CreateVideoArgs> = {
+  name: "video.create",
+  domain: "artifact",
+  provider: "internal",
+  description:
+    "Create one five-second video artifact in Drive (from text or from an image). Always approval-gated. Costs 29 Work Hours. Never name models.",
+  readOnly: false,
+  risk: "high",
+  approval: "required",
+  asyncJobType: "video_create",
+  argsSchema: CreateVideoArgsSchema,
+  promptUsage:
+    'video.create — args: { "intent": "text_to_video"|"image_to_video", "prompt": "...", "title"?, "sourceFileId"|"sourceArtifactId"|"sourceExportId" for image_to_video }. ' +
+    "ALWAYS approval-gated. Estimate card must read exactly: Create one five-second video. Estimated usage: 29 Work Hours. " +
+    "Before proposing: check WORK HOURS BUDGET — if remaining WH < 29, do not call this tool; explain the job cannot finish and suggest more Work Hours, wait for reset, or a cheaper image. " +
+    "Ask clarifying questions (motion, subject, camera, aspect). For image_to_video link the source image artifact/file. Async — status processing → ready/failed; cancellable while processing.",
+  buildPreview: (args) => {
+    const label =
+      args.intent === "image_to_video" ? "Create video from image" : "Create video from text";
+    return {
+      title: `${label} — ${args.title ?? "five-second video"}`,
+      summary: "Create one five-second video. Estimated usage: 29 Work Hours.",
+      fields: fields([
+        ["Action", label],
+        ["What happens", "Create one five-second video"],
+        ["Estimated usage", "29 Work Hours"],
+        ["Status after approve", "processing → ready (or failed/cancelled)"],
+        ["Source image", args.sourceArtifactId ?? args.sourceFileId ?? args.sourceExportId],
+        ["Prompt", args.prompt.slice(0, 220)],
+      ]),
+      risk: "high",
+    };
+  },
+};
+
 // ---------------------------------------------------------------------------
 // Registry access
 // ---------------------------------------------------------------------------
@@ -1191,6 +1239,7 @@ const TOOL_DEFINITIONS = [
   createImage,
   editImage,
   regenerateImage,
+  createVideo,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
 ] as ToolDefinition<any>[];
 

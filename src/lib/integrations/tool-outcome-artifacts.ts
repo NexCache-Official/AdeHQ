@@ -28,6 +28,7 @@ const TOOL_LABELS: Record<string, string> = {
   "image.create": "image",
   "image.edit": "image edit",
   "image.regenerate": "image",
+  "video.create": "video",
   "social.createCampaign": "campaign",
   "calendar.createCampaign": "campaign",
   "social.draftPost": "social post",
@@ -56,6 +57,7 @@ export function toolReceiptArtifact(result: ToolCallResult): MessageArtifact | n
     if (hasArtifactType(result, ["approval"])) return null;
     const title = result.preview?.title ?? `Prepare ${label}`;
     const emailSend = result.tool === "email.sendDraft";
+    const videoCreate = result.tool === "video.create";
     return {
       type: "tool_result",
       id: result.approvalId ?? result.toolRunId ?? `${result.tool}-approval`,
@@ -65,7 +67,9 @@ export function toolReceiptArtifact(result: ToolCallResult): MessageArtifact | n
         toolStatus: "approval_pending",
         subtitle: emailSend
           ? "Approve to send from the workspace inbox."
-          : "Review and approve before this is saved to CRM.",
+          : videoCreate
+            ? "Create one five-second video. Estimated usage: 29 Work Hours."
+            : "Review and approve before this runs.",
       },
     };
   }
@@ -286,7 +290,8 @@ export function toolReceiptArtifact(result: ToolCallResult): MessageArtifact | n
         result.tool === "artifact.updateSpreadsheet" ||
         result.tool === "image.create" ||
         result.tool === "image.edit" ||
-        result.tool === "image.regenerate") &&
+        result.tool === "image.regenerate" ||
+        result.tool === "video.create") &&
       objectId
     ) {
       const payload = (output?.payload ?? {}) as Record<string, unknown>;
@@ -294,6 +299,7 @@ export function toolReceiptArtifact(result: ToolCallResult): MessageArtifact | n
       const fileExtension =
         (payload.targetFormat ? String(payload.targetFormat) : undefined) ??
         (payload.exportFormat ? String(payload.exportFormat) : undefined) ??
+        (result.tool === "video.create" ? "mp4" : undefined) ??
         (result.tool.startsWith("image.") ? "png" : undefined) ??
         extensionFromToolName(result.tool);
       const titleFromPayload = payload.title ? cleanChatFileTitle(String(payload.title)) : undefined;
@@ -315,6 +321,12 @@ export function toolReceiptArtifact(result: ToolCallResult): MessageArtifact | n
           exportId,
           fileExtension,
           fileName: titleFromPayload,
+          mimeType:
+            result.tool === "video.create"
+              ? "video/mp4"
+              : result.tool.startsWith("image.")
+                ? "image/png"
+                : undefined,
         },
       };
     }
@@ -338,18 +350,26 @@ export function toolOutcomeArtifact(
     const createsDriveFile =
       result.tool.startsWith("artifact.create") ||
       result.tool === "artifact.convertFile" ||
-      result.tool === "artifact.updateSpreadsheet";
+      result.tool === "artifact.updateSpreadsheet" ||
+      result.tool.startsWith("image.") ||
+      result.tool === "video.create";
+    const subtitle =
+      result.tool === "video.create"
+        ? "Create one five-second video. Estimated usage: 29 Work Hours. Status: processing…"
+        : createsDriveFile
+          ? "Creating the file, then saving it to Drive…"
+          : "This usually takes a few seconds.";
     return {
       type: "tool_result",
       id: result.jobId ?? result.toolRunId ?? result.tool,
-      label: `Generating ${label}…`,
+      label: result.tool === "video.create" ? "Generating video…" : `Generating ${label}…`,
       meta: {
         toolName: result.tool,
         toolStatus: "queued",
         jobId: result.jobId,
-        subtitle: createsDriveFile
-          ? "Creating the file, then saving it to Drive…"
-          : "This usually takes a few seconds.",
+        fileExtension: result.tool === "video.create" ? "mp4" : result.tool.startsWith("image.") ? "png" : undefined,
+        mimeType: result.tool === "video.create" ? "video/mp4" : result.tool.startsWith("image.") ? "image/png" : undefined,
+        subtitle,
         href: result.jobId ? `/work-log` : undefined,
       },
     };

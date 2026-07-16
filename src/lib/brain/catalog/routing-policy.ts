@@ -181,6 +181,21 @@ export const ROUTING_POLICY: RoutingPolicyEntry[] = [
     primaryRouteId: "route_image_qwen_image_edit",
     backupRouteIds: [],
   },
+  // PR-17: intent selects T2V vs I2V in brain/video; both bill ~29 WH.
+  {
+    capability: "video_generation",
+    intensity: "standard",
+    environment: "production",
+    primaryRouteId: "route_video_wan22_t2v",
+    backupRouteIds: ["route_video_wan22_i2v"],
+  },
+  {
+    capability: "video_generation",
+    intensity: "deep",
+    environment: "production",
+    primaryRouteId: "route_video_wan22_i2v",
+    backupRouteIds: ["route_video_wan22_t2v"],
+  },
 ];
 
 export function resolveRoutingPolicy(

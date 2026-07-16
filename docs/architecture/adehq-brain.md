@@ -1,8 +1,8 @@
 # AdeHQ Brain — V1 Engineering Plan
 
 > Living doc. Supersedes [intelligence-v2-plan.md](intelligence-v2-plan.md) for routing/metering/costing concerns.
-> Status: **V1 landed (PR-1…PR-12). PR-14 search + PR-15 vision + PR-16 image create/edit landed (CATALOG_VERSION=5).**  
-> Next: PR-13 Step-3.5 promote only after agreement harness proves parity → video media slices.  
+> Status: **V1 landed (PR-1…PR-12). PR-14 search + PR-15 vision + PR-16 image + PR-17 video landed (CATALOG_VERSION=6).**  
+> Next: PR-13 Step-3.5 promote only after agreement harness proves parity → voice/TTS media slice.  
 > Last grounded against the codebase 2026-07-16.
 
 ## Product lock
@@ -368,7 +368,7 @@ type CostPolicy = {
 
 ## Part 10 — Media V1 scope + Steward facade (PR-8, PR-9)
 
-- **Media:** catalog + snapshots exist (`environment: "evaluation"`); AdeHQ Control gets a read-only catalog browser with estimate math. **No customer-facing Create image/video buttons** — not even disabled ones with "Coming soon" tooltips. Feature-flagged test workspaces may see real controls only when execution works end-to-end. Live generation is Phase 4.
+- **Media:** catalog + snapshots; AdeHQ Control gets a read-only catalog browser with estimate math. **No customer-facing chrome CTAs** for media — generation is via employee tools (`image.*`, `video.create`), never stub "Coming soon" buttons. Kill switches: `ADEHQ_BRAIN_IMAGE_V1`, `ADEHQ_BRAIN_VIDEO_V1`.
 - **Steward Core facade (PR-9):** `src/lib/brain/steward-core.ts` exposes `decide(input): StewardDecision` and internally dispatches to `room-steward.ts` / `dm-steward.ts` / `topic-steward.ts` unchanged. Zero behavior change — the facade exists so Phase 3 (leases, blackboard) has one seam. Snapshot tests assert identical decisions before/after.
 
 ---
@@ -432,7 +432,7 @@ Cursor plan index: `.cursor/plans/adehq_brain_roadmap_7879533e.plan.md` (points 
 
 - **Phase 2:** intensity → enforced thinking/tool/search budgets; Step-3.5-Flash micro-routing shadow→prod; Flash→Pro and Coder→Kimi escalations as new attempts; search WH via snapshots (Perplexity/Exa/Tavily).
 - **Phase 3:** multi-agent Steward — lead selection, work leases, shared findings blackboard, single final response; DM one voice; room mention-wins.
-- **Phase 4:** **Vision live (PR-15)** + **Image create/edit live (PR-16)** — Drive artifacts with prompt provenance, versions, regenerate/edit, WH receipts, tools `image.create` / `image.edit` / `image.regenerate`, kill switches `ADEHQ_BRAIN_VISION_V1` / `ADEHQ_BRAIN_IMAGE_V1`. Remaining: video generation + voice.
+- **Phase 4:** **Vision live (PR-15)** + **Image create/edit live (PR-16)** + **Video live (PR-17)** — Drive artifacts with prompt provenance, versions, regenerate/edit, WH receipts. Image tools `image.create` / `image.edit` / `image.regenerate`. Video tool `video.create` (Wan2.2 T2V/I2V, async, approval-gated, ~29 WH, cancellable locally, MP4 player in chat). Kill switches `ADEHQ_BRAIN_VISION_V1` / `ADEHQ_BRAIN_IMAGE_V1` / `ADEHQ_BRAIN_VIDEO_V1`. Remaining: voice/TTS.
 - **Phase 5:** TTS live; STT chosen + priced before any voice marketing.
 - **Phase 6:** canary/shadow optimizer, quality scoring, provider health, enterprise route allowlists.
 

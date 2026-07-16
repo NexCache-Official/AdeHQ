@@ -15,6 +15,7 @@ Runnable tooling for AdeHQ. Prefer **npm scripts** from the repo root (`package.
 | Brain Exa search | `npm run test:brain:search` (Exa-first chain, routing, citations) |
 | Brain vision | `npm run test:brain:vision` (+ `:benchmark`; live with `ADEHQ_VISION_BENCHMARK_LIVE=1`) |
 | Brain image | `npm run test:brain:image` (create/edit routes, WH policy, tools) |
+| Brain video | `npm run test:brain:video` (T2V/I2V routes, 29 WH policy, approval tool, mp4 preview) |
 | Human burst / typing | `npm run test:human-burst` |
 | Inbox Resend proof | `npm run test:inbox-transport-proof` (needs `.env.local`) |
 | AI caller audit | `npm run audit:ai-callers` |

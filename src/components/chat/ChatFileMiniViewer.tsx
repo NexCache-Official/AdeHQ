@@ -7,6 +7,7 @@ import {
   ExternalLink,
   FileSpreadsheet,
   FileText,
+  Film,
   Loader2,
   Presentation,
 } from "lucide-react";
@@ -51,6 +52,7 @@ export type ChatFileMiniViewerProps = {
 function kindIcon(kind: ChatFilePreviewKind) {
   if (kind === "spreadsheet") return FileSpreadsheet;
   if (kind === "presentation") return Presentation;
+  if (kind === "video") return Film;
   return FileText;
 }
 
@@ -67,6 +69,8 @@ function kindLabel(kind: ChatFilePreviewKind, extension?: string): string {
       return ext ? `Presentation · ${ext}` : "Presentation";
     case "image":
       return "Image";
+    case "video":
+      return ext ? `Video · ${ext}` : "Video";
     default:
       return ext ?? "File";
   }
@@ -294,6 +298,20 @@ export function ChatFileMiniViewer({
     if (kind === "image" && signedUrl) {
       // eslint-disable-next-line @next/next/no-img-element
       return <img src={signedUrl} alt={displayTitle} className="max-h-56 w-full object-contain bg-white" />;
+    }
+
+    if (kind === "video" && signedUrl) {
+      return (
+        <video
+          src={signedUrl}
+          controls
+          playsInline
+          preload="metadata"
+          className="max-h-64 w-full bg-black object-contain"
+        >
+          <track kind="captions" />
+        </video>
+      );
     }
 
     if (kind === "presentation" && pptxSlides && pptxSlides.length > 0) {

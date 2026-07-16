@@ -329,17 +329,19 @@ export async function persistGeneratedImageArtifact(
   }
 
   for (const edge of edges) {
-    await client.from("work_graph_edges").insert({
-      workspace_id: params.workspaceId,
-      from_object_type: edge.fromObjectType,
-      from_object_id: edge.fromObjectId,
-      relation_type: edge.relationType,
-      to_object_type: edge.toObjectType,
-      to_object_id: edge.toObjectId,
-      metadata: { kind: "image", intent: params.generation.intent },
-    }).catch(() => {
+    try {
+      await client.from("work_graph_edges").insert({
+        workspace_id: params.workspaceId,
+        from_object_type: edge.fromObjectType,
+        from_object_id: edge.fromObjectId,
+        relation_type: edge.relationType,
+        to_object_type: edge.toObjectType,
+        to_object_id: edge.toObjectId,
+        metadata: { kind: "image", intent: params.generation.intent },
+      });
+    } catch {
       /* non-fatal */
-    });
+    }
   }
 
   return { artifactId, exportId, versionNumber, title };

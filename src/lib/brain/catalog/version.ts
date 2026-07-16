@@ -1,5 +1,5 @@
 /** Bump when capability/route/policy seed content changes shape. */
-export const CATALOG_VERSION = "5";
+export const CATALOG_VERSION = "6";
 
 export const PACKET_VERSION = "1";
 export const DECISION_VERSION = "1";

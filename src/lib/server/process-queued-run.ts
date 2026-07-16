@@ -47,6 +47,8 @@ import {
   retrieveFileContext,
 } from "@/lib/server/file-context";
 import { executeVisionUnderstanding, shouldRunVision } from "@/lib/brain/vision";
+import { buildWorkHoursBudgetPrompt } from "@/lib/brain/video";
+import { isBrainVideoV1Enabled, isBrainImageV1Enabled } from "@/lib/brain/flags";
 import { nowISO } from "@/lib/utils";
 import {
   planEmployeeReplyShadowRun,
@@ -560,6 +562,21 @@ export async function processQueuedAgentRun(
       } catch (error) {
         console.warn(
           "[AdeHQ vision] skipped",
+          error instanceof Error ? error.message : error,
+        );
+      }
+    }
+
+    // PR-17: remaining Work Hours so employees refuse unaffordable video (~29 WH).
+    if (!isGreetingRun && (isBrainVideoV1Enabled() || isBrainImageV1Enabled())) {
+      try {
+        const budgetPrompt = await buildWorkHoursBudgetPrompt(client, workspaceId);
+        if (budgetPrompt) {
+          fileContextPrompt = [fileContextPrompt, budgetPrompt].filter(Boolean).join("\n\n");
+        }
+      } catch (error) {
+        console.warn(
+          "[AdeHQ video] WH budget context skipped",
           error instanceof Error ? error.message : error,
         );
       }

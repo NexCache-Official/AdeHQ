@@ -21,6 +21,8 @@ function artifactKindFromTool(tool: string | undefined): string {
   if (tool.includes("Pdf") || tool.includes("pdf")) return "Report";
   if (tool.includes("Docx") || tool.includes("docx")) return "Document";
   if (tool.includes("Presentation") || tool.includes("presentation")) return "Presentation";
+  if (tool.startsWith("image.")) return "Image";
+  if (tool === "video.create" || tool.startsWith("video.")) return "Video";
   return "File";
 }
 
@@ -42,12 +44,13 @@ export function artifactFromCompletedJob(
   const fileExtension =
     prior.meta?.fileExtension ?? extensionFromToolName(prior.meta?.toolName);
 
+  const toolName = prior.meta?.toolName;
   return {
     type: "tool_result",
     id: artifactId ?? prior.id,
     label: `${kind} ready — ${title}`,
     meta: {
-      toolName: prior.meta?.toolName,
+      toolName,
       toolStatus: "success",
       href: exportId
         ? `/drive?export=${encodeURIComponent(exportId)}&section=exports`
@@ -58,6 +61,12 @@ export function artifactFromCompletedJob(
       exportId,
       fileExtension,
       fileName: title,
+      mimeType:
+        toolName === "video.create"
+          ? "video/mp4"
+          : toolName?.startsWith("image.")
+            ? "image/png"
+            : prior.meta?.mimeType,
     },
   };
 }
@@ -82,6 +91,19 @@ export function reconcileQueuedArtifact(
         toolStatus: "failed",
         error: job.errorMessage ?? "Background job failed.",
         subtitle: job.errorMessage ?? "Background job failed.",
+      },
+    };
+  }
+
+  if (job.status === "cancelled") {
+    return {
+      ...artifact,
+      label: `Cancelled: ${artifact.meta?.toolName?.split(".").pop() ?? "action"}`,
+      meta: {
+        ...artifact.meta,
+        toolStatus: "cancelled",
+        error: job.errorMessage ?? "Cancelled.",
+        subtitle: job.errorMessage ?? "Cancelled before the video finished.",
       },
     };
   }
