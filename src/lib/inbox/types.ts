@@ -100,7 +100,12 @@ export type MailboxAccessFlags = {
 
 export type InboxMailboxResponse =
   | { claimed: false; canClaim: boolean }
-  | { claimed: true; mailbox: MailboxDTO; access: MailboxAccessFlags };
+  | {
+      claimed: true;
+      /** Omitted when the caller is a member without inbox read / admin rights. */
+      mailbox?: MailboxDTO;
+      access: MailboxAccessFlags;
+    };
 
 export type AttachmentDTO = {
   id: string;

@@ -11,6 +11,8 @@ import {
 } from "@/lib/ai/browser-research/server";
 import { AuthError, requireAuthUser, requireWorkspaceMembership } from "@/lib/supabase/auth-server";
 import { createSupabaseSecretClient } from "@/lib/supabase/server";
+import { assertCanAccessRoom } from "@/lib/server/room-access";
+import { assertTopicInRoom } from "@/lib/server/topic-helpers";
 import { isPlatformFlagEnabled, preloadPlatformFlags } from "@/lib/admin/platform-flags";
 import { PlanEntitlementError } from "@/lib/billing/plans/entitlements";
 import type { RoomMessage } from "@/lib/types";
@@ -60,11 +62,24 @@ export async function POST(request: NextRequest) {
     }
 
     const { user, client } = await requireAuthUser(request);
-    await requireWorkspaceMembership(client, workspaceId, user.id);
+    const { role } = await requireWorkspaceMembership(client, workspaceId, user.id);
+
+    const roomId = body.roomId?.trim() || undefined;
+    const topicId = body.topicId?.trim() || undefined;
+    if (roomId) {
+      await assertCanAccessRoom(client, workspaceId, roomId, user.id, role);
+      if (topicId) {
+        await assertTopicInRoom(client, workspaceId, roomId, topicId);
+      }
+    } else if (topicId) {
+      return NextResponse.json(
+        { error: "roomId is required when topicId is provided." },
+        { status: 400 },
+      );
+    }
 
     let userQuestion = query;
-    if (triggerMessageId && body.topicId?.trim()) {
-      const topicId = body.topicId.trim();
+    if (triggerMessageId && topicId) {
       const { data: rows } = await client
         .from("messages")
         .select("id, room_id, topic_id, sender_type, sender_id, sender_name, content, created_at")
@@ -124,8 +139,8 @@ export async function POST(request: NextRequest) {
     // entitlement (throws PlanEntitlementError -> 402 below) so all callers stay gated.
     const { run, chatReply, async: isAsync } = await createAndRunBrowserResearch(serviceClient, {
       workspaceId,
-      roomId: body.roomId?.trim() || undefined,
-      topicId: body.topicId?.trim() || undefined,
+      roomId,
+      topicId,
       employeeId,
       createdBy: user.id,
       query,

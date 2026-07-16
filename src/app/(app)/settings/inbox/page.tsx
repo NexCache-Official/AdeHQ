@@ -105,12 +105,14 @@ export default function SettingsInboxPage() {
                 </p>
                 <div className="mt-3 flex flex-wrap items-center gap-2">
                   <code className="rounded-lg border border-border bg-canvas px-3 py-1.5 text-sm font-medium text-ink">
-                    {mailbox.mailbox.address}
+                    {mailbox.mailbox?.address}
                   </code>
                   <Button
                     size="sm"
                     variant="secondary"
-                    onClick={() => void copyAddress(mailbox.mailbox.address)}
+                    onClick={() => {
+                      if (mailbox.mailbox?.address) void copyAddress(mailbox.mailbox.address);
+                    }}
                   >
                     {copied ? (
                       <>
@@ -123,10 +125,10 @@ export default function SettingsInboxPage() {
                     )}
                   </Button>
                 </div>
-                {mailbox.mailbox.displayName ? (
+                {mailbox.mailbox?.displayName ? (
                   <p className="mt-2 text-sm text-ink-2">
                     Display name:{" "}
-                    <span className="font-medium text-ink">{mailbox.mailbox.displayName}</span>
+                    <span className="font-medium text-ink">{mailbox.mailbox?.displayName}</span>
                   </p>
                 ) : null}
               </div>

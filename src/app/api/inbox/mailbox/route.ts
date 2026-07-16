@@ -3,7 +3,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { requireAuthUser } from "@/lib/supabase/auth-server";
+import { requireAuthUser, requireWorkspaceMembership } from "@/lib/supabase/auth-server";
 import { createSupabaseSecretClient } from "@/lib/supabase/server";
 import { getPrimaryMailbox } from "@/lib/inbox/mailbox";
 import { getInboxAccess } from "@/lib/inbox/access";
@@ -14,11 +14,14 @@ export const runtime = "nodejs";
 
 export async function GET(request: NextRequest) {
   try {
-    const { user } = await requireAuthUser(request);
+    const { user, client } = await requireAuthUser(request);
     const workspaceId = request.nextUrl.searchParams.get("workspaceId");
     if (!workspaceId) {
       return NextResponse.json({ error: "workspaceId required" }, { status: 400 });
     }
+
+    // Membership first — never disclose another workspace's mailbox via service role.
+    await requireWorkspaceMembership(client, workspaceId, user.id);
 
     const secret = createSupabaseSecretClient();
     const mailbox = await getPrimaryMailbox(secret, workspaceId);
@@ -33,9 +36,10 @@ export async function GET(request: NextRequest) {
       return NextResponse.json(body);
     }
 
+    const maySeeMailbox = access.canRead || access.isAdmin;
     const body: InboxMailboxResponse = {
       claimed: true,
-      mailbox,
+      ...(maySeeMailbox ? { mailbox } : {}),
       access: {
         role: access.role,
         isAdmin: access.isAdmin,

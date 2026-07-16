@@ -178,7 +178,7 @@ export default function InboxPage() {
 
   const access: MailboxAccessFlags | null =
     mailbox && mailbox.claimed ? mailbox.access : null;
-  const mailboxId = mailbox && mailbox.claimed ? mailbox.mailbox.id : null;
+  const mailboxId = mailbox && mailbox.claimed ? mailbox.mailbox?.id : null;
 
   // Per-folder cache so Inbox ↔ Sent switches stay instant and never flash empty
   // from a slower in-flight response for a different folder.
@@ -532,7 +532,7 @@ export default function InboxPage() {
       const optimistic: MessageDTO = {
         id: optimisticId,
         direction: "outbound",
-        fromAddress: mailbox && mailbox.claimed ? mailbox.mailbox.address : null,
+        fromAddress: mailbox && mailbox.claimed ? mailbox.mailbox?.address ?? null : null,
         fromName: null,
         to: payload.to,
         cc: payload.cc,
@@ -725,7 +725,7 @@ export default function InboxPage() {
                 approvalId: draft.approvalId,
                 approvalExpiresAt: draft.approvalExpiresAt,
                 employeeId: draft.employeeId,
-                mailboxAddress: mailbox?.claimed ? mailbox.mailbox.address : undefined,
+                mailboxAddress: mailbox?.claimed ? mailbox.mailbox?.address : undefined,
                 canApprove: mailbox?.claimed ? mailbox.access.canApprove : false,
               },
             });
@@ -849,7 +849,7 @@ export default function InboxPage() {
         approvalId: draft.approvalId,
         approvalExpiresAt: draft.approvalExpiresAt,
         employeeId: draft.employeeId,
-        mailboxAddress: mailbox.mailbox.address,
+        mailboxAddress: mailbox.mailbox?.address,
         canApprove: mailbox.access.canApprove,
       },
     });
@@ -1021,7 +1021,7 @@ export default function InboxPage() {
             </div>
           </motion.div>
         )}
-        <p className="truncate px-3 pb-2 text-xs text-ink-3">{mailbox.mailbox.address}</p>
+        <p className="truncate px-3 pb-2 text-xs text-ink-3">{mailbox.mailbox?.address}</p>
         {FOLDERS.map((f) => (
           <button
             key={f.key}
@@ -1179,7 +1179,7 @@ export default function InboxPage() {
                         approvalId: d.approvalId,
                         approvalExpiresAt: d.approvalExpiresAt,
                         employeeId: d.employeeId,
-                        mailboxAddress: mailbox.mailbox.address,
+                        mailboxAddress: mailbox.mailbox?.address,
                         canApprove: mailbox.access.canApprove,
                       },
                     })
@@ -1258,7 +1258,7 @@ export default function InboxPage() {
               workspaceId={workspaceId}
               initial={{
                 ...composer.initial,
-                mailboxAddress: mailbox.mailbox.address,
+                mailboxAddress: mailbox.mailbox?.address,
                 canApprove: mailbox.access.canApprove,
               }}
               onSend={handleSend}

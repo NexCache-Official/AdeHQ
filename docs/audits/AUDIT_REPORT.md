@@ -30,6 +30,12 @@ Scope of this pass: Phase 1 (partial), Phase 2/3 (partial via Maya/Elena/David),
 - forgot-password burst → **200×3 then 429**
 - `/login` → CSP, HSTS, `X-Frame-Options: DENY`, nosniff, referrer, permissions-policy
 
+**Follow-up IDOR fixes (service-role audit):**
+- `GET /api/inbox/mailbox` — membership required; mailbox payload only if read/admin.
+- Browser research create — `assertCanAccessRoom` / `assertTopicInRoom` before service-role write.
+- Browser research cancel — creator, admin, or room access; use run’s canonical workspace id.
+- Tools catalog write was already platform-admin-only from the main hardening pass.
+
 ---
 
 ## Session 2026-07-16 — Stall / no self-wake after “give me a sec”
