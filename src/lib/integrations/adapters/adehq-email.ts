@@ -416,7 +416,11 @@ export async function listRecentEmails(
     .limit(limit);
 
   if (folder === "inbox") {
-    query = query.eq("is_spam", false).neq("status", "archived");
+    // Match UI Inbox: only threads whose latest message is inbound.
+    query = query
+      .eq("is_spam", false)
+      .neq("status", "archived")
+      .eq("latest_direction", "inbound");
   } else if (folder === "sent") {
     query = query.in("latest_direction", ["outbound"]).eq("is_spam", false);
   } else if (folder === "archived") {

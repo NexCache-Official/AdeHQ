@@ -51,6 +51,7 @@ export type MessageDirection = "inbound" | "outbound" | "internal";
 /** UI folder keys — derived via query, not a DB column. */
 export type InboxFolder =
   | "inbox"
+  | "all"
   | "awaiting"
   | "sent"
   | "drafts"

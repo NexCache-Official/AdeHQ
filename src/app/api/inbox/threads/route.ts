@@ -16,6 +16,7 @@ export const runtime = "nodejs";
 
 const VALID_FOLDERS: InboxFolder[] = [
   "inbox",
+  "all",
   "awaiting",
   "sent",
   "archived",

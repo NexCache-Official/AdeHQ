@@ -19,6 +19,7 @@ import {
   UserRound,
   Folder,
   MessageCircleQuestion,
+  Mails,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useStore } from "@/lib/demo-store";
@@ -66,6 +67,7 @@ import { EMAIL_MISSION_LABELS } from "@/lib/inbox/mission-status";
 
 const FOLDERS: { key: InboxFolder; label: string; icon: typeof InboxIcon }[] = [
   { key: "inbox", label: "Inbox", icon: InboxIcon },
+  { key: "all", label: "All mail", icon: Mails },
   { key: "assigned_to_me", label: "Assigned to me", icon: UserRound },
   { key: "ai_working", label: "AI working", icon: Sparkles },
   { key: "needs_input", label: "Needs your input", icon: MessageCircleQuestion },

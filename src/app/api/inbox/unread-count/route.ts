@@ -21,6 +21,7 @@ export async function GET(request: NextRequest) {
         .eq("mailbox_id", ctx.mailbox.id)
         .eq("has_unread", true)
         .eq("is_spam", false)
+        .eq("latest_direction", "inbound")
         .neq("status", "archived"),
       ctx.secret
         .from("email_threads")

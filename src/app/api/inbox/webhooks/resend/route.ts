@@ -39,14 +39,21 @@ export async function POST(req: NextRequest) {
   const client = createSupabaseSecretClient();
   const stored = await storeInboundWebhookEvent(client, { meta, svixId });
 
-  // Best-effort drain — must not delay the 200. Cron recovers if this is killed.
+  // Best-effort drain — must not delay the 200. Minute cron recovers if this is killed.
+  // Prefer the just-stored event first so real replies land immediately.
   if (!stored.duplicate) {
-    void Promise.all([
-      processQueuedInboundEvents(client, 3),
-      // Delivery events are stored as ready and applied inside processInboundEvent;
-      // also nudge outbox for undo-window flushes.
-      processQueuedOutbox(client, 2),
-    ]).catch((err) => console.warn("[inbox] webhook drain nudge failed", err));
+    void (async () => {
+      try {
+        const { processInboundEvent } = await import("@/lib/inbox/inbound/process");
+        await processInboundEvent(client, stored.eventId);
+        await Promise.all([
+          processQueuedInboundEvents(client, 8),
+          processQueuedOutbox(client, 4),
+        ]);
+      } catch (err) {
+        console.warn("[inbox] webhook drain nudge failed", err);
+      }
+    })();
   }
 
   return NextResponse.json({

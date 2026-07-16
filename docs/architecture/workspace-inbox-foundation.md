@@ -32,7 +32,8 @@ Approve = manage grant or manager-with-read (plus owners/admins). Rules CRUD req
 
 | UI folder | Query |
 |-----------|-------|
-| Inbox | `status in (open,waiting)`, not spam |
+| Inbox | `status in (open,waiting)`, not spam, **`latest_direction = inbound`** (incoming only) |
+| All mail | not spam (includes archived + outbound-only threads) |
 | Assigned to me | `assigned_human_id = current user` |
 | AI working | `triage_status` or `draft_status` in queued/running (active jobs only) |
 | Needs your input | `mission_status = awaiting_human` |

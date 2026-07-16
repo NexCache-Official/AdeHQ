@@ -19,7 +19,15 @@ type ThreadQuery = {
 export function applyFolderFilter(query: ThreadQuery, folder: InboxFolder): ThreadQuery {
   switch (folder) {
     case "inbox":
-      return query.in("status", ["open", "waiting"]).eq("is_spam", false);
+      // Incoming only — latest message must be from the outside. Pure outbound
+      // outreach lives in Sent / Awaiting reply; use All mail for everything.
+      return query
+        .in("status", ["open", "waiting"])
+        .eq("is_spam", false)
+        .eq("latest_direction", "inbound");
+    case "all":
+      // Everything except spam (includes archived + outbound-only threads).
+      return query.eq("is_spam", false);
     case "awaiting":
       return query
         .in("status", ["open", "waiting"])
@@ -66,6 +74,7 @@ export function applyFolderFilter(query: ThreadQuery, folder: InboxFolder): Thre
 export function listPreviewDirection(
   folder: InboxFolder,
 ): "inbound" | "outbound" | "any" {
+  if (folder === "inbox") return "inbound";
   if (folder === "sent" || folder === "awaiting") return "outbound";
   return "any";
 }

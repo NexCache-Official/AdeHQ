@@ -22,6 +22,26 @@ Scope of this pass: Phase 1 (partial), Phase 2/3 (partial via Maya/Elena/David),
 
 ---
 
+## Session 2026-07-16 — Inbox showed Sent + “paraphrased” inbound
+
+**Observed:**
+1. Main Inbox listed rows as `To: skumar@…` (outbound outreach), not only incoming.
+2. AutoDesk thread showed a polite paraphrased reply (“mid-market ops teams…”) that did **not** match the real Gmail send (“Hey Casey, Yes, lets set up something…”).
+
+**Root causes:**
+1. Inbox folder query was `status in (open,waiting) AND not spam` with **no** `latest_direction = inbound` filter — so ~29/30 open outbound threads appeared in Inbox.
+2. The paraphrased body was **not** a rewrite of the real email. It was a synthetic Slice F test row (`provider_email_id = slice-f-test-…`) inserted during e2e. The real Gmail reply **had** arrived as Resend webhook `email.received` (`provider_email_id = a44f3bbc-…`) but sat in `email_inbound_events.processing_state = queued` with 65+ other events. Inbox cron was `0 4 * * *` (once/day), so the real body never landed until a manual drain.
+
+**Fix:**
+- Inbox query requires `latest_direction = inbound`; list preview uses last inbound; unread badge same.
+- New **All mail** folder (`is_spam = false`).
+- Cron → `* * * * *`; webhook drain processes the just-stored event first, then a larger batch.
+- Deleted the synthetic test inbound; drained the queue — real body now stored verbatim.
+
+**Verify:** Inbox shows only inbound-latest threads; AutoDesk thread body matches Gmail; Sent / All mail / Awaiting still work.
+
+---
+
 ## Session 2026-07-16 (later) — Stall recurred: “Checking the inbox now — pulling the latest thread…” with no follow-through
 
 **Observed:** Casey (role `sales`, so `roleWorkflowRules` already told her to use `email.listRecent`/`email.getThread`) stalled again on a multi-part ask (check inbox + invent product + propose reply + create a calendar reminder). Her reply narrated the check ("Checking the inbox now — pulling the latest thread to report back on…") but emitted zero `effects.toolCalls`, and the run ended there.
