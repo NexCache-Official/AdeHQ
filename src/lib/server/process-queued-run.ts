@@ -2063,29 +2063,35 @@ export async function processQueuedAgentRun(
       });
       followUpRuns = followUp.followUpRuns;
 
-      // AI→AI @mention / handoff chain: the API route returns these follow-up
-      // runs to the browser to drive, but the tab can't be trusted to poll the
-      // whole fan-out (backgrounded, navigated away, or driven out-of-band).
-      // Kick a server-side drain so @mentioned teammates actually run without a
-      // human keeping the room open. Only the first hop starts the drainer —
-      // the single drain walks the rest of the queued chain up to its budget,
-      // so downstream hops must NOT each spawn their own drainer.
-      if (followUp.followUpRuns.length && handoffDepth === 0) {
-        console.info("[AdeHQ process-queued-run] draining AI follow-up chain", {
+      // Collaboration collaborators (queueCollaboratorRuns) and AI→AI
+      // @mention/handoff follow-ups (queueFollowUpRuns) are both queued here but
+      // only RETURNED to the browser to drive — the API route never drives them
+      // server-side. The tab can't be trusted to poll the whole fan-out
+      // (backgrounded, navigated away, or the send bypassed the client chain
+      // driver), so the activated teammates sit queued forever and the workforce
+      // looks uncollaborative. Kick a single server-side drain from the first
+      // hop so the whole chain runs without a human keeping the room open. Only
+      // handoffDepth 0 starts the drainer — that one drain walks the rest of the
+      // queued chain up to its budget, so downstream hops must NOT each spawn
+      // their own drainer.
+      const queuedThisTurn = followUpRuns.length + activatedRuns.length;
+      if (queuedThisTurn && handoffDepth === 0) {
+        console.info("[AdeHQ process-queued-run] draining AI collaboration chain", {
           runId,
           sourceEmployeeId: employee.id,
-          followUpRuns: followUp.followUpRuns.map((r) => r.runId),
+          followUpRuns: followUpRuns.map((r) => r.runId),
+          activatedRuns: activatedRuns.map((r) => r.runId),
         });
         void import("@/lib/server/background-agent-drainer")
           .then(({ drainQueuedAgentRunsForRoot }) =>
             drainQueuedAgentRunsForRoot(client, {
               workspaceId,
               rootTriggerMessageId,
-              maxRuns: 6,
+              maxRuns: 8,
             }),
           )
           .catch((err) =>
-            console.warn("[AdeHQ process-queued-run] follow-up drain failed", err),
+            console.warn("[AdeHQ process-queued-run] collaboration drain failed", err),
           );
       }
 
