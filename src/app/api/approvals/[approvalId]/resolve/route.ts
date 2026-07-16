@@ -27,6 +27,7 @@ import {
 import { ensureGeneralTopic } from "@/lib/server/topic-helpers";
 import { processEmployeeResponse } from "@/lib/server/process-employee-response";
 import type { ResolveCapabilityGrantResult } from "@/lib/integrations/resolve-capability-grant";
+import { createSupabaseSecretClient } from "@/lib/supabase/server";
 import { nowISO, uid } from "@/lib/utils";
 
 async function persistCapabilityGrantAck(
@@ -448,10 +449,13 @@ export async function POST(
     });
 
     // Approving executes the action when there is a tool payload.
+    // Use service role for execution — inbox outbox / transport tables are not
+    // client-writable under RLS (auth + membership already verified above).
     let execution: ToolCallResult | undefined;
     if (toolName) {
+      const service = createSupabaseSecretClient();
       const employeeId = String(actionPayload?.employeeId ?? row.requested_by);
-      const employee = await loadIntegrationEmployee(client, workspaceId, employeeId);
+      const employee = await loadIntegrationEmployee(service, workspaceId, employeeId);
       if (!employee) {
         return NextResponse.json(
           { error: "The employee who requested this action no longer exists." },
@@ -460,9 +464,9 @@ export async function POST(
       }
 
       execution = await runToolCall(
-        client,
+        service,
         {
-          client,
+          client: service,
           workspaceId,
           employeeId: employee.id,
           employeeName: employee.name,
@@ -491,11 +495,44 @@ export async function POST(
       );
 
       if (execution.status === "success" && execution.toolRunId) {
-        await client
+        await service
           .from("approvals")
           .update({ executed_tool_run_id: execution.toolRunId })
           .eq("workspace_id", workspaceId)
           .eq("id", params.approvalId);
+
+        // Keep Inbox mission / draft state aligned with chat approval sends.
+        if (toolName === "email.sendDraft") {
+          const draftId =
+            typeof effectiveArgs.draftId === "string" ? effectiveArgs.draftId.trim() : "";
+          const outboxThreadId =
+            typeof execution.output?.payload?.threadId === "string"
+              ? String(execution.output.payload.threadId)
+              : null;
+          try {
+            const { syncThreadMissionStatus, loadEmailDraftForApproval } = await import(
+              "@/lib/integrations/sync-email-draft-approvals"
+            );
+            let threadId = outboxThreadId;
+            if (!threadId && draftId) {
+              const draft = await loadEmailDraftForApproval(service, {
+                workspaceId,
+                draftId,
+              });
+              threadId = draft?.threadId ?? null;
+            }
+            if (threadId) {
+              await syncThreadMissionStatus(service, {
+                workspaceId,
+                threadId,
+                status: "queued",
+                ownerEmployeeId: employee.id,
+              });
+            }
+          } catch (syncErr) {
+            console.warn("[AdeHQ approvals resolve] inbox sync failed", syncErr);
+          }
+        }
       }
     }
 

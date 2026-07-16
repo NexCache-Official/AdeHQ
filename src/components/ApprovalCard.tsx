@@ -37,7 +37,10 @@ type ResolveResponse = {
   execution?: {
     status: string;
     error?: string;
-    output?: { summary?: string };
+    output?: {
+      summary?: string;
+      payload?: Record<string, unknown>;
+    };
   };
   revisionReplyFailed?: string;
   error?: string;
@@ -186,14 +189,27 @@ export function ApprovalCard({ approval }: { approval: Approval }) {
         setNotice(data.acknowledgment);
       } else if (data.execution) {
         if (data.execution.status === "success") {
-          setNotice(data.execution.output?.summary ?? "Action executed.");
+          const summary = data.execution.output?.summary ?? "Action executed.";
+          const undoUntil =
+            typeof data.execution.output?.payload?.undoUntil === "string"
+              ? String(data.execution.output.payload.undoUntil)
+              : null;
+          setNotice(
+            isEmailSend && undoUntil
+              ? `${summary} You can undo from Inbox until the send window closes.`
+              : summary,
+          );
         } else if (data.execution.error) {
           setError(`Approved, but execution failed: ${data.execution.error}`);
         }
       }
       if (data.revisionReplyFailed) setNotice(data.revisionReplyFailed);
       setPanel(null);
+      // Reload workspace so Inbox drafts/outbox + approvals stay in sync with chat.
       void actions.refreshWorkspace();
+      window.setTimeout(() => {
+        void actions.refreshWorkspace();
+      }, 1500);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to resolve approval.");
     } finally {

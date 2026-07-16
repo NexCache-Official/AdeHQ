@@ -78,6 +78,19 @@ function resolveEmployeePermissions(
  * Catalog approval, plus Workforce flags.
  * Outbound email send always requires approval (never bypassable).
  */
+function formatToolExecutionError(error: unknown): string {
+  if (error instanceof Error && error.message.trim()) return error.message;
+  if (error && typeof error === "object") {
+    const row = error as { message?: unknown; details?: unknown; hint?: unknown; code?: unknown };
+    const parts = [row.message, row.details, row.hint]
+      .map((part) => (typeof part === "string" ? part.trim() : ""))
+      .filter(Boolean);
+    if (parts.length) return parts.join(" — ");
+    if (row.code != null) return `Tool execution failed (${String(row.code)}).`;
+  }
+  return "Tool execution failed.";
+}
+
 export function effectiveToolApproval(
   tool: Pick<ToolDefinition, "name" | "approval" | "readOnly" | "risk">,
   permissions: EmployeePermissions,
@@ -684,7 +697,7 @@ export async function runToolCall(
       messageArtifacts: resultArtifacts({ workLogEventId, output }),
     };
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Tool execution failed.";
+    const message = formatToolExecutionError(error);
     if (runId) {
       await finalizeToolRun(client, {
         toolRunId: runId,

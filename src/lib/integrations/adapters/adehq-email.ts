@@ -376,6 +376,7 @@ export async function sendEmailDraft(
       draftId,
       outboxId: queued.outboxId,
       approvalId: approval.id,
+      threadId,
       to,
       subject,
       undoUntil: queued.undoUntil,

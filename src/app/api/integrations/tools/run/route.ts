@@ -17,6 +17,7 @@ import {
 import { loadIntegrationEmployee } from "@/lib/integrations/load-employee";
 import { getToolDefinition } from "@/lib/integrations/registry/tool-definitions";
 import type { ToolCallMode } from "@/lib/integrations/types";
+import { createSupabaseSecretClient } from "@/lib/supabase/server";
 import type { WorkspaceMemberRole } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -83,17 +84,19 @@ export async function POST(request: NextRequest) {
       await assertCanAccessRoom(client, body.workspaceId, body.roomId, user.id, role);
     }
 
-    const employee = await loadIntegrationEmployee(client, body.workspaceId, body.employeeId);
+    // Service role for tool writes (outbox, drafts, CRM) after auth gates above.
+    const service = createSupabaseSecretClient();
+    const employee = await loadIntegrationEmployee(service, body.workspaceId, body.employeeId);
     if (!employee) {
       return NextResponse.json({ error: "Employee not found in workspace." }, { status: 404 });
     }
 
     const seeded = await ensureDefaultEmployeeToolGrants(
-      client,
+      service,
       body.workspaceId,
       employee,
     );
-    const sessionIds = await loadActiveSessionGrantToolIds(client, {
+    const sessionIds = await loadActiveSessionGrantToolIds(service, {
       workspaceId: body.workspaceId,
       employeeId: seeded.id,
       roomId: body.roomId,
@@ -106,9 +109,9 @@ export async function POST(request: NextRequest) {
     );
 
     const result = await runToolCall(
-      client,
+      service,
       {
-        client,
+        client: service,
         workspaceId: body.workspaceId,
         employeeId: employee.id,
         employeeName: employee.name,

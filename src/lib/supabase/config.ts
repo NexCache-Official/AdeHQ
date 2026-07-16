@@ -151,4 +151,5 @@ export const SUPABASE_WORKSPACE_TABLES = [
   "email_messages",
   "email_drafts",
   "email_outbox",
+  "email_approvals",
 ] as const;
