@@ -2063,6 +2063,32 @@ export async function processQueuedAgentRun(
       });
       followUpRuns = followUp.followUpRuns;
 
+      // AI→AI @mention / handoff chain: the API route returns these follow-up
+      // runs to the browser to drive, but the tab can't be trusted to poll the
+      // whole fan-out (backgrounded, navigated away, or driven out-of-band).
+      // Kick a server-side drain so @mentioned teammates actually run without a
+      // human keeping the room open. Only the first hop starts the drainer —
+      // the single drain walks the rest of the queued chain up to its budget,
+      // so downstream hops must NOT each spawn their own drainer.
+      if (followUp.followUpRuns.length && handoffDepth === 0) {
+        console.info("[AdeHQ process-queued-run] draining AI follow-up chain", {
+          runId,
+          sourceEmployeeId: employee.id,
+          followUpRuns: followUp.followUpRuns.map((r) => r.runId),
+        });
+        void import("@/lib/server/background-agent-drainer")
+          .then(({ drainQueuedAgentRunsForRoot }) =>
+            drainQueuedAgentRunsForRoot(client, {
+              workspaceId,
+              rootTriggerMessageId,
+              maxRuns: 6,
+            }),
+          )
+          .catch((err) =>
+            console.warn("[AdeHQ process-queued-run] follow-up drain failed", err),
+          );
+      }
+
       // Stall recovery: "give me a sec" with no tools → one self-continuation.
       const humanAskForContinuation =
         typeof runMetadata.humanTriggerContent === "string" &&
