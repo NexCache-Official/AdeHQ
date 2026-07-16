@@ -936,7 +936,7 @@ export function ChatComposer({
         setShowPlusMenu(false);
       }} />}
 
-      <div className="relative z-10 rounded-[17px] border border-border bg-surface p-1.5 shadow-[0_8px_26px_-18px_rgba(40,30,15,0.3)] transition-[border-color,box-shadow] focus-within:border-accent/30">
+      <div className="relative z-10 rounded-[15px] border border-border bg-surface p-1 shadow-[0_8px_26px_-18px_rgba(40,30,15,0.3)] transition-[border-color,box-shadow] focus-within:border-accent/30">
         {commandNotice && (
           <div className="mb-1 flex items-center justify-between gap-2 rounded-xl bg-accent-soft px-3 py-2 text-[11px] text-accent-d">
             <span>{commandNotice}</span>
@@ -1052,7 +1052,7 @@ export function ChatComposer({
           <button
             type="button"
             onClick={() => setShowPlusMenu((open) => !open)}
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[11px] text-ink-3 transition-colors hover:bg-muted hover:text-ink-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/40"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[11px] text-ink-3 transition-colors hover:bg-muted hover:text-ink-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/40"
             aria-label="Open add menu"
             title="Add"
           >
@@ -1061,11 +1061,11 @@ export function ChatComposer({
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
-            className="hidden h-9 w-9 shrink-0 items-center justify-center rounded-[11px] text-ink-3 transition-colors hover:bg-muted hover:text-ink-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/40 sm:flex"
+            className="hidden h-8 w-8 shrink-0 items-center justify-center rounded-[11px] text-ink-3 transition-colors hover:bg-muted hover:text-ink-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/40 sm:flex"
             aria-label="Attach file"
             title="Attach file"
           >
-            <Paperclip className="h-[17px] w-[17px]" strokeWidth={1.8} />
+            <Paperclip className="h-4 w-4" strokeWidth={1.8} />
           </button>
           <textarea
             ref={inputRef}
@@ -1079,29 +1079,29 @@ export function ChatComposer({
             rows={1}
             disabled={disabled}
             placeholder={placeholder ?? "Message the room… use @ to mention an employee"}
-            className="min-h-0 w-full flex-1 resize-none overflow-hidden bg-transparent px-1 py-[10px] text-[16.1px] leading-[1.5] text-ink outline-none placeholder:text-ink-3 disabled:cursor-not-allowed disabled:opacity-60"
+            className="min-h-0 w-full flex-1 resize-none overflow-hidden bg-transparent px-1 py-2 text-[14px] leading-[1.5] text-ink outline-none placeholder:text-ink-3 disabled:cursor-not-allowed disabled:opacity-60"
           />
           <div className="flex shrink-0 items-center gap-0.5">
             <button
               type="button"
               disabled
-              className="hidden h-9 w-9 cursor-not-allowed items-center justify-center rounded-[11px] text-ink-3 opacity-45 sm:flex"
+              className="hidden h-8 w-8 cursor-not-allowed items-center justify-center rounded-[11px] text-ink-3 opacity-45 sm:flex"
               title="Emoji reactions arrive later"
               aria-label="Emoji"
             >
-              <Smile className="h-[17px] w-[17px]" strokeWidth={1.8} />
+              <Smile className="h-4 w-4" strokeWidth={1.8} />
             </button>
             <button
               type="button"
               onClick={() => setShowFormatting((open) => !open)}
               className={cn(
-                "flex h-9 w-9 items-center justify-center rounded-[11px] transition-colors hover:bg-muted hover:text-ink-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/40",
+                "flex h-8 w-8 items-center justify-center rounded-[11px] transition-colors hover:bg-muted hover:text-ink-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/40",
                 showFormatting ? "bg-muted text-ink-2" : "text-ink-3",
               )}
               title="Formatting"
               aria-label="Toggle formatting"
             >
-              <Type className="h-[17px] w-[17px]" strokeWidth={1.8} />
+              <Type className="h-4 w-4" strokeWidth={1.8} />
             </button>
             <button
               type="button"
@@ -1110,16 +1110,16 @@ export function ChatComposer({
                 setMentionQuery("");
                 inputRef.current?.focus();
               }}
-              className="flex h-9 w-9 items-center justify-center rounded-[11px] text-ink-3 transition-colors hover:bg-muted hover:text-ink-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/40"
+              className="flex h-8 w-8 items-center justify-center rounded-[11px] text-ink-3 transition-colors hover:bg-muted hover:text-ink-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/40"
               title="Mention employee"
               aria-label="Mention employee"
             >
-              <AtSign className="h-[17px] w-[17px]" strokeWidth={1.8} />
+              <AtSign className="h-4 w-4" strokeWidth={1.8} />
             </button>
             <button
               type="button"
               onClick={() => setShowCommands((open) => !open)}
-              className="flex h-9 w-9 items-center justify-center rounded-[11px] font-mono text-base font-semibold text-ink-3 transition-colors hover:bg-muted hover:text-ink-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/40"
+              className="flex h-8 w-8 items-center justify-center rounded-[11px] font-mono text-base font-semibold text-ink-3 transition-colors hover:bg-muted hover:text-ink-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/40"
               title="Slash command"
               aria-label="Open slash commands"
             >
@@ -1134,7 +1134,7 @@ export function ChatComposer({
                   if (!browserResearchEnabled) onAgentModeEnabledChange?.(false);
                 }}
                 className={cn(
-                  "flex h-9 items-center gap-1 rounded-[11px] px-2 text-[11px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/40",
+                  "flex h-8 items-center gap-1 rounded-[11px] px-2 text-[11px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/40",
                   browserResearchEnabled
                     ? "bg-sky-600 text-white hover:bg-sky-700"
                     : "text-ink-3 hover:bg-muted hover:text-ink-2",
@@ -1160,7 +1160,7 @@ export function ChatComposer({
                   if (!agentModeEnabled) onBrowserResearchEnabledChange?.(false);
                 }}
                 className={cn(
-                  "flex h-9 items-center gap-1 rounded-[11px] px-2 text-[11px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/40",
+                  "flex h-8 items-center gap-1 rounded-[11px] px-2 text-[11px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/40",
                   agentModeEnabled
                     ? "bg-emerald-600 text-white hover:bg-emerald-700"
                     : "text-ink-3 hover:bg-muted hover:text-ink-2",
@@ -1181,20 +1181,20 @@ export function ChatComposer({
               type="button"
               onClick={() => void send()}
               disabled={!canSend}
-              className="flex h-9 w-9 items-center justify-center rounded-[11px] bg-accent text-white shadow-[0_4px_12px_-5px_rgba(47,111,237,0.5)] transition-all hover:brightness-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/60 disabled:opacity-40 active:scale-95"
+              className="flex h-8 w-8 items-center justify-center rounded-[11px] bg-accent text-white shadow-[0_4px_12px_-5px_rgba(47,111,237,0.5)] transition-all hover:brightness-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/60 disabled:opacity-40 active:scale-95"
               aria-label="Send message"
             >
               {sending ? (
-                <Loader2 className="h-[17px] w-[17px] animate-spin" strokeWidth={2} />
+                <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2} />
               ) : (
-                <SendHorizontal className="h-[17px] w-[17px]" strokeWidth={2} />
+                <SendHorizontal className="h-4 w-4" strokeWidth={2} />
               )}
             </button>
           </div>
         </div>
       </div>
 
-      <div className="mt-1.5 hidden flex-wrap items-center gap-1.5 px-1 text-[12.7px] text-ink-3 sm:flex">
+      <div className="mt-1.5 hidden flex-wrap items-center gap-1.5 px-1 text-[11px] text-ink-3 sm:flex">
         {QUICK_COMMANDS.slice(0, 3).map((command) => (
           <button
             key={command.label}

@@ -226,8 +226,16 @@ export async function refreshTopicSummary(
     return { summary: existingForContext, refreshed: false, skippedReason: "no_meaningful_change" };
   }
 
+  // Manual refresh with unchanged content: still touch the timestamp / source
+  // coverage so the UI clears "May be outdated" instead of spinning then staying stale.
   if (manual && !force && !changed && existingForContext) {
-    return { summary: existingForContext, refreshed: false, skippedReason: "no_meaningful_change" };
+    const touched = await upsertTopicSummary(client, {
+      ...existingForContext,
+      sourceMessageIds: ctx.sourceMessageIds,
+      sourceWorkLogIds: ctx.sourceWorkLogIds,
+      lastRefreshedAt: nowISO(),
+    });
+    return { summary: touched, refreshed: true, skippedReason: "no_meaningful_change" };
   }
 
   if (chatClearedAt && ctx.messages.length === 0) {

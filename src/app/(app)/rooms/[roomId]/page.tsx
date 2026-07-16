@@ -254,8 +254,11 @@ export default function RoomDetailPage() {
 
   const summarizeTopic = async (options?: { force?: boolean }) => {
     if (!room) return;
+    // Ignore accidental click-event args from onClick={summarizeTopic}.
+    const force = Boolean(options && typeof options === "object" && "force" in options && options.force);
 
     setSummarizing(true);
+    setTopicActionError(null);
     try {
       let topicId = selectedTopic?.id;
 
@@ -278,13 +281,18 @@ export default function RoomDetailPage() {
           }
         }
 
-        if (!topicId) return;
+        if (!topicId) {
+          setTopicActionError("Pick a topic before summarizing.");
+          return;
+        }
 
         const result = await refreshTopicSummaryClient(topicId, {
           manual: true,
-          force: Boolean(options?.force),
+          force,
         });
-        if (!result.refreshed && result.skippedReason) {
+        if (result.skippedReason === "generation_failed") {
+          setTopicActionError("Couldn't generate a summary just now — try again in a moment.");
+        } else if (!result.refreshed && result.skippedReason) {
           console.info("[AdeHQ summarize]", result.skippedReason);
         }
         void actions.refreshWorkLogForTopic(topicId);
@@ -316,6 +324,7 @@ export default function RoomDetailPage() {
       actions.setTopicSummary(selectedTopic.id, summary);
     } catch (e) {
       console.error(e);
+      setTopicActionError(e instanceof Error ? e.message : "Failed to refresh summary");
     } finally {
       setSummarizing(false);
     }

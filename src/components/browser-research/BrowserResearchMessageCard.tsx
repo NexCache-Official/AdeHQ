@@ -102,10 +102,10 @@ export function BrowserResearchMessageCard({
         <div className="flex items-start gap-2">
           <Globe className="mt-0.5 h-4 w-4 text-accent-600" />
           <div>
-            <div className="text-[16.1px] font-semibold text-ink">
+            <div className="text-sm font-semibold text-ink">
               {employeeName ? `${employeeName} — browser research` : "Browser research"}
             </div>
-            <div className="text-[12.7px] text-ink-3">
+            <div className="text-[11px] text-ink-3">
               {browserResearchRunLabel(run.provider)} · {timeAgo(run.createdAt)}
             </div>
           </div>
@@ -176,7 +176,7 @@ export function BrowserResearchMessageCard({
 
       {run.findings.length > 0 && (
         <section className="mt-3">
-          <div className="text-[12.7px] font-semibold uppercase tracking-wide text-ink-3">
+          <div className="text-[11px] font-semibold uppercase tracking-wide text-ink-3">
             {browserResearchFindingsSectionLabel(run.provider)}
           </div>
           <ul className="mt-1 space-y-1.5">
@@ -193,7 +193,7 @@ export function BrowserResearchMessageCard({
 
       {run.mockSources.length > 0 && (
         <section className="mt-3">
-          <div className="text-[12.7px] font-semibold uppercase tracking-wide text-ink-3">
+          <div className="text-[11px] font-semibold uppercase tracking-wide text-ink-3">
             {browserResearchSourceSectionLabel(run.provider)}
           </div>
           <ul className="mt-1 space-y-2">
@@ -204,7 +204,7 @@ export function BrowserResearchMessageCard({
                   href={source.url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="truncate text-[12.7px] text-accent-700 hover:underline"
+                  className="truncate text-[11px] text-accent-700 hover:underline"
                 >
                   {source.url}
                 </a>

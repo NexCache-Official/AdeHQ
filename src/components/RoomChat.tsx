@@ -268,7 +268,7 @@ export function RoomChat({
   artifactIntent?: { type: import("@/lib/types").SavedArtifactType; label: string } | null;
   onContextConsumed?: () => void;
   isDm?: boolean;
-  onSummarize?: () => void;
+  onSummarize?: (options?: { force?: boolean }) => void;
   summarizing?: boolean;
   onAddEmployee?: () => void;
   messageActions?: MessageActionHandlers;
@@ -1855,7 +1855,7 @@ export function RoomChat({
 
   return (
     <div className="flex h-full flex-col bg-canvas">
-      <div className="flex h-14 shrink-0 items-center gap-3 border-b border-border bg-canvas px-[18px]">
+      <div className="flex h-12 shrink-0 items-center gap-2.5 border-b border-border bg-canvas px-4">
         {isDm && dmEmployee ? (
           <>
             <EmployeeAvatar
@@ -1920,7 +1920,7 @@ export function RoomChat({
           {onSummarize && (
             <button
               type="button"
-              onClick={onSummarize}
+              onClick={() => onSummarize({ force: true })}
               disabled={summarizing || chatDisabled}
               className="hidden items-center gap-1.5 rounded-[10px] border border-border bg-surface px-[11px] py-[7px] text-xs font-medium text-ink-2 transition-colors hover:bg-muted disabled:opacity-50 sm:inline-flex"
             >
@@ -1965,7 +1965,7 @@ export function RoomChat({
       <div
         ref={messagesScrollRef}
         onScroll={handleMessagesScroll}
-        className="h-full overflow-y-auto px-[26px] pb-4 pt-[18px]"
+        className="h-full overflow-y-auto px-[22px] pb-3.5 pt-4"
       >
         {isMayaHiringMode && !mayaHiring ? (
           <div className="flex h-full min-h-[200px] items-center justify-center gap-2 text-sm text-ink-3">
@@ -2062,7 +2062,7 @@ export function RoomChat({
                 <div key={item.row.message.id}>
                   {item.row.showDaySeparator && (
                     <div className="mb-[18px] mt-1.5 text-center">
-                      <span className="rounded-full bg-muted px-3 py-0.5 text-[12.7px] text-ink-3">
+                      <span className="rounded-full bg-muted px-3 py-0.5 text-[11px] text-ink-3">
                         {daySeparatorLabel(item.row.message.createdAt)}
                       </span>
                     </div>
@@ -2121,7 +2121,7 @@ export function RoomChat({
                   <EmployeeAvatar employee={dmEmployee} size="md" showStatus={false} />
                 </div>
                 <div className="flex w-fit items-center gap-1.5 rounded-[13px] border border-border bg-surface px-3.5 py-2.5">
-                  <span className="text-[12.7px] text-ink-3">
+                  <span className="text-[11px] text-ink-3">
                     {mayaResponder.phase === "reading"
                       ? "Reading…"
                       : mayaResponder.phase === "thinking"
@@ -2160,7 +2160,7 @@ export function RoomChat({
                   <EmployeeAvatar employee={dmEmployee} size="md" showStatus={false} />
                 </div>
                 <div className="flex w-fit items-center gap-1.5 rounded-[13px] border border-border bg-surface px-3.5 py-2.5">
-                  <span className="text-[12.7px] text-ink-3">
+                  <span className="text-[11px] text-ink-3">
                     {mayaHiring.generatingCandidates
                       ? "Preparing candidates…"
                       : mayaHiring.mayaState === "acknowledging"
@@ -2198,7 +2198,7 @@ export function RoomChat({
 
       {failedSend && (
         <div className="border-t border-rose-200 bg-rose-50 px-4 py-2 sm:px-6">
-          <div className={cn("mx-auto flex items-center gap-3 text-[16.1px] text-rose-800", ROOM_CHAT_WIDE_MAX_WIDTH)}>
+          <div className={cn("mx-auto flex items-center gap-3 text-sm text-rose-800", ROOM_CHAT_WIDE_MAX_WIDTH)}>
             <AlertCircle className="h-4 w-4 shrink-0" />
             <span className="flex-1">
               Message failed to send{sendError ? `: ${sendError}` : "."}
@@ -2210,7 +2210,7 @@ export function RoomChat({
         </div>
       )}
 
-      <div className="shrink-0 px-[26px] pb-[18px] pt-1.5">
+      <div className="shrink-0 px-[22px] pb-4 pt-1.5">
         <div className={cn("mx-auto", ROOM_CHAT_MAX_WIDTH)}>
           {contextImportWarning ? (
             <div className="mb-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
@@ -2289,7 +2289,7 @@ export function RoomChat({
             browserResearchBusy={browserResearchBusy}
           />
           {!chatDisabled && (
-          <p className="px-1.5 pt-[7px] text-[12.7px] text-ink-3">
+          <p className="px-1.5 pt-1.5 text-[11px] text-ink-3">
             <span>
               <b className="font-mono text-ink-2">@</b> mention someone
             </span>

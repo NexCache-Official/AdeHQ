@@ -648,8 +648,8 @@ export function RoomMessageItem({
       id={`msg-${message.id}`}
       data-message-id={message.id}
       className={cn(
-        "chat-message-enter group/msg relative flex gap-3 rounded-[10px] px-0 transition-colors hover:bg-black/[0.015]",
-        grouped ? "py-0.5" : "py-2",
+        "chat-message-enter group/msg relative flex gap-2.5 rounded-[10px] px-0 transition-colors hover:bg-black/[0.015]",
+        grouped ? "py-0.5" : "py-1.5",
       )}
     >
       <MessageActions
@@ -658,30 +658,30 @@ export function RoomMessageItem({
         handlers={messageActions}
         disabled={actionsDisabled}
       />
-      <div className="w-9 shrink-0">
+      <div className="w-8 shrink-0">
         {grouped ? null : isHuman ? (
-          <HumanAvatar name={message.senderName} size="md" />
+          <HumanAvatar name={message.senderName} size="sm" />
         ) : employee ? (
-          <EmployeeAvatar employee={employee} size="md" showStatus={false} />
+          <EmployeeAvatar employee={employee} size="sm" showStatus={false} />
         ) : (
-          <HumanAvatar name={message.senderName} size="md" accent="#475569" />
+          <HumanAvatar name={message.senderName} size="sm" accent="#475569" />
         )}
       </div>
 
       <div className="relative min-w-0 flex-1">
         {!grouped && (
           <div className="mb-0.5 flex flex-wrap items-center gap-1.5">
-            <span className="text-[15.5px] font-semibold text-ink">{message.senderName}</span>
+            <span className="text-[13.5px] font-semibold text-ink">{message.senderName}</span>
             {!isHuman && (
-              <span className="rounded-[5px] bg-accent-soft px-1.5 py-0.5 text-[10.5px] font-bold text-accent">
+              <span className="rounded-[5px] bg-accent-soft px-1.5 py-0.5 text-[10px] font-bold text-accent">
                 AI
               </span>
             )}
             {!isHuman && employee && (
-              <span className="text-[12.7px] text-ink-3">{employee.role}</span>
+              <span className="text-[11px] text-ink-3">{employee.role}</span>
             )}
             {!isHuman && (
-              <span className="font-mono text-[12px] text-ink-3">{formatTime(message.createdAt)}</span>
+              <span className="font-mono text-[11px] text-ink-3">{formatTime(message.createdAt)}</span>
             )}
           </div>
         )}

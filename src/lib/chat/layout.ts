@@ -1,8 +1,8 @@
-/** Room chat column width (+15% from original 760px). */
-export const ROOM_CHAT_MAX_WIDTH = "max-w-[874px]" as const;
+/** Room chat column width. */
+export const ROOM_CHAT_MAX_WIDTH = "max-w-[760px]" as const;
 
-/** Wider in-chat cards (+15% from max-w-3xl / 768px). */
-export const ROOM_CHAT_WIDE_MAX_WIDTH = "max-w-[883px]" as const;
+/** Wider in-chat cards (aligns with max-w-3xl). */
+export const ROOM_CHAT_WIDE_MAX_WIDTH = "max-w-[768px]" as const;
 
 /** Message markdown typography at default size. */
 export const markdownTypography = {
@@ -17,18 +17,8 @@ export const markdownTypography = {
   sourceChip: "text-[11px]",
 } as const;
 
-/** Message markdown typography scaled +15% for room chat. */
-export const roomChatMarkdownTypography = {
-  body: "text-[16.1px] leading-[1.6]",
-  list: "text-[16.1px] leading-[1.6]",
-  quote: "text-[15.5px] leading-relaxed",
-  headingLg: "text-[19.5px]",
-  headingMd: "text-[17.2px]",
-  headingCompact: "text-[16.1px]",
-  code: "text-[14.4px] leading-relaxed",
-  table: "text-[14.4px]",
-  sourceChip: "text-[12.7px]",
-} as const;
+/** Room chat uses the same typography as default markdown (no +15% scale). */
+export const roomChatMarkdownTypography = markdownTypography;
 
 export type MarkdownTypography = {
   body: string;

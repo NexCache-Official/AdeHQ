@@ -173,7 +173,7 @@ export function TopicPanel({
   topicMessages?: RoomMessage[];
   isDm?: boolean;
   isMayaDm?: boolean;
-  onSummarize: () => void;
+  onSummarize: (options?: { force?: boolean }) => void;
   onArchive: () => void;
   onUnarchive?: () => void;
   onDeletePermanently?: () => void;
@@ -294,20 +294,33 @@ export function TopicPanel({
     };
   }, [loadArtifacts, loadFiles, topic.id]);
 
+  const latestTopicMessageId = topicMessages.length
+    ? topicMessages[topicMessages.length - 1]?.id
+    : undefined;
+  // Stale when chat has newer messages than the summary covered — not merely "old by clock".
+  const summaryCoversLatest =
+    !latestTopicMessageId ||
+    Boolean(topicSummary?.sourceMessageIds?.includes(latestTopicMessageId));
+  const summaryStale = Boolean(topicSummary && latestTopicMessageId && !summaryCoversLatest);
+
+  const runSummaryRefresh = (force: boolean) => {
+    // Prefer the local hook path so skipped/error reasons surface in this panel.
+    void refreshTopicSummary({ manual: true, force }).then((result) => {
+      if (result?.refreshed) onWorkLogRefresh?.();
+    });
+  };
+
   const handleSummarize = () => {
-    onSummarize();
+    // Force when stale or when a summary already exists (user asked to refresh).
+    runSummaryRefresh(summaryStale || Boolean(topicSummary?.lastRefreshedAt));
   };
 
   const handleRefreshSummary = () => {
-    void refreshTopicSummary({ manual: true, force: false }).then((result) => {
-      if (result?.refreshed) onWorkLogRefresh?.();
-    });
+    runSummaryRefresh(true);
   };
 
   const handleRegenerateSummary = () => {
-    void refreshTopicSummary({ manual: true, force: true }).then((result) => {
-      if (result?.refreshed) onWorkLogRefresh?.();
-    });
+    runSummaryRefresh(true);
   };
 
   const createSummaryArtifact = async (file: WorkspaceFile) => {
@@ -468,10 +481,7 @@ export function TopicPanel({
     : topic.updatedAt
       ? timeAgo(topic.updatedAt)
       : null;
-  const summaryStale =
-    Boolean(topicSummary?.lastRefreshedAt) &&
-    Date.now() - +new Date(topicSummary!.lastRefreshedAt!) > 15 * 60 * 1000;
-
+  // Stale when chat has newer messages than the summary covered — not merely "old by clock".
   const handleMemorySaved = (saved?: MemoryEntry, duplicate?: boolean) => {
     if (saved) actions.mergeMemoryEntry(saved);
     onWorkLogRefresh?.();
@@ -542,9 +552,19 @@ export function TopicPanel({
           </div>
           {summaryStale ? (
             <p className="mt-1.5 text-[10.5px] text-amber-800">
-              Summary may not reflect the latest chat — regenerate to refresh.
+              Summary may not reflect the latest chat — refresh to update.
             </p>
           ) : null}
+          {(summaryError || summaryInfo) && (
+            <p
+              className={cn(
+                "mt-1.5 text-[10.5px]",
+                summaryError ? "text-rose-700" : "text-ink-3",
+              )}
+            >
+              {summaryError ?? summaryInfo}
+            </p>
+          )}
           <div className="mt-2.5 flex flex-wrap gap-1.5">
             <Button
               variant="secondary"

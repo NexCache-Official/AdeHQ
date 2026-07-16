@@ -185,6 +185,20 @@ export function buildTopicSummaryContextBlock(params: BuildContextParams): strin
 /** Hard cap so a slow/unparseable summary never blocks the run that spawned it. */
 const TOPIC_SUMMARY_TIMEOUT_MS = 20_000;
 
+async function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 /**
  * Safe degraded payload used when summary generation fails. Marked as a casual
  * conversation so callers skip updating the stored summary instead of erroring.
@@ -342,28 +356,32 @@ export async function generateTopicSummaryPayloadRuntime(
     }
   }
 
-  const result = await runtimeGenerateObject(
-    {
-      workspaceId: options.workspaceId,
-      workUnitId,
-      capability: "summarization",
-      runtimeMode: "balanced",
-      reasoningProfile: "low",
-      schema: summarySchema,
-      system: TOPIC_SUMMARY_SYSTEM,
-      prompt: contextBlock,
-      maxTokens: TOPIC_SUMMARY_MAX_TOKENS,
-      frequencyPenalty: TOPIC_SUMMARY_FREQUENCY_PENALTY,
-      presencePenalty: TOPIC_SUMMARY_PRESENCE_PENALTY,
-      preferJsonMode: true,
-      metadata: {
-        topicId: options.topicId,
-        roomId: options.roomId,
+  const result = await withTimeout(
+    runtimeGenerateObject(
+      {
         workspaceId: options.workspaceId,
-        sourceMessageCount: options.sourceMessageCount,
+        workUnitId,
+        capability: "summarization",
+        runtimeMode: "balanced",
+        reasoningProfile: "low",
+        schema: summarySchema,
+        system: TOPIC_SUMMARY_SYSTEM,
+        prompt: contextBlock,
+        maxTokens: TOPIC_SUMMARY_MAX_TOKENS,
+        frequencyPenalty: TOPIC_SUMMARY_FREQUENCY_PENALTY,
+        presencePenalty: TOPIC_SUMMARY_PRESENCE_PENALTY,
+        preferJsonMode: true,
+        metadata: {
+          topicId: options.topicId,
+          roomId: options.roomId,
+          workspaceId: options.workspaceId,
+          sourceMessageCount: options.sourceMessageCount,
+        },
       },
-    },
-    { forceMode: "on" },
+      { forceMode: "on" },
+    ),
+    TOPIC_SUMMARY_TIMEOUT_MS,
+    "Topic summary runtime",
   );
 
   const parsed = summarySchema.safeParse(result.object);

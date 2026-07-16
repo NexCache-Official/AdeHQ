@@ -11,9 +11,10 @@ import {
 const SKIP_REASON_LABELS: Record<string, string> = {
   casual_conversation: "Not enough substantive discussion to summarize yet.",
   insufficient_messages: "Need at least a few messages before summarizing.",
-  no_meaningful_change: "Conversation hasn't changed since the last summary.",
+  no_meaningful_change: "Summary is already up to date with the latest messages.",
   cooldown: "Summary was refreshed recently — try again in a minute.",
   chat_cleared: "Chat was cleared — send new messages, then summarize again.",
+  generation_failed: "Couldn't generate a summary just now — try again in a moment.",
 };
 
 export function useTopicSummary(topicId: string | undefined) {
@@ -80,8 +81,12 @@ export function useTopicSummary(topicId: string | undefined) {
         } else if (result.skippedReason === "chat_cleared") {
           setSummary(null);
         }
-        if (!result.refreshed && result.skippedReason) {
+        if (result.skippedReason === "generation_failed") {
+          setError(SKIP_REASON_LABELS.generation_failed);
+        } else if (!result.refreshed && result.skippedReason) {
           setInfo(SKIP_REASON_LABELS[result.skippedReason] ?? "Summary was not updated.");
+        } else if (result.refreshed && result.skippedReason === "no_meaningful_change") {
+          setInfo(SKIP_REASON_LABELS.no_meaningful_change);
         }
         return result;
       } catch (err) {
