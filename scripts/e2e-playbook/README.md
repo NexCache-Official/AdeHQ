@@ -41,6 +41,7 @@ npx playwright install chrome
 | `saas-investor-update-wave.mjs` | Lane investor DOCX + Casey email approve path |
 | `saas-usage-meter-check.mjs` | Casey DM reply → Settings Usage meter assert |
 | `saas-maya-hire-status.mjs` | Maya workforce-manager check-in |
+| `brain-media-smoke.mjs` | PR-14…17 search / image WH / video capacity guidance smoke (no 29 WH spend) |
 | `saas-inbound-permission-wave.mjs` | Inbox scan + Engineering permission reminder for inbound replies |
 
 ## Run examples
