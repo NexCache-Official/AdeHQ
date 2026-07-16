@@ -237,6 +237,16 @@ Return structured fields only.`;
     })
     .eq("id", threadId);
 
+  const { syncThreadMissionStatus } = await import(
+    "@/lib/integrations/sync-email-draft-approvals"
+  );
+  await syncThreadMissionStatus(client, {
+    workspaceId,
+    threadId,
+    status: "drafting",
+    ownerEmployeeId: employeeId,
+  });
+
   await recordEmailEvent(client, {
     workspaceId,
     mailboxId,

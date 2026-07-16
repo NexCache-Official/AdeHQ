@@ -133,6 +133,7 @@ async function createToolApproval(
         recipientEmail: draft.recipientEmail || enrichedArgs.recipientEmail,
         bodyPreview: draft.body || enrichedArgs.bodyPreview,
         body: draft.body,
+        threadId: draft.threadId ?? enrichedArgs.threadId ?? null,
       };
       enrichedPreview = tool.buildPreview(enrichedArgs);
     }

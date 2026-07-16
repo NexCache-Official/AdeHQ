@@ -123,6 +123,17 @@ export async function POST(
       .update({ status: "pending_approval" })
       .eq("id", draftId);
 
+    if (draft.thread_id) {
+      const { syncThreadMissionStatus } = await import(
+        "@/lib/integrations/sync-email-draft-approvals"
+      );
+      await syncThreadMissionStatus(ctx.secret, {
+        workspaceId: ctx.workspaceId,
+        threadId: String(draft.thread_id),
+        status: "pending_send",
+      });
+    }
+
     await recordEmailEvent(ctx.secret, {
       workspaceId: ctx.workspaceId,
       mailboxId: ctx.mailbox.id,

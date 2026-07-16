@@ -17,6 +17,7 @@ import {
   inboxPrepareProposal,
   inboxSaveDecision,
   inboxSaveMemory,
+  inboxStartBrainstorm,
   inboxStartRoom,
   inboxUnlinkWork,
   newClientActionId,
@@ -38,6 +39,7 @@ type MenuAction =
   | "link_topic"
   | "create_task"
   | "ask_employee"
+  | "start_brainstorm"
   | "create_proposal"
   | "prepare_proposal"
   | "save_decision"
@@ -80,6 +82,7 @@ export function EmailWorkPanel({
   // Form fields
   const [roomId, setRoomId] = useState("");
   const [employeeId, setEmployeeId] = useState("");
+  const [brainstormEmployeeIds, setBrainstormEmployeeIds] = useState<string[]>([]);
   const [askTarget, setAskTarget] = useState<"dm" | "room" | "start_room">("dm");
   const [taskTitle, setTaskTitle] = useState("");
   const [topicTitle, setTopicTitle] = useState("");
@@ -102,6 +105,9 @@ export function EmailWorkPanel({
       }
       if (rooms[0] && !roomId) setRoomId(rooms[0].id);
       if (employees[0] && !employeeId) setEmployeeId(employees[0].id);
+      if (employees.length && brainstormEmployeeIds.length === 0) {
+        setBrainstormEmployeeIds(employees.slice(0, Math.min(3, employees.length)).map((e) => e.id));
+      }
       try {
         const { authHeaders } = await import("@/lib/api/auth-client");
         const headers = await authHeaders();
@@ -308,6 +314,7 @@ export function EmailWorkPanel({
               ["link_topic", "Move to topic"],
               ["create_task", "Create task"],
               ["ask_employee", "Ask employee"],
+              ["start_brainstorm", "Start AI brainstorm"],
               ["create_proposal", "Create proposal workspace"],
               ["prepare_proposal", "Prepare proposal with AI"],
               ["save_decision", "Save decision"],
@@ -594,6 +601,97 @@ export function EmailWorkPanel({
               ))}
             </select>
           )}
+        </ActionBox>
+      )}
+
+      {action === "start_brainstorm" && (
+        <ActionBox
+          busy={busy}
+          onCancel={() => setAction(null)}
+          onConfirm={() =>
+            void run(async () => {
+              const result = (await inboxStartBrainstorm({
+                workspaceId,
+                threadId,
+                employeeIds: brainstormEmployeeIds,
+                roomId: roomId || undefined,
+                topicTitle: topicTitle.trim() || undefined,
+                leadEmployeeId: employeeId || undefined,
+              })) as { roomId?: string };
+              setLastCard({
+                title: "Brainstorm started",
+                subtitle: "Human-confirmed · no auto-send",
+                href: result.roomId ? `/rooms/${result.roomId}` : null,
+              });
+            })
+          }
+        >
+          <p className="mb-2 text-[11px] text-ink-3">
+            Invites selected AIs into a topic titled “Email: …”. The lead synthesizes; nothing is
+            sent without your approval.
+          </p>
+          <div className="max-h-40 space-y-1 overflow-y-auto rounded-lg border border-border p-2">
+            {employees.map((e) => {
+              const checked = brainstormEmployeeIds.includes(e.id);
+              return (
+                <label key={e.id} className="flex items-center gap-2 text-xs text-ink">
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={() =>
+                      setBrainstormEmployeeIds((prev) =>
+                        checked ? prev.filter((id) => id !== e.id) : [...prev, e.id],
+                      )
+                    }
+                  />
+                  <span className="min-w-0 truncate">
+                    {e.name}
+                    <span className="text-ink-3"> · {e.role}</span>
+                  </span>
+                </label>
+              );
+            })}
+          </div>
+          <label className="mt-2 block text-xs text-ink-3">
+            Lead (synthesizes)
+            <select
+              className="mt-1 w-full rounded-lg border border-border bg-canvas px-2 py-1.5 text-ink"
+              value={employeeId}
+              onChange={(e) => setEmployeeId(e.target.value)}
+            >
+              {employees
+                .filter((e) => brainstormEmployeeIds.includes(e.id))
+                .map((e) => (
+                  <option key={e.id} value={e.id}>
+                    {e.name}
+                  </option>
+                ))}
+            </select>
+          </label>
+          <label className="mt-2 block text-xs text-ink-3">
+            Room
+            <select
+              className="mt-1 w-full rounded-lg border border-border bg-canvas px-2 py-1.5 text-ink"
+              value={roomId}
+              onChange={(e) => setRoomId(e.target.value)}
+            >
+              <option value="">Auto (linked room or new)</option>
+              {rooms.map((r) => (
+                <option key={r.id} value={r.id}>
+                  {r.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="mt-2 block text-xs text-ink-3">
+            Topic title (optional)
+            <input
+              className="mt-1 w-full rounded-lg border border-border bg-canvas px-2 py-1.5 text-ink"
+              value={topicTitle}
+              onChange={(e) => setTopicTitle(e.target.value)}
+              placeholder="Email: …"
+            />
+          </label>
         </ActionBox>
       )}
 

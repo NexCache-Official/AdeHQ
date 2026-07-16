@@ -41,6 +41,11 @@ export function applyFolderFilter(query: ThreadQuery, folder: InboxFolder): Thre
         .or(
           "triage_status.in.(queued,running),draft_status.in.(queued,running)",
         );
+    case "needs_input":
+      return query
+        .eq("is_spam", false)
+        .eq("mission_status", "awaiting_human")
+        .neq("status", "archived");
     case "needs_approval":
       // Threads with a draft awaiting hash-valid approval (route may refine).
       return query

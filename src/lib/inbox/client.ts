@@ -398,8 +398,10 @@ export async function fetchInboxUnreadCount(workspaceId: string): Promise<number
     `/api/inbox/unread-count?workspaceId=${encodeURIComponent(workspaceId)}`,
     { headers, cache: "no-store" },
   );
-  const body = await parseJson<{ count: number }>(res);
-  return body.count ?? 0;
+  const body = await parseJson<{ count?: number; badge?: number; awaitingHuman?: number }>(
+    res,
+  );
+  return body.badge ?? body.count ?? 0;
 }
 
 export async function fetchMailboxMembers(workspaceId: string): Promise<
@@ -609,6 +611,18 @@ export async function inboxAskEmployee(params: {
   clientActionId?: string;
 }) {
   return postWorkAction(params.threadId, "ask-employee", params);
+}
+
+export async function inboxStartBrainstorm(params: {
+  workspaceId: string;
+  threadId: string;
+  employeeIds: string[];
+  roomId?: string;
+  topicTitle?: string;
+  leadEmployeeId?: string;
+  clientActionId?: string;
+}) {
+  return postWorkAction(params.threadId, "start-brainstorm", params);
 }
 
 export async function inboxCreateProposal(params: {

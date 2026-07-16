@@ -12,6 +12,11 @@ import type {
   ThreadStatus,
   ThreadSummaryDTO,
 } from "./types";
+import {
+  deriveEmailMissionStatus,
+  EMAIL_MISSION_LABELS,
+  type EmailMissionStatus,
+} from "./mission-status";
 import type { DeliveryStatus, MessageDirection } from "./types";
 
 export async function getPrimaryMailbox(
@@ -69,6 +74,17 @@ export function mapThreadRow(row: Record<string, unknown>): ThreadSummaryDTO {
     peerName = (preview.from_name as string) ?? null;
   }
 
+  const missionStatus =
+    (row.mission_status as EmailMissionStatus | null) ??
+    deriveEmailMissionStatus({
+      currentStatus: row.mission_status as string | null,
+      assignedEmployeeId: row.assigned_employee_id as string | null,
+      replyRequired: Boolean(row.reply_required),
+      latestDirection: row.latest_direction as string | null,
+      draftStatus: row.draft_status as string | null,
+      wakePosted: Boolean(row.last_wake_at),
+    });
+
   return {
     id: String(row.id),
     subject: String(row.subject ?? "") || "(no subject)",
@@ -98,6 +114,8 @@ export function mapThreadRow(row: Record<string, unknown>): ThreadSummaryDTO {
     draftStatus: (row.draft_status as ThreadSummaryDTO["draftStatus"]) ?? "idle",
     category: (row.category as string) ?? null,
     aiActivity: buildAiActivity(row),
+    missionStatus,
+    missionOwnerEmployeeId: (row.mission_owner_employee_id as string) ?? null,
     labels: Array.isArray(row.__labels)
       ? (row.__labels as Array<{ id: string; name: string; color: string | null }>)
       : [],
@@ -105,6 +123,10 @@ export function mapThreadRow(row: Record<string, unknown>): ThreadSummaryDTO {
 }
 
 function buildAiActivity(row: Record<string, unknown>): string | null {
+  const mission = row.mission_status as EmailMissionStatus | undefined;
+  if (mission && mission !== "idle" && mission !== "assigned") {
+    return EMAIL_MISSION_LABELS[mission] ?? null;
+  }
   const draftStatus = String(row.draft_status ?? "idle");
   const triageStatus = String(row.triage_status ?? "not_started");
   const meta = (row.steward_meta as Record<string, unknown>) ?? {};

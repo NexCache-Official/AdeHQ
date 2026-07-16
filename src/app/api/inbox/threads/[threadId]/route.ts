@@ -15,6 +15,7 @@ import type {
   ThreadStatus,
   TriageStatus,
 } from "@/lib/inbox/types";
+import { deriveEmailMissionStatus } from "@/lib/inbox/mission-status";
 
 export const runtime = "nodejs";
 
@@ -33,7 +34,7 @@ export async function GET(
     const { data: thread, error: threadError } = await ctx.secret
       .from("email_threads")
       .select(
-        "id, subject, status, is_spam, direction_state, has_unread, mailbox_id, triage_status, draft_status, category, priority, reply_required, triage_confidence, assignment_confidence, assignment_source, assigned_employee_id, assigned_human_id, suggested_employee_id, steward_meta, latest_draft_id",
+        "id, subject, status, is_spam, direction_state, latest_direction, has_unread, mailbox_id, triage_status, draft_status, category, priority, reply_required, triage_confidence, assignment_confidence, assignment_source, assigned_employee_id, assigned_human_id, suggested_employee_id, steward_meta, latest_draft_id, mission_status, mission_owner_employee_id, last_wake_at, origin_room_id, origin_topic_id",
       )
       .eq("id", threadId)
       .eq("mailbox_id", ctx.mailbox.id)
@@ -164,6 +165,20 @@ export async function GET(
       latestDraftId: (thread.latest_draft_id as string) ?? null,
       assistanceModeSuggestsActions:
         String(mailbox?.assistance_mode) === "ai_triage_suggested_replies",
+      missionStatus: deriveEmailMissionStatus({
+        currentStatus: thread.mission_status as string | null,
+        assignedEmployeeId: thread.assigned_employee_id as string | null,
+        replyRequired: Boolean(thread.reply_required),
+        latestDirection: thread.latest_direction as string | null,
+        draftStatus: thread.draft_status as string | null,
+      }),
+      missionOwnerEmployeeId:
+        (thread.mission_owner_employee_id as string) ??
+        (thread.assigned_employee_id as string) ??
+        null,
+      lastWakeAt: (thread.last_wake_at as string) ?? null,
+      originRoomId: (thread.origin_room_id as string) ?? null,
+      originTopicId: (thread.origin_topic_id as string) ?? null,
     };
     return NextResponse.json(body);
   } catch (error) {

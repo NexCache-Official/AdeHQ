@@ -21,6 +21,7 @@ const VALID_FOLDERS: InboxFolder[] = [
   "archived",
   "spam",
   "ai_working",
+  "needs_input",
   "needs_approval",
   "assigned_to_me",
 ];
@@ -70,7 +71,7 @@ export async function GET(request: NextRequest) {
     let query = ctx.secret
       .from("email_threads")
       .select(
-        "id, subject, status, is_spam, direction_state, latest_direction, has_unread, last_message_at, assigned_human_id, assigned_employee_id, suggested_employee_id, priority, reply_required, triage_status, draft_status, category, steward_meta, latest_draft_id",
+        "id, subject, status, is_spam, direction_state, latest_direction, has_unread, last_message_at, assigned_human_id, assigned_employee_id, suggested_employee_id, priority, reply_required, triage_status, draft_status, category, steward_meta, latest_draft_id, mission_status, mission_owner_employee_id, last_wake_at, origin_room_id, origin_topic_id",
       )
       .eq("mailbox_id", ctx.mailbox.id)
       .order("last_message_at", { ascending: false, nullsFirst: false })

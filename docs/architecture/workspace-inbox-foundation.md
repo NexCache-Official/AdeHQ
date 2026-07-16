@@ -1,4 +1,4 @@
-# Workspace Inbox — Slice A–E foundation
+# Workspace Inbox — Slice A–F foundation
 
 Secure foundation for AdeHQ’s **shared workspace inbox** (not per-AI-employee mailboxes). Transport is Resend (`inbox.adehq.com`); system of record is Supabase.
 
@@ -7,6 +7,7 @@ Secure foundation for AdeHQ’s **shared workspace inbox** (not per-AI-employee 
 - **Slice C** — cost-aware Email Steward (organise + on-demand AI drafts + version-locked approval)
 - **Slice D** — email → AdeHQ work (rooms/topics/tasks/artifacts/memory) via privacy-safe bridge + Work Graph
 - **Slice E** — CRM linking, labels, simple rules, follow-up tasks, Context CRM panel
+- **Slice F** — inbound AI wake (DM-first), unified `mission_status`, human-confirmed brainstorm, composer/live polish
 
 Slice 0 transport proof remains under `src/lib/inbox-transport-proof/` — do not delete yet.
 
@@ -34,6 +35,7 @@ Approve = manage grant or manager-with-read (plus owners/admins). Rules CRUD req
 | Inbox | `status in (open,waiting)`, not spam |
 | Assigned to me | `assigned_human_id = current user` |
 | AI working | `triage_status` or `draft_status` in queued/running (active jobs only) |
+| Needs your input | `mission_status = awaiting_human` |
 | Needs approval | AI/origin drafts with pending approval or awaiting request; excludes stale |
 | Awaiting reply | latest outbound |
 | Sent | direction outbound/mixed |
@@ -103,11 +105,39 @@ Also: AI employee **Allow once / Always allow** tool grants use `employee_tool_s
 6. `20260714141823_inbox_slice_d.sql` — Slice D
 7. `20260714145149_inbox_slice_e.sql` — Slice E (employee/CRM text IDs + FKs)
 8. `20260714150150_employee_tool_session_grants.sql` — Allow-once tool session grants
+9. `20260715234454_inbox_collab_email_missions.sql` / `20260715234645_…` — empty stubs
+10. `20260716000000_inbox_collab_email_missions.sql` — Slice F mission columns + `inbound_wake` job type
 
-## Out of scope (F+)
+## Slice F — collaborative inbound missions
 
-- Custom domains, aliases UX, Gmail/Outlook sync → **F**
+After triage/assign (when `assistance_mode !== manual`, thread has an assignee, and `reply_required`), the steward enqueues `inbound_wake`:
+
+1. Resolve DM with the assignee (never Maya)
+2. Post a privacy-safe system bridge (summary / key points / ≤500-char excerpt)
+3. Queue `agent_runs` with `workType: email_inbound_wake`
+4. Optional origin-room heads-up via Work Graph
+5. Set `mission_status = awaiting_human` (idempotent via `email_work_actions`)
+
+Canonical cross-surface state lives on `email_threads.mission_status` (`idle` → `triaging` → `assigned` → `awaiting_human` → `brainstorming` → `drafting` → `pending_send` → `queued` → `waiting_reply` / `discarded`). Dual approval tables stay separate; the UI reads mission status everywhere.
+
+Human-confirmed brainstorm: `POST /api/inbox/threads/[id]/work/start-brainstorm` creates/reuses topic `Email: {subject}`, invites peers, leads synthesize (`email_brainstorm` / `email_brainstorm_lead`). Never auto-sends.
+
+Composer: quoted inbound reply, attachment size chips, session-persisted undo banner, deep links from chat ApprovalCards / email artifact cards → `/inbox?thread=…`. Live: realtime on drafts/approvals + focused Inbox poll; sidebar badge includes `awaiting_human`.
+
+### Key F routes / helpers
+
+| Piece | Path |
+|-------|------|
+| Wake | `src/lib/inbox/steward/inbound-wake.ts` |
+| Mission | `src/lib/inbox/mission-status.ts` + `syncThreadMissionStatus` |
+| Brainstorm | `POST .../work/start-brainstorm` |
+| Migration | `20260716000000_inbox_collab_email_missions.sql` |
+
+## Out of scope (G+)
+
+- Custom domains, aliases UX, Gmail/Outlook sync
 - Autonomous send / AI auto-draft mode → **G**
 - Property linking (no CRM property entity yet)
 - Scheduled outbound sequences / Scheduled folder as send queue
 - Silent auto-create contacts; auto-sending follow-up emails
+- Per-employee mailboxes; merging `email_approvals` with chat `approvals`

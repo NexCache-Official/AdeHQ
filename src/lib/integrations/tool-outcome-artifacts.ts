@@ -94,6 +94,13 @@ export function toolReceiptArtifact(result: ToolCallResult): MessageArtifact | n
       const title = String(output?.payload?.title ?? output?.payload?.subject ?? "Email draft");
       const inboxDraftId = output?.payload?.inboxDraftId ?? output?.payload?.draftId;
       const artifactId = output?.payload?.artifactId;
+      const emailThreadId = output?.payload?.emailThreadId;
+      const inboxHref =
+        typeof emailThreadId === "string" && emailThreadId
+          ? `/inbox?thread=${encodeURIComponent(emailThreadId)}`
+          : inboxDraftId
+            ? "/inbox?folder=drafts"
+            : null;
       return {
         type: "tool_result",
         id: objectId,
@@ -101,11 +108,13 @@ export function toolReceiptArtifact(result: ToolCallResult): MessageArtifact | n
         meta: {
           toolName: result.tool,
           toolStatus: "success",
-          href: inboxDraftId
-            ? "/inbox?folder=drafts"
-            : artifactId
+          inboxDraftId: typeof inboxDraftId === "string" ? inboxDraftId : null,
+          emailThreadId: typeof emailThreadId === "string" ? emailThreadId : null,
+          href:
+            inboxHref ??
+            (artifactId
               ? `/drive?artifact=${artifactId}`
-              : `/drive?artifact=${objectId}`,
+              : `/drive?artifact=${objectId}`),
           subtitle: inboxDraftId
             ? "Saved to Inbox drafts — not sent yet"
             : "Reviewable draft — not sent",

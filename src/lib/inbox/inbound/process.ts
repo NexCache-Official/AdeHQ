@@ -407,10 +407,11 @@ export async function processInboundEvent(
     const nextDirectionState =
       prevDirection === "outbound" || prevDirection === "mixed" ? "mixed" : "inbound";
 
+    const inboundAt = new Date().toISOString();
     await client
       .from("email_threads")
       .update({
-        last_message_at: new Date().toISOString(),
+        last_message_at: inboundAt,
         processing_state: "ready",
         folder: "inbox",
         latest_direction: "inbound",
@@ -420,6 +421,8 @@ export async function processInboundEvent(
         // "waiting" after our outbound left the thread awaiting a reply).
         status: "open",
         is_spam: false,
+        mission_status: "triaging",
+        last_inbound_at: inboundAt,
       })
       .eq("id", threadId);
 
@@ -461,6 +464,15 @@ export async function processInboundEvent(
         threadId,
         messageId,
       });
+      if (!jobId) {
+        const { updateEmailMission } = await import("@/lib/inbox/mission-status");
+        await updateEmailMission(client, {
+          workspaceId: resolved.workspaceId,
+          threadId,
+          status: "idle",
+          lastInboundAt: inboundAt,
+        });
+      }
       if (jobId) {
         // Best-effort drain — must not delay marking inbound ready.
         void import("@/lib/inbox/steward/process")

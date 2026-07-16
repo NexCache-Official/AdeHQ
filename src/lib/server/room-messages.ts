@@ -653,6 +653,69 @@ export async function insertHumanMessage(
   return message;
 }
 
+/** Insert an idempotent internal platform message (stewards, automations). */
+export async function insertSystemMessage(
+  client: SupabaseClient,
+  workspaceId: string,
+  roomId: string,
+  content: string,
+  topicId: string,
+  clientMessageId: string,
+  senderName = "Email Steward",
+): Promise<RoomMessage> {
+  const { data: existing, error: lookupError } = await client
+    .from("messages")
+    .select("*")
+    .eq("workspace_id", workspaceId)
+    .eq("client_message_id", clientMessageId)
+    .maybeSingle();
+  if (lookupError) throw lookupError;
+  if (existing) return messageFromRow(existing as DbRow);
+
+  const message: RoomMessage = {
+    id: uid("msg"),
+    roomId,
+    topicId,
+    senderType: "system",
+    senderId: "email-steward",
+    senderName,
+    content,
+    mentions: [],
+    clientMessageId,
+    createdAt: nowISO(),
+  };
+  const { error } = await client.from("messages").insert({
+    workspace_id: workspaceId,
+    id: message.id,
+    client_message_id: clientMessageId,
+    room_id: roomId,
+    topic_id: topicId,
+    sender_type: message.senderType,
+    sender_id: message.senderId,
+    sender_name: message.senderName,
+    content: message.content,
+    mentions: [],
+    mentions_json: [],
+    pending: false,
+    created_at: message.createdAt,
+  });
+  if (error?.code === "23505") {
+    const { data: raced, error: refetchError } = await client
+      .from("messages")
+      .select("*")
+      .eq("workspace_id", workspaceId)
+      .eq("client_message_id", clientMessageId)
+      .maybeSingle();
+    if (refetchError) throw refetchError;
+    if (raced) return messageFromRow(raced as DbRow);
+  }
+  if (error) throw error;
+  void refreshTopicStats(client, topicId).catch((err) => {
+    console.error("[AdeHQ] topic stats refresh failed", err);
+  });
+  return message;
+}
+
 export async function persistEmployeeEffects(
   client: SupabaseClient,
   workspaceId: string,

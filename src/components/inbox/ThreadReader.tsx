@@ -21,6 +21,7 @@ import {
 import type { MailboxAccessFlags, MessageDTO, ThreadDetailDTO } from "@/lib/inbox/types";
 import { cn } from "@/lib/utils";
 import { EmailWorkPanel } from "@/components/inbox/EmailWorkPanel";
+import { EMAIL_MISSION_LABELS } from "@/lib/inbox/mission-status";
 
 const DELIVERY_LABEL: Record<string, string> = {
   received: "Received",
@@ -473,6 +474,20 @@ export function ThreadReader({
                 <Users className="h-3 w-3" />
               )}
               {thread.assigneeName}
+            </span>
+          )}
+          {thread.missionStatus !== "idle" && (
+            <span
+              className={cn(
+                "rounded-md px-1.5 py-0.5 font-medium",
+                thread.missionStatus === "awaiting_human"
+                  ? "bg-amber-50 text-amber-800"
+                  : thread.missionStatus === "pending_send"
+                    ? "bg-rose-50 text-rose-700"
+                    : "bg-muted text-ink-2",
+              )}
+            >
+              {EMAIL_MISSION_LABELS[thread.missionStatus]}
             </span>
           )}
           {thread.hasUnread && <span className="font-medium text-accent-d">Unread</span>}

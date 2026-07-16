@@ -12,7 +12,13 @@ import { useEffect, useRef } from "react";
 import { supabase } from "@/lib/supabase/client";
 
 export type InboxRealtimeEvent = {
-  table: "email_threads" | "email_messages" | "email_outbox" | "email_jobs";
+  table:
+    | "email_threads"
+    | "email_messages"
+    | "email_outbox"
+    | "email_jobs"
+    | "email_drafts"
+    | "email_approvals";
   eventType: "INSERT" | "UPDATE" | "DELETE";
   threadId: string | null;
   new: Record<string, unknown> | null;
@@ -78,6 +84,16 @@ export function useInboxRealtime(params: {
         "postgres_changes",
         { event: "*", schema: "public", table: "email_jobs", filter },
         relay("email_jobs"),
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "email_drafts", filter },
+        relay("email_drafts"),
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "email_approvals", filter },
+        relay("email_approvals"),
       )
       .subscribe();
 

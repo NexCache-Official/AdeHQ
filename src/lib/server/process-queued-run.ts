@@ -881,7 +881,10 @@ export async function processQueuedAgentRun(
       typeof runMetadata.workType === "string" ? runMetadata.workType : "";
     const isEmailWorkAsk =
       emailWorkType === "email_ask_employee" ||
-      emailWorkType === "email_prepare_proposal";
+      emailWorkType === "email_prepare_proposal" ||
+      emailWorkType === "email_inbound_wake" ||
+      emailWorkType === "email_brainstorm" ||
+      emailWorkType === "email_brainstorm_lead";
     if (isEmailWorkAsk) {
       const emailBlock = [
         "EMAIL WORK CONTEXT (internal AdeHQ inbox bridge):",
@@ -889,6 +892,33 @@ export async function processQueuedAgentRun(
         "- That bridge IS your email context (subject, summary, key points, excerpt).",
         "- Do NOT say you cannot see the email, need a sync, or lack inbox access when those fields are present.",
         "- Do NOT send external email yourself. Use email.createDraft then email.sendDraft so a human approves send from the workspace Inbox.",
+        emailWorkType === "email_inbound_wake"
+          ? [
+              "- This turn was self-initiated by the Email Steward after a new inbound reply.",
+              "- Identify who replied, what changed, and the exact decision the human needs to make.",
+              "- Ask at most 1–2 high-value clarifying questions; do not interrogate the human.",
+              "- Recommend a concrete response stance and ask whether to draft it now.",
+              "- Treat calendar commitments, pricing, legal terms, security, and promises as decisions requiring explicit human confirmation.",
+              "- If multiple specialties are genuinely needed, name the roles and ask before starting a brainstorm. Do not summon coworkers unprompted.",
+              "- Never claim a meeting is booked or an email is sent until the corresponding tool succeeds.",
+            ].join("\n")
+          : null,
+        emailWorkType === "email_brainstorm"
+          ? [
+              "- This is a human-confirmed multi-AI brainstorm about an inbound email.",
+              "- Contribute 2–4 concrete points from your specialty only.",
+              "- Do not draft the final email unless the human asks after synthesis.",
+              "- Never send external email or claim a booking/send without a successful tool result.",
+            ].join("\n")
+          : null,
+        emailWorkType === "email_brainstorm_lead"
+          ? [
+              "- You are the lead for a human-confirmed email brainstorm.",
+              "- Wait for peer points if they arrive in the same topic; then synthesize one recommended reply stance.",
+              "- Present a short outline and ask the human before calling email.createDraft.",
+              "- Never auto-send. Never summon additional AIs without human confirmation.",
+            ].join("\n")
+          : null,
         typeof runMetadata.emailThreadId === "string"
           ? `- emailThreadId: ${runMetadata.emailThreadId}`
           : null,

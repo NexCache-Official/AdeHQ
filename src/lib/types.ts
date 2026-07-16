@@ -223,6 +223,8 @@ export type MessageArtifact = {
     href?: string;
     subtitle?: string;
     email?: string;
+    inboxDraftId?: string | null;
+    emailThreadId?: string | null;
     searchSources?: Array<{
       id: string;
       title: string;

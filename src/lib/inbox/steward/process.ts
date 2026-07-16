@@ -6,6 +6,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { claimNextJobs, completeJob, failJob } from "./jobs";
 import { runTriageForMessage } from "./run";
 import { runDraftJob } from "./draft";
+import { wakeEmployeeForEmailThread } from "./inbound-wake";
 
 export async function processEmailJobs(
   client: SupabaseClient,
@@ -30,6 +31,16 @@ export async function processEmailJobs(
       } else if (jobType === "draft" || jobType === "rewrite") {
         await runDraftJob(client, job);
         await completeJob(client, jobId, { ok: true });
+      } else if (jobType === "inbound_wake") {
+        const payload = (job.payload as Record<string, unknown> | null) ?? {};
+        const result = await wakeEmployeeForEmailThread(client, {
+          workspaceId: String(job.workspace_id),
+          mailboxId: String(job.mailbox_id),
+          threadId: String(job.thread_id),
+          messageId: String(job.message_id),
+          employeeId: String(payload.employeeId ?? ""),
+        });
+        await completeJob(client, jobId, { ok: true, wake: result });
       } else {
         await failJob(client, jobId, `unknown_job_type:${jobType}`);
       }
@@ -50,6 +61,11 @@ export async function processEmailJobs(
         }
       }
     }
+  }
+  // Triage can enqueue an inbound_wake job. Drain newly-created follow-up work
+  // in the same best-effort nudge without exceeding the caller's batch limit.
+  if (claimed.length > 0 && n < limit) {
+    return n + (await processEmailJobs(client, limit - n));
   }
   return n;
 }

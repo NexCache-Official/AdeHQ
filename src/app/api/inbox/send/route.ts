@@ -191,7 +191,7 @@ export async function POST(request: NextRequest) {
 
     // Close any pending chat email.sendDraft cards for this draft so DMs update live.
     if (body.draftId) {
-      const { syncPendingEmailSendApprovals } = await import(
+      const { syncPendingEmailSendApprovals, syncThreadMissionStatus } = await import(
         "@/lib/integrations/sync-email-draft-approvals"
       );
       await syncPendingEmailSendApprovals(ctx.secret, {
@@ -200,6 +200,33 @@ export async function POST(request: NextRequest) {
         status: "approved",
         resolvedBy: ctx.user.id,
         note: "Sent from Inbox",
+      });
+      if (body.threadId || result.outboxId) {
+        const threadId =
+          body.threadId ??
+          (
+            await ctx.secret
+              .from("email_outbox")
+              .select("thread_id")
+              .eq("id", result.outboxId)
+              .maybeSingle()
+          ).data?.thread_id;
+        if (threadId) {
+          await syncThreadMissionStatus(ctx.secret, {
+            workspaceId: ctx.workspaceId,
+            threadId: String(threadId),
+            status: "queued",
+          });
+        }
+      }
+    } else if (body.threadId) {
+      const { syncThreadMissionStatus } = await import(
+        "@/lib/integrations/sync-email-draft-approvals"
+      );
+      await syncThreadMissionStatus(ctx.secret, {
+        workspaceId: ctx.workspaceId,
+        threadId: body.threadId,
+        status: "queued",
       });
     }
 

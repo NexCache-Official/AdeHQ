@@ -61,7 +61,7 @@ export type EmailTriageResult = {
   source: "rules" | "embeddings" | "classifier";
 };
 
-export type EmailJobType = "triage" | "draft" | "rewrite";
+export type EmailJobType = "triage" | "draft" | "rewrite" | "inbound_wake";
 
 export type EmailJobStatus =
   | "queued"

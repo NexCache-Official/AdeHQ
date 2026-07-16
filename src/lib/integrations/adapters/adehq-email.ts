@@ -188,6 +188,7 @@ export async function createEmailDraft(
       artifactId,
       inboxDraftId,
       draftId: inboxDraftId,
+      emailThreadId: ctx.emailThreadId ?? null,
       title,
       subject: json.subject,
       body: json.body,

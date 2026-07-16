@@ -549,6 +549,255 @@ export async function createTaskFromEmail(
 
 // --- D2 actions ----------------------------------------------------------------
 
+/**
+ * Human-confirmed multi-AI brainstorm on a dedicated email topic.
+ * Never auto-sends. Invites peers; lead (assignee or first peer) synthesizes.
+ */
+export async function startBrainstormFromEmail(
+  base: WorkActionBase,
+  params: {
+    employeeIds: string[];
+    roomId?: string;
+    topicTitle?: string;
+    leadEmployeeId?: string;
+  },
+) {
+  return withIdempotency(base, "start_brainstorm", async () => {
+    const uniqueIds = [...new Set(params.employeeIds.map((id) => id.trim()).filter(Boolean))];
+    if (uniqueIds.length === 0) {
+      throw new AuthError("Select at least one employee to brainstorm.", 400);
+    }
+
+    const ctx = await buildContextForThread(base);
+    const provenance = provenanceFromContext(ctx);
+    const src = await loadThreadWorkSource(
+      base.client,
+      base.workspaceId,
+      base.mailboxId,
+      base.threadId,
+    );
+
+    const employees: AIEmployee[] = [];
+    for (const employeeId of uniqueIds) {
+      await loadWorkAssignableEmployee(base.client, {
+        workspaceId: base.workspaceId,
+        employeeId,
+      });
+      const { data: empRow, error: empErr } = await base.client
+        .from("ai_employees")
+        .select("*")
+        .eq("workspace_id", base.workspaceId)
+        .eq("id", employeeId)
+        .single();
+      if (empErr || !empRow) throw empErr ?? new AuthError("Employee not found", 404);
+      const employee = employeeStubFromRow(empRow as Record<string, unknown>);
+      if (isMayaEmployee(employee)) {
+        throw new AuthError("Maya cannot join inbox brainstorms.", 400);
+      }
+      employees.push(employee);
+    }
+
+    let roomId = params.roomId?.trim() || "";
+    if (!roomId) {
+      const edges = await listActiveEdgesForThread(base.client, {
+        workspaceId: base.workspaceId,
+        threadId: base.threadId,
+      });
+      const linkedRoom = edges.find(
+        (e) =>
+          (e.relationType === EMAIL_WORK_RELATIONS.linkedRoom ||
+            e.relationType === EMAIL_WORK_RELATIONS.spawnedRoom) &&
+          e.toObjectType === "room",
+      );
+      if (linkedRoom) {
+        roomId = linkedRoom.toObjectId;
+      } else {
+        const started = await startRoomFromEmail(base, {
+          roomName: truncateName(`Email · ${ctx.subject}`, 80),
+        });
+        roomId = started.roomId;
+      }
+    } else {
+      await assertCanBridgeIntoRoom(base.client, {
+        workspaceId: base.workspaceId,
+        roomId,
+        userId: base.userId,
+      });
+    }
+
+    const topicTitle =
+      params.topicTitle?.trim() ||
+      truncateName(`Email: ${ctx.subject || "thread"}`, 80);
+
+    // Reuse an existing brainstorm topic for this thread when present.
+    const existingEdges = await listActiveEdgesForThread(base.client, {
+      workspaceId: base.workspaceId,
+      threadId: base.threadId,
+    });
+    const brainstormEdge = existingEdges.find(
+      (e) =>
+        e.relationType === EMAIL_WORK_RELATIONS.linkedTopic &&
+        e.toObjectType === "topic" &&
+        e.metadata?.brainstorm === true &&
+        String(e.metadata?.roomId ?? "") === roomId,
+    );
+
+    let topicId = brainstormEdge?.toObjectId;
+    if (!topicId) {
+      const { data: created, error } = await base.client
+        .from("topics")
+        .insert({
+          workspace_id: base.workspaceId,
+          room_id: roomId,
+          title: topicTitle,
+          description: "Email brainstorm (human-confirmed)",
+          created_by_type: "human",
+          created_by_id: base.userId,
+          metadata: { fromInboxThreadId: base.threadId, brainstorm: true },
+        })
+        .select("id")
+        .single();
+      if (error) throw error;
+      topicId = String(created.id);
+      await base.client.from("topic_members").upsert(
+        {
+          workspace_id: base.workspaceId,
+          room_id: roomId,
+          topic_id: topicId,
+          member_type: "human",
+          member_id: base.userId,
+          role: "owner",
+        },
+        { onConflict: "topic_id,member_type,member_id" },
+      );
+    }
+
+    const now = nowISO();
+    for (const employee of employees) {
+      await base.client.from("room_members").upsert(
+        {
+          workspace_id: base.workspaceId,
+          room_id: roomId,
+          member_type: "ai",
+          member_id: employee.id,
+          created_at: now,
+        },
+        { onConflict: "workspace_id,room_id,member_type,member_id" },
+      );
+      await base.client.from("topic_members").upsert(
+        {
+          workspace_id: base.workspaceId,
+          room_id: roomId,
+          topic_id: topicId,
+          member_type: "ai",
+          member_id: employee.id,
+          role: "member",
+        },
+        { onConflict: "topic_id,member_type,member_id" },
+      );
+    }
+
+    const leadId =
+      (params.leadEmployeeId && uniqueIds.includes(params.leadEmployeeId)
+        ? params.leadEmployeeId
+        : null) ||
+      (src.assignedEmployeeId && uniqueIds.includes(src.assignedEmployeeId)
+        ? src.assignedEmployeeId
+        : uniqueIds[0]);
+
+    const names = employees.map((e) => e.name).join(", ");
+    const bridge = formatEmailWorkBridgeMessage(ctx);
+    const content = [
+      bridge,
+      "",
+      `Brainstorm (human-confirmed): @${names.replace(/, /g, " @")}`,
+      `- Goal: recommend a response stance and draft outline for this email.`,
+      `- Do not send external email. Do not claim a send or booking unless a tool succeeds.`,
+      `- Peers: share 2–4 concrete points from your specialty.`,
+      `- @${employees.find((e) => e.id === leadId)?.name ?? "Lead"}: synthesize a single recommended reply after peers weigh in, then ask the human before drafting.`,
+    ].join("\n");
+
+    const message = await insertHumanMessage(
+      base.client,
+      base.workspaceId,
+      roomId,
+      { id: base.userId, name: base.userName },
+      content,
+      topicId,
+      `email-brainstorm-${base.clientActionId}`,
+    );
+
+    await upsertWorkGraphEdge(base.client, {
+      workspaceId: base.workspaceId,
+      fromObjectType: "email_thread",
+      fromObjectId: base.threadId,
+      relationType: EMAIL_WORK_RELATIONS.linkedRoom,
+      toObjectType: "room",
+      toObjectId: roomId,
+      metadata: { ...provenance, brainstorm: true },
+    });
+    await upsertWorkGraphEdge(base.client, {
+      workspaceId: base.workspaceId,
+      fromObjectType: "email_thread",
+      fromObjectId: base.threadId,
+      relationType: EMAIL_WORK_RELATIONS.linkedTopic,
+      toObjectType: "topic",
+      toObjectId: topicId,
+      metadata: {
+        ...provenance,
+        roomId,
+        messageId: message.id,
+        brainstorm: true,
+        leadEmployeeId: leadId,
+      },
+    });
+
+    const { updateEmailMission } = await import("@/lib/inbox/mission-status");
+    await updateEmailMission(base.client, {
+      workspaceId: base.workspaceId,
+      threadId: base.threadId,
+      status: "brainstorming",
+      ownerEmployeeId: leadId,
+      originRoomId: roomId,
+      originTopicId: topicId,
+    });
+
+    const { queued, blocked } = await queueAgentRuns(base.client, {
+      workspaceId: base.workspaceId,
+      roomId,
+      topicId,
+      triggerMessageId: message.id,
+      responders: employees.map((employee) => ({
+        employee,
+        reason: "explicit_mention" as const,
+        runMetadata: {
+          workType:
+            employee.id === leadId
+              ? "email_brainstorm_lead"
+              : "email_brainstorm",
+          emailThreadId: base.threadId,
+          emailMessageId: ctx.latestMessageId,
+          brainstormLeadEmployeeId: leadId,
+          ...provenance,
+        },
+      })),
+      content,
+    });
+
+    return {
+      roomId,
+      topicId,
+      messageId: message.id,
+      leadEmployeeId: leadId,
+      employeeIds: uniqueIds,
+      queuedRuns: queued.map((q) => q.runId),
+      blocked,
+      provenance,
+      workHoursEvent: "email_brainstorm",
+    };
+  });
+}
+
 export async function askEmployeeFromEmail(
   base: WorkActionBase,
   params: {

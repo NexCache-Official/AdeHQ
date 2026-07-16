@@ -86,6 +86,12 @@ const TEXT_COLORS = [
 
 const MAX_ATTACHMENT_BYTES = 8 * 1024 * 1024;
 
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 function parseAddresses(raw: string): string[] {
   return raw
     .split(/[,;]/)
@@ -759,14 +765,17 @@ export function Composer({
           {attachments.map((a) => (
             <span
               key={a.id}
-              className="inline-flex items-center gap-1.5 rounded-full border border-border bg-muted px-2.5 py-1 text-xs text-ink-2"
+              className="inline-flex max-w-full items-center gap-1.5 rounded-lg border border-border bg-muted px-2.5 py-1 text-xs text-ink-2"
+              title={`${a.filename} · ${formatBytes(a.sizeBytes)}`}
             >
-              <Paperclip className="h-3 w-3" />
-              <span className="max-w-[140px] truncate">{a.filename}</span>
+              <Paperclip className="h-3 w-3 shrink-0" />
+              <span className="min-w-0 max-w-[160px] truncate font-medium text-ink">{a.filename}</span>
+              <span className="shrink-0 text-[10px] text-ink-3">{formatBytes(a.sizeBytes)}</span>
               <button
                 type="button"
                 onClick={() => setAttachments((prev) => prev.filter((x) => x.id !== a.id))}
-                className="text-ink-3 hover:text-ink"
+                className="shrink-0 text-ink-3 hover:text-ink"
+                aria-label={`Remove ${a.filename}`}
               >
                 <X className="h-3 w-3" />
               </button>

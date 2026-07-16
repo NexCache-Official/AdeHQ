@@ -94,7 +94,9 @@ export function Sidebar() {
         });
     };
     load();
-    const timer = setInterval(load, 60_000);
+    // Faster while on Inbox so mission "needs input" badges stay fresh.
+    const intervalMs = pathname?.startsWith("/inbox") ? 15_000 : 60_000;
+    const timer = setInterval(load, intervalMs);
     return () => {
       cancelled = true;
       clearInterval(timer);

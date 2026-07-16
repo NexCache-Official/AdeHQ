@@ -118,6 +118,15 @@ export function ApprovalCard({ approval }: { approval: Approval }) {
     fieldValue(previewFields, "Body") ||
     fieldValue(previewFields, "Preview");
   const draftId = typeof payloadArgs.draftId === "string" ? payloadArgs.draftId : null;
+  const emailThreadId =
+    typeof payloadArgs.threadId === "string" && payloadArgs.threadId.trim()
+      ? payloadArgs.threadId.trim()
+      : null;
+  const inboxHref = emailThreadId
+    ? `/inbox?thread=${encodeURIComponent(emailThreadId)}`
+    : draftId
+      ? "/inbox?folder=drafts"
+      : "/inbox";
 
   // Keep pending email cards fresh against inbox draft status / full body.
   useEffect(() => {
@@ -237,12 +246,12 @@ export function ApprovalCard({ approval }: { approval: Approval }) {
               </h4>
             </div>
           </div>
-          {draftId && (
+          {(draftId || emailThreadId) && (
             <Link
-              href={`/inbox?folder=drafts`}
+              href={inboxHref}
               className="inline-flex shrink-0 items-center gap-1 text-[11px] font-medium text-accent-d hover:underline"
             >
-              Inbox <ExternalLink className="h-3 w-3" />
+              Open in Inbox <ExternalLink className="h-3 w-3" />
             </Link>
           )}
         </div>

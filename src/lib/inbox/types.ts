@@ -57,6 +57,7 @@ export type InboxFolder =
   | "archived"
   | "spam"
   | "ai_working"
+  | "needs_input"
   | "needs_approval"
   | "assigned_to_me";
 
@@ -133,6 +134,8 @@ export type ThreadSummaryDTO = {
   draftStatus: DraftJobStatus;
   category: string | null;
   aiActivity: string | null;
+  missionStatus: import("./mission-status").EmailMissionStatus;
+  missionOwnerEmployeeId: string | null;
   labels: Array<{ id: string; name: string; color: string | null }>;
 };
 
@@ -188,6 +191,11 @@ export type ThreadDetailDTO = {
   suggestionDismissed: boolean;
   latestDraftId: string | null;
   assistanceModeSuggestsActions: boolean;
+  missionStatus: import("./mission-status").EmailMissionStatus;
+  missionOwnerEmployeeId: string | null;
+  lastWakeAt: string | null;
+  originRoomId: string | null;
+  originTopicId: string | null;
 };
 
 export type DraftDTO = {

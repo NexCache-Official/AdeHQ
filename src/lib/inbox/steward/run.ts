@@ -12,6 +12,7 @@ import { decideAssignment, loadEligibleEmployees } from "./assign";
 import { maybeClassifyWithModel } from "./classify";
 import { TRIAGE_VERSION } from "./types";
 import type { EmailTriageResult } from "./types";
+import { updateEmailMission } from "@/lib/inbox/mission-status";
 
 export async function runTriageForMessage(
   client: SupabaseClient,
@@ -193,6 +194,21 @@ export async function runTriageForMessage(
       .eq("id", params.threadId);
     if (patchError) throw patchError;
 
+    const effectiveAssignee =
+      (humanLocked ? thread?.assigned_employee_id : assignment.assignedEmployeeId) ?? null;
+    await updateEmailMission(client, {
+      workspaceId: params.workspaceId,
+      threadId: params.threadId,
+      status: result.replyRequired
+        ? effectiveAssignee
+          ? "assigned"
+          : "triaging"
+        : effectiveAssignee
+          ? "assigned"
+          : "idle",
+      ownerEmployeeId: effectiveAssignee ? String(effectiveAssignee) : null,
+    });
+
     await recordEmailEvent(client, {
       workspaceId: params.workspaceId,
       mailboxId: params.mailboxId,
@@ -229,6 +245,19 @@ export async function runTriageForMessage(
           source: assignment.assignmentSource,
           confidence: assignment.assignmentConfidence,
         },
+      });
+    }
+
+    if (result.replyRequired && effectiveAssignee) {
+      const { enqueueEmailJob } = await import("./jobs");
+      await enqueueEmailJob(client, {
+        workspaceId: params.workspaceId,
+        mailboxId: params.mailboxId,
+        threadId: params.threadId,
+        messageId: params.messageId,
+        jobType: "inbound_wake",
+        idempotencyKey: `email-wake:${params.messageId}:${String(effectiveAssignee)}`,
+        payload: { employeeId: String(effectiveAssignee) },
       });
     }
 

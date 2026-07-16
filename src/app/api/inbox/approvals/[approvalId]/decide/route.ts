@@ -89,6 +89,10 @@ export async function POST(
       );
     }
 
+    const { syncThreadMissionStatus } = await import(
+      "@/lib/integrations/sync-email-draft-approvals"
+    );
+
     if (body.decision === "reject") {
       await ctx.secret
         .from("email_approvals")
@@ -103,6 +107,13 @@ export async function POST(
         .from("email_drafts")
         .update({ status: "draft" })
         .eq("id", draft.id);
+      if (draft.thread_id) {
+        await syncThreadMissionStatus(ctx.secret, {
+          workspaceId: ctx.workspaceId,
+          threadId: String(draft.thread_id),
+          status: "awaiting_human",
+        });
+      }
       await recordEmailEvent(ctx.secret, {
         workspaceId: ctx.workspaceId,
         mailboxId: ctx.mailbox.id,
@@ -134,6 +145,11 @@ export async function POST(
         .from("email_threads")
         .update({ latest_valid_approval_id: approvalId })
         .eq("id", draft.thread_id);
+      await syncThreadMissionStatus(ctx.secret, {
+        workspaceId: ctx.workspaceId,
+        threadId: String(draft.thread_id),
+        status: "pending_send",
+      });
     }
 
     await recordEmailEvent(ctx.secret, {

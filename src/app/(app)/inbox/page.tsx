@@ -18,6 +18,7 @@ import {
   Settings2,
   UserRound,
   Folder,
+  MessageCircleQuestion,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useStore } from "@/lib/demo-store";
@@ -61,11 +62,13 @@ import type {
 } from "@/lib/inbox/types";
 import { motion } from "framer-motion";
 import { workAssignableEmployees } from "@/lib/maya-employee";
+import { EMAIL_MISSION_LABELS } from "@/lib/inbox/mission-status";
 
 const FOLDERS: { key: InboxFolder; label: string; icon: typeof InboxIcon }[] = [
   { key: "inbox", label: "Inbox", icon: InboxIcon },
   { key: "assigned_to_me", label: "Assigned to me", icon: UserRound },
   { key: "ai_working", label: "AI working", icon: Sparkles },
+  { key: "needs_input", label: "Needs your input", icon: MessageCircleQuestion },
   { key: "needs_approval", label: "Needs approval", icon: CheckCircle2 },
   { key: "awaiting", label: "Awaiting reply", icon: Clock },
   { key: "sent", label: "Sent", icon: SendIcon },
@@ -123,6 +126,43 @@ export default function InboxPage() {
   } | null>(null);
   const [undoSecondsLeft, setUndoSecondsLeft] = useState(0);
   const undoTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const undoStorageKey = workspaceId ? `adehq:inbox-undo:${workspaceId}` : null;
+
+  // Restore undo banner across refresh while the undo window is still open.
+  useEffect(() => {
+    if (!undoStorageKey || typeof window === "undefined") return;
+    try {
+      const raw = sessionStorage.getItem(undoStorageKey);
+      if (!raw) return;
+      const parsed = JSON.parse(raw) as {
+        outboxId: string;
+        undoUntil: string;
+        subject: string;
+        threadId: string | null;
+        optimisticId: string;
+      };
+      if (!parsed?.outboxId || !parsed?.undoUntil) {
+        sessionStorage.removeItem(undoStorageKey);
+        return;
+      }
+      if (new Date(parsed.undoUntil).getTime() <= Date.now()) {
+        sessionStorage.removeItem(undoStorageKey);
+        return;
+      }
+      setUndoBanner(parsed);
+    } catch {
+      sessionStorage.removeItem(undoStorageKey);
+    }
+  }, [undoStorageKey]);
+
+  useEffect(() => {
+    if (!undoStorageKey || typeof window === "undefined") return;
+    if (undoBanner) {
+      sessionStorage.setItem(undoStorageKey, JSON.stringify(undoBanner));
+    } else {
+      sessionStorage.removeItem(undoStorageKey);
+    }
+  }, [undoBanner, undoStorageKey]);
   const [drafting, setDrafting] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [assistanceMode, setAssistanceMode] = useState<string>("ai_triage");
@@ -381,6 +421,25 @@ export default function InboxPage() {
     },
   });
 
+  // Focused poll while Inbox is open — catches mission_status / draft changes
+  // if realtime is delayed or RLS filters miss a row.
+  useEffect(() => {
+    if (!access?.canRead || !workspaceId) return;
+    const tick = () => {
+      if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
+      scheduleRefresh(selectedThreadId);
+    };
+    const timer = window.setInterval(tick, 12_000);
+    const onFocus = () => tick();
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onFocus);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onFocus);
+    };
+  }, [access?.canRead, workspaceId, selectedThreadId, scheduleRefresh]);
+
   // --- Sending (optimistic + undo window) -----------------------------------
   const clearUndoBanner = useCallback(() => {
     if (undoTimerRef.current) {
@@ -575,7 +634,56 @@ export default function InboxPage() {
     const subject = threadDetail.subject.match(/^re:/i)
       ? threadDetail.subject
       : `Re: ${threadDetail.subject}`;
-    setComposer({ open: true, initial: { threadId: threadDetail.id, to, subject } });
+    const quoteSource =
+      lastInbound?.textBody?.trim() ||
+      lastInbound?.htmlSanitised
+        ?.replace(/<br\s*\/?>/gi, "\n")
+        .replace(/<\/p>/gi, "\n\n")
+        .replace(/<[^>]+>/g, " ")
+        .replace(/[ \t]+\n/g, "\n")
+        .replace(/\n{3,}/g, "\n\n")
+        .replace(/[ \t]{2,}/g, " ")
+        .trim() ||
+      "";
+    const when = lastInbound?.createdAt
+      ? new Date(lastInbound.createdAt).toLocaleString(undefined, {
+          dateStyle: "medium",
+          timeStyle: "short",
+        })
+      : "";
+    const who = lastInbound?.fromAddress || "them";
+    const quoteHeader = `On ${when}, ${who} wrote:`;
+    const quotedText = quoteSource
+      ? `${quoteHeader}\n${quoteSource
+          .split("\n")
+          .map((line) => `> ${line}`)
+          .join("\n")}`
+      : "";
+    const quotedHtml = quoteSource
+      ? `<p><br/></p><blockquote style="margin:0 0 0 0.5rem;padding-left:0.75rem;border-left:2px solid #d1d5db;color:#4b5563"><p><em>${quoteHeader
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")}</em></p>${quoteSource
+          .split(/\n{2,}/)
+          .map(
+            (p) =>
+              `<p>${p
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/\n/g, "<br/>")}</p>`,
+          )
+          .join("")}</blockquote>`
+      : "<p><br/></p>";
+    setComposer({
+      open: true,
+      initial: {
+        threadId: threadDetail.id,
+        to,
+        subject,
+        body: quotedText ? `\n\n${quotedText}` : "",
+        htmlBody: quotedHtml,
+      },
+    });
   }, [threadDetail]);
 
   const handleDraftWithAi = useCallback(async () => {
@@ -1279,6 +1387,25 @@ function ThreadRow({
             Drafting
           </span>
         )}
+        {thread.missionStatus !== "idle" &&
+          thread.missionStatus !== "assigned" &&
+          thread.missionStatus !== "drafting" && (
+            <span
+              className={cn(
+                "shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-medium",
+                thread.missionStatus === "awaiting_human" &&
+                  "bg-amber-50 text-amber-800",
+                thread.missionStatus === "pending_send" &&
+                  "bg-rose-50 text-rose-700",
+                thread.missionStatus === "brainstorming" &&
+                  "bg-accent-soft text-accent-d",
+                ["queued", "sent", "waiting_reply"].includes(thread.missionStatus) &&
+                  "bg-emerald-50 text-emerald-700",
+              )}
+            >
+              {EMAIL_MISSION_LABELS[thread.missionStatus]}
+            </span>
+          )}
         <span className="min-w-0 flex-1 truncate text-xs text-ink-3">
           {thread.aiActivity || thread.snippet}
         </span>

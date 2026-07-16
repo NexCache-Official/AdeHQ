@@ -801,6 +801,13 @@ export function RoomMessageItem({
                 company={artifact.meta?.company}
                 createdBy={artifact.meta?.createdByName ?? message.senderName}
                 status={artifact.meta?.artifactStatus ?? "draft"}
+                inboxHref={
+                  typeof artifact.meta?.emailThreadId === "string" && artifact.meta.emailThreadId
+                    ? `/inbox?thread=${encodeURIComponent(artifact.meta.emailThreadId)}`
+                    : typeof artifact.meta?.inboxDraftId === "string" && artifact.meta.inboxDraftId
+                      ? "/inbox?folder=drafts"
+                      : "/inbox"
+                }
                 onOpen={() => {
                   window.dispatchEvent(
                     new CustomEvent("adehq:open-artifact", {

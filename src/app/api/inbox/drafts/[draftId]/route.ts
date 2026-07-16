@@ -8,7 +8,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { resolveInboxRoute, inboxErrorResponse } from "@/lib/inbox/route-helpers";
 import { discardDraft, updateDraft } from "@/lib/inbox/drafts";
 import { mapDraftRow } from "@/lib/inbox/mailbox";
-import { syncPendingEmailSendApprovals } from "@/lib/integrations/sync-email-draft-approvals";
+import {
+  syncPendingEmailSendApprovals,
+  syncThreadMissionStatus,
+} from "@/lib/integrations/sync-email-draft-approvals";
 import { AuthError } from "@/lib/supabase/auth-server";
 
 export const runtime = "nodejs";
@@ -114,6 +117,11 @@ export async function DELETE(
       "send",
     );
     await assertDraftInMailbox(ctx, draftId);
+    const { data: draftRow } = await ctx.secret
+      .from("email_drafts")
+      .select("thread_id")
+      .eq("id", draftId)
+      .maybeSingle();
     await discardDraft(ctx.secret, draftId);
     await syncPendingEmailSendApprovals(ctx.secret, {
       workspaceId: ctx.workspaceId,
@@ -122,6 +130,13 @@ export async function DELETE(
       resolvedBy: ctx.user.id,
       note: "Draft discarded from Inbox",
     });
+    if (draftRow?.thread_id) {
+      await syncThreadMissionStatus(ctx.secret, {
+        workspaceId: ctx.workspaceId,
+        threadId: String(draftRow.thread_id),
+        status: "awaiting_human",
+      });
+    }
     return NextResponse.json({ ok: true });
   } catch (error) {
     return inboxErrorResponse(error);

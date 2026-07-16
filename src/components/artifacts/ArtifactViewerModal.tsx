@@ -199,6 +199,7 @@ export function EmailArtifactInlineCard({
   company,
   createdBy,
   status = "draft",
+  inboxHref,
   onOpen,
   onCopy,
   className,
@@ -210,6 +211,8 @@ export function EmailArtifactInlineCard({
   company?: string;
   createdBy?: string;
   status?: "draft" | "saved";
+  /** Deep link into workspace Inbox for this draft/thread. */
+  inboxHref?: string | null;
   onOpen?: () => void;
   onCopy?: () => void;
   className?: string;
@@ -260,6 +263,14 @@ export function EmailArtifactInlineCard({
       <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border px-3.5 py-2">
         <p className="text-[10px] text-ink-3">Review in Approvals or Inbox drafts to send.</p>
         <div className="flex flex-wrap gap-1.5">
+          {inboxHref && (
+            <a
+              href={inboxHref}
+              className="rounded-lg border border-border bg-canvas px-2.5 py-1 text-[11px] font-medium hover:bg-muted"
+            >
+              Inbox
+            </a>
+          )}
           {onOpen && (
             <button
               type="button"

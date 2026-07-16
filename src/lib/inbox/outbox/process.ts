@@ -178,6 +178,15 @@ export async function processOutboxItem(
       })
       .eq("id", threadId);
 
+    const { syncThreadMissionStatus } = await import(
+      "@/lib/integrations/sync-email-draft-approvals"
+    );
+    await syncThreadMissionStatus(client, {
+      workspaceId: String(claimed.workspace_id),
+      threadId,
+      status: "waiting_reply",
+    });
+
     await recordEmailEvent(client, {
       workspaceId: String(claimed.workspace_id),
       mailboxId: String(claimed.mailbox_id),
@@ -321,7 +330,7 @@ export async function cancelOutboxItem(
     .eq("id", params.outboxId)
     .eq("mailbox_id", params.mailboxId)
     .eq("status", "queued")
-    .select("id, draft_id")
+    .select("id, draft_id, thread_id, workspace_id")
     .maybeSingle();
 
   if (error) throw error;
@@ -335,6 +344,17 @@ export async function cancelOutboxItem(
       .eq("id", data.draft_id)
       .eq("mailbox_id", params.mailboxId)
       .eq("status", "sent");
+  }
+
+  if (data.thread_id && data.workspace_id) {
+    const { syncThreadMissionStatus } = await import(
+      "@/lib/integrations/sync-email-draft-approvals"
+    );
+    await syncThreadMissionStatus(client, {
+      workspaceId: String(data.workspace_id),
+      threadId: String(data.thread_id),
+      status: "drafting",
+    });
   }
 
   return { ok: true };
