@@ -39,8 +39,8 @@ export async function POST(req: NextRequest) {
   const client = createSupabaseSecretClient();
   const stored = await storeInboundWebhookEvent(client, { meta, svixId });
 
-  // Best-effort drain — must not delay the 200. Minute cron recovers if this is killed.
-  // Prefer the just-stored event first so real replies land immediately.
+  // Best-effort drain — must not delay the 200. Daily cron is recovery only
+  // (Hobby plan); prefer the just-stored event so real replies land immediately.
   if (!stored.duplicate) {
     void (async () => {
       try {

@@ -1,5 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { AuthError, requireAuthUser, requireWorkspaceMembership, getRequestWorkspaceId } from "@/lib/supabase/auth-server";
+import { createSupabaseSecretClient } from "@/lib/supabase/server";
+import {
+  consumeRateLimit,
+  rateLimitResponse,
+} from "@/lib/security/rate-limit";
 import { assertCanSendRoomMessage } from "@/lib/server/room-access";
 import {
   AmbiguousRoomWorkspaceError,
@@ -105,6 +110,15 @@ export async function POST(
     }
 
     const { role } = await requireWorkspaceMembership(client, workspaceId, user.id);
+    const messageLimit = await consumeRateLimit(createSupabaseSecretClient(), {
+      bucket: "rooms.messages.user",
+      key: `${workspaceId}:${user.id}`,
+      limit: 30,
+      windowMs: 60_000,
+    });
+    if (!messageLimit.allowed) {
+      return rateLimitResponse(messageLimit, "Too many messages. Slow down for a moment.");
+    }
     try {
       await assertCanSendRoomMessage(client, workspaceId, params.roomId, user.id, role);
     } catch (err) {

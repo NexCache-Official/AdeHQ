@@ -14,6 +14,10 @@ import { createSupabaseSecretClient } from "@/lib/supabase/server";
 import { isPlatformFlagEnabled, preloadPlatformFlags } from "@/lib/admin/platform-flags";
 import { PlanEntitlementError } from "@/lib/billing/plans/entitlements";
 import type { RoomMessage } from "@/lib/types";
+import {
+  consumeRateLimit,
+  rateLimitResponse,
+} from "@/lib/security/rate-limit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -86,6 +90,27 @@ export async function POST(request: NextRequest) {
     }
 
     const serviceClient = createSupabaseSecretClient();
+    const [userLimit, workspaceLimit] = await Promise.all([
+      consumeRateLimit(serviceClient, {
+        bucket: "browser_research.user.day",
+        key: `${workspaceId}:${user.id}`,
+        limit: 10,
+        windowMs: 24 * 60 * 60_000,
+      }),
+      consumeRateLimit(serviceClient, {
+        bucket: "browser_research.workspace.day",
+        key: workspaceId,
+        limit: 50,
+        windowMs: 24 * 60 * 60_000,
+      }),
+    ]);
+    if (!userLimit.allowed) {
+      return rateLimitResponse(userLimit, "Daily browser research limit reached.");
+    }
+    if (!workspaceLimit.allowed) {
+      return rateLimitResponse(workspaceLimit, "Workspace browser research limit reached.");
+    }
+
     await preloadPlatformFlags(serviceClient);
 
     if (!(await isPlatformFlagEnabled("browser_research_enabled", serviceClient))) {

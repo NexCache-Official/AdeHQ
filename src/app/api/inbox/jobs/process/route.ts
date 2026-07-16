@@ -1,6 +1,7 @@
 /**
  * Serverless drain for inbox inbound + outbox + Slice C email_jobs.
- * Auth: Bearer INTERNAL_CRON_SECRET. Also invoked by Vercel Cron (GET/POST).
+ * Auth: Bearer CRON_SECRET or INTERNAL_CRON_SECRET only.
+ * Do not trust x-vercel-cron alone — that header is spoofable.
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -14,12 +15,13 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 function authorised(req: NextRequest): boolean {
-  const secret = process.env.INTERNAL_CRON_SECRET?.trim();
-  const cronHeader = req.headers.get("x-vercel-cron");
-  if (cronHeader === "1") return true;
-  if (!secret) return process.env.NODE_ENV === "development";
+  const secrets = [
+    process.env.CRON_SECRET?.trim(),
+    process.env.INTERNAL_CRON_SECRET?.trim(),
+  ].filter((value): value is string => Boolean(value));
+  if (secrets.length === 0) return process.env.NODE_ENV === "development";
   const header = req.headers.get("authorization");
-  return header === `Bearer ${secret}`;
+  return secrets.some((secret) => header === `Bearer ${secret}`);
 }
 
 async function drain() {

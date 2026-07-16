@@ -12,19 +12,12 @@ import { requireWorkspaceAdmin } from "@/lib/inbox/access";
 import { validateLocalPart } from "@/lib/inbox/local-part";
 import { getInboxDomain } from "@/lib/inbox/config";
 import { inboxErrorResponse } from "@/lib/inbox/route-helpers";
+import {
+  consumeRateLimit,
+  rateLimitResponse,
+} from "@/lib/security/rate-limit";
 
 export const runtime = "nodejs";
-
-// Best-effort in-process rate limit (10 checks / min / workspace).
-const buckets = new Map<string, number[]>();
-function rateLimited(key: string): boolean {
-  const now = Date.now();
-  const windowStart = now - 60_000;
-  const hits = (buckets.get(key) ?? []).filter((t) => t > windowStart);
-  hits.push(now);
-  buckets.set(key, hits);
-  return hits.length > 10;
-}
 
 export async function GET(request: NextRequest) {
   try {
@@ -38,11 +31,14 @@ export async function GET(request: NextRequest) {
     const secret = createSupabaseSecretClient();
     await requireWorkspaceAdmin(secret, { workspaceId, userId: user.id });
 
-    if (rateLimited(`${workspaceId}:${user.id}`)) {
-      return NextResponse.json(
-        { error: "Too many checks. Slow down a moment." },
-        { status: 429 },
-      );
+    const limit = await consumeRateLimit(secret, {
+      bucket: "inbox.mailbox_availability.user",
+      key: `${workspaceId}:${user.id}`,
+      limit: 10,
+      windowMs: 60_000,
+    });
+    if (!limit.allowed) {
+      return rateLimitResponse(limit, "Too many checks. Slow down a moment.");
     }
 
     const validation = validateLocalPart(localPartRaw);

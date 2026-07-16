@@ -8,6 +8,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { resolveInboxRoute, inboxErrorResponse } from "@/lib/inbox/route-helpers";
 import { enqueueOutbound } from "@/lib/inbox/outbox/enqueue";
 import type { OutboxStatus, SendResultDTO } from "@/lib/inbox/types";
+import {
+  consumeRateLimit,
+  rateLimitResponse,
+} from "@/lib/security/rate-limit";
 
 export const runtime = "nodejs";
 
@@ -48,6 +52,35 @@ export async function POST(request: NextRequest) {
     const to = asAddressList(body.to);
     if (to.length === 0) {
       return NextResponse.json({ error: "At least one recipient is required." }, { status: 400 });
+    }
+    const recipientCount =
+      to.length + asAddressList(body.cc).length + asAddressList(body.bcc).length;
+    if (recipientCount > 25) {
+      return NextResponse.json(
+        { error: "A message can have at most 25 recipients." },
+        { status: 400 },
+      );
+    }
+
+    const [hourlyLimit, dailyLimit] = await Promise.all([
+      consumeRateLimit(ctx.secret, {
+        bucket: "inbox.send.mailbox.hour",
+        key: ctx.mailbox.id,
+        limit: 20,
+        windowMs: 60 * 60_000,
+      }),
+      consumeRateLimit(ctx.secret, {
+        bucket: "inbox.send.mailbox.day",
+        key: ctx.mailbox.id,
+        limit: 100,
+        windowMs: 24 * 60 * 60_000,
+      }),
+    ]);
+    if (!hourlyLimit.allowed) {
+      return rateLimitResponse(hourlyLimit, "Hourly email send limit reached.");
+    }
+    if (!dailyLimit.allowed) {
+      return rateLimitResponse(dailyLimit, "Daily email send limit reached.");
     }
 
     // AI-origin drafts: server-side approval gate (never trust client).

@@ -5,6 +5,11 @@ import { briefSchema } from "@/lib/hiring/brief-schema";
 import { generateCandidateInterviewReply } from "@/lib/hiring/candidate-interview";
 import { resolveHiringWorkspaceContext } from "@/lib/server/hiring-workspace-context";
 import type { AiEmployeeApplicant, AiEmployeeJobBrief, RecruiterMessage } from "@/lib/hiring/types";
+import { createSupabaseSecretClient } from "@/lib/supabase/server";
+import {
+  consumeRateLimit,
+  rateLimitResponse,
+} from "@/lib/security/rate-limit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -87,6 +92,15 @@ export async function POST(request: NextRequest) {
       topicId: body.topicId,
       mayaRoomId: body.mayaRoomId,
     });
+    const limit = await consumeRateLimit(createSupabaseSecretClient(), {
+      bucket: "hiring.interview.user",
+      key: user.id,
+      limit: 10,
+      windowMs: 60 * 60_000,
+    });
+    if (!limit.allowed) {
+      return rateLimitResponse(limit, "Interview message limit reached. Try again later.");
+    }
 
     const result = await generateCandidateInterviewReply({
       applicant: body.applicant as AiEmployeeApplicant,

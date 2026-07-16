@@ -265,9 +265,18 @@ export async function checkWorkspaceAiCapacity(
   let capacity: WorkspaceCapacity;
   try {
     capacity = await getWorkspaceCapacity(client, workspaceId);
-  } catch {
-    // Fail open: if usage tracking is unavailable, do not block AI work.
-    return { allowed: true, warningLevel: "ok", remaining: UNLIMITED_ALLOWANCE, unlimited: true };
+  } catch (error) {
+    console.error("[AdeHQ usage] capacity check failed closed", {
+      workspaceId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return {
+      allowed: false,
+      warningLevel: "exhausted",
+      remaining: 0,
+      unlimited: false,
+      reason: "AI work is temporarily paused while usage capacity is verified.",
+    };
   }
 
   if (capacity.unlimited) {

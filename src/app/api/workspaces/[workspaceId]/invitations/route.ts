@@ -8,6 +8,10 @@ import { createSupabaseSecretClient } from "@/lib/supabase/server";
 import { canManageMembers, normalizeWorkspaceRole } from "@/lib/workspace/permissions";
 import { sendEmail } from "@/lib/email/send";
 import { getSiteUrl } from "@/lib/site-url";
+import {
+  consumeRateLimit,
+  rateLimitResponse,
+} from "@/lib/security/rate-limit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -46,6 +50,16 @@ export async function POST(
     }
 
     const service = createSupabaseSecretClient();
+    const inviteLimit = await consumeRateLimit(service, {
+      bucket: "workspace.invitations.admin.day",
+      key: `${params.workspaceId}:${user.id}`,
+      limit: 20,
+      windowMs: 24 * 60 * 60_000,
+    });
+    if (!inviteLimit.allowed) {
+      return rateLimitResponse(inviteLimit, "Daily workspace invitation limit reached.");
+    }
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60_000).toISOString();
 
     const { data: invite, error: inviteError } = await service
       .from("workspace_invitations")
@@ -58,6 +72,7 @@ export async function POST(
           status: "pending",
           accepted_by: null,
           accepted_at: null,
+          expires_at: expiresAt,
         },
         { onConflict: "workspace_id,invited_email" },
       )
@@ -73,6 +88,7 @@ export async function POST(
           invited_by: user.id,
           role: invitedRole,
           status: "pending",
+          expires_at: expiresAt,
         })
         .select("*")
         .single();

@@ -5,6 +5,12 @@ import {
   resolveSupabasePublishableKey,
   resolveSupabaseUrl,
 } from "@/lib/supabase/config";
+import { createSupabaseSecretClient } from "@/lib/supabase/server";
+import {
+  consumeRateLimit,
+  rateLimitResponse,
+  requestIp,
+} from "@/lib/security/rate-limit";
 
 export const runtime = "nodejs";
 
@@ -13,11 +19,29 @@ type Body = { email?: string };
 export async function POST(request: NextRequest) {
   try {
     const body = (await request.json()) as Body;
-    const email = body.email?.trim();
+    const email = body.email?.trim().toLowerCase();
 
     if (!email) {
       return NextResponse.json({ error: "Email is required." }, { status: 400 });
     }
+
+    const secret = createSupabaseSecretClient();
+    const [ipLimit, emailLimit] = await Promise.all([
+      consumeRateLimit(secret, {
+        bucket: "auth.resend_confirmation.ip",
+        key: requestIp(request),
+        limit: 5,
+        windowMs: 15 * 60_000,
+      }),
+      consumeRateLimit(secret, {
+        bucket: "auth.resend_confirmation.email",
+        key: email,
+        limit: 3,
+        windowMs: 60 * 60_000,
+      }),
+    ]);
+    if (!ipLimit.allowed) return rateLimitResponse(ipLimit);
+    if (!emailLimit.allowed) return rateLimitResponse(emailLimit);
 
     const supabase = createClient(resolveSupabaseUrl(), resolveSupabasePublishableKey(), {
       auth: { autoRefreshToken: false, persistSession: false },
@@ -30,15 +54,13 @@ export async function POST(request: NextRequest) {
     });
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 400 });
+      console.warn("[AdeHQ resend confirmation]", error.message);
     }
 
+    // Enumeration-safe: callers cannot distinguish an existing account.
     return NextResponse.json({ ok: true });
   } catch (error) {
     console.error("[AdeHQ resend confirmation]", error);
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Unable to resend confirmation email." },
-      { status: 500 },
-    );
+    return NextResponse.json({ error: "Unable to process request." }, { status: 503 });
   }
 }

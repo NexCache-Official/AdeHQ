@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { AuthError, requireAuthUser } from "@/lib/supabase/auth-server";
+import {
+  AuthError,
+  requireAuthUser,
+  requireWorkspaceMembership,
+} from "@/lib/supabase/auth-server";
 import { createSupabaseSecretClient } from "@/lib/supabase/server";
 import { ensureMayaWorkspaceBundle } from "@/lib/server/ensure-maya";
 import { resolveUserFirstName } from "@/lib/server/resolve-user-first-name";
@@ -31,6 +35,8 @@ export async function POST(request: NextRequest) {
     if (!workspaceId) {
       return NextResponse.json({ error: "No workspace found." }, { status: 404 });
     }
+
+    await requireWorkspaceMembership(serviceClient, String(workspaceId), user.id);
 
     const firstName = await resolveUserFirstName(serviceClient, user, body.firstName);
 

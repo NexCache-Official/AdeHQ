@@ -11,8 +11,8 @@ export type RevolutWebhookHeaders = {
 /**
  * Verify a Revolut webhook signature.
  * Revolut signs `v1.{timestamp}.{rawBody}` with the webhook secret (HMAC-SHA256) and sends the
- * result as `Revolut-Signature: v1=<hex>`. When no secret is configured, verification is skipped
- * (development only).
+ * result as `Revolut-Signature: v1=<hex>`. Production always fails closed
+ * when the webhook secret is absent.
  */
 export function verifyRevolutSignature(
   rawBody: string,
@@ -20,7 +20,7 @@ export function verifyRevolutSignature(
 ): boolean {
   const config = getRevolutConfig();
   const secret = config?.webhookSecret;
-  if (!secret) return true;
+  if (!secret) return process.env.NODE_ENV === "development";
   if (!headers.signature || !headers.timestamp) return false;
 
   const payloadToSign = `v1.${headers.timestamp}.${rawBody}`;

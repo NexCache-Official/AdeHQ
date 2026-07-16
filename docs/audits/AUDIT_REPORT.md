@@ -6,6 +6,29 @@ Scope of this pass: Phase 1 (partial), Phase 2/3 (partial via Maya/Elena/David),
 
 ---
 
+## Session 2026-07-16 — White-hat security hardening (app.adehq.com)
+
+**Probes (cheap, no flood):**
+- `GET /api/inbox/jobs/process` with only `x-vercel-cron: 1` → **200** before fix (spoofable drain).
+- 5× `POST /api/auth/forgot-password` → all **200** (no rate limit).
+- `/login` headers → HSTS only; no CSP / frame / nosniff.
+
+**Fixes shipped:**
+- Cron drain requires `Authorization: Bearer CRON_SECRET|INTERNAL_CRON_SECRET` (fail closed outside dev).
+- `ensure-maya` requires workspace membership for requested `workspaceId` (IDOR).
+- Revolut webhook fails closed when secret missing in production.
+- Durable `security_rate_limit_events` + `consumeRateLimit` on forgot/resend, room messages, inbox send (20/h + 100/day), mailbox availability, invites, hiring interview, browser research.
+- AI capacity check fails closed on tracking errors.
+- Invite `expires_at` = 7 days; tool catalog seed → platform admin write only.
+- Security headers in `next.config.mjs` (CSP, HSTS, frame-ancestors, nosniff, referrer, permissions).
+- Revoked EXECUTE on maintenance SECURITY DEFINER RPCs from anon/authenticated; pinned `increment_workspace_usage_period` search_path.
+- Signup confirmation copy no longer enumerates “account already exists”.
+- Production `CRON_SECRET` set on Vercel; cron schedule stays `0 4 * * *` (Hobby cannot run more than daily — webhook processes new inbound immediately).
+
+**Verify after deploy:** cron spoof → 401; forgot-password burst → 429; login response includes CSP.
+
+---
+
 ## Session 2026-07-16 — Stall / no self-wake after “give me a sec”
 
 **Observed:** Casey replied “give me a sec” (or similar) on a real work ask, completed the agent run, went idle, and never continued — human had to nudge again.
@@ -35,7 +58,7 @@ Scope of this pass: Phase 1 (partial), Phase 2/3 (partial via Maya/Elena/David),
 **Fix:**
 - Inbox query requires `latest_direction = inbound`; list preview uses last inbound; unread badge same.
 - New **All mail** folder (`is_spam = false`).
-- Cron → `* * * * *`; webhook drain processes the just-stored event first, then a larger batch.
+- Webhook drain processes the just-stored event first, then a larger batch; daily cron remains recovery-only on Hobby.
 - Deleted the synthetic test inbound; drained the queue — real body now stored verbatim.
 
 **Verify:** Inbox shows only inbound-latest threads; AutoDesk thread body matches Gmail; Sent / All mail / Awaiting still work.
