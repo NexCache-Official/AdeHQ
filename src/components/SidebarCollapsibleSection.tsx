@@ -123,13 +123,15 @@ export function SidebarNestedLink({
     <Link
       href={href}
       className={cn(
-        "flex items-center gap-2 rounded-lg px-2 py-1.5 text-[12.5px] font-medium transition-colors",
+        "flex items-center gap-2.5 rounded-lg px-2 py-1.5 text-[12.5px] font-medium leading-none transition-colors",
         active
           ? "bg-[var(--rail-active-bg)] text-[var(--rail-active-ink)]"
           : "text-[var(--rail-ink-2)] hover:bg-[var(--rail-hover)] hover:text-[var(--rail-ink)]",
       )}
     >
-      <span className="flex h-4 w-4 shrink-0 items-center justify-center opacity-70">{icon}</span>
+      <span className="flex h-[18px] w-[18px] shrink-0 items-center justify-center opacity-70 [&_svg]:h-3.5 [&_svg]:w-3.5">
+        {icon}
+      </span>
       <span className="min-w-0 flex-1 truncate">{label}</span>
       {badge}
     </Link>
@@ -154,14 +156,16 @@ export function SidebarNestedButton({
       type="button"
       onClick={onClick}
       className={cn(
-        "flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[12.5px] font-medium transition-colors",
+        "flex w-full items-center gap-3 rounded-lg px-2 py-1.5 text-left text-[12.5px] font-medium leading-none transition-colors",
         active
           ? "bg-[var(--rail-active-bg)] text-[var(--rail-active-ink)]"
           : "text-[var(--rail-ink-2)] hover:bg-[var(--rail-hover)] hover:text-[var(--rail-ink)]",
       )}
     >
-      <span className="flex h-4 w-4 shrink-0 items-center justify-center opacity-90">{icon}</span>
-      <span className="min-w-0 flex-1 truncate">{label}</span>
+      <span className="flex h-[22px] w-[22px] shrink-0 items-center justify-center">
+        {icon}
+      </span>
+      <span className="min-w-0 flex-1 truncate self-center">{label}</span>
       {badge}
     </button>
   );

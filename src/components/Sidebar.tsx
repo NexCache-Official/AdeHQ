@@ -252,7 +252,6 @@ export function Sidebar() {
                       employee={employee}
                       size="xs"
                       showStatus={false}
-                      className="!h-4 !w-4 !rounded-[5px] !text-[8px]"
                     />
                   }
                   label={employee.name}

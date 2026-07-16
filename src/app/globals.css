@@ -9,7 +9,7 @@
      Channel tokens hold "R G B" so Tailwind can do rgb(var(--c-x) / <alpha-value>). */
   --c-canvas: 255 255 255;
   --c-surface: 255 255 255;
-  --c-muted: 238 240 243;
+  --c-muted: 235 234 235;
   --c-border: 225 228 234;
   --c-border-2: 235 237 241;
   --c-ink: 11 13 18;
@@ -67,10 +67,10 @@
   --rail-ink-3: #8b909e;
   --rail-border: #e8eaf0;
   --rail-fill: #f4f5f8;
-  --rail-hover: #eceef3;
+  --rail-hover: #ebeaeb;
   --rail-active-bg: #e7effe;
   --rail-active-ink: #2557c7;
-  --rail-badge-bg: #eceef3;
+  --rail-badge-bg: #ebeaeb;
   --rail-badge-ink: #565d6c;
 
   /* Effects / gradients (literal per theme). */
