@@ -1855,7 +1855,7 @@ export function RoomChat({
 
   return (
     <div className="flex h-full flex-col bg-canvas">
-      <div className="flex h-12 shrink-0 items-center gap-2.5 border-b border-border bg-canvas px-4">
+      <div className="flex min-h-[58px] shrink-0 items-center gap-2.5 border-b border-border bg-canvas px-4 py-2.5">
         {isDm && dmEmployee ? (
           <>
             <EmployeeAvatar

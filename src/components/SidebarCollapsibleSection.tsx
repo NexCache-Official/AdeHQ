@@ -156,7 +156,7 @@ export function SidebarNestedButton({
       type="button"
       onClick={onClick}
       className={cn(
-        "flex w-full items-center gap-3 rounded-lg px-2 py-1.5 text-left text-[12.5px] font-medium leading-none transition-colors",
+        "flex w-full items-center gap-1.5 rounded-lg px-2 py-1.5 text-left text-[12.5px] font-medium leading-none transition-colors",
         active
           ? "bg-[var(--rail-active-bg)] text-[var(--rail-active-ink)]"
           : "text-[var(--rail-ink-2)] hover:bg-[var(--rail-hover)] hover:text-[var(--rail-ink)]",
