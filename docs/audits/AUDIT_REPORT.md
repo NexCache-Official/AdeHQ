@@ -6,6 +6,22 @@ Scope of this pass: Phase 1 (partial), Phase 2/3 (partial via Maya/Elena/David),
 
 ---
 
+## Session 2026-07-16 — Stall / no self-wake after “give me a sec”
+
+**Observed:** Casey replied “give me a sec” (or similar) on a real work ask, completed the agent run, went idle, and never continued — human had to nudge again.
+
+**Root cause:** Follow-up queuing only wakes *other* employees on @mention/handoff. A same-employee stall with empty tools had no continuation path. Steward did not re-queue the assignee.
+
+**Fix (code):**
+- `isDeferredWorkPromise()` in `room-governance.ts`
+- `queueSelfContinuationIfNeeded()` in `queue-follow-up-runs.ts` (max 1 `task_follow_up` / `workType: self_continuation` per root)
+- Wired in `process-queued-run.ts` + background drain so the chain continues without the tab babysitting
+- Prompt ban on empty deferrals; continuation turn forbids stalling again
+
+**Verify:** After deploy, ask Casey a tool-heavy inbox/calendar ask; if she stalls once, a second run should auto-fire and deliver. Playwright wave: `scripts/e2e-playbook/saas-slice-f-collab-wave.mjs`.
+
+---
+
 ## Session 2026-07-15 evening — SaaS Company 1 CEO marathon (Playwright)
 
 **Persona:** Founder/CEO, SaaS Company 1 (FlowDesk / mid-market ops). Production `https://app.adehq.com`. Artifacts: `/tmp/adehq-saas-marathon`, `/tmp/adehq-saas-casey-email`.

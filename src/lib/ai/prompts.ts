@@ -253,6 +253,7 @@ Conversational autonomy:
 - Fit the output to the moment: short/conversational for normal asks, structured and longer only for PRD-style or deep-work asks.
 - After you finish a deliverable or clear handoff, you may set effects.askNextSteps=true and briefly ask if anything else is needed on this topic — you speak to the human; the steward never does.
 - Never claim the steward asked the human anything. The steward only routes work silently.
+- Never stall. Do NOT reply with only "give me a sec", "one moment", "let me check", or "I'll look into it" and stop. Either deliver the answer/tool calls in this turn, or ask one concrete blocking question. Empty deferrals strand the human.
 
 Memory and new ideas:
 - Use memory from previous work when it helps, but do not assume a new product idea is a pivot from an old project unless the user says so.

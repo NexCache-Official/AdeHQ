@@ -36,6 +36,34 @@ const LOW_ACTION_PATTERNS = [
   /^(hi|hello|hey)\b/i,
 ];
 
+/**
+ * Model promised to look / work and then stopped without delivering.
+ * These must trigger a self-continuation run — otherwise the employee
+ * goes idle after "give me a sec" and never wakes again.
+ */
+const DEFERRED_WORK_PROMISE_PATTERNS = [
+  /\bgive me a (sec|second|moment|minute|min)\b/i,
+  /\bone (sec|second|moment|minute|min)\b/i,
+  /\b(hang on|hold on|be right back|\bbrb\b)\b/i,
+  /\blet me (check|look|pull|find|see|grab|review|open|fetch|read)\b/i,
+  /\bi'?ll (check|look|pull|get back|come back|take a look|look into|dig in|review)\b/i,
+  /\b(looking into|pulling (that|it|this) up|checking (that|it|this|now)|one sec)\b/i,
+  /\b(just a (sec|second|moment)|sec(?:ond)?\.{0,3})\s*$/i,
+  /\b(on it|working on it|give me a beat)\b[.!]?\s*$/i,
+];
+
+/** Max one automatic self-continuation per root trigger (same employee). */
+export const MAX_SELF_CONTINUATIONS_PER_ROOT = 1;
+
+export function isDeferredWorkPromise(content: string): boolean {
+  const text = content.trim();
+  if (!text) return false;
+  // Long substantive replies that happen to include "let me check" mid-thought
+  // are not stalls — only short deferrals / promise-only messages.
+  if (text.length > 480) return false;
+  return DEFERRED_WORK_PROMISE_PATTERNS.some((p) => p.test(text));
+}
+
 export function isGroupGreeting(content: string): boolean {
   const text = content.trim();
   if (!text) return false;

@@ -3,14 +3,17 @@ import type { AIEmployee, ResponseReason, RoomTopic } from "@/lib/types";
 import { extractMentions } from "@/lib/utils";
 import {
   isActionOriented,
+  isDeferredWorkPromise,
   isLowActionMessage,
   MAX_AI_TO_AI_HOPS,
   MAX_FOLLOW_UP_RUNS_PER_ROOT,
   MAX_SAME_EMPLOYEE_REENTRY,
+  MAX_SELF_CONTINUATIONS_PER_ROOT,
 } from "@/lib/server/room-governance";
 import { isAiQueueingBlocked, isEmployeeBlockedInTopic } from "@/lib/topic-ai-control";
 import type { ResponderDecision } from "@/lib/server/conversation-orchestrator";
 import { queueAgentRuns, type QueuedRun } from "@/lib/server/queue-agent-runs";
+import { messageLikelyNeedsStructuredEffects } from "@/lib/ai/message-intent";
 
 type DbRow = Record<string, unknown>;
 
@@ -256,6 +259,126 @@ export async function queueFollowUpRuns(
     }
   } catch (err) {
     console.warn("[queue-follow-up] task book transfer log failed", err);
+  }
+
+  return { followUpRuns: queued, skipped };
+}
+
+export type SelfContinuationParams = {
+  workspaceId: string;
+  roomId: string;
+  topic: RoomTopic;
+  employee: AIEmployee;
+  aiMessageId: string;
+  aiReply: string;
+  humanTriggerContent: string;
+  parentRunId: string;
+  rootTriggerMessageId: string;
+  handoffDepth: number;
+  isGreetingRun?: boolean;
+  runMetadata?: Record<string, unknown>;
+  /** True when this completed run already executed tools / approvals. */
+  hadDeliverable: boolean;
+};
+
+/**
+ * When an employee stalls ("give me a sec") without delivering, queue one
+ * same-employee continuation so work actually completes without a human nudge.
+ */
+export async function queueSelfContinuationIfNeeded(
+  client: SupabaseClient,
+  params: SelfContinuationParams,
+): Promise<{ followUpRuns: QueuedRun[]; skipped: string[] }> {
+  const skipped: string[] = [];
+  if (params.isGreetingRun) {
+    return { followUpRuns: [], skipped: ["greeting_run"] };
+  }
+  if (isAiQueueingBlocked(params.topic)) {
+    return { followUpRuns: [], skipped: ["ai_stopped"] };
+  }
+  if (params.runMetadata?.workType === "self_continuation") {
+    return { followUpRuns: [], skipped: ["already_continuation"] };
+  }
+  if (params.hadDeliverable) {
+    return { followUpRuns: [], skipped: ["already_delivered"] };
+  }
+  if (!isDeferredWorkPromise(params.aiReply)) {
+    return { followUpRuns: [], skipped: ["not_deferred_promise"] };
+  }
+
+  const humanNeededWork =
+    isActionOriented(params.humanTriggerContent) ||
+    messageLikelyNeedsStructuredEffects(params.humanTriggerContent);
+  if (!humanNeededWork) {
+    return { followUpRuns: [], skipped: ["human_not_action_oriented"] };
+  }
+
+  if (isEmployeeBlockedInTopic(params.topic, params.employee.id)) {
+    return { followUpRuns: [], skipped: ["employee_blocked"] };
+  }
+
+  const { data: priorContinuations } = await client
+    .from("agent_runs")
+    .select("id")
+    .eq("workspace_id", params.workspaceId)
+    .eq("root_trigger_message_id", params.rootTriggerMessageId)
+    .eq("employee_id", params.employee.id)
+    .eq("response_reason", "task_follow_up")
+    .in("status", ["queued", "waiting", "running", "completed"])
+    .limit(MAX_SELF_CONTINUATIONS_PER_ROOT);
+
+  if ((priorContinuations?.length ?? 0) >= MAX_SELF_CONTINUATIONS_PER_ROOT) {
+    return { followUpRuns: [], skipped: ["max_self_continuations"] };
+  }
+
+  const exists = await hasExistingFollowUp(
+    client,
+    params.workspaceId,
+    params.rootTriggerMessageId,
+    params.aiMessageId,
+    params.employee.id,
+    "task_follow_up",
+  );
+  if (exists) {
+    return { followUpRuns: [], skipped: ["duplicate"] };
+  }
+
+  const nudge = [
+    `[System continuation — do not address the human as if this is a new chat.]`,
+    `Your previous reply only promised to look/work ("${params.aiReply.trim().slice(0, 120)}").`,
+    `The human's request still needs a real answer or tool action now.`,
+    `Do the work in this turn. Do NOT say "give me a sec", "one moment", or "I'll check" again.`,
+    `If tools are required (email draft, calendar, CRM, tasks), emit effects.toolCalls immediately.`,
+  ].join(" ");
+
+  const { queued } = await queueAgentRuns(client, {
+    workspaceId: params.workspaceId,
+    roomId: params.roomId,
+    topicId: params.topic.id,
+    triggerMessageId: params.aiMessageId,
+    rootTriggerMessageId: params.rootTriggerMessageId,
+    responders: [
+      {
+        employee: params.employee,
+        reason: "task_follow_up",
+        runMetadata: {
+          ...(params.runMetadata ?? {}),
+          workType: "self_continuation",
+          continuationOf: params.parentRunId,
+          humanTriggerContent: params.humanTriggerContent.slice(0, 2000),
+        },
+      },
+    ],
+    content: nudge,
+    parentRunId: params.parentRunId,
+    handoffDepth: params.handoffDepth,
+    skipAdmission: true,
+    createdByType: "steward",
+    createdById: "self_continuation",
+  });
+
+  if (!queued.length) {
+    skipped.push("queue_empty");
   }
 
   return { followUpRuns: queued, skipped };

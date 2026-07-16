@@ -25,6 +25,7 @@ import { assertRoomActive } from "@/lib/server/room-helpers";
 import {
   queueCollaboratorRuns,
   queueFollowUpRuns,
+  queueSelfContinuationIfNeeded,
 } from "@/lib/server/queue-follow-up-runs";
 import { GREETING_MAX_OUTPUT_TOKENS } from "@/lib/server/room-governance";
 import type { QueuedRun } from "@/lib/server/queue-agent-runs";
@@ -879,6 +880,16 @@ export async function processQueuedAgentRun(
 
     const emailWorkType =
       typeof runMetadata.workType === "string" ? runMetadata.workType : "";
+    if (emailWorkType === "self_continuation") {
+      const continuationBlock = [
+        "SELF-CONTINUATION (you already stalled once):",
+        "- Your prior chat message only promised to look/work (e.g. \"give me a sec\").",
+        "- Finish the human's request in THIS turn with a real answer and/or effects.toolCalls.",
+        "- Forbidden: \"give me a sec\", \"one moment\", \"I'll check\", \"hang on\", or any deferral without delivery.",
+        "- If email/calendar/CRM/tasks are needed, emit the tool calls now — do not narrate them.",
+      ].join("\n");
+      fileContextPrompt = [fileContextPrompt, continuationBlock].filter(Boolean).join("\n\n");
+    }
     const isEmailWorkAsk =
       emailWorkType === "email_ask_employee" ||
       emailWorkType === "email_prepare_proposal" ||
@@ -2043,6 +2054,55 @@ export async function processQueuedAgentRun(
         runMetadata,
       });
       followUpRuns = followUp.followUpRuns;
+
+      // Stall recovery: "give me a sec" with no tools → one self-continuation.
+      const humanAskForContinuation =
+        typeof runMetadata.humanTriggerContent === "string" &&
+        runMetadata.humanTriggerContent.trim()
+          ? String(runMetadata.humanTriggerContent)
+          : triggerUserContent;
+      const hadDeliverable =
+        (effect.toolCalls?.length ?? 0) > 0 ||
+        effect.tasks.length > 0 ||
+        effect.approvals.length > 0 ||
+        (effect.artifacts?.length ?? 0) > 0 ||
+        (effect.memory?.length ?? 0) > 0 ||
+        (effect.memorySuggestions?.length ?? 0) > 0;
+      const selfContinuation = await queueSelfContinuationIfNeeded(client, {
+        workspaceId,
+        roomId,
+        topic: ctx.topic,
+        employee,
+        aiMessageId: aiMessage.id,
+        aiReply: response.reply,
+        humanTriggerContent: humanAskForContinuation,
+        parentRunId: runId,
+        rootTriggerMessageId,
+        handoffDepth,
+        isGreetingRun,
+        runMetadata,
+        hadDeliverable,
+      });
+      if (selfContinuation.followUpRuns.length) {
+        followUpRuns = [...followUpRuns, ...selfContinuation.followUpRuns];
+        console.info("[AdeHQ process-queued-run] queued self-continuation after stall", {
+          runId,
+          employeeId: employee.id,
+          continuationRuns: selfContinuation.followUpRuns.map((r) => r.runId),
+        });
+        // Keep working even if the browser tab stops processing the chain.
+        void import("@/lib/server/background-agent-drainer")
+          .then(({ drainQueuedAgentRunsForRoot }) =>
+            drainQueuedAgentRunsForRoot(client, {
+              workspaceId,
+              rootTriggerMessageId,
+              maxRuns: 4,
+            }),
+          )
+          .catch((err) =>
+            console.warn("[AdeHQ process-queued-run] self-continuation drain failed", err),
+          );
+      }
     }
 
     const collaborationPlan = planFromMetadata(runMetadata, rootTriggerMessageId);
