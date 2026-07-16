@@ -808,10 +808,10 @@ const scheduleDraft: ToolDefinition<ScheduleDraftArgs> = {
   description: "Schedule a draft post for later (internal status only — no external publish).",
   readOnly: false,
   risk: "medium",
-  approval: "suggested",
+  approval: "required",
   argsSchema: ScheduleDraftArgsSchema,
   promptUsage:
-    'calendar.scheduleDraft — args: { "postId" or "title", "scheduledAt": "2026-07-15T09:00:00Z" } — use mode preview when human sign-off is needed',
+    'calendar.scheduleDraft — args: { "postId" or "title", "scheduledAt": "2026-07-15T09:00:00Z" }. Always use mode "execute"; the system shows an approval card before scheduling.',
   buildPreview: (args) => ({
     title: `Schedule post — ${args.title ?? args.postId ?? "draft"}`,
     summary: `Mark post as scheduled for ${args.scheduledAt} (no external publish in v1).`,

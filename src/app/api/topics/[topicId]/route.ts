@@ -3,6 +3,7 @@ import { AuthError, requireAuthUser, requireWorkspaceMembership } from "@/lib/su
 import { assertCanAccessRoom } from "@/lib/server/room-access";
 import { permanentlyDeleteTopic, topicFromRow } from "@/lib/server/topic-helpers";
 import { mapTopicCreateError } from "@/lib/server/supabase-errors";
+import { createSupabaseSecretClient } from "@/lib/supabase/server";
 import { isGeneralTopic } from "@/lib/topics";
 import { nowISO } from "@/lib/utils";
 import type { TopicPriority, TopicStatus } from "@/lib/types";
@@ -128,7 +129,9 @@ export async function DELETE(
     const permanent = request.nextUrl.searchParams.get("permanent") === "true";
 
     if (permanent) {
-      await permanentlyDeleteTopic(client, topic.workspaceId, topic.id, topic.roomId);
+      // Service role: agent_runs / usage writes are no longer client-writable under RLS.
+      const service = createSupabaseSecretClient();
+      await permanentlyDeleteTopic(service, topic.workspaceId, topic.id, topic.roomId);
       return NextResponse.json({ deleted: true, topicId: topic.id });
     }
 

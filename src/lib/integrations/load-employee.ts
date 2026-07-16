@@ -4,7 +4,8 @@
 // ===========================================================================
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { ToolAccess } from "@/lib/types";
+import type { EmployeePermissions, ToolAccess } from "@/lib/types";
+import { defaultPermissions } from "@/lib/demo/demo-data";
 import type { IntegrationEmployee } from "./types";
 
 export async function loadIntegrationEmployee(
@@ -15,7 +16,7 @@ export async function loadIntegrationEmployee(
   const [employeeResult, toolsResult] = await Promise.all([
     client
       .from("ai_employees")
-      .select("id, name, role_key")
+      .select("id, name, role_key, permissions")
       .eq("workspace_id", workspaceId)
       .eq("id", employeeId)
       .maybeSingle(),
@@ -39,10 +40,13 @@ export async function loadIntegrationEmployee(
     lastUsedAt: row.last_used_at ? String(row.last_used_at) : undefined,
   }));
 
+  const stored = (employeeResult.data.permissions ?? {}) as Partial<EmployeePermissions>;
+
   return {
     id: String(employeeResult.data.id),
     name: String(employeeResult.data.name),
     roleKey: employeeResult.data.role_key as IntegrationEmployee["roleKey"],
     tools,
+    permissions: defaultPermissions(stored),
   };
 }

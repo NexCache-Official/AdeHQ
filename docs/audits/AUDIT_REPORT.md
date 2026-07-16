@@ -36,6 +36,12 @@ Scope of this pass: Phase 1 (partial), Phase 2/3 (partial via Maya/Elena/David),
 - Browser research cancel — creator, admin, or room access; use run’s canonical workspace id.
 - Tools catalog write was already platform-admin-only from the main hardening pass.
 
+**AI conduct + DB bar-raise (no Pro plan):**
+- Global `professionalConductRules()` in every employee system prompt (illegal/harmful/PII/secrets).
+- Workforce flags `approvalBeforeExternal` / `approvalBeforeEmails` enforced in tool executor; `email.sendDraft` always requires approval; `calendar.scheduleDraft` → required.
+- Daily caps on `email.createDraft`, CRM creates, `team.coordinate`.
+- RLS: `is_workspace_member` / `shares_workspace_with` require active status; admin-only workspace/member mutations; agent_runs + usage client writes removed; inbox outbox/events not client-writable; revoke service-only table grants.
+
 ---
 
 ## Session 2026-07-16 — Stall / no self-wake after “give me a sec”

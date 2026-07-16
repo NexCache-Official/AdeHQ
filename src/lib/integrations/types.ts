@@ -7,7 +7,10 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { AIEmployee, MessageArtifact, WorkspaceMemberRole } from "@/lib/types";
 
 /** Minimal employee shape needed by the Tool Execution Core. */
-export type IntegrationEmployee = Pick<AIEmployee, "id" | "name" | "roleKey" | "tools">;
+export type IntegrationEmployee = Pick<
+  AIEmployee,
+  "id" | "name" | "roleKey" | "tools" | "permissions"
+>;
 
 /** Capability domains routed by the Tool Execution Core. */
 export type CapabilityDomain =

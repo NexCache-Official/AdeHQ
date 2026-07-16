@@ -3,6 +3,7 @@ import { AuthError, requireAuthUser, requireWorkspaceMembership } from "@/lib/su
 import { assertCanAccessRoom } from "@/lib/server/room-access";
 import { getTopicForRoom, topicFromRow } from "@/lib/server/topic-helpers";
 import { roomIdFromRow } from "@/lib/server/db-row";
+import { createSupabaseSecretClient } from "@/lib/supabase/server";
 import { nowISO } from "@/lib/utils";
 
 export const runtime = "nodejs";
@@ -93,7 +94,8 @@ export async function POST(
     if (updateError) throw updateError;
 
     if (body.action === "stop_all") {
-      const { data: activeRuns } = await client
+      const service = createSupabaseSecretClient();
+      const { data: activeRuns } = await service
         .from("agent_runs")
         .select("id, run_metadata, status")
         .eq("workspace_id", workspaceId)
@@ -108,7 +110,7 @@ export async function POST(
         meta.cancelReason = "cancelled_by_user";
 
         if (status === "queued" || status === "waiting") {
-          await client
+          await service
             .from("agent_runs")
             .update({
               status: "cancelled",
@@ -119,7 +121,7 @@ export async function POST(
             .eq("workspace_id", workspaceId)
             .eq("id", runId);
         } else if (status === "running") {
-          await client
+          await service
             .from("agent_runs")
             .update({
               status: "failed",

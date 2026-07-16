@@ -9,8 +9,9 @@
 // ===========================================================================
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { AIEmployee, MessageArtifact } from "@/lib/types";
+import type { AIEmployee, EmployeePermissions, MessageArtifact } from "@/lib/types";
 import type {
+  ToolApprovalPolicy,
   ToolCallMode,
   ToolCallRequest,
   ToolCallResult,
@@ -39,16 +40,74 @@ import { enqueueIntegrationJob } from "@/lib/integrations/jobs/queue";
 import { coerceToolCall } from "@/lib/integrations/coerce-tool-args";
 import { hydrateToolCallArgs, type ToolHydrationState } from "@/lib/integrations/hydrate-tool-args";
 import { nowISO, uid } from "@/lib/utils";
+import { defaultPermissions } from "@/lib/demo/demo-data";
+import { createSupabaseSecretClient } from "@/lib/supabase/server";
+import { consumeRateLimit } from "@/lib/security/rate-limit";
 
 export type RunToolCallOptions = {
-  /** Employee record with tools loaded — used for the grant gate. */
-  employee: Pick<AIEmployee, "id" | "name" | "tools">;
+  /** Employee record with tools + permissions — used for grant / approval gates. */
+  employee: Pick<AIEmployee, "id" | "name" | "tools" | "permissions">;
   /**
    * Set by the approval resolve route after it atomically flipped the
    * approval to approved — skips re-fetching the approval row.
    */
   approvalVerified?: boolean;
 };
+
+/** Tools that leave the workspace boundary or schedule outward-facing work. */
+const EXTERNAL_ACTION_TOOLS = new Set([
+  "email.sendDraft",
+  "calendar.scheduleDraft",
+]);
+
+/** High-volume write tools capped per employee per day (spam / pollution guard). */
+const DAILY_WRITE_LIMITS: Record<string, { bucket: string; limit: number }> = {
+  "email.createDraft": { bucket: "tool.email.createDraft.day", limit: 40 },
+  "crm.createContact": { bucket: "tool.crm.createContact.day", limit: 60 },
+  "crm.createDeal": { bucket: "tool.crm.createDeal.day", limit: 40 },
+  "team.coordinate": { bucket: "tool.team.coordinate.day", limit: 12 },
+};
+
+function resolveEmployeePermissions(
+  employee: RunToolCallOptions["employee"],
+): EmployeePermissions {
+  return defaultPermissions(employee.permissions ?? {});
+}
+
+/**
+ * Catalog approval, plus Workforce flags.
+ * Outbound email send always requires approval (never bypassable).
+ */
+export function effectiveToolApproval(
+  tool: Pick<ToolDefinition, "name" | "approval" | "readOnly" | "risk">,
+  permissions: EmployeePermissions,
+): ToolApprovalPolicy {
+  let approval: ToolApprovalPolicy = tool.approval;
+
+  // Hard product rule: never auto-send mail.
+  if (tool.name === "email.sendDraft") {
+    return "required";
+  }
+
+  if (
+    permissions.approvalBeforeEmails &&
+    tool.name.startsWith("email.") &&
+    !tool.readOnly &&
+    tool.name !== "email.createDraft"
+  ) {
+    approval = "required";
+  }
+
+  if (
+    permissions.approvalBeforeExternal &&
+    !tool.readOnly &&
+    (EXTERNAL_ACTION_TOOLS.has(tool.name) || tool.risk === "high" || tool.risk === "medium")
+  ) {
+    approval = "required";
+  }
+
+  return approval;
+}
 
 function failedResult(
   request: Pick<ToolCallRequest, "tool">,
@@ -344,6 +403,8 @@ export async function runToolCall(
   }
 
   const preview = tool.buildPreview(args);
+  const permissions = resolveEmployeePermissions(options.employee);
+  const approvalPolicy = effectiveToolApproval(tool, permissions);
 
   // -------------------------------------------------------------------------
   // preview — human-readable card; approval for gated tools; never mutates.
@@ -351,7 +412,7 @@ export async function runToolCall(
   if (mode === "preview") {
     try {
       let approvalId: string | undefined;
-      if (tool.approval !== "none" && !tool.readOnly) {
+      if (approvalPolicy !== "none" && !tool.readOnly) {
         approvalId = await createToolApproval(client, ctx, tool, args, preview);
         await writeWorkLog(client, ctx, {
           action: "approval_requested",
@@ -393,8 +454,32 @@ export async function runToolCall(
   // execute
   // -------------------------------------------------------------------------
 
-  // Gate 2: approval requirement for high-risk/external tools.
-  if (tool.approval === "required" && !options.approvalVerified) {
+  // Gate 1b: per-employee daily caps on spammy write tools.
+  const writeLimit = DAILY_WRITE_LIMITS[tool.name];
+  if (writeLimit && mode === "execute") {
+    try {
+      const secret = createSupabaseSecretClient();
+      const limitResult = await consumeRateLimit(secret, {
+        bucket: writeLimit.bucket,
+        key: `${ctx.workspaceId}:${options.employee.id}`,
+        limit: writeLimit.limit,
+        windowMs: 24 * 60 * 60_000,
+      });
+      if (!limitResult.allowed) {
+        return failedResult(
+          request,
+          mode,
+          `Daily limit reached for ${tool.name} (${writeLimit.limit}/day). Ask a human if you need more.`,
+          "blocked",
+        );
+      }
+    } catch (error) {
+      console.warn("[AdeHQ integrations] tool write rate-limit check failed", error);
+    }
+  }
+
+  // Gate 2: approval requirement for high-risk/external tools (+ Workforce flags).
+  if (approvalPolicy === "required" && !options.approvalVerified) {
     if (!request.approvalId) {
       try {
         const approvalId = await createToolApproval(client, ctx, tool, args, preview);

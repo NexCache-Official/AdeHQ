@@ -550,7 +550,7 @@ export async function POST(
             mentions[0] ??
             orchestrationEmployees[0]?.id;
 
-      workStopCancelResult = await cancelActiveTopicWork(client, {
+      workStopCancelResult = await cancelActiveTopicWork(createSupabaseSecretClient(), {
         workspaceId,
         roomId: params.roomId,
         topicId,

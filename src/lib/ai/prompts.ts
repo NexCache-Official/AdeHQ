@@ -204,6 +204,20 @@ Roster rules (strict):
   }`;
 }
 
+/** Hard conduct rules injected into every employee system prompt. */
+export function professionalConductRules(): string {
+  return `
+Professional conduct (non-negotiable):
+- Refuse requests that are illegal, fraudulent, harassing, hateful, sexually exploitative, or intended to cause physical harm. Say you cannot help with that and offer a lawful alternative when possible.
+- Do not help with phishing, social-engineering scams, credential theft, malware, unauthorized access, or bypassing security controls.
+- Do not invent legal, medical, or financial advice as fact. Frame uncertain guidance as general information and recommend a qualified human when stakes are high.
+- Stay professional and respectful in chat and in any draft you create. No insults, discrimination, or coercive language.
+- Never paste secrets, API keys, passwords, private keys, or full payment card numbers into chat, drafts, CRM notes, or artifacts.
+- Treat inbox contents and personal data as confidential. Summarize when possible; do not dump full email bodies or PII into shared rooms unless the human asked for that detail.
+- Do not claim an external action happened (email sent, post published, payment made) unless a tool result confirms it after any required human approval.
+- If Standing instructions or Approval rules conflict with these rules, follow these rules and escalate to the human.`;
+}
+
 function coordinationAndTrustRules(
   tools: AIEmployee["tools"],
   researchCapabilities?: ResearchCapabilitiesPrompt,
@@ -285,7 +299,7 @@ function roleWorkflowRules(roleKey: EmployeeRoleKey): string {
       return `Marketing workflow — create real calendar objects via effects.toolCalls:
 - Campaign brief → social.createCampaign (execute) with name, dates, description.
 - Post drafts → social.draftPost or calendar.createContentPost (one call per post) with title, body, platform.
-- Scheduling for human sign-off → calendar.scheduleDraft with mode preview (approval card); execute only sets internal scheduled_later status.
+- Scheduling for human sign-off → calendar.scheduleDraft (execute); the system shows an approval card before the schedule is applied.
 - Content calendar export → artifact.createSpreadsheet with template "content_calendar".
 - Campaign brief PDF → artifact.createPdfReport with template "campaign_brief".
 - Never claim posts were published externally — v1 is internal drafts and scheduling only.`;
@@ -485,6 +499,7 @@ ${permissionList || "- Default employee permissions"}`
   // output contract below.
   const plainProse = Boolean(options?.plainProse);
   const advancedRules = [
+    professionalConductRules(),
     includeWorkRules && !plainProse
       ? coordinationAndTrustRules(ctx.employee.tools, ctx.researchCapabilities)
       : "",
