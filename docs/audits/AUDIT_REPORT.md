@@ -25,7 +25,10 @@ Scope of this pass: Phase 1 (partial), Phase 2/3 (partial via Maya/Elena/David),
 - Signup confirmation copy no longer enumerates “account already exists”.
 - Production `CRON_SECRET` set on Vercel; cron schedule stays `0 4 * * *` (Hobby cannot run more than daily — webhook processes new inbound immediately).
 
-**Verify after deploy:** cron spoof → 401; forgot-password burst → 429; login response includes CSP.
+**Verify after deploy (2026-07-16, `b7e12192` on `app.adehq.com`):**
+- cron spoof (`x-vercel-cron` only) → **401**
+- forgot-password burst → **200×3 then 429**
+- `/login` → CSP, HSTS, `X-Frame-Options: DENY`, nosniff, referrer, permissions-policy
 
 ---
 
