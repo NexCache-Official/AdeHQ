@@ -110,7 +110,10 @@ function usageFromTokens(
   latencyMs: number,
   credential?: ResolvedCredential,
 ): RuntimeResult["usage"] {
-  const modelCostUsd = estimateCost(modelId, inputTokens, outputTokens);
+  const modelCostUsd = estimateCost(modelId, inputTokens, outputTokens, {
+    cachedInputTokens: cachedTokens,
+    providerRoute: CTX.providerRoute,
+  });
   return {
     inputTokens,
     outputTokens,

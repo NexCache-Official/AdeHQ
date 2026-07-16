@@ -114,26 +114,69 @@ function vgOffer(
 export const MANUAL_MODEL_OVERRIDES: ModelEndpointOffer[] = [
   sfOffer(
     SILICONFLOW_CHEAP_MODEL,
-    "DeepSeek V3 (Efficient)",
+    "DeepSeek V4 Flash (Efficient)",
     ["quick_reply", "classification", "memory_curation", "summarization"],
     ["efficient"],
-    0.1,
-    0.15,
+    0.13,
+    0.28,
+    {
+      cachedInputCostPerMillion: 0.028,
+      metadata: provenance(
+        "https://www.siliconflow.com/models/deepseek-v4-flash",
+        "SiliconFlow efficient slot — DeepSeek V4 Flash",
+      ),
+    },
   ),
   sfOffer(
     DEFAULT_SILICONFLOW_MODEL,
     "DeepSeek V4 Flash (Balanced)",
     ["structured_chat", "summarization", "artifact_generation", "reasoning"],
     ["balanced"],
-    0.3,
-    0.6,
+    0.13,
+    0.28,
+    {
+      cachedInputCostPerMillion: 0.028,
+      metadata: provenance(
+        "https://www.siliconflow.com/models/deepseek-v4-flash",
+        "SiliconFlow DeepSeek V4 Flash official pricing (2026-07-16)",
+      ),
+    },
+  ),
+  sfOffer(
+    "deepseek-ai/DeepSeek-V4-Flash",
+    "DeepSeek V4 Flash",
+    ["structured_chat", "summarization", "artifact_generation", "reasoning", "quick_reply"],
+    ["balanced", "efficient"],
+    0.13,
+    0.28,
+    {
+      cachedInputCostPerMillion: 0.028,
+      metadata: provenance(
+        "https://www.siliconflow.com/models/deepseek-v4-flash",
+        "SiliconFlow DeepSeek V4 Flash official pricing (2026-07-16)",
+      ),
+    },
+  ),
+  sfOffer(
+    "Qwen/Qwen3-8B",
+    "Qwen3 8B (fallback)",
+    ["quick_reply", "classification", "structured_chat"],
+    ["efficient", "balanced"],
+    0.06,
+    0.06,
+    {
+      metadata: provenance(
+        "https://www.siliconflow.com/models/qwen3-8b",
+        "SiliconFlow Qwen3-8B official pricing (2026-07-16)",
+      ),
+    },
   ),
   sfOffer(
     SILICONFLOW_STRONG_MODEL,
     "DeepSeek V4 Pro (Strong)",
     ["deep_reasoning", "artifact_generation", "research_planning"],
     ["strong", "research"],
-    1.6,
+    1.5016,
     3.135,
     {
       qualityScore: 9.0,
@@ -142,7 +185,7 @@ export const MANUAL_MODEL_OVERRIDES: ModelEndpointOffer[] = [
       maxOutputTokens: 393_000,
       metadata: provenance(
         "https://www.siliconflow.com/models/deepseek-v4-pro",
-        "SiliconFlow DeepSeek V4 Pro official pricing",
+        "SiliconFlow DeepSeek V4 Pro official pricing (2026-07-16)",
       ),
     },
   ),
@@ -205,7 +248,20 @@ export const MANUAL_MODEL_OVERRIDES: ModelEndpointOffer[] = [
     ["strong", "research"],
     0.43,
     0.87,
-    { qualityScore: 9.0, supportsTools: true },
+    {
+      qualityScore: 9.0,
+      supportsTools: true,
+      gatewayProviderSlug: "deepseek",
+      pricingDiscountActive: true,
+      originalInputCostPerMillion: 1.74,
+      originalOutputCostPerMillion: 3.48,
+      pricingNotes: "Vercel AI Gateway DeepSeek provider route ($0.43/$0.87 per M)",
+      metadata: provenance(
+        "https://vercel.com/ai-gateway/models/deepseek-v4-pro",
+        "Vercel AI Gateway DeepSeek V4 Pro discounted pricing — preferred for Strong/Pro",
+        "vercel_page_manual",
+      ),
+    },
   ),
   vgOffer(
     VERCEL_GATEWAY_DEFAULT_MODELS.long_context,

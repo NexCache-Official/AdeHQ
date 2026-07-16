@@ -346,7 +346,17 @@ export async function failAiWorkUnit(
     actual_work_minutes: result?.actualWorkMinutes ?? null,
   };
   if (result?.metadata) patch.metadata = result.metadata;
-  return patchAiWorkUnit(client, workspaceId, workUnitId, patch);
+  const failed = await patchAiWorkUnit(client, workspaceId, workUnitId, patch);
+  // Still meter tokens already spent (timeouts / schema failures after the provider call).
+  try {
+    await recordCostFromWorkUnit(client, failed, {
+      actualCostUsd: result?.actualCostUsd,
+      metadata: result?.metadata,
+    });
+  } catch (error) {
+    console.warn("[AdeHQ cost ledger] failAiWorkUnit", error);
+  }
+  return failed;
 }
 
 export async function cancelAiWorkUnit(

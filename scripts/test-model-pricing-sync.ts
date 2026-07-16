@@ -74,7 +74,7 @@ async function main() {
 
   await run("V20.1.1 — corrected SF + Vercel DeepSeek V4 Pro prices", () => {
     const sf = MANUAL_MODEL_OVERRIDES.find((o) => o.modelId === "deepseek-ai/DeepSeek-V4-Pro");
-    assert(sf?.inputCostPerMillion === 1.6, "SF input");
+    assert(sf?.inputCostPerMillion === 1.5016, "SF input");
     assert(sf?.outputCostPerMillion === 3.135, "SF output");
 
     const vg = buildVercelEndpointOverrides().find(

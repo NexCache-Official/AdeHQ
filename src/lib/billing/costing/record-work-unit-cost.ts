@@ -82,6 +82,8 @@ export async function recordCostFromWorkUnit(
     inputTokens,
     cachedInputTokens,
     outputTokens,
+    providerRoute:
+      stringFromMeta(meta, "providerRoute") ?? workUnit.providerRoute ?? null,
     actualCostUsd: result?.actualCostUsd ?? workUnit.actualCostUsd,
     estimatedCostUsd: workUnit.estimatedCostUsd,
   });

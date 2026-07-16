@@ -69,12 +69,12 @@ async function main() {
     assert(row!.metadata?.sourceUrl != null, "sourceUrl");
   });
 
-  await run("SF DeepSeek V4 Pro corrected to 1.60/3.135", () => {
+  await run("SF DeepSeek V4 Pro corrected to 1.5016/3.135", () => {
     const row = MANUAL_MODEL_OVERRIDES.find(
       (o) => o.modelId === "deepseek-ai/DeepSeek-V4-Pro",
     );
     assert(row != null, "SF DeepSeek V4 Pro override missing");
-    assert(row!.inputCostPerMillion === 1.6, "input");
+    assert(row!.inputCostPerMillion === 1.5016, "input");
     assert(row!.outputCostPerMillion === 3.135, "output");
     assert(row!.cachedInputCostPerMillion === 0.135, "cache stored");
   });

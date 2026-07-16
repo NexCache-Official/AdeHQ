@@ -6,6 +6,7 @@ import {
   SILICONFLOW_LONG_CONTEXT_MODEL,
   SILICONFLOW_STRONG_MODEL,
 } from "@/lib/config/features";
+import { estimateTokenCostUsd } from "@/lib/billing/costing/token-rates";
 
 export type ModelMode =
   | "cheap"
@@ -56,21 +57,24 @@ const TIMEOUT_MS: Record<ModelMode, number> = {
   creative: 45_000,
 };
 
-/** Rough per-1M-token pricing (USD) for cost estimates. */
+/** @deprecated Prefer resolveTokenRates / estimateTokenCostUsd — kept for rare offline callers. */
 const PRICING_PER_MILLION: Record<string, { input: number; output: number }> = {
-  [SILICONFLOW_CHEAP_MODEL]: { input: 0.1, output: 0.15 },
+  [SILICONFLOW_CHEAP_MODEL]: { input: 0.13, output: 0.28 },
   "deepseek-ai/DeepSeek-V3": { input: 0.14, output: 0.28 },
-  "Qwen/Qwen3-Coder-30B-A3B-Instruct": { input: 0.3, output: 0.6 },
-  "MiniMaxAI/MiniMax-M2.5": { input: 0.4, output: 0.8 },
-  [DEFAULT_SILICONFLOW_MODEL]: { input: 0.3, output: 0.6 },
-  [SILICONFLOW_STRONG_MODEL]: { input: 0.8, output: 1.6 },
+  "deepseek-ai/DeepSeek-V4-Flash": { input: 0.13, output: 0.28 },
+  "deepseek-ai/DeepSeek-V4-Pro": { input: 1.5016, output: 3.135 },
+  "deepseek/deepseek-v4-flash": { input: 0.14, output: 0.28 },
+  "deepseek/deepseek-v4-pro": { input: 0.43, output: 0.87 },
+  "Qwen/Qwen3-8B": { input: 0.06, output: 0.06 },
+  "Qwen/Qwen3-Coder-30B-A3B-Instruct": { input: 0.5, output: 1.0 },
+  "MiniMaxAI/MiniMax-M2.5": { input: 0.3, output: 1.2 },
+  [DEFAULT_SILICONFLOW_MODEL]: { input: 0.13, output: 0.28 },
+  [SILICONFLOW_STRONG_MODEL]: { input: 1.5016, output: 3.135 },
   [SILICONFLOW_CODER_MODEL]: { input: 0.5, output: 1.0 },
-  [SILICONFLOW_LONG_CONTEXT_MODEL]: { input: 0.4, output: 0.8 },
+  [SILICONFLOW_LONG_CONTEXT_MODEL]: { input: 0.3, output: 1.2 },
   "openai/gpt-4o-mini": { input: 0.15, output: 0.6 },
   "anthropic/claude-sonnet-4": { input: 3.0, output: 15.0 },
 };
-
-const DEFAULT_PRICING = { input: 0.5, output: 1.0 };
 
 export function defaultModelModeForRole(roleKey: EmployeeRoleKey): ModelMode {
   return ROLE_DEFAULT_MODE[roleKey] ?? "balanced";
@@ -114,16 +118,28 @@ export function getTimeoutMs(mode: ModelMode): number {
   return TIMEOUT_MS[mode] ?? TIMEOUT_MS.balanced;
 }
 
+export type EstimateCostOptions = {
+  cachedInputTokens?: number;
+  providerRoute?: string | null;
+};
+
+/**
+ * USD cost for a model call. Uses curated SiliconFlow / Vercel Gateway endpoint
+ * rates (e.g. deepseek/deepseek-v4-pro @ $0.43/$0.87 via gateway).
+ */
 export function estimateCost(
   model: string,
   inputTokens: number,
   outputTokens: number,
+  options?: EstimateCostOptions,
 ): number {
-  const rates = PRICING_PER_MILLION[model] ?? DEFAULT_PRICING;
-  return (
-    (inputTokens / 1_000_000) * rates.input +
-    (outputTokens / 1_000_000) * rates.output
-  );
+  return estimateTokenCostUsd({
+    modelId: model,
+    inputTokens,
+    outputTokens,
+    cachedInputTokens: options?.cachedInputTokens,
+    providerRoute: options?.providerRoute,
+  });
 }
 
 export function estimateCostForRun(

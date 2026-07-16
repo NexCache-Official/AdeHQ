@@ -276,18 +276,37 @@ async function recordCommercialUsageFromFinalizedRun(
   const outputTokens = Math.max(0, params.outputTokens ?? 0);
   const cachedTokens = Math.max(0, params.cachedTokens ?? 0);
 
+  const providerName =
+    typeof usage?.provider === "string" ? usage.provider.trim().toLowerCase() : null;
+  const providerRoute =
+    providerName === "vercel" || providerName === "vercel_gateway" || providerName?.includes("gateway")
+      ? "vercel_gateway"
+      : providerName === "siliconflow" || providerName === "siliconflow_direct"
+        ? "siliconflow_direct"
+        : modelId?.startsWith("deepseek/") || modelId?.startsWith("minimax/") || modelId?.startsWith("qwen/")
+          ? "vercel_gateway"
+          : modelId?.includes("/")
+            ? "siliconflow_direct"
+            : null;
+
+  // Prefer token×endpoint rates over caller "actualCostUsd" — call sites often pass
+  // our own estimateCost() result as actual, which historically used stale catalog rates.
   let { costUsd, costSource } = calculateModelCost({
     modelId,
     inputTokens,
     cachedInputTokens: cachedTokens,
     outputTokens,
-    actualCostUsd: params.actualCostUsd,
+    providerRoute,
     estimatedCostUsd:
-      usage?.estimated_cost_usd != null ? Number(usage.estimated_cost_usd) : null,
+      params.actualCostUsd ??
+      (usage?.estimated_cost_usd != null ? Number(usage.estimated_cost_usd) : null),
   });
 
-  if (costUsd <= 0 && (inputTokens > 0 || outputTokens > 0)) {
-    costUsd = estimateCost(modelId ?? "default", inputTokens + cachedTokens, outputTokens);
+  if ((inputTokens > 0 || outputTokens > 0 || cachedTokens > 0) && modelId) {
+    costUsd = estimateCost(modelId, inputTokens > 0 ? inputTokens : cachedTokens, outputTokens, {
+      cachedInputTokens: inputTokens > 0 ? cachedTokens : 0,
+      providerRoute,
+    });
     costSource = "estimated";
   }
   // Completed employee replies with missing token/cost telemetry still consumed
@@ -312,6 +331,7 @@ async function recordCommercialUsageFromFinalizedRun(
     topicId: run?.topic_id ? String(run.topic_id) : null,
     messageId: params.responseMessageId ?? null,
     sourceType: "llm",
+    providerRoute,
     providerName: typeof usage?.provider === "string" ? usage.provider : null,
     modelId,
     workType: "employee_reply",
@@ -326,6 +346,7 @@ async function recordCommercialUsageFromFinalizedRun(
       agentRunId: params.runId,
       usageId: params.usageId,
       mirroredFrom: "finalizeAiRun",
+      tokenRatesApplied: true,
     },
   });
 }
