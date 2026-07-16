@@ -46,6 +46,7 @@ import {
   loadAttachmentFileIds,
   retrieveFileContext,
 } from "@/lib/server/file-context";
+import { executeVisionUnderstanding, shouldRunVision } from "@/lib/brain/vision";
 import { nowISO } from "@/lib/utils";
 import {
   planEmployeeReplyShadowRun,
@@ -519,6 +520,50 @@ export async function processQueuedAgentRun(
           ? "standard"
           : rawWorkMode
         : undefined;
+
+    // PR-15: visual understanding for Rooms/DMs/Drive image attachments + Inbox images.
+    if (
+      !isGreetingRun &&
+      shouldRunVision({
+        attachmentFileIds,
+        hasVisualAssets: attachmentFileIds.length > 0,
+        userMessage: content,
+      })
+    ) {
+      try {
+        const visionIntensity =
+          workMode === "fast" ||
+          workMode === "standard" ||
+          workMode === "deep" ||
+          workMode === "research"
+            ? workMode
+            : "standard";
+        const vision = await executeVisionUnderstanding({
+          client,
+          workspaceId,
+          roomId,
+          topicId,
+          employeeId,
+          workUnitId: runId,
+          messageId: triggerMessageId,
+          userMessage: content,
+          attachmentFileIds,
+          emailThreadId:
+            typeof runMetadata.emailThreadId === "string" ? runMetadata.emailThreadId : null,
+          emailMessageId:
+            typeof runMetadata.emailMessageId === "string" ? runMetadata.emailMessageId : null,
+          intensity: visionIntensity,
+        });
+        if (vision?.promptBlock) {
+          fileContextPrompt = [fileContextPrompt, vision.promptBlock].filter(Boolean).join("\n\n");
+        }
+      } catch (error) {
+        console.warn(
+          "[AdeHQ vision] skipped",
+          error instanceof Error ? error.message : error,
+        );
+      }
+    }
 
     if (isIntelligenceV1Enabled()) {
       intelligence = await enrichIntelligenceContext(client, {

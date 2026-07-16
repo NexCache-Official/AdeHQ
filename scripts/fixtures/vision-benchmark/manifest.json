@@ -1,0 +1,666 @@
+{
+  "version": 1,
+  "count": 60,
+  "items": [
+    {
+      "id": "screenshot_01",
+      "category": "screenshot",
+      "fileName": "screenshot_01.png",
+      "expectedFacts": [
+        "SCREENSHOT-FACT-1",
+        "VALUE-11"
+      ],
+      "prompt": "What is in this screenshot? Extract SCREENSHOT-FACT-1 and VALUE-11.",
+      "forceComplex": false
+    },
+    {
+      "id": "screenshot_02",
+      "category": "screenshot",
+      "fileName": "screenshot_02.png",
+      "expectedFacts": [
+        "SCREENSHOT-FACT-2",
+        "VALUE-22"
+      ],
+      "prompt": "What is in this screenshot? Extract SCREENSHOT-FACT-2 and VALUE-22.",
+      "forceComplex": false
+    },
+    {
+      "id": "screenshot_03",
+      "category": "screenshot",
+      "fileName": "screenshot_03.png",
+      "expectedFacts": [
+        "SCREENSHOT-FACT-3",
+        "VALUE-33"
+      ],
+      "prompt": "What is in this screenshot? Extract SCREENSHOT-FACT-3 and VALUE-33.",
+      "forceComplex": false
+    },
+    {
+      "id": "screenshot_04",
+      "category": "screenshot",
+      "fileName": "screenshot_04.png",
+      "expectedFacts": [
+        "SCREENSHOT-FACT-4",
+        "VALUE-44"
+      ],
+      "prompt": "What is in this screenshot? Extract SCREENSHOT-FACT-4 and VALUE-44.",
+      "forceComplex": false
+    },
+    {
+      "id": "screenshot_05",
+      "category": "screenshot",
+      "fileName": "screenshot_05.png",
+      "expectedFacts": [
+        "SCREENSHOT-FACT-5",
+        "VALUE-55"
+      ],
+      "prompt": "What is in this screenshot? Extract SCREENSHOT-FACT-5 and VALUE-55.",
+      "forceComplex": false
+    },
+    {
+      "id": "screenshot_06",
+      "category": "screenshot",
+      "fileName": "screenshot_06.png",
+      "expectedFacts": [
+        "SCREENSHOT-FACT-6",
+        "VALUE-66"
+      ],
+      "prompt": "What is in this screenshot? Extract SCREENSHOT-FACT-6 and VALUE-66.",
+      "forceComplex": false
+    },
+    {
+      "id": "screenshot_07",
+      "category": "screenshot",
+      "fileName": "screenshot_07.png",
+      "expectedFacts": [
+        "SCREENSHOT-FACT-7",
+        "VALUE-77"
+      ],
+      "prompt": "What is in this screenshot? Extract SCREENSHOT-FACT-7 and VALUE-77.",
+      "forceComplex": false
+    },
+    {
+      "id": "screenshot_08",
+      "category": "screenshot",
+      "fileName": "screenshot_08.png",
+      "expectedFacts": [
+        "SCREENSHOT-FACT-8",
+        "VALUE-88"
+      ],
+      "prompt": "What is in this screenshot? Extract SCREENSHOT-FACT-8 and VALUE-88.",
+      "forceComplex": false
+    },
+    {
+      "id": "screenshot_09",
+      "category": "screenshot",
+      "fileName": "screenshot_09.png",
+      "expectedFacts": [
+        "SCREENSHOT-FACT-9",
+        "VALUE-99"
+      ],
+      "prompt": "What is in this screenshot? Extract SCREENSHOT-FACT-9 and VALUE-99.",
+      "forceComplex": false
+    },
+    {
+      "id": "screenshot_10",
+      "category": "screenshot",
+      "fileName": "screenshot_10.png",
+      "expectedFacts": [
+        "SCREENSHOT-FACT-10",
+        "VALUE-110"
+      ],
+      "prompt": "What is in this screenshot? Extract SCREENSHOT-FACT-10 and VALUE-110.",
+      "forceComplex": false
+    },
+    {
+      "id": "chart_01",
+      "category": "chart",
+      "fileName": "chart_01.png",
+      "expectedFacts": [
+        "CHART-FACT-1",
+        "VALUE-11"
+      ],
+      "prompt": "What is in this chart? Extract CHART-FACT-1 and VALUE-11.",
+      "forceComplex": false
+    },
+    {
+      "id": "chart_02",
+      "category": "chart",
+      "fileName": "chart_02.png",
+      "expectedFacts": [
+        "CHART-FACT-2",
+        "VALUE-22"
+      ],
+      "prompt": "What is in this chart? Extract CHART-FACT-2 and VALUE-22.",
+      "forceComplex": false
+    },
+    {
+      "id": "chart_03",
+      "category": "chart",
+      "fileName": "chart_03.png",
+      "expectedFacts": [
+        "CHART-FACT-3",
+        "VALUE-33"
+      ],
+      "prompt": "What is in this chart? Extract CHART-FACT-3 and VALUE-33.",
+      "forceComplex": false
+    },
+    {
+      "id": "chart_04",
+      "category": "chart",
+      "fileName": "chart_04.png",
+      "expectedFacts": [
+        "CHART-FACT-4",
+        "VALUE-44"
+      ],
+      "prompt": "What is in this chart? Extract CHART-FACT-4 and VALUE-44.",
+      "forceComplex": false
+    },
+    {
+      "id": "chart_05",
+      "category": "chart",
+      "fileName": "chart_05.png",
+      "expectedFacts": [
+        "CHART-FACT-5",
+        "VALUE-55"
+      ],
+      "prompt": "What is in this chart? Extract CHART-FACT-5 and VALUE-55.",
+      "forceComplex": false
+    },
+    {
+      "id": "chart_06",
+      "category": "chart",
+      "fileName": "chart_06.png",
+      "expectedFacts": [
+        "CHART-FACT-6",
+        "VALUE-66"
+      ],
+      "prompt": "What is in this chart? Extract CHART-FACT-6 and VALUE-66.",
+      "forceComplex": false
+    },
+    {
+      "id": "chart_07",
+      "category": "chart",
+      "fileName": "chart_07.png",
+      "expectedFacts": [
+        "CHART-FACT-7",
+        "VALUE-77"
+      ],
+      "prompt": "What is in this chart? Extract CHART-FACT-7 and VALUE-77.",
+      "forceComplex": false
+    },
+    {
+      "id": "chart_08",
+      "category": "chart",
+      "fileName": "chart_08.png",
+      "expectedFacts": [
+        "CHART-FACT-8",
+        "VALUE-88"
+      ],
+      "prompt": "What is in this chart? Extract CHART-FACT-8 and VALUE-88.",
+      "forceComplex": false
+    },
+    {
+      "id": "chart_09",
+      "category": "chart",
+      "fileName": "chart_09.png",
+      "expectedFacts": [
+        "CHART-FACT-9",
+        "VALUE-99"
+      ],
+      "prompt": "What is in this chart? Extract CHART-FACT-9 and VALUE-99.",
+      "forceComplex": false
+    },
+    {
+      "id": "chart_10",
+      "category": "chart",
+      "fileName": "chart_10.png",
+      "expectedFacts": [
+        "CHART-FACT-10",
+        "VALUE-110"
+      ],
+      "prompt": "What is in this chart? Extract CHART-FACT-10 and VALUE-110.",
+      "forceComplex": false
+    },
+    {
+      "id": "document_page_01",
+      "category": "document_page",
+      "fileName": "document_page_01.png",
+      "expectedFacts": [
+        "DOCUMENT_PAGE-FACT-1",
+        "VALUE-11"
+      ],
+      "prompt": "What is in this document page? Extract DOCUMENT_PAGE-FACT-1 and VALUE-11.",
+      "forceComplex": false
+    },
+    {
+      "id": "document_page_02",
+      "category": "document_page",
+      "fileName": "document_page_02.png",
+      "expectedFacts": [
+        "DOCUMENT_PAGE-FACT-2",
+        "VALUE-22"
+      ],
+      "prompt": "What is in this document page? Extract DOCUMENT_PAGE-FACT-2 and VALUE-22.",
+      "forceComplex": false
+    },
+    {
+      "id": "document_page_03",
+      "category": "document_page",
+      "fileName": "document_page_03.png",
+      "expectedFacts": [
+        "DOCUMENT_PAGE-FACT-3",
+        "VALUE-33"
+      ],
+      "prompt": "What is in this document page? Extract DOCUMENT_PAGE-FACT-3 and VALUE-33.",
+      "forceComplex": false
+    },
+    {
+      "id": "document_page_04",
+      "category": "document_page",
+      "fileName": "document_page_04.png",
+      "expectedFacts": [
+        "DOCUMENT_PAGE-FACT-4",
+        "VALUE-44"
+      ],
+      "prompt": "What is in this document page? Extract DOCUMENT_PAGE-FACT-4 and VALUE-44.",
+      "forceComplex": false
+    },
+    {
+      "id": "document_page_05",
+      "category": "document_page",
+      "fileName": "document_page_05.png",
+      "expectedFacts": [
+        "DOCUMENT_PAGE-FACT-5",
+        "VALUE-55"
+      ],
+      "prompt": "What is in this document page? Extract DOCUMENT_PAGE-FACT-5 and VALUE-55.",
+      "forceComplex": false
+    },
+    {
+      "id": "document_page_06",
+      "category": "document_page",
+      "fileName": "document_page_06.png",
+      "expectedFacts": [
+        "DOCUMENT_PAGE-FACT-6",
+        "VALUE-66"
+      ],
+      "prompt": "What is in this document page? Extract DOCUMENT_PAGE-FACT-6 and VALUE-66.",
+      "forceComplex": false
+    },
+    {
+      "id": "document_page_07",
+      "category": "document_page",
+      "fileName": "document_page_07.png",
+      "expectedFacts": [
+        "DOCUMENT_PAGE-FACT-7",
+        "VALUE-77"
+      ],
+      "prompt": "What is in this document page? Extract DOCUMENT_PAGE-FACT-7 and VALUE-77.",
+      "forceComplex": false
+    },
+    {
+      "id": "document_page_08",
+      "category": "document_page",
+      "fileName": "document_page_08.png",
+      "expectedFacts": [
+        "DOCUMENT_PAGE-FACT-8",
+        "VALUE-88"
+      ],
+      "prompt": "What is in this document page? Extract DOCUMENT_PAGE-FACT-8 and VALUE-88.",
+      "forceComplex": false
+    },
+    {
+      "id": "document_page_09",
+      "category": "document_page",
+      "fileName": "document_page_09.png",
+      "expectedFacts": [
+        "DOCUMENT_PAGE-FACT-9",
+        "VALUE-99"
+      ],
+      "prompt": "What is in this document page? Extract DOCUMENT_PAGE-FACT-9 and VALUE-99.",
+      "forceComplex": false
+    },
+    {
+      "id": "document_page_10",
+      "category": "document_page",
+      "fileName": "document_page_10.png",
+      "expectedFacts": [
+        "DOCUMENT_PAGE-FACT-10",
+        "VALUE-110"
+      ],
+      "prompt": "What is in this document page? Extract DOCUMENT_PAGE-FACT-10 and VALUE-110.",
+      "forceComplex": false
+    },
+    {
+      "id": "property_product_01",
+      "category": "property_product",
+      "fileName": "property_product_01.png",
+      "expectedFacts": [
+        "PROPERTY_PRODUCT-FACT-1",
+        "VALUE-11"
+      ],
+      "prompt": "What is in this property product? Extract PROPERTY_PRODUCT-FACT-1 and VALUE-11.",
+      "forceComplex": false
+    },
+    {
+      "id": "property_product_02",
+      "category": "property_product",
+      "fileName": "property_product_02.png",
+      "expectedFacts": [
+        "PROPERTY_PRODUCT-FACT-2",
+        "VALUE-22"
+      ],
+      "prompt": "What is in this property product? Extract PROPERTY_PRODUCT-FACT-2 and VALUE-22.",
+      "forceComplex": false
+    },
+    {
+      "id": "property_product_03",
+      "category": "property_product",
+      "fileName": "property_product_03.png",
+      "expectedFacts": [
+        "PROPERTY_PRODUCT-FACT-3",
+        "VALUE-33"
+      ],
+      "prompt": "What is in this property product? Extract PROPERTY_PRODUCT-FACT-3 and VALUE-33.",
+      "forceComplex": false
+    },
+    {
+      "id": "property_product_04",
+      "category": "property_product",
+      "fileName": "property_product_04.png",
+      "expectedFacts": [
+        "PROPERTY_PRODUCT-FACT-4",
+        "VALUE-44"
+      ],
+      "prompt": "What is in this property product? Extract PROPERTY_PRODUCT-FACT-4 and VALUE-44.",
+      "forceComplex": false
+    },
+    {
+      "id": "property_product_05",
+      "category": "property_product",
+      "fileName": "property_product_05.png",
+      "expectedFacts": [
+        "PROPERTY_PRODUCT-FACT-5",
+        "VALUE-55"
+      ],
+      "prompt": "What is in this property product? Extract PROPERTY_PRODUCT-FACT-5 and VALUE-55.",
+      "forceComplex": false
+    },
+    {
+      "id": "property_product_06",
+      "category": "property_product",
+      "fileName": "property_product_06.png",
+      "expectedFacts": [
+        "PROPERTY_PRODUCT-FACT-6",
+        "VALUE-66"
+      ],
+      "prompt": "What is in this property product? Extract PROPERTY_PRODUCT-FACT-6 and VALUE-66.",
+      "forceComplex": false
+    },
+    {
+      "id": "property_product_07",
+      "category": "property_product",
+      "fileName": "property_product_07.png",
+      "expectedFacts": [
+        "PROPERTY_PRODUCT-FACT-7",
+        "VALUE-77"
+      ],
+      "prompt": "What is in this property product? Extract PROPERTY_PRODUCT-FACT-7 and VALUE-77.",
+      "forceComplex": false
+    },
+    {
+      "id": "property_product_08",
+      "category": "property_product",
+      "fileName": "property_product_08.png",
+      "expectedFacts": [
+        "PROPERTY_PRODUCT-FACT-8",
+        "VALUE-88"
+      ],
+      "prompt": "What is in this property product? Extract PROPERTY_PRODUCT-FACT-8 and VALUE-88.",
+      "forceComplex": false
+    },
+    {
+      "id": "property_product_09",
+      "category": "property_product",
+      "fileName": "property_product_09.png",
+      "expectedFacts": [
+        "PROPERTY_PRODUCT-FACT-9",
+        "VALUE-99"
+      ],
+      "prompt": "What is in this property product? Extract PROPERTY_PRODUCT-FACT-9 and VALUE-99.",
+      "forceComplex": false
+    },
+    {
+      "id": "property_product_10",
+      "category": "property_product",
+      "fileName": "property_product_10.png",
+      "expectedFacts": [
+        "PROPERTY_PRODUCT-FACT-10",
+        "VALUE-110"
+      ],
+      "prompt": "What is in this property product? Extract PROPERTY_PRODUCT-FACT-10 and VALUE-110.",
+      "forceComplex": false
+    },
+    {
+      "id": "ui_bug_01",
+      "category": "ui_bug",
+      "fileName": "ui_bug_01.png",
+      "expectedFacts": [
+        "UI_BUG-FACT-1",
+        "VALUE-11"
+      ],
+      "prompt": "Debug the root cause of this UI bug. Find UI_BUG-FACT-1 and VALUE-11.",
+      "forceComplex": true
+    },
+    {
+      "id": "ui_bug_02",
+      "category": "ui_bug",
+      "fileName": "ui_bug_02.png",
+      "expectedFacts": [
+        "UI_BUG-FACT-2",
+        "VALUE-22"
+      ],
+      "prompt": "Debug the root cause of this UI bug. Find UI_BUG-FACT-2 and VALUE-22.",
+      "forceComplex": true
+    },
+    {
+      "id": "ui_bug_03",
+      "category": "ui_bug",
+      "fileName": "ui_bug_03.png",
+      "expectedFacts": [
+        "UI_BUG-FACT-3",
+        "VALUE-33"
+      ],
+      "prompt": "Debug the root cause of this UI bug. Find UI_BUG-FACT-3 and VALUE-33.",
+      "forceComplex": true
+    },
+    {
+      "id": "ui_bug_04",
+      "category": "ui_bug",
+      "fileName": "ui_bug_04.png",
+      "expectedFacts": [
+        "UI_BUG-FACT-4",
+        "VALUE-44"
+      ],
+      "prompt": "Debug the root cause of this UI bug. Find UI_BUG-FACT-4 and VALUE-44.",
+      "forceComplex": true
+    },
+    {
+      "id": "ui_bug_05",
+      "category": "ui_bug",
+      "fileName": "ui_bug_05.png",
+      "expectedFacts": [
+        "UI_BUG-FACT-5",
+        "VALUE-55"
+      ],
+      "prompt": "Debug the root cause of this UI bug. Find UI_BUG-FACT-5 and VALUE-55.",
+      "forceComplex": true
+    },
+    {
+      "id": "ui_bug_06",
+      "category": "ui_bug",
+      "fileName": "ui_bug_06.png",
+      "expectedFacts": [
+        "UI_BUG-FACT-6",
+        "VALUE-66"
+      ],
+      "prompt": "Debug the root cause of this UI bug. Find UI_BUG-FACT-6 and VALUE-66.",
+      "forceComplex": true
+    },
+    {
+      "id": "ui_bug_07",
+      "category": "ui_bug",
+      "fileName": "ui_bug_07.png",
+      "expectedFacts": [
+        "UI_BUG-FACT-7",
+        "VALUE-77"
+      ],
+      "prompt": "Debug the root cause of this UI bug. Find UI_BUG-FACT-7 and VALUE-77.",
+      "forceComplex": true
+    },
+    {
+      "id": "ui_bug_08",
+      "category": "ui_bug",
+      "fileName": "ui_bug_08.png",
+      "expectedFacts": [
+        "UI_BUG-FACT-8",
+        "VALUE-88"
+      ],
+      "prompt": "Debug the root cause of this UI bug. Find UI_BUG-FACT-8 and VALUE-88.",
+      "forceComplex": true
+    },
+    {
+      "id": "ui_bug_09",
+      "category": "ui_bug",
+      "fileName": "ui_bug_09.png",
+      "expectedFacts": [
+        "UI_BUG-FACT-9",
+        "VALUE-99"
+      ],
+      "prompt": "Debug the root cause of this UI bug. Find UI_BUG-FACT-9 and VALUE-99.",
+      "forceComplex": true
+    },
+    {
+      "id": "ui_bug_10",
+      "category": "ui_bug",
+      "fileName": "ui_bug_10.png",
+      "expectedFacts": [
+        "UI_BUG-FACT-10",
+        "VALUE-110"
+      ],
+      "prompt": "Debug the root cause of this UI bug. Find UI_BUG-FACT-10 and VALUE-110.",
+      "forceComplex": true
+    },
+    {
+      "id": "low_quality_scan_01",
+      "category": "low_quality_scan",
+      "fileName": "low_quality_scan_01.png",
+      "expectedFacts": [
+        "LOW_QUALITY_SCAN-FACT-1",
+        "VALUE-11"
+      ],
+      "prompt": "This is a low-quality scan. OCR every readable token including LOW_QUALITY_SCAN-FACT-1.",
+      "forceComplex": true
+    },
+    {
+      "id": "low_quality_scan_02",
+      "category": "low_quality_scan",
+      "fileName": "low_quality_scan_02.png",
+      "expectedFacts": [
+        "LOW_QUALITY_SCAN-FACT-2",
+        "VALUE-22"
+      ],
+      "prompt": "This is a low-quality scan. OCR every readable token including LOW_QUALITY_SCAN-FACT-2.",
+      "forceComplex": true
+    },
+    {
+      "id": "low_quality_scan_03",
+      "category": "low_quality_scan",
+      "fileName": "low_quality_scan_03.png",
+      "expectedFacts": [
+        "LOW_QUALITY_SCAN-FACT-3",
+        "VALUE-33"
+      ],
+      "prompt": "This is a low-quality scan. OCR every readable token including LOW_QUALITY_SCAN-FACT-3.",
+      "forceComplex": true
+    },
+    {
+      "id": "low_quality_scan_04",
+      "category": "low_quality_scan",
+      "fileName": "low_quality_scan_04.png",
+      "expectedFacts": [
+        "LOW_QUALITY_SCAN-FACT-4",
+        "VALUE-44"
+      ],
+      "prompt": "This is a low-quality scan. OCR every readable token including LOW_QUALITY_SCAN-FACT-4.",
+      "forceComplex": true
+    },
+    {
+      "id": "low_quality_scan_05",
+      "category": "low_quality_scan",
+      "fileName": "low_quality_scan_05.png",
+      "expectedFacts": [
+        "LOW_QUALITY_SCAN-FACT-5",
+        "VALUE-55"
+      ],
+      "prompt": "This is a low-quality scan. OCR every readable token including LOW_QUALITY_SCAN-FACT-5.",
+      "forceComplex": true
+    },
+    {
+      "id": "low_quality_scan_06",
+      "category": "low_quality_scan",
+      "fileName": "low_quality_scan_06.png",
+      "expectedFacts": [
+        "LOW_QUALITY_SCAN-FACT-6",
+        "VALUE-66"
+      ],
+      "prompt": "This is a low-quality scan. OCR every readable token including LOW_QUALITY_SCAN-FACT-6.",
+      "forceComplex": true
+    },
+    {
+      "id": "low_quality_scan_07",
+      "category": "low_quality_scan",
+      "fileName": "low_quality_scan_07.png",
+      "expectedFacts": [
+        "LOW_QUALITY_SCAN-FACT-7",
+        "VALUE-77"
+      ],
+      "prompt": "This is a low-quality scan. OCR every readable token including LOW_QUALITY_SCAN-FACT-7.",
+      "forceComplex": true
+    },
+    {
+      "id": "low_quality_scan_08",
+      "category": "low_quality_scan",
+      "fileName": "low_quality_scan_08.png",
+      "expectedFacts": [
+        "LOW_QUALITY_SCAN-FACT-8",
+        "VALUE-88"
+      ],
+      "prompt": "This is a low-quality scan. OCR every readable token including LOW_QUALITY_SCAN-FACT-8.",
+      "forceComplex": true
+    },
+    {
+      "id": "low_quality_scan_09",
+      "category": "low_quality_scan",
+      "fileName": "low_quality_scan_09.png",
+      "expectedFacts": [
+        "LOW_QUALITY_SCAN-FACT-9",
+        "VALUE-99"
+      ],
+      "prompt": "This is a low-quality scan. OCR every readable token including LOW_QUALITY_SCAN-FACT-9.",
+      "forceComplex": true
+    },
+    {
+      "id": "low_quality_scan_10",
+      "category": "low_quality_scan",
+      "fileName": "low_quality_scan_10.png",
+      "expectedFacts": [
+        "LOW_QUALITY_SCAN-FACT-10",
+        "VALUE-110"
+      ],
+      "prompt": "This is a low-quality scan. OCR every readable token including LOW_QUALITY_SCAN-FACT-10.",
+      "forceComplex": true
+    }
+  ]
+}

@@ -167,7 +167,7 @@ const APPROVED: Array<{
   {
     id: "route_vision_qwen3_vl_8b_sf",
     model: "Qwen/Qwen3-VL-8B-Instruct",
-    environment: "shadow",
+    environment: "production",
     unitType: "tokens",
     provider: "siliconflow",
     rates: { input: 0.18, output: 0.68 },
@@ -176,7 +176,7 @@ const APPROVED: Array<{
   {
     id: "route_vision_qwen3_vl_32b_sf",
     model: "Qwen/Qwen3-VL-32B-Thinking",
-    environment: "shadow",
+    environment: "production",
     unitType: "tokens",
     provider: "siliconflow",
     rates: { input: 0.2, output: 1.5 },
@@ -326,7 +326,7 @@ const APPROVED: Array<{
 ];
 
 function main() {
-  assert(CATALOG_VERSION === "3", "CATALOG_VERSION must be 3 after PR-14 Exa-first search");
+  assert(CATALOG_VERSION === "4", "CATALOG_VERSION must be 4 after PR-15 vision");
 
   const ids = BRAIN_ROUTES.map((r) => r.id);
   assert(new Set(ids).size === ids.length, "route ids must be unique");
@@ -427,9 +427,13 @@ function main() {
   const newId = nextSnapshotId("route_text_v4flash_sf", "2026-08-01T00:00:00.000Z");
   assert(newId !== old.id, "rate change must allocate a new snapshot id");
 
-  // Media / vision / voice must NOT be production
+  // PR-15 vision is production; image/video/TTS remain shadow
+  for (const id of ["route_vision_qwen3_vl_8b_sf", "route_vision_qwen3_vl_32b_sf"]) {
+    const r = getBrainRoute(id);
+    assert(r?.environment === "production", `${id} must be production`);
+    assert(r?.supportsVision, `${id} must support vision`);
+  }
   for (const id of [
-    "route_vision_qwen3_vl_8b_sf",
     "route_image_z_image_turbo",
     "route_video_wan22_t2v",
     "route_tts_cosyvoice2",

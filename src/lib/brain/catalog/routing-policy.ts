@@ -123,6 +123,35 @@ export const ROUTING_POLICY: RoutingPolicyEntry[] = [
     primaryRouteId: "route_search_exa",
     backupRouteIds: ["route_search_perplexity", "route_search_tavily"],
   },
+  // PR-15: VL-8B standard; VL-32B-Thinking for complex / deep / research.
+  {
+    capability: "vision",
+    intensity: "fast",
+    environment: "production",
+    primaryRouteId: "route_vision_qwen3_vl_8b_sf",
+    backupRouteIds: ["route_vision_qwen3_vl_32b_sf"],
+  },
+  {
+    capability: "vision",
+    intensity: "standard",
+    environment: "production",
+    primaryRouteId: "route_vision_qwen3_vl_8b_sf",
+    backupRouteIds: ["route_vision_qwen3_vl_32b_sf"],
+  },
+  {
+    capability: "vision",
+    intensity: "deep",
+    environment: "production",
+    primaryRouteId: "route_vision_qwen3_vl_32b_sf",
+    backupRouteIds: ["route_vision_qwen3_vl_8b_sf"],
+  },
+  {
+    capability: "vision",
+    intensity: "research",
+    environment: "production",
+    primaryRouteId: "route_vision_qwen3_vl_32b_sf",
+    backupRouteIds: ["route_vision_qwen3_vl_8b_sf"],
+  },
 ];
 
 export function resolveRoutingPolicy(

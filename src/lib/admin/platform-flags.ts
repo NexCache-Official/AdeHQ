@@ -22,7 +22,8 @@ export type PlatformFlagKey =
   | "employee_direct_execution"
   | "employee_queued_execution"
   | "adehq_brain_v1"
-  | "adehq_brain_search_v1";
+  | "adehq_brain_search_v1"
+  | "adehq_brain_vision_v1";
 
 const FLAG_DEFAULTS: Record<string, unknown> = {
   signups_enabled: true,
@@ -40,6 +41,7 @@ const FLAG_DEFAULTS: Record<string, unknown> = {
   employee_queued_execution: false,
   adehq_brain_v1: true,
   adehq_brain_search_v1: true,
+  adehq_brain_vision_v1: true,
 };
 
 /** Optional env fallbacks if the DB row is missing (e.g. before migration runs). */
@@ -54,6 +56,7 @@ const FLAG_ENV_FALLBACKS: Partial<Record<PlatformFlagKey, string>> = {
   employee_queued_execution: "AI_RUNTIME_V2_EMPLOYEE_QUEUED_EXECUTION",
   adehq_brain_v1: "ADEHQ_BRAIN_V1",
   adehq_brain_search_v1: "ADEHQ_BRAIN_SEARCH_V1",
+  adehq_brain_vision_v1: "ADEHQ_BRAIN_VISION_V1",
 };
 
 const CACHE_TTL_MS = 15_000;

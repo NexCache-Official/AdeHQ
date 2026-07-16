@@ -30,4 +30,9 @@ export {
   resolveBrainAwareModelMode,
 } from "./resolve-auto-run";
 export * from "./search";
-export { isBrainSearchV1Enabled, isBrainSearchCacheEnabled } from "./flags";
+export * from "./vision";
+export {
+  isBrainSearchV1Enabled,
+  isBrainSearchCacheEnabled,
+  isBrainVisionV1Enabled,
+} from "./flags";

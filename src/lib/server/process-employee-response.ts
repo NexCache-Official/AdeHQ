@@ -18,6 +18,7 @@ import {
   loadAttachmentFileIds,
   retrieveFileContext,
 } from "@/lib/server/file-context";
+import { executeVisionUnderstanding, shouldRunVision } from "@/lib/brain/vision";
 import { inferArtifactsFromReply } from "@/lib/artifacts/intelligence";
 import { resolveRunModelMode } from "@/lib/ai/resolve-run-model-mode";
 import { ensureDefaultEmployeeToolGrants } from "@/lib/integrations/permissions";
@@ -123,8 +124,37 @@ export async function processEmployeeResponse(
     userMessage: content,
     priorityFileIds: attachmentFileIds,
   });
-  const fileContextPrompt = buildFileContextPrompt(fileContextBundle);
+  let fileContextPrompt = buildFileContextPrompt(fileContextBundle);
   const usedFileContext = fileContextBundle.chunks.length > 0;
+
+  if (
+    shouldRunVision({
+      attachmentFileIds,
+      hasVisualAssets: attachmentFileIds.length > 0,
+      userMessage: content,
+    })
+  ) {
+    try {
+      const vision = await executeVisionUnderstanding({
+        client,
+        workspaceId: ctx.workspaceId,
+        roomId: ctx.room.id,
+        topicId,
+        employeeId,
+        messageId: options.triggerMessageId,
+        userMessage: content,
+        attachmentFileIds,
+      });
+      if (vision?.promptBlock) {
+        fileContextPrompt = [fileContextPrompt, vision.promptBlock].filter(Boolean).join("\n\n");
+      }
+    } catch (error) {
+      console.warn(
+        "[AdeHQ vision] skipped (direct)",
+        error instanceof Error ? error.message : error,
+      );
+    }
+  }
 
   const roomWithMessages = {
     ...ctx.room,

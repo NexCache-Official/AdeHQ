@@ -83,6 +83,11 @@ const MIME_BY_EXTENSION: Record<string, string[]> = {
   csv: ["text/csv", "application/csv", "application/vnd.ms-excel", "text/plain"],
   txt: ["text/plain", "application/octet-stream"],
   md: ["text/markdown", "text/plain", "application/octet-stream"],
+  png: ["image/png", "application/octet-stream"],
+  jpg: ["image/jpeg", "image/jpg", "application/octet-stream"],
+  jpeg: ["image/jpeg", "image/jpg", "application/octet-stream"],
+  webp: ["image/webp", "application/octet-stream"],
+  gif: ["image/gif", "application/octet-stream"],
 };
 
 export function fileChecksum(buffer: Buffer): string {
@@ -100,7 +105,10 @@ export function validateUploadType(fileName: string, mimeType: string): {
   const extension = fileExtension(fileName);
   const allowed = MIME_BY_EXTENSION[extension];
   if (!allowed) {
-    return { ok: false, error: "Unsupported file type. Upload PDF, DOCX, XLSX, CSV, TXT, or MD." };
+    return {
+      ok: false,
+      error: "Unsupported file type. Upload PDF, DOCX, XLSX, CSV, TXT, MD, or an image (PNG, JPG, WEBP, GIF).",
+    };
   }
   const normalizedMime = mimeType || "application/octet-stream";
   if (!allowed.includes(normalizedMime) && normalizedMime !== "application/octet-stream") {
@@ -178,11 +186,12 @@ async function parsePdf(buffer: Buffer): Promise<ParsedFileResult> {
         status: "ready",
         parseStatus: "no_text",
         extractedText: null,
-        textPreview: "No extractable text found.",
+        textPreview: "No extractable text found. Attach page screenshots for visual understanding.",
         chunks: [],
         pageCount: result.total ?? pages.length,
-        sourceMetadata: { parser: "pdf-parse", noOcr: true },
-        errorMessage: "No extractable text found. This may be a scanned or image-only PDF.",
+        sourceMetadata: { parser: "pdf-parse", noOcr: true, visionEligible: true, needsPageRaster: true },
+        errorMessage:
+          "No extractable text found. This may be a scanned or image-only PDF — attach page images for visual understanding.",
       };
     }
 
@@ -356,6 +365,31 @@ function parseXlsx(buffer: Buffer): ParsedFileResult {
   };
 }
 
+function parseImage(buffer: Buffer, extension: string): ParsedFileResult {
+  const mime =
+    extension === "png"
+      ? "image/png"
+      : extension === "webp"
+        ? "image/webp"
+        : extension === "gif"
+          ? "image/gif"
+          : "image/jpeg";
+  return {
+    status: "ready",
+    parseStatus: "no_text",
+    extractedText: null,
+    textPreview: "Image ready for visual understanding.",
+    chunks: [],
+    sourceMetadata: {
+      parser: "vision_image",
+      visionEligible: true,
+      mimeType: mime,
+      byteLength: buffer.byteLength,
+    },
+    errorMessage: null,
+  };
+}
+
 export async function parseUploadedFile(buffer: Buffer, extension: string): Promise<ParsedFileResult> {
   try {
     let result: ParsedFileResult;
@@ -377,6 +411,13 @@ export async function parseUploadedFile(buffer: Buffer, extension: string): Prom
       case "txt":
       case "md":
         result = parseText(buffer, extension);
+        break;
+      case "png":
+      case "jpg":
+      case "jpeg":
+      case "webp":
+      case "gif":
+        result = parseImage(buffer, extension);
         break;
       default:
         return {

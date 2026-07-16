@@ -729,7 +729,7 @@ export function ChatComposer({
         type="file"
         multiple
         className="hidden"
-        accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.md"
+        accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.md,.png,.jpg,.jpeg,.webp,.gif,image/*"
         onChange={(event) => {
           if (event.target.files) addFiles(event.target.files);
           event.target.value = "";

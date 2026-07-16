@@ -1,7 +1,7 @@
 import { getCachedPlatformFlag } from "@/lib/admin/platform-flags";
 
 function resolveBoolFlag(
-  platformKey: "adehq_brain_v1" | "adehq_brain_search_v1",
+  platformKey: "adehq_brain_v1" | "adehq_brain_search_v1" | "adehq_brain_vision_v1",
   envKey: string,
   defaultOn: boolean,
 ): boolean {
@@ -43,4 +43,13 @@ export function isBrainSearchCacheEnabled(): boolean {
   const env = process.env.ADEHQ_SEARCH_CACHE?.trim().toLowerCase();
   if (env === "0" || env === "false" || env === "off" || env === "no") return false;
   return true;
+}
+
+/**
+ * PR-15 vision kill switch.
+ * When off: skip VL understanding; text file retrieval remains.
+ * ADEHQ_BRAIN_VISION_V1=0 restores pre-vision attachment behavior.
+ */
+export function isBrainVisionV1Enabled(): boolean {
+  return resolveBoolFlag("adehq_brain_vision_v1", "ADEHQ_BRAIN_VISION_V1", true);
 }

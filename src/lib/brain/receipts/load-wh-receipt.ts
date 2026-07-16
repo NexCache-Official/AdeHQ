@@ -66,11 +66,13 @@ export async function loadWhReceipt(
       capabilityRaw === "research_planning" ||
       workTypeRaw === "realtime_search"
         ? "Web research"
-        : capabilityRaw === "reasoning" ||
-            capabilityRaw === "quick_reply" ||
-            capabilityRaw === "structured_chat"
-          ? "Answer synthesis"
-          : capabilityRaw;
+        : capabilityRaw === "vision" || workTypeRaw === "vision_understanding"
+          ? "Visual understanding"
+          : capabilityRaw === "reasoning" ||
+              capabilityRaw === "quick_reply" ||
+              capabilityRaw === "structured_chat"
+            ? "Answer synthesis"
+            : capabilityRaw;
     return {
       capability: input.includeAdminDetail ? capabilityRaw : memberCapability,
       workType: workTypeRaw,
