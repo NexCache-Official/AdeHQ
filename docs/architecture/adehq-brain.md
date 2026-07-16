@@ -1,8 +1,8 @@
 # AdeHQ Brain — V1 Engineering Plan
 
 > Living doc. Supersedes [intelligence-v2-plan.md](intelligence-v2-plan.md) for routing/metering/costing concerns.
-> Status: **V1 landed (PR-1…PR-10). Catalog PR-11 landed. PR-12 Auto UX + hot-path intensity wiring landed.**  
-> Next: PR-13 Step-3.5 promote only after agreement harness proves parity → PR-14 search → vision/media.  
+> Status: **V1 landed (PR-1…PR-12). PR-14 Exa-first Brain search landed (CATALOG_VERSION=3).**  
+> Next: PR-13 Step-3.5 promote only after agreement harness proves parity → vision/media slices.  
 > Last grounded against the codebase 2026-07-16.
 
 ## Product lock
@@ -287,9 +287,9 @@ src/lib/brain/catalog/
 environment: "production" | "fallback" | "shadow" | "evaluation" | "disabled"
 ```
 
-**Production (live scoring):** V4 Flash, V4 Pro (+ SF failover), MiniMax M2.5 (+ native Gateway + SF fallbacks), Qwen3 Coder, Qwen3-8B classifier, Qwen3 Embedding, Tavily, Browserbase.
+**Production (live scoring):** V4 Flash, V4 Pro (+ SF failover), MiniMax M2.5 (+ native Gateway + SF fallbacks), Qwen3 Coder, Qwen3-8B classifier, Qwen3 Embedding, **Exa (search primary)**, **Perplexity (search fallback)**, **Tavily (final search fallback)**, Browserbase (interaction only).
 
-**Shadow (catalogued, not live):** Step-3.5-Flash, Perplexity, Exa, Qwen3-VL-8B/32B, Z-Image-Turbo, Qwen-Image, Qwen-Image-Edit, FLUX.2-flex, Wan T2V/I2V, CosyVoice2, IndexTTS-2, Fish Speech.
+**Shadow (catalogued, not live):** Step-3.5-Flash, Qwen3-VL-8B/32B, Z-Image-Turbo, Qwen-Image, Qwen-Image-Edit, FLUX.2-flex, Wan T2V/I2V, CosyVoice2, IndexTTS-2, Fish Speech.
 
 **Evaluation:** Kimi-K2.7-Code, Qwen3.6-35B/27B, GLM-5.2, MiniMax M3.
 

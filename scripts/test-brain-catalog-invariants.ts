@@ -122,6 +122,24 @@ const APPROVED: Array<{
     rates: { input: 0.02, output: 0.02 },
   },
   {
+    id: "route_search_exa",
+    model: "exa-search",
+    environment: "production",
+    unitType: "search",
+    provider: "exa",
+    rates: { perSearch: 0.007 },
+    fallbacks: ["route_search_perplexity", "route_search_tavily"],
+  },
+  {
+    id: "route_search_perplexity",
+    model: "perplexity-search",
+    environment: "production",
+    unitType: "search",
+    provider: "perplexity",
+    rates: { perSearch: 0.005 },
+    fallbacks: ["route_search_tavily"],
+  },
+  {
     id: "route_search_tavily",
     model: "tavily-search",
     environment: "production",
@@ -145,22 +163,6 @@ const APPROVED: Array<{
     unitType: "tokens",
     provider: "siliconflow",
     rates: { input: 0.1, output: 0.3 },
-  },
-  {
-    id: "route_search_perplexity",
-    model: "perplexity-search",
-    environment: "shadow",
-    unitType: "search",
-    provider: "perplexity",
-    rates: { perSearch: 0.005 },
-  },
-  {
-    id: "route_search_exa",
-    model: "exa-search",
-    environment: "shadow",
-    unitType: "search",
-    provider: "exa",
-    rates: { perSearch: 0.007 },
   },
   {
     id: "route_vision_qwen3_vl_8b_sf",
@@ -324,7 +326,7 @@ const APPROVED: Array<{
 ];
 
 function main() {
-  assert(CATALOG_VERSION === "2", "CATALOG_VERSION must be 2 after PR-11 alignment");
+  assert(CATALOG_VERSION === "3", "CATALOG_VERSION must be 3 after PR-14 Exa-first search");
 
   const ids = BRAIN_ROUTES.map((r) => r.id);
   assert(new Set(ids).size === ids.length, "route ids must be unique");
@@ -348,6 +350,22 @@ function main() {
   assert(classifier?.environment === "production", "Qwen3-8B stays production classifier");
   const step = getBrainRoute("route_classify_step35_flash_sf");
   assert(step?.environment === "shadow", "Step-3.5-Flash is shadow only");
+
+  // PR-14: Exa primary → Perplexity → Tavily
+  const exa = getBrainRoute("route_search_exa");
+  const perplexity = getBrainRoute("route_search_perplexity");
+  const tavily = getBrainRoute("route_search_tavily");
+  assert(exa?.environment === "production", "Exa is production primary search");
+  assert(perplexity?.environment === "production", "Perplexity is production search fallback");
+  assert(tavily?.environment === "production", "Tavily remains production final fallback");
+  assert(
+    exa?.fallbackRouteIds?.[0] === "route_search_perplexity",
+    "Exa falls back to Perplexity first",
+  );
+  assert(
+    exa?.fallbackRouteIds?.[1] === "route_search_tavily",
+    "Exa falls back to Tavily second",
+  );
 
   for (const expected of APPROVED) {
     const route = getBrainRoute(expected.id);

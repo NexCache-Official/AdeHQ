@@ -110,8 +110,21 @@ export async function recordCostFromWorkUnit(
     sharedKey ??
     (usageId ? `usage_event:${usageId}:${sourceType}` : `${workUnit.id}:${stepId}:${attempt}`);
 
+  const searchRoute = stringFromMeta(meta, "searchRoute");
+  const searchRouteId =
+    searchRoute === "gateway_exa"
+      ? "route_search_exa"
+      : searchRoute === "gateway_perplexity"
+        ? "route_search_perplexity"
+        : searchRoute === "tavily"
+          ? "route_search_tavily"
+          : stringFromMeta(meta, "providerName") === "exa"
+            ? "route_search_exa"
+            : null;
+
   const routeId =
     stringFromMeta(meta, "routeId") ??
+    searchRouteId ??
     resolveRouteIdForModel({
       modelId,
       providerRoute,

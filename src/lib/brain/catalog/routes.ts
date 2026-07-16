@@ -213,7 +213,34 @@ export const BRAIN_ROUTES: CapabilityRoute[] = [
     fallbackRouteIds: [],
   },
 
-  // ─── Production search / browser (current live) ──────────────────
+  // ─── Production search / browser (PR-14 Exa-first) ───────────────
+  {
+    id: "route_search_exa",
+    capability: "search_semantic",
+    provider: "exa",
+    providerRoute: null,
+    model: "exa-search",
+    unitType: "search",
+    environment: "production",
+    enabled: true,
+    label: "Exa web retrieval (primary)",
+    fallbackRouteIds: ["route_search_perplexity", "route_search_tavily"],
+    notes:
+      "PR-14 primary for current facts, company/market/people research, docs, papers, semantic discovery.",
+  },
+  {
+    id: "route_search_perplexity",
+    capability: "search_fast",
+    provider: "perplexity",
+    providerRoute: null,
+    model: "perplexity-search",
+    unitType: "search",
+    environment: "production",
+    enabled: true,
+    label: "Perplexity grounded answer (fallback)",
+    fallbackRouteIds: ["route_search_tavily"],
+    notes: "PR-14 first fallback when Exa fails or evidence is insufficient.",
+  },
   {
     id: "route_search_tavily",
     capability: "research_planning",
@@ -223,9 +250,9 @@ export const BRAIN_ROUTES: CapabilityRoute[] = [
     unitType: "search",
     environment: "production",
     enabled: true,
-    label: "Tavily search (fallback/extraction)",
+    label: "Tavily search (final fallback)",
     fallbackRouteIds: [],
-    notes: "Current production search. PR-14 moves Perplexity/Exa ahead.",
+    notes: "PR-14 final non-browser fallback / extraction hedge.",
   },
   {
     id: "route_browser_browserbase",
@@ -238,6 +265,7 @@ export const BRAIN_ROUTES: CapabilityRoute[] = [
     enabled: true,
     label: "Browser automation",
     fallbackRouteIds: [],
+    notes: "Interaction-only — never ordinary fact fallback.",
   },
 
   // ─── Shadow — approved candidates, NOT live scoring ──────────────
@@ -256,30 +284,6 @@ export const BRAIN_ROUTES: CapabilityRoute[] = [
     supportsJson: false,
     notes:
       "PR-13 shadow eval vs Qwen3-8B. SF rejects response_format=json_object; use text+parse + enable_thinking=false. Do not promote without proof.",
-  },
-  {
-    id: "route_search_perplexity",
-    capability: "search_fast",
-    provider: "perplexity",
-    providerRoute: null,
-    model: "perplexity-search",
-    unitType: "search",
-    environment: "shadow",
-    enabled: true,
-    label: "Fast current-fact search",
-    notes: "PR-14 candidate primary for fast facts.",
-  },
-  {
-    id: "route_search_exa",
-    capability: "search_semantic",
-    provider: "exa",
-    providerRoute: null,
-    model: "exa-search",
-    unitType: "search",
-    environment: "shadow",
-    enabled: true,
-    label: "Semantic / company / paper discovery",
-    notes: "PR-14 candidate primary for semantic search.",
   },
   {
     id: "route_vision_qwen3_vl_8b_sf",

@@ -59,19 +59,42 @@ function SourceChipView({ source, chipClassName }: { source: SourceChip; chipCla
 function CitationChip({ number, source }: { number: number; source: ResolvedWebSource }) {
   const label = source.domain || source.title || `Source ${number}`;
   return (
-    <a
-      href={source.url}
-      target="_blank"
-      rel="noopener noreferrer"
+    <button
+      type="button"
       title={source.title ? `${source.title} — ${source.domain ?? ""}`.trim() : label}
+      aria-label={`Source ${number}: ${label}. Click to focus sources; open link from the source card.`}
       className={cn(
         "mx-px inline-flex h-[15px] min-w-[15px] items-center justify-center rounded-[4px] px-1",
-        "align-super text-[10px] font-semibold leading-none text-accent-d no-underline",
+        "align-super text-[10px] font-semibold leading-none text-accent-d",
         "border border-accent/25 bg-accent-soft transition-colors hover:bg-accent/15",
       )}
+      onClick={(event) => {
+        event.preventDefault();
+        const focusSource = () => {
+          const target = document.getElementById(`source-${number}`);
+          if (!target) return false;
+          target.scrollIntoView({ behavior: "smooth", block: "nearest" });
+          target.classList.add("ring-2", "ring-accent/40", "bg-accent-soft");
+          window.setTimeout(() => {
+            target.classList.remove("ring-2", "ring-accent/40", "bg-accent-soft");
+          }, 1600);
+          return true;
+        };
+        if (focusSource()) return;
+        // Expand collapsed "+N more" so higher citation numbers become focusable.
+        const expandBtn = Array.from(
+          document.querySelectorAll<HTMLButtonElement>("[data-sources-panel] button"),
+        ).find((btn) => /\+\d+\s+more/i.test(btn.textContent ?? ""));
+        expandBtn?.click();
+        window.setTimeout(() => {
+          if (!focusSource()) {
+            window.open(source.url, "_blank", "noopener,noreferrer");
+          }
+        }, 50);
+      }}
     >
       {number}
-    </a>
+    </button>
   );
 }
 

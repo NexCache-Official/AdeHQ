@@ -29,3 +29,5 @@ export {
   resolveEffectiveIntensity,
   resolveBrainAwareModelMode,
 } from "./resolve-auto-run";
+export * from "./search";
+export { isBrainSearchV1Enabled, isBrainSearchCacheEnabled } from "./flags";

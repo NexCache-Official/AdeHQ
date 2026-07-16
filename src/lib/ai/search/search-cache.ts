@@ -24,6 +24,18 @@ export type CachedSearchAnswer = {
 };
 
 const DEFAULT_TTL_HOURS = 24;
+/** Live / breaking — 20 minutes. */
+const LIVE_TTL_HOURS = 20 / 60;
+/** News / current events — 45 minutes. */
+const NEWS_TTL_HOURS = 45 / 60;
+/** Company funding/revenue/leadership — 12 hours. */
+const COMPANY_TTL_HOURS = 12;
+/** Market research — 18 hours. */
+const MARKET_TTL_HOURS = 18;
+/** Technical documentation — 48 hours. */
+const DOCS_TTL_HOURS = 48;
+/** Academic / stable reference — 5 days. */
+const ACADEMIC_TTL_HOURS = 24 * 5;
 const FAST_FACT_TTL_HOURS = 6;
 const STABLE_FACT_TTL_HOURS = 72;
 
@@ -45,14 +57,52 @@ export function computeSearchConfidence(
   return Math.min(0.98, base);
 }
 
-function ttlHoursForQuery(query: string): number {
+/** PR-14 need-aware TTLs (workspace-scoped cache only). */
+export function ttlHoursForSearchNeed(need?: string | null): number {
+  switch (need) {
+    case "news":
+    case "current_fact":
+      return NEWS_TTL_HOURS;
+    case "company_fact":
+    case "company_research":
+      return COMPANY_TTL_HOURS;
+    case "market_research":
+    case "people_research":
+      return MARKET_TTL_HOURS;
+    case "technical_docs":
+      return DOCS_TTL_HOURS;
+    case "academic_research":
+    case "source_verification":
+      return ACADEMIC_TTL_HOURS;
+    default:
+      return DEFAULT_TTL_HOURS;
+  }
+}
+
+function ttlHoursForQuery(query: string, need?: string | null): number {
   if (
-    /\b(?:today|tonight|score|live|breaking|just announced|this week)\b/i.test(query)
+    /\b(?:today|tonight|score|live|breaking|just announced)\b/i.test(query)
   ) {
-    return FAST_FACT_TTL_HOURS;
+    return LIVE_TTL_HOURS;
+  }
+  if (need) return ttlHoursForSearchNeed(need);
+  if (/\b(?:this week|headlines?|news)\b/i.test(query)) {
+    return NEWS_TTL_HOURS;
+  }
+  if (/\b(?:funding|revenue|ceo|valuation|raised)\b/i.test(query)) {
+    return COMPANY_TTL_HOURS;
+  }
+  if (/\b(?:docs?|documentation|api reference)\b/i.test(query)) {
+    return DOCS_TTL_HOURS;
+  }
+  if (/\b(?:arxiv|paper|academic)\b/i.test(query)) {
+    return ACADEMIC_TTL_HOURS;
   }
   if (/\b(?:law|regulation|visa|tax|definition|history)\b/i.test(query)) {
     return STABLE_FACT_TTL_HOURS;
+  }
+  if (/\b(?:today|tonight|score|live|breaking|just announced|this week)\b/i.test(query)) {
+    return FAST_FACT_TTL_HOURS;
   }
   return DEFAULT_TTL_HOURS;
 }
@@ -168,16 +218,19 @@ export async function setSearchCache(
     topicId?: string;
     sourceAgentRunId?: string;
     confidence?: number;
+    searchNeed?: string;
   },
 ): Promise<string> {
   const cacheKey = normalizeSearchCacheKey(query);
+  const need = options?.searchNeed ?? result.searchMeta?.searchNeed ?? null;
   const expiresAt = new Date(
-    Date.now() + ttlHoursForQuery(query) * 60 * 60 * 1000,
+    Date.now() + ttlHoursForQuery(query, need) * 60 * 60 * 1000,
   ).toISOString();
 
   const searchMeta = {
     ...(result.searchMeta ?? {}),
     ...(options?.confidence != null ? { confidence: options.confidence } : {}),
+    ...(need ? { searchNeed: need } : {}),
   };
 
   const { error } = await client.from("workspace_search_cache").upsert(

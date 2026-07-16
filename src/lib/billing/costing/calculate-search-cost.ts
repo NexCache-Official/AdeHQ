@@ -1,17 +1,30 @@
-import { getGatewaySearchCostUsd } from "@/lib/ai/search/config";
+import { getExaSearchCostUsd, getGatewaySearchCostUsd } from "@/lib/ai/search/config";
 import { getTavilySearchCostUsd } from "@/lib/ai/browser-research/provider-config";
 
-export type SearchProviderKind = "gateway" | "tavily";
+export type SearchProviderKind = "exa" | "gateway" | "perplexity" | "tavily";
 
 /**
- * Per-request search cost. Gateway (Perplexity/Exa/Parallel) and Tavily use configurable
- * assumed costs so pricing stays safe even when startup credits mask the real charge.
+ * Per-request search cost. Prefer Brain snapshot rates at ledger time;
+ * these helpers remain for estimates and legacy call sites.
  */
 export function calculateSearchCost(
   provider: SearchProviderKind,
   requests = 1,
 ): { costUsd: number; requests: number } {
   const count = Math.max(1, Math.round(requests));
-  const unit = provider === "tavily" ? getTavilySearchCostUsd() : getGatewaySearchCostUsd();
+  let unit: number;
+  switch (provider) {
+    case "exa":
+      unit = getExaSearchCostUsd();
+      break;
+    case "tavily":
+      unit = getTavilySearchCostUsd();
+      break;
+    case "perplexity":
+    case "gateway":
+    default:
+      unit = getGatewaySearchCostUsd();
+      break;
+  }
   return { costUsd: unit * count, requests: count };
 }

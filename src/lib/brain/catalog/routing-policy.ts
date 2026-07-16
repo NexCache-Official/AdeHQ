@@ -87,12 +87,41 @@ export const ROUTING_POLICY: RoutingPolicyEntry[] = [
     primaryRouteId: "route_browser_browserbase",
     backupRouteIds: [],
   },
+  // PR-14: Exa primary for all external web retrieval; Perplexity then Tavily.
+  {
+    capability: "search_semantic",
+    intensity: "standard",
+    environment: "production",
+    primaryRouteId: "route_search_exa",
+    backupRouteIds: ["route_search_perplexity", "route_search_tavily"],
+  },
+  {
+    capability: "search_semantic",
+    intensity: "research",
+    environment: "production",
+    primaryRouteId: "route_search_exa",
+    backupRouteIds: ["route_search_perplexity", "route_search_tavily"],
+  },
+  {
+    capability: "search_fast",
+    intensity: "fast",
+    environment: "production",
+    primaryRouteId: "route_search_exa",
+    backupRouteIds: ["route_search_perplexity", "route_search_tavily"],
+  },
+  {
+    capability: "search_fast",
+    intensity: "standard",
+    environment: "production",
+    primaryRouteId: "route_search_exa",
+    backupRouteIds: ["route_search_perplexity", "route_search_tavily"],
+  },
   {
     capability: "research_planning",
     intensity: "research",
     environment: "production",
-    primaryRouteId: "route_search_tavily",
-    backupRouteIds: [],
+    primaryRouteId: "route_search_exa",
+    backupRouteIds: ["route_search_perplexity", "route_search_tavily"],
   },
 ];
 

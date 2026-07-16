@@ -40,20 +40,42 @@ export function isTavilySearchConfigured(): boolean {
   return Boolean(process.env.TAVILY_API_KEY?.trim());
 }
 
-export function getSearchPrimaryProvider(): SearchProviderPref {
-  const raw = process.env.AI_SEARCH_PRIMARY_PROVIDER?.trim().toLowerCase();
-  if (raw === "gateway_exa") return "gateway_exa";
-  if (raw === "gateway_parallel") return "gateway_parallel";
-  if (raw === "tavily") return "tavily";
-  return "gateway_perplexity";
+function normalizeProviderPref(raw: string | undefined): SearchProviderPref | null {
+  const v = raw?.trim().toLowerCase();
+  if (!v) return null;
+  if (v === "exa" || v === "gateway_exa") return "gateway_exa";
+  if (v === "perplexity" || v === "gateway_perplexity") return "gateway_perplexity";
+  if (v === "gateway_parallel" || v === "parallel") return "gateway_parallel";
+  if (v === "tavily") return "tavily";
+  return null;
 }
 
+/** PR-14 default primary is Exa. Legacy AI_SEARCH_PRIMARY_PROVIDER still honored. */
+export function getSearchPrimaryProvider(): SearchProviderPref {
+  return (
+    normalizeProviderPref(process.env.ADEHQ_SEARCH_PRIMARY) ??
+    normalizeProviderPref(process.env.AI_SEARCH_PRIMARY_PROVIDER) ??
+    "gateway_exa"
+  );
+}
+
+/** First fallback — Perplexity by default (PR-14). */
+export function getSearchFallback1Provider(): SearchProviderPref {
+  return (
+    normalizeProviderPref(process.env.ADEHQ_SEARCH_FALLBACK_1) ??
+    normalizeProviderPref(process.env.AI_SEARCH_BACKUP_PROVIDER) ??
+    "gateway_perplexity"
+  );
+}
+
+/** Final non-browser fallback — Tavily by default (PR-14). */
+export function getSearchFallback2Provider(): SearchProviderPref {
+  return normalizeProviderPref(process.env.ADEHQ_SEARCH_FALLBACK_2) ?? "tavily";
+}
+
+/** @deprecated Prefer getSearchFallback1Provider / getSearchFallback2Provider. */
 export function getSearchBackupProvider(): SearchProviderPref {
-  const raw = process.env.AI_SEARCH_BACKUP_PROVIDER?.trim().toLowerCase();
-  if (raw === "gateway_perplexity") return "gateway_perplexity";
-  if (raw === "gateway_exa") return "gateway_exa";
-  if (raw === "gateway_parallel") return "gateway_parallel";
-  return "tavily";
+  return getSearchFallback1Provider();
 }
 
 export function isBrowserResearchEnabled(): boolean {

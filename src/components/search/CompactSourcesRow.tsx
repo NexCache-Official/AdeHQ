@@ -24,6 +24,7 @@ function confidenceDot(confidence?: "high" | "medium" | "low") {
 
 function WebSourcesRow({ artifact }: { artifact: MessageArtifact }) {
   const [expanded, setExpanded] = useState(false);
+  const [highlightId, setHighlightId] = useState<string | null>(null);
   const sources = resolveWebSources(artifact);
   if (!sources.length) return null;
 
@@ -31,35 +32,43 @@ function WebSourcesRow({ artifact }: { artifact: MessageArtifact }) {
   const visible = expanded ? sources : sources.slice(0, COLLAPSED_WEB_SOURCES);
 
   return (
-    <div className="mt-2 flex flex-wrap items-center gap-1.5">
+    <div className="mt-2 flex flex-wrap items-center gap-1.5" data-sources-panel>
       <span className="text-[11px] font-medium uppercase tracking-wide text-ink-3">
         Sources
       </span>
-      {visible.map((source, index) => (
-        <a
-          key={source.id}
-          href={source.url}
-          target="_blank"
-          rel="noopener noreferrer"
-          title={source.title || source.domain || source.url}
-          className={cn(
-            "inline-flex max-w-[220px] items-center gap-1 rounded-full border border-black/8",
-            "bg-white px-2 py-0.5 text-[11.5px] text-ink-2 transition-colors hover:bg-black/[0.03]",
-          )}
-        >
-          <span className="shrink-0 font-mono text-[10px] text-ink-3">{index + 1}</span>
-          <span
-            className={cn("h-1.5 w-1.5 shrink-0 rounded-full", confidenceDot(source.confidence))}
-          />
-          <span className="truncate">{source.domain || source.title}</span>
-          <ExternalLink className="h-3 w-3 shrink-0 opacity-60" />
-        </a>
-      ))}
+      {visible.map((source) => {
+        const citationNumber = sources.findIndex((s) => s.id === source.id) + 1;
+        return (
+          <a
+            key={source.id}
+            id={`source-${citationNumber}`}
+            href={source.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            title={source.title || source.domain || source.url}
+            data-source-number={citationNumber}
+            className={cn(
+              "inline-flex max-w-[220px] items-center gap-1 rounded-full border border-black/8",
+              "bg-white px-2 py-0.5 text-[11.5px] text-ink-2 transition-colors hover:bg-black/[0.03]",
+              highlightId === source.id && "ring-2 ring-accent/40 bg-accent-soft",
+            )}
+            onClick={() => setHighlightId(source.id)}
+          >
+            <span className="shrink-0 font-mono text-[10px] text-ink-3">{citationNumber}</span>
+            <span
+              className={cn("h-1.5 w-1.5 shrink-0 rounded-full", confidenceDot(source.confidence))}
+            />
+            <span className="truncate">{source.domain || source.title}</span>
+            <ExternalLink className="h-3 w-3 shrink-0 opacity-60" />
+          </a>
+        );
+      })}
       {hidden > 0 ? (
         <button
           type="button"
           onClick={() => setExpanded((value) => !value)}
           className="rounded-full px-1.5 py-0.5 text-[11px] text-accent-d transition-colors hover:bg-accent-soft"
+          aria-expanded={expanded}
         >
           {expanded ? "Show less" : `+${hidden} more`}
         </button>

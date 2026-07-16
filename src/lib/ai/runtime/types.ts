@@ -12,6 +12,8 @@ export type AiCapability =
   | "long_context"
   | "coding"
   | "research_planning"
+  | "search_fast"
+  | "search_semantic"
   | "browser_research"
   | "artifact_generation"
   | "memory_curation"

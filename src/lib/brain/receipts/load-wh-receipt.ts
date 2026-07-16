@@ -57,9 +57,23 @@ export async function loadWhReceipt(
     const wh = Number(row.work_hours_charged ?? 0);
     const meta = (row.metadata ?? {}) as Record<string, unknown>;
     const routeId = typeof meta.routeId === "string" ? meta.routeId : null;
+    const capabilityRaw = row.capability ? String(row.capability) : null;
+    const workTypeRaw = row.work_type ? String(row.work_type) : null;
+    // Member-facing labels — never expose provider names (Exa/Perplexity/Tavily).
+    const memberCapability =
+      capabilityRaw === "search_semantic" ||
+      capabilityRaw === "search_fast" ||
+      capabilityRaw === "research_planning" ||
+      workTypeRaw === "realtime_search"
+        ? "Web research"
+        : capabilityRaw === "reasoning" ||
+            capabilityRaw === "quick_reply" ||
+            capabilityRaw === "structured_chat"
+          ? "Answer synthesis"
+          : capabilityRaw;
     return {
-      capability: row.capability ? String(row.capability) : null,
-      workType: row.work_type ? String(row.work_type) : null,
+      capability: input.includeAdminDetail ? capabilityRaw : memberCapability,
+      workType: workTypeRaw,
       workHours: wh,
       displayWorkHours: displayWorkHours(wh),
       ...(input.includeAdminDetail

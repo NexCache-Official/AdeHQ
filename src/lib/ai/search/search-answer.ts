@@ -38,6 +38,18 @@ import {
   type SearchStewardDecision,
 } from "./search-steward";
 import { getReusableSessionFindings, recordSessionSearchEvent } from "./research-session";
+import { isBrainSearchV1Enabled, isBrainSearchCacheEnabled } from "@/lib/brain/flags";
+import {
+  assessSearchEvidence,
+  legacySearchNeedToBrainNeed,
+  searchRouteToBrainRouteId,
+  searchRouteToAttemptProvider,
+  shouldFallbackFromEvidence,
+  type SearchAttemptRecord,
+} from "@/lib/brain/search";
+import { getLiveSeedSnapshot } from "@/lib/brain/catalog";
+import { workHoursFromCost } from "@/lib/billing/costing/work-hours";
+import { createHash } from "node:crypto";
 
 export type ExecuteSearchAnswerParams = {
   client?: SupabaseClient;
@@ -55,8 +67,11 @@ export type ExecuteSearchAnswerParams = {
 export type ExecuteSearchAnswerMeta = {
   steward?: SearchStewardDecision;
   attempts?: SearchStewardAttempt[];
+  brainAttempts?: SearchAttemptRecord[];
   sessionId?: string;
   sessionReused?: boolean;
+  cacheHit?: boolean;
+  cacheAgeLabel?: string;
 };
 
 const SEARCH_UNAVAILABLE_MESSAGE =
@@ -218,6 +233,7 @@ export async function executeSearchAnswer(
       employeeId: params.employeeId,
       // Customer Usage shows "Real-time Search"; providerName keeps Exa vs Gateway distinct.
       workType: "realtime_search",
+      // Work units use AiCapability; Brain search_* route ids live in metadata.routeId.
       capability: "research_planning",
       // ProviderRoute is the AI runtime enum (vercel_gateway | siliconflow_direct | mock).
       // Search engines are recorded on providerName + metadata.searchRoute instead.
@@ -239,7 +255,9 @@ export async function executeSearchAnswer(
         searchRoute: decision.route,
         searchMode,
         searchNeed: decision.need,
+        routeId: searchRouteToBrainRouteId(decision.route),
         agentRunId: params.agentRunId,
+        brainSearchV1: isBrainSearchV1Enabled(),
       },
     });
     workUnitId = workUnit.id;
@@ -248,28 +266,34 @@ export async function executeSearchAnswer(
 
   try {
     if (params.client) {
-      const cached = await getSearchCache(params.client, params.workspaceId, params.query);
-      if (cached?.answer?.trim()) {
-        const cachedResult = cachedAnswerToSearchResult(cached);
-        if (workUnitId) {
-          await completeAiWorkUnit(params.client, params.workspaceId, workUnitId, {
-            actualWorkMinutes: 0,
-            actualCostUsd: 0,
-            metadata: {
+      if (isBrainSearchCacheEnabled()) {
+        const cached = await getSearchCache(params.client, params.workspaceId, params.query);
+        if (cached?.answer?.trim()) {
+          const cachedResult = cachedAnswerToSearchResult(cached);
+          if (workUnitId) {
+            await completeAiWorkUnit(params.client, params.workspaceId, workUnitId, {
+              actualWorkMinutes: 0,
+              actualCostUsd: 0,
+              metadata: {
+                cacheHit: true,
+                cacheKey: cached.cacheKey,
+                hitCount: cached.hitCount + 1,
+                searchRequests: 0,
+                billableToWorkspace: false,
+              },
+            });
+          }
+          return {
+            ...cachedResult,
+            stewardMeta: {
+              steward,
+              attempts,
+              sessionReused: false,
               cacheHit: true,
-              cacheKey: cached.cacheKey,
-              hitCount: cached.hitCount + 1,
+              cacheAgeLabel: "Used cached research",
             },
-          });
+          };
         }
-        return {
-          ...cachedResult,
-          stewardMeta: {
-            steward,
-            attempts,
-            sessionReused: false,
-          },
-        };
       }
 
       const sessionReuse = await getReusableSessionFindings(params.client, {
@@ -282,7 +306,7 @@ export async function executeSearchAnswer(
           await completeAiWorkUnit(params.client, params.workspaceId, workUnitId, {
             actualWorkMinutes: 0,
             actualCostUsd: 0,
-            metadata: { sessionReused: true, sessionId: sessionReuse.sessionId },
+            metadata: { sessionReused: true, sessionId: sessionReuse.sessionId, searchRequests: 0 },
           });
         }
         return {
@@ -313,69 +337,128 @@ export async function executeSearchAnswer(
     let searchLatencyMs = 0;
     let synthesisLatencyMs = 0;
     let activeRoute: SearchRoute = decision.route;
+    const brainAttempts: SearchAttemptRecord[] = [];
+    const queryHash = createHash("sha256").update(params.query.trim().toLowerCase()).digest("hex").slice(0, 40);
+    const brainNeed = legacySearchNeedToBrainNeed(decision.need);
 
-    try {
-      const primaryStarted = Date.now();
-      const primary = await runProviderSearch(activeRoute, params, decision);
-      text = primary.text;
-      rawSources = primary.sources;
-      providerRoute = primary.providerRoute;
-      estimatedCostUsd = primary.estimatedCostUsd;
-      estimatedWorkMinutes = primary.estimatedWorkMinutes;
-      synthesisModel = primary.synthesisModel;
-      searchLatencyMs = primary.searchLatencyMs;
-      synthesisLatencyMs = primary.synthesisLatencyMs;
-      attempts.push({
-        provider: activeRoute,
-        sourceCount: rawSources.length,
-        latencyMs: Date.now() - primaryStarted,
-        failed: isSearchFailure(text, rawSources.length),
-      });
-    } catch (error) {
-      attempts.push({
-        provider: activeRoute,
-        sourceCount: 0,
-        latencyMs: 0,
-        failed: true,
-      });
-      console.warn("[AdeHQ search] Primary provider failed:", error);
-    }
+    const routeChain: SearchRoute[] = isBrainSearchV1Enabled()
+      ? [
+          decision.route,
+          ...(steward.fallbackChain ?? []).filter((r) => r && r !== decision.route),
+        ]
+      : [
+          decision.route,
+          ...(steward.backupProvider && steward.backupProvider !== decision.route
+            ? [steward.backupProvider]
+            : []),
+        ];
 
-    if (isSearchFailure(text, rawSources.length) && steward.backupProvider) {
-      const backupRoute = steward.backupProvider;
-      if (backupRoute !== activeRoute) {
-        try {
-          const backupStarted = Date.now();
-          const backup = await runProviderSearch(backupRoute, params, {
-            ...decision,
-            route: backupRoute,
+    for (let i = 0; i < routeChain.length; i++) {
+      const route = routeChain[i]!;
+      const startedAt = new Date().toISOString();
+      const attemptStarted = Date.now();
+      const brainRouteId = searchRouteToBrainRouteId(route) ?? "route_search_exa";
+      const snap = getLiveSeedSnapshot(brainRouteId);
+      const attemptProvider = searchRouteToAttemptProvider(route);
+
+      try {
+        const result = await runProviderSearch(route, params, {
+          ...decision,
+          route,
+        });
+        const latencyMs = Date.now() - attemptStarted;
+        const assessment = assessSearchEvidence(result.sources, {
+          query: params.query,
+          need: brainNeed,
+          freshness: decision.need === "news" ? "live" : "recent",
+          requirePrimarySources: decision.need === "source_verification",
+          maxSources: decision.maxResults ?? 6,
+        }, { answerText: result.text });
+
+        const failed =
+          isSearchFailure(result.text, result.sources.length) ||
+          (isBrainSearchV1Enabled() && shouldFallbackFromEvidence(assessment));
+
+        attempts.push({
+          provider: route,
+          sourceCount: result.sources.length,
+          latencyMs,
+          failed,
+          fallbackReason: assessment.fallbackReason,
+        });
+
+        if (attemptProvider) {
+          brainAttempts.push({
+            attemptNumber: i + 1,
+            routeId: brainRouteId,
+            provider: attemptProvider,
+            queryHash,
+            startedAt,
+            completedAt: new Date().toISOString(),
+            latencyMs,
+            sourceCount: result.sources.length,
+            usedSourceCount: assessment.sourceCount,
+            outcome: failed
+              ? assessment.fallbackReason === "no_usable_sources"
+                ? "no_sources"
+                : "insufficient_evidence"
+              : "success",
+            fallbackReason: failed ? assessment.fallbackReason : undefined,
+            pricingSnapshotId: snap?.id,
+            actualCostUsd: result.estimatedCostUsd,
+            workHours: workHoursFromCost(result.estimatedCostUsd),
           });
-          if (!isSearchFailure(backup.text, backup.sources.length)) {
-            text = backup.text;
-            rawSources = backup.sources;
-            providerRoute = backup.providerRoute;
-            estimatedCostUsd = backup.estimatedCostUsd;
-            estimatedWorkMinutes = backup.estimatedWorkMinutes;
-            synthesisModel = backup.synthesisModel;
-            searchLatencyMs = backup.searchLatencyMs;
-            synthesisLatencyMs = backup.synthesisLatencyMs;
-            activeRoute = backupRoute;
-          }
-          attempts.push({
-            provider: backupRoute,
-            sourceCount: backup.sources.length,
-            latencyMs: Date.now() - backupStarted,
-            failed: isSearchFailure(backup.text, backup.sources.length),
-          });
-        } catch (error) {
-          attempts.push({
-            provider: backupRoute,
-            sourceCount: 0,
-            latencyMs: 0,
-            failed: true,
-          });
-          console.warn("[AdeHQ search] Backup provider failed:", error);
         }
+
+        // Always charge billed attempts that returned from the provider.
+        estimatedCostUsd += result.estimatedCostUsd;
+
+        if (!failed) {
+          text = result.text;
+          rawSources = result.sources;
+          providerRoute = result.providerRoute;
+          estimatedWorkMinutes = result.estimatedWorkMinutes;
+          synthesisModel = result.synthesisModel;
+          searchLatencyMs = result.searchLatencyMs;
+          synthesisLatencyMs = result.synthesisLatencyMs;
+          activeRoute = route;
+          break;
+        }
+
+        console.warn(
+          `[AdeHQ search] Attempt ${i + 1} (${route}) insufficient:`,
+          assessment.fallbackReason ?? "search_failure",
+        );
+      } catch (error) {
+        const latencyMs = Date.now() - attemptStarted;
+        attempts.push({
+          provider: route,
+          sourceCount: 0,
+          latencyMs,
+          failed: true,
+          fallbackReason: "provider_error",
+        });
+        if (attemptProvider) {
+          const isTimeout =
+            error instanceof Error && /timeout|timed out|aborted/i.test(error.message);
+          brainAttempts.push({
+            attemptNumber: i + 1,
+            routeId: brainRouteId,
+            provider: attemptProvider,
+            queryHash,
+            startedAt,
+            completedAt: new Date().toISOString(),
+            latencyMs,
+            sourceCount: 0,
+            usedSourceCount: 0,
+            outcome: isTimeout ? "timeout" : "provider_error",
+            fallbackReason: error instanceof Error ? error.message : String(error),
+            pricingSnapshotId: snap?.id,
+            actualCostUsd: 0,
+            workHours: 0,
+          });
+        }
+        console.warn(`[AdeHQ search] Attempt ${i + 1} (${route}) failed:`, error);
       }
     }
 
@@ -387,7 +470,7 @@ export async function executeSearchAnswer(
         providerRoute: "model_fallback",
         estimatedCostUsd: 0,
         estimatedWorkMinutes: 0,
-        stewardMeta: { steward, attempts },
+        stewardMeta: { steward, attempts, brainAttempts },
       };
     }
 
@@ -413,7 +496,7 @@ export async function executeSearchAnswer(
         providerRoute: "model_fallback",
         estimatedCostUsd: 0,
         estimatedWorkMinutes: 0,
-        stewardMeta: { steward, attempts },
+        stewardMeta: { steward, attempts, brainAttempts },
       };
     }
 
@@ -425,7 +508,7 @@ export async function executeSearchAnswer(
         providerRoute,
         estimatedCostUsd,
         estimatedWorkMinutes,
-        stewardMeta: { steward, attempts },
+        stewardMeta: { steward, attempts, brainAttempts },
       };
     }
 
@@ -437,12 +520,13 @@ export async function executeSearchAnswer(
       0,
       normalized.sourceCount - displayedSourceCount,
     );
+    const billedAttempts = brainAttempts.filter((a) => a.actualCostUsd > 0);
     const searchMeta = {
       searchRoute: activeRoute,
       searchNeed: decision.need as SearchNeed,
       searchMode,
       browserRequired: false as const,
-      searchRequests: attempts.length,
+      searchRequests: Math.max(1, billedAttempts.length || attempts.filter((a) => !a.failed).length),
       sourceCount: normalized.sourceCount,
       usedSourceCount: displayedSourceCount,
       excludedSourceCount: displayedExcludedCount,
@@ -458,6 +542,7 @@ export async function executeSearchAnswer(
         .filter(Boolean) as string[],
     };
 
+    const winningRouteId = searchRouteToBrainRouteId(activeRoute);
     if (params.client && workUnitId) {
       await completeAiWorkUnit(params.client, params.workspaceId, workUnitId, {
         actualWorkMinutes: estimatedWorkMinutes,
@@ -468,6 +553,17 @@ export async function executeSearchAnswer(
           excludedSourceCount: displayedExcludedCount,
           totalLatencyMs,
           confidence,
+          searchRoute: activeRoute,
+          searchNeed: decision.need,
+          routeId: winningRouteId,
+          searchRequests: searchMeta.searchRequests,
+          brainSearchAttempts: brainAttempts,
+          providerName:
+            activeRoute === "gateway_exa" && isExaSearchConfigured()
+              ? "exa"
+              : isGatewaySearchRoute(activeRoute)
+                ? "vercel_gateway"
+                : "tavily",
         },
       });
     }
@@ -494,7 +590,7 @@ export async function executeSearchAnswer(
       searchMeta,
       webSourcesArtifact: webArtifact,
       searchSourcesArtifact: webArtifact,
-      stewardMeta: { steward, attempts },
+      stewardMeta: { steward, attempts, brainAttempts },
     };
 
     if (params.client && result.answer.trim()) {
@@ -502,6 +598,7 @@ export async function executeSearchAnswer(
         topicId: params.topicId,
         sourceAgentRunId: params.agentRunId,
         confidence,
+        searchNeed: decision.need,
       });
 
       await recordSessionSearchEvent(params.client, {

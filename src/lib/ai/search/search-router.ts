@@ -8,12 +8,13 @@ import {
 } from "./config";
 import type { SearchNeed, SearchRoute, SearchRouteDecision } from "./types";
 
+/** PR-14: Exa is primary for all non-browser external search needs. */
 export const DEFAULT_SEARCH_ROUTE_POLICY: Record<Exclude<SearchNeed, "none">, SearchRoute> = {
-  current_fact: "gateway_perplexity",
-  company_fact: "gateway_perplexity",
-  news: "gateway_perplexity",
+  current_fact: "gateway_exa",
+  company_fact: "gateway_exa",
+  news: "gateway_exa",
   market_research: "gateway_exa",
-  source_verification: "gateway_parallel",
+  source_verification: "gateway_exa",
   deep_browser_research: "browserbase",
 };
 
@@ -39,6 +40,7 @@ const DEEP_BROWSER_PATTERNS = INTERACTION_REQUIRED_PATTERNS;
 
 const MARKET_RESEARCH_PATTERNS = [
   /\b(market size|tam|sam|som|competitive landscape|industry analysis|market research)\b/i,
+  /\b(competitor|competitors|landscape)\b/i,
 ];
 
 const SEMANTIC_RESEARCH_PATTERNS = [
@@ -49,6 +51,9 @@ const SEMANTIC_RESEARCH_PATTERNS = [
   /\bcompanies building\b/i,
   /\bsemantic search\b/i,
   /\blandscape of\b/i,
+  /\b(technical docs?|documentation|api reference|official docs?)\b/i,
+  /\b(arxiv|academic|peer[- ]reviewed|whitepaper)\b/i,
+  /\bfind (people|founders?|executives?|researchers?)\b/i,
 ];
 
 const NEWS_PATTERNS = [/\b(news|headlines?|breaking news|just announced)\b/i];
@@ -116,16 +121,19 @@ function applyProviderAvailability(route: SearchRoute): {
     return false;
   };
 
+  // Prefer policy route when available; else Exa → configured primary → backup → Tavily.
   const preferred =
-    route.startsWith("gateway_") && tryRoute(route)
+    tryRoute(route)
       ? route
-      : primary.startsWith("gateway_") && tryRoute(primary)
-        ? primary
-        : tryRoute(backup)
-          ? backup
-          : tryRoute("tavily")
-            ? "tavily"
-            : "none";
+      : tryRoute("gateway_exa")
+        ? "gateway_exa"
+        : primary !== route && tryRoute(primary)
+          ? primary
+          : tryRoute(backup)
+            ? backup
+            : tryRoute("tavily")
+              ? "tavily"
+              : "none";
 
   if (preferred === "none") {
     return {
@@ -192,7 +200,7 @@ export function decideSearchRoute(
   }
 
   if (isQuickFactLookup(trimmed) && !opts?.preferAgentMode) {
-    const routed = applyProviderAvailability("gateway_perplexity");
+    const routed = applyProviderAvailability("gateway_exa");
     return {
       need,
       route: routed.route,
@@ -201,16 +209,16 @@ export function decideSearchRoute(
       reason:
         routed.route === "none"
           ? "Fast search requested but no search provider is configured."
-          : `Quick factual lookup — ${routed.reason}.`,
+          : `Quick factual lookup — Exa-first (${routed.reason}).`,
       maxResults: 5,
       recency: "year",
-      estimatedWorkMinutes: routed.route.startsWith("gateway_") ? 1.5 : 2,
+      estimatedWorkMinutes: routed.route === "gateway_exa" ? 2 : 1.5,
     };
   }
 
   let policyRoute = resolveRouteForNeed(need);
   if (isBrowserResearchRequiresExplicitDeepTask() && policyRoute === "browserbase") {
-    policyRoute = "gateway_perplexity";
+    policyRoute = "gateway_exa";
   }
 
   const routed = applyProviderAvailability(policyRoute);

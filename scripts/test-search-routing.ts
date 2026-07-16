@@ -30,14 +30,15 @@ function skip(name: string, reason: string) {
 }
 
 async function main() {
-  await test("Anthropic revenue routes to gateway search, not browser", () => {
+  await test("Anthropic revenue routes to Exa-first search, not browser", () => {
     const decision = decideSearchRoute("What was Anthropic's revenue in 2025?");
     expectTrue(decision.browserRequired === false, "browserRequired should be false");
     expectTrue(
-      decision.route === "gateway_perplexity" ||
+      decision.route === "gateway_exa" ||
+        decision.route === "gateway_perplexity" ||
         decision.route === "tavily" ||
         decision.route === "none",
-      `expected fast search route, got ${decision.route}`,
+      `expected Exa-first search route, got ${decision.route}`,
     );
     expectTrue(decision.route !== "browserbase", "must not route to browserbase");
   });
@@ -66,10 +67,26 @@ async function main() {
     expectTrue(!isQuickFactLookup("Draft a launch plan for our washing machine product"));
   });
 
-  await test("provider policy maps current_fact to gateway_perplexity when configured", () => {
-    const decision = decideSearchRoute("Who is the CEO of Stripe?");
-    expectTrue(decision.need === "current_fact" || decision.need === "company_fact");
-    expectTrue(!decision.browserRequired);
+  await test("provider policy maps facts/research to Exa-first when configured", () => {
+    const previousExa = process.env.EXA_API_KEY;
+    process.env.EXA_API_KEY = process.env.EXA_API_KEY || "test-exa-key";
+    try {
+      const decision = decideSearchRoute("Who is the CEO of Stripe?");
+      expectTrue(
+        decision.need === "current_fact" ||
+          decision.need === "company_fact" ||
+          decision.need === "market_research",
+        `unexpected need ${decision.need}`,
+      );
+      expectTrue(!decision.browserRequired);
+      expectTrue(
+        decision.route === "gateway_exa" || decision.route === "none",
+        `expected gateway_exa primary, got ${decision.route}`,
+      );
+    } finally {
+      if (previousExa === undefined) delete process.env.EXA_API_KEY;
+      else process.env.EXA_API_KEY = previousExa;
+    }
   });
 
   await test("general factual question routes to fast search", () => {
