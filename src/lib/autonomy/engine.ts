@@ -13,6 +13,7 @@ import type { IntegrationEmployee } from "@/lib/integrations/types";
 import { nowISO, uid } from "@/lib/utils";
 import {
   appendStep,
+  claimForIteration,
   getSession,
   listSteps,
   updateSession,
@@ -440,20 +441,34 @@ export async function resumeIfApprovalResolved(
 // Inline driver — runs iterations until the session pauses or finishes.
 // ---------------------------------------------------------------------------
 
+/**
+ * Max wall-clock a single drive request holds the loop. Serverless functions
+ * have a hard duration cap, and the poll route awaits this — so we bound each
+ * request to ~one iteration's worth of work, return, and let the next poll
+ * re-claim the (re-queued) session. Combined with the atomic per-iteration
+ * claim this makes autopilot resilient to killed requests without any single
+ * request running for minutes or overlapping polls double-driving.
+ */
+const DRIVE_DEADLINE_MS = 55_000;
+
 export async function driveSession(
   client: SupabaseClient,
   sessionId: string,
   brain: AutonomyBrain,
   maxIterations = 20,
   deps: EngineDeps = {},
+  deadlineMs = DRIVE_DEADLINE_MS,
 ): Promise<AutonomousSession | null> {
+  const deadline = Date.now() + deadlineMs;
   for (let i = 0; i < maxIterations; i += 1) {
-    const session = await getSession(client, sessionId);
-    if (!session) return null;
-    if (session.status === "queued") {
-      await updateSession(client, sessionId, { status: "running", startedAt: session.startedAt ?? nowISO() });
-    } else if (session.status !== "running") {
-      return session; // paused, waiting_approval, or terminal
+    if (Date.now() >= deadline) break;
+    // Atomic claim: flips queued → running (recovering an orphaned running
+    // session whose lease expired). Null means the session isn't drivable right
+    // now — it's terminal, paused, waiting on approval, or another request holds
+    // a fresh lock — so we stop rather than racing it.
+    const claimed = await claimForIteration(client, sessionId);
+    if (!claimed) {
+      return getSession(client, sessionId);
     }
     const outcome = await runSessionIteration(client, sessionId, brain, deps);
     if (!outcome.shouldContinue) break;

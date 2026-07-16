@@ -51,6 +51,8 @@ class Query {
   eq(col: string, val: any) { this.filters.push([col, "eq", val]); return this; }
   in(col: string, vals: any[]) { this.filters.push([col, "in", vals]); return this; }
   is(col: string, val: any) { this.filters.push([col, "is", val]); return this; }
+  lt(col: string, val: any) { this.filters.push([col, "lt", val]); return this; }
+  gt(col: string, val: any) { this.filters.push([col, "gt", val]); return this; }
   ilike(col: string, val: any) { this.filters.push([col, "ilike", val]); return this; }
   order(col: string, opts?: { ascending?: boolean }) { this.orderCol = col; this.orderAsc = opts?.ascending ?? true; return this; }
   limit(n: number) { this.limitN = n; return this; }
@@ -60,6 +62,8 @@ class Query {
       if (kind === "eq") return row[col] === val;
       if (kind === "in") return (val as any[]).includes(row[col]);
       if (kind === "is") return row[col] === val;
+      if (kind === "lt") return row[col] != null && row[col] < val;
+      if (kind === "gt") return row[col] != null && row[col] > val;
       if (kind === "ilike") return String(row[col] ?? "").toLowerCase().includes(String(val).toLowerCase().replace(/%/g, ""));
       return true;
     });

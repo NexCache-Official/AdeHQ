@@ -149,19 +149,46 @@ export async function updateSession(
 }
 
 /**
- * Atomically claim a session for processing: flips queued/running → running
- * only if not already claimed by a concurrent iteration. Returns null when the
- * session can't be advanced (already finished, paused, waiting, or racing).
+ * How long a session may sit in "running" without progressing before it's
+ * treated as orphaned (its driver — a fire-and-forget request or a poll — was
+ * killed mid-iteration by the serverless platform). Must be comfortably above
+ * the worst-case single iteration: brain call (~45s) + up to 4 tool calls that
+ * can each be slow (web search, browser). `started_at` is refreshed on every
+ * claim, so it doubles as the driver heartbeat.
+ */
+export const ITERATION_LEASE_MS = 180_000;
+
+/**
+ * Atomically claim a session for one iteration. Flips **queued → running** only
+ * if not already claimed by a concurrent iteration, so overlapping poll
+ * requests can't double-drive the same session. First reclaims an orphaned
+ * "running" session whose lease has expired (driver died mid-iteration), so a
+ * session is never wedged in "running" forever. Returns null when the session
+ * can't be advanced (finished, paused, waiting_approval, or a fresh lock is
+ * held by another driver).
  */
 export async function claimForIteration(
   client: SupabaseClient,
   sessionId: string,
+  leaseMs: number = ITERATION_LEASE_MS,
 ): Promise<AutonomousSession | null> {
+  // 1) Recover an orphaned running session — only if its lease has expired.
+  const staleCutoff = new Date(Date.now() - leaseMs).toISOString();
+  await client
+    .from("autonomous_sessions")
+    .update({ status: "queued" })
+    .eq("id", sessionId)
+    .eq("status", "running")
+    .lt("started_at", staleCutoff);
+
+  // 2) Atomically claim a queued session. The status filter in the UPDATE WHERE
+  //    makes this the single point of mutual exclusion: only one concurrent
+  //    caller flips queued → running; the rest get no row back.
   const { data, error } = await client
     .from("autonomous_sessions")
     .update({ status: "running", started_at: new Date().toISOString() })
     .eq("id", sessionId)
-    .in("status", ["queued"])
+    .eq("status", "queued")
     .select("*")
     .maybeSingle();
   if (error) throw error;
