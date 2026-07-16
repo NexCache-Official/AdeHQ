@@ -1,18 +1,19 @@
 /**
  * AI Work Hours conversion (commercial unit).
  *
- * Public unit: 1 AI Work Hour = $0.01 of internal billable AI cost.
+ * Public unit: 1 AI Work Hour = $0.01 of internal billable AI cost (pinned).
  * This is a different unit than the legacy shadow "work minutes" (which used $0.01/minute).
  * The internal USD-per-Work-Hour rate is a platform secret and must never be shown to customers.
+ *
+ * Brain D1: AI_WORK_HOUR_USD env override removed — rate is always $0.01.
+ * Per-row work_hour_usd_rate on the ledger records the rate used at charge time.
  */
 
-const DEFAULT_AI_WORK_HOUR_USD = 0.01;
+export const AI_WORK_HOUR_USD = 0.01;
 
-/** Internal USD cost that equals one AI Work Hour. Configurable via env for platform tuning. */
+/** Internal USD cost that equals one AI Work Hour. */
 export function getWorkHourUsdRate(): number {
-  const raw = Number(process.env.AI_WORK_HOUR_USD);
-  if (Number.isFinite(raw) && raw > 0) return raw;
-  return DEFAULT_AI_WORK_HOUR_USD;
+  return AI_WORK_HOUR_USD;
 }
 
 /** Convert a billable USD cost to AI Work Hours. */

@@ -80,6 +80,7 @@ const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
       { href: "/admin/usage", label: "Usage & Cost", icon: BarChart3 },
       { href: "/admin/work-hours", label: "Work Hours", icon: Clock },
       { href: "/admin/models", label: "Models", icon: Activity },
+      { href: "/admin/brain-catalog", label: "Brain Catalog", icon: Activity },
       { href: "/admin/runtime", label: "Runtime", icon: Cpu },
       { href: "/admin/browser-research", label: "Browser Research", icon: Globe },
       { href: "/admin/ai-employees", label: "AI Employees", icon: Bot },

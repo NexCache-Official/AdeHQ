@@ -28,6 +28,8 @@ import {
   isPreviewableChatFile,
 } from "@/lib/chat/file-preview-kind";
 import { MessageMarkdown } from "./MessageMarkdown";
+import { WorkHoursReceipt } from "@/components/chat/WorkHoursReceipt";
+import { displayWorkHours } from "@/lib/billing/costing/work-hours";
 import { EmailBridgeMessageCard } from "@/components/chat/EmailBridgeMessageCard";
 import {
   isEmailBridgeClientMessageId,
@@ -702,8 +704,8 @@ export function RoomMessageItem({
               const label =
                 mode === "fast"
                   ? "⚡ Fast"
-                  : mode === "balanced"
-                    ? "⚖️ Balanced"
+                  : mode === "standard" || mode === "balanced"
+                    ? "⚖️ Standard"
                     : mode === "deep"
                       ? "🧠 Deep Thinking"
                       : mode === "research"
@@ -756,6 +758,25 @@ export function RoomMessageItem({
               mentionParticipants={mentionParticipants}
               citationSources={inlineCitationSources}
             />
+            {message.whReceipt || (message.workHoursCharged != null && message.workHoursCharged > 0) ? (
+              <WorkHoursReceipt
+                receipt={{
+                  brainRunId: null,
+                  messageId: message.id,
+                  totalWorkHours:
+                    message.whReceipt?.totalWorkHours ?? message.workHoursCharged ?? 0,
+                  displayTotalWorkHours: displayWorkHours(
+                    message.whReceipt?.totalWorkHours ?? message.workHoursCharged ?? 0,
+                  ),
+                  lines: (message.whReceipt?.lines ?? []).map((line) => ({
+                    capability: line.capability ?? null,
+                    workType: line.workType ?? null,
+                    workHours: line.workHours,
+                    displayWorkHours: displayWorkHours(line.workHours),
+                  })),
+                }}
+              />
+            ) : null}
           </div>
         )}
 

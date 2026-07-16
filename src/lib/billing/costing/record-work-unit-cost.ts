@@ -1,19 +1,23 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { intelligenceModeFromModelMode } from "@/lib/ai/intelligence-policy";
+import { resolveRouteIdForModel } from "@/lib/brain/catalog";
+import { recordBrainUsage } from "@/lib/brain/metering/record-brain-usage";
 import type { AiWorkUnit } from "@/lib/supabase/ai-work-units";
-import { calculateModelCost } from "./calculate-model-cost";
-import { recordCostEvent } from "./record-cost-event";
 import type { CostSourceType } from "./types";
 
-/** Work types that are internal orchestration overhead — recorded but not billed to the workspace. */
+/** Known steward/classifier work types — unbilled but still recorded (D3). */
 const PLATFORM_OVERHEAD_WORK_TYPES = new Set([
   "orchestration_classify",
   "room_steward",
   "dm_steward",
 ]);
 
-function isPlatformOverhead(workType: string): boolean {
-  if (PLATFORM_OVERHEAD_WORK_TYPES.has(workType)) return true;
+function isKnownPlatformOverhead(workType: string): boolean {
+  return PLATFORM_OVERHEAD_WORK_TYPES.has(workType);
+}
+
+/** Legacy fallback only — logged; prefer explicit metadata.billableToWorkspace. */
+function legacyPlatformOverheadHeuristic(workType: string): boolean {
   return workType.includes("classify") || workType.includes("steward");
 }
 
@@ -38,7 +42,12 @@ function stringFromMeta(meta: Record<string, unknown>, key: string): string | nu
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
-/** Resolve Efficient / Balanced / Strong (etc.) for Usage breakdowns. */
+function boolFromMeta(meta: Record<string, unknown>, key: string): boolean | undefined {
+  const value = meta[key];
+  if (typeof value === "boolean") return value;
+  return undefined;
+}
+
 function intelligenceModeFromMeta(meta: Record<string, unknown>): string | null {
   const explicit = stringFromMeta(meta, "intelligenceMode");
   if (explicit) return intelligenceModeFromModelMode(explicit);
@@ -50,10 +59,23 @@ function intelligenceModeFromMeta(meta: Record<string, unknown>): string | null 
   return null;
 }
 
+function resolveBillable(workUnit: AiWorkUnit, meta: Record<string, unknown>): boolean {
+  const explicit = boolFromMeta(meta, "billableToWorkspace");
+  if (explicit !== undefined) return explicit;
+
+  if (isKnownPlatformOverhead(workUnit.workType)) return false;
+
+  if (legacyPlatformOverheadHeuristic(workUnit.workType)) {
+    console.warn(
+      `[AdeHQ cost ledger] legacy platform-overhead heuristic matched workType=${workUnit.workType}; set metadata.billableToWorkspace explicitly`,
+    );
+    return false;
+  }
+  return true;
+}
+
 /**
- * Derive a billable cost event from a completed work unit and write it to the cost ledger.
- * This is the primary capture hook — every path that completes a work unit records cost here.
- * Fire-and-forget: callers should not block on ledger writes.
+ * Derive a billable cost event from a completed work unit via the Brain metering spine.
  */
 export async function recordCostFromWorkUnit(
   client: SupabaseClient,
@@ -63,6 +85,7 @@ export async function recordCostFromWorkUnit(
     inputTokens?: number | null;
     outputTokens?: number | null;
     cachedInputTokens?: number | null;
+    status?: "succeeded" | "failed" | "cancelled";
     metadata?: Record<string, unknown>;
   },
 ): Promise<void> {
@@ -75,52 +98,84 @@ export async function recordCostFromWorkUnit(
     stringFromMeta(meta, "modelId") ??
     workUnit.modelId ??
     null;
+  const providerRoute =
+    stringFromMeta(meta, "providerRoute") ?? workUnit.providerRoute ?? null;
   const intelligenceMode = intelligenceModeFromMeta(meta);
+  const sourceType = sourceTypeFor(workUnit);
+  const stepId = stringFromMeta(meta, "brainStepId") ?? "complete";
+  const attempt = stringFromMeta(meta, "brainAttempt") ?? "1";
+  const sharedKey = stringFromMeta(meta, "brainIdempotencyKey");
+  const usageId = stringFromMeta(meta, "usageId");
+  const idempotencyKey =
+    sharedKey ??
+    (usageId ? `usage_event:${usageId}:${sourceType}` : `${workUnit.id}:${stepId}:${attempt}`);
 
-  const { costUsd, costSource } = calculateModelCost({
-    modelId,
-    inputTokens,
-    cachedInputTokens,
-    outputTokens,
-    providerRoute:
-      stringFromMeta(meta, "providerRoute") ?? workUnit.providerRoute ?? null,
-    actualCostUsd: result?.actualCostUsd ?? workUnit.actualCostUsd,
-    estimatedCostUsd: workUnit.estimatedCostUsd,
-  });
+  const routeId =
+    stringFromMeta(meta, "routeId") ??
+    resolveRouteIdForModel({
+      modelId,
+      providerRoute,
+      capability: (workUnit.capability as never) ?? null,
+    }) ??
+    "route_text_v4flash_sf";
 
-  // Skip zero-cost events (e.g. mock provider) to keep the ledger meaningful.
-  if (costUsd <= 0) return;
+  const billableToWorkspace = resolveBillable(workUnit, meta);
+  const providerCalled =
+    boolFromMeta(meta, "providerCalled") ??
+    (inputTokens > 0 || outputTokens > 0 || cachedInputTokens > 0 || (result?.actualCostUsd ?? 0) > 0);
 
-  const platformOverhead = isPlatformOverhead(workUnit.workType);
+  // Pure mock with no units — skip (defect I: still record real zero-cost provider calls via spine).
+  if (
+    (providerRoute === "mock" || stringFromMeta(meta, "providerName") === "mock") &&
+    !providerCalled
+  ) {
+    return;
+  }
 
-  await recordCostEvent(client, {
+  await recordBrainUsage({
+    client,
     workspaceId: workUnit.workspaceId,
+    idempotencyKey,
     userId: workUnit.userId ?? null,
     employeeId: workUnit.employeeId ?? null,
     workUnitId: workUnit.id,
+    brainRunId: stringFromMeta(meta, "brainRunId"),
+    decisionAttemptId: stringFromMeta(meta, "decisionAttemptId"),
     roomId: workUnit.roomId ?? null,
     topicId: workUnit.topicId ?? null,
-    sourceType: sourceTypeFor(workUnit),
-    providerRoute:
-      stringFromMeta(meta, "providerRoute") ?? workUnit.providerRoute ?? null,
-    providerName:
-      stringFromMeta(meta, "providerName") ?? workUnit.providerName ?? null,
-    modelId,
-    providerCredentialId: stringFromMeta(meta, "providerCredentialId"),
-    providerAllocationId: stringFromMeta(meta, "providerAllocationId"),
-    providerProjectId: stringFromMeta(meta, "providerProjectId"),
+    sourceType,
+    routeId,
+    usage: {
+      inputTokens,
+      cachedInputTokens,
+      outputTokens,
+      providerReportedCostUsd:
+        result?.actualCostUsd != null && result.actualCostUsd > 0
+          ? // Prefer token×rates when metadata says adapters precomputed a guess.
+            boolFromMeta(meta, "providerReportedCost")
+            ? result.actualCostUsd
+            : undefined
+          : undefined,
+      searchRequests: numFromMeta(meta, "searchRequests"),
+      browserSessionSeconds: numFromMeta(meta, "browserSessionSeconds"),
+      imageCount: numFromMeta(meta, "imageCount"),
+      videoCount: numFromMeta(meta, "videoCount"),
+      ttsUtf8Bytes: numFromMeta(meta, "ttsUtf8Bytes"),
+    },
+    status:
+      result?.status ??
+      (workUnit.status === "cancelled"
+        ? "cancelled"
+        : workUnit.status === "failed"
+          ? "failed"
+          : "succeeded"),
+    billableToWorkspace,
+    platformOverhead: !billableToWorkspace,
+    workType: workUnit.workType,
+    capability: workUnit.capability ?? null,
     runtimeMode:
       stringFromMeta(meta, "runtimeMode") ?? workUnit.runtimeMode ?? null,
-    capability: workUnit.capability ?? null,
-    workType: workUnit.workType,
-    inputTokens,
-    cachedInputTokens,
-    outputTokens,
-    actualCostUsd: costSource === "provider_usage" ? costUsd : undefined,
-    estimatedCostUsd: costSource === "estimated" ? costUsd : undefined,
-    costSource,
-    platformOverhead,
-    billableToWorkspace: !platformOverhead,
+    providerCalled,
     metadata: {
       workType: workUnit.workType,
       workUnitStatus: workUnit.status,

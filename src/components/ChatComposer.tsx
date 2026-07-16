@@ -53,7 +53,7 @@ const WORK_MODES: Array<{
   hint: string;
 }> = [
   { id: "fast", emoji: "⚡", label: "Fast", hint: "Quick response with minimal reasoning" },
-  { id: "balanced", emoji: "⚖️", label: "Balanced", hint: "Balanced speed and depth" },
+  { id: "standard", emoji: "⚖️", label: "Standard", hint: "Balanced speed and depth" },
   { id: "deep", emoji: "🧠", label: "Deep Thinking", hint: "More reasoning for complex decisions" },
   { id: "research", emoji: "🌍", label: "Research", hint: "Use current sources and research tools" },
   { id: "collaboration", emoji: "🤝", label: "Collaboration", hint: "Coordinate relevant teammates" },

@@ -54,6 +54,7 @@ async function main() {
   });
   // 500k uncached @ 0.13 + 500k cached @ 0.028 = 0.065 + 0.014 = 0.079
   nearly(withCache.costUsd, 0.079);
+  assert(withCache.costSource === "token_rates", "token counts × rates → token_rates");
 
   console.log("PASS  test-token-rates-billing");
 }

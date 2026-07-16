@@ -2,10 +2,27 @@ import type { SearchRoute } from "@/lib/ai/search/types";
 
 export type WorkMode =
   | "fast"
-  | "balanced"
+  | "standard"
+  | "balanced" // legacy alias of standard
   | "deep"
   | "research"
   | "collaboration";
+
+/** Normalize composer / API work mode to Brain intensity vocabulary. */
+export function normalizeWorkMode(mode?: WorkMode | string | null): WorkMode | undefined {
+  if (!mode) return undefined;
+  if (mode === "balanced") return "standard";
+  if (
+    mode === "fast" ||
+    mode === "standard" ||
+    mode === "deep" ||
+    mode === "research" ||
+    mode === "collaboration"
+  ) {
+    return mode;
+  }
+  return undefined;
+}
 
 export type FastPathDecision =
   | "greeting"

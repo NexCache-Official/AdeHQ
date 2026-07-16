@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { IntegrationJobRecord } from "@/lib/integrations/types";
-import { recordCostEvent } from "./record-cost-event";
+import { recordBrainUsage } from "@/lib/brain/metering/record-brain-usage";
 
 function jobContext(job: IntegrationJobRecord): {
   employeeId: string | null;
@@ -47,9 +47,7 @@ function workTypeForJob(jobType: string): string {
 const COMMERCIAL_JOB_COST_SCALE = 0.01;
 
 /**
- * Charge successful integration jobs (artifact binary generation, etc.) to the
- * commercial Work Hours ledger, attributed to the employee who ran the job.
- * Idempotent per job via synthetic work_unit_id.
+ * Charge successful integration jobs via the Brain metering spine.
  */
 export async function recordIntegrationJobCost(
   client: SupabaseClient,
@@ -65,20 +63,26 @@ export async function recordIntegrationJobCost(
   const isArtifact = job.jobType.toLowerCase().includes("artifact");
 
   try {
-    await recordCostEvent(client, {
+    await recordBrainUsage({
+      client,
       workspaceId: job.workspaceId,
+      idempotencyKey: `integration_job:${job.id}:artifact:1`,
       userId,
       employeeId,
-      // Synthetic id — unique index on (work_unit_id, source_type) prevents double-charge.
       workUnitId: `integration_job:${job.id}`,
       roomId,
       topicId,
       sourceType: isArtifact ? "artifact" : "system",
-      capability: isArtifact ? "artifact_generation" : null,
-      workType: workTypeForJob(job.jobType),
-      estimatedCostUsd: billableUsd,
-      costSource: "estimated",
+      // Artifact binary gen has no dedicated token route; use flash as placeholder for model fields.
+      routeId: "route_text_v4flash_sf",
+      usage: {
+        providerReportedCostUsd: billableUsd,
+      },
+      status: "succeeded",
       billableToWorkspace: true,
+      workType: workTypeForJob(job.jobType),
+      capability: isArtifact ? "artifact_generation" : null,
+      providerCalled: true,
       metadata: {
         integrationJobId: job.id,
         integrationJobType: job.jobType,

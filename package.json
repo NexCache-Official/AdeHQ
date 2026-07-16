@@ -18,6 +18,8 @@
     "test:runtime:siliconflow": "tsx scripts/test-runtime-siliconflow.ts",
     "test:runtime:integration": "tsx scripts/test-runtime-integration.ts",
     "test:runtime:db": "tsx scripts/test-ai-runtime-db.ts",
+    "test:brain": "tsx scripts/test-brain-catalog-invariants.ts && tsx scripts/test-brain-metering-matrix.ts && tsx scripts/test-brain-intensity-invariant.ts && tsx scripts/test-brain-steward-facade.ts && tsx scripts/test-brain-no-customer-media-cta.ts",
+    "test:brain:step-shadow": "tsx -r dotenv/config scripts/test-brain-step-classifier-shadow.ts dotenv_config_path=.env.local",
     "test:work-hours": "tsx scripts/simulate-work-hours.ts",
     "test:work-hours:shadow": "tsx scripts/test-work-hours-shadow.ts",
     "test:work-hours:ui": "tsx scripts/test-work-hours-shadow-ui.ts",

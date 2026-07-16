@@ -6,6 +6,7 @@ import type {
 
 const MODE_POINTS: Record<WorkMode, number> = {
   fast: 1,
+  standard: 3,
   balanced: 3,
   deep: 5,
   research: 7,

@@ -10,7 +10,7 @@ This folder is the **engineering companion** for AI agents and contributors work
 
 | Path | What belongs here |
 |------|-------------------|
-| [`architecture/`](./architecture/) | Living system design (inbox foundation, email, intelligence, known issues) |
+| [`architecture/`](./architecture/) | Living system design (inbox foundation, email, intelligence, [AdeHQ Brain](./architecture/adehq-brain.md), known issues) |
 | [`product/`](./product/) | Product plans and feature-gap notes not yet in Mintlify |
 | [`design-system/`](./design-system/) | How UI tokens + components work in this codebase |
 | [`inbox/`](./inbox/) | Inbox-specific proof / slice notes |

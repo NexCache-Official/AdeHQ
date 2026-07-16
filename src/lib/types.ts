@@ -92,6 +92,7 @@ export type EmployeePermissions = {
 
 export type EmployeeIntelligencePolicy = {
   defaultMode:
+    | "auto"
     | "efficient"
     | "balanced"
     | "strong"
@@ -99,6 +100,11 @@ export type EmployeeIntelligencePolicy = {
     | "coding"
     | (string & {});
   allowedModes: string[];
+  /**
+   * Legacy tier bias preserved when migrating to Auto (Brain V1).
+   * Cleared the first time an admin edits the employee's intelligence policy.
+   */
+  preferredIntensityFloor?: "fast" | "standard" | "deep" | "research" | null;
   workHourProfile: "light" | "moderate" | "heavy" | "low" | "high";
   browserAccess: "none" | "research_only" | "full_later" | "approved";
   routingPreference:
@@ -439,6 +445,16 @@ export type RoomMessage = {
   seenBy?: MessageSeenBy[];
   /** Client idempotency key — matches DB client_message_id when persisted */
   clientMessageId?: string;
+  /** Brain WH receipt summary (member-facing; no model ids). */
+  workHoursCharged?: number;
+  whReceipt?: {
+    totalWorkHours: number;
+    lines: Array<{
+      capability?: string | null;
+      workType?: string | null;
+      workHours: number;
+    }>;
+  };
 };
 
 export type WorkspaceFileStatus = "uploaded" | "processing" | "ready" | "failed";

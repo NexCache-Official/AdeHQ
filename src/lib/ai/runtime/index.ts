@@ -1,3 +1,5 @@
+import { isBrainV1Enabled } from "@/lib/brain/flags";
+import { routeCapabilityV2 } from "@/lib/brain/router";
 import { loadEnabledOffers } from "./catalog/loader";
 import { routeCapability } from "./capability-router";
 import {
@@ -320,6 +322,11 @@ export function planRoute(
   });
   if (isRuntimeOff(flags.mode)) {
     throw new DisabledError("Cannot plan route while AI_RUNTIME_V2_MODE=off.");
+  }
+  // Brain V1: eligibility + USD ranges. Kill switch restores legacy scoring-only path.
+  // Metering is never gated by this flag.
+  if (isBrainV1Enabled()) {
+    return routeCapabilityV2(input, flags.providerPref);
   }
   return routeCapability(input, flags.providerPref);
 }

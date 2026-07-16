@@ -252,9 +252,11 @@ export async function generateEmployeeQueuedResponseRuntime(
 
     if (ctx.client && ctx.workspaceId && workUnitId) {
       await completeAiWorkUnit(ctx.client, ctx.workspaceId, workUnitId, {
-        actualCostUsd: result.usage.totalCostUsd,
         actualWorkMinutes: result.workMinutesEstimated,
         modelId: result.usage.modelId,
+        inputTokens: result.usage.inputTokens,
+        outputTokens: result.usage.outputTokens,
+        cachedInputTokens: result.usage.cacheReadTokens,
         metadata: {
           ...workUnitMetadata(input, meta, capability, result.routing?.runtimeMode),
           providerRoute: result.usage.providerRoute,
@@ -266,10 +268,14 @@ export async function generateEmployeeQueuedResponseRuntime(
           workMinutesEstimated: result.workMinutesEstimated,
           inputTokens: result.usage.inputTokens,
           outputTokens: result.usage.outputTokens,
+          cachedInputTokens: result.usage.cacheReadTokens,
           modelId: result.usage.modelId,
           modelMode,
           intelligenceMode: intelligenceModeFromModelMode(modelMode),
           routeOptimizer: result.routing?.routeOptimizer,
+          usageId: meta.usageId,
+          brainIdempotencyKey: meta.usageId ? `usage_event:${meta.usageId}:llm` : undefined,
+          providerCalled: true,
         },
       });
     }

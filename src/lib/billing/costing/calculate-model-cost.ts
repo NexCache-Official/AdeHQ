@@ -1,4 +1,5 @@
 import { estimateCost } from "@/lib/ai/model-catalog";
+import type { CostSource } from "./types";
 
 export type ModelCostInput = {
   modelId?: string | null;
@@ -13,12 +14,13 @@ export type ModelCostInput = {
 
 export type ModelCostResult = {
   costUsd: number;
-  costSource: "provider_usage" | "estimated";
+  /** token_rates = real token counts × curated/snapshot rates (not a guess). */
+  costSource: Extract<CostSource, "provider_usage" | "token_rates" | "estimated">;
 };
 
 /**
  * Resolve the USD cost of an LLM/embedding call.
- * Prefer provider actual → token×endpoint rates (Vercel/SF) → queue-time estimate.
+ * Prefer provider actual → tokens×rates (token_rates) → queue-time estimate.
  */
 export function calculateModelCost(input: ModelCostInput): ModelCostResult {
   if (input.actualCostUsd != null && input.actualCostUsd > 0) {
@@ -31,13 +33,12 @@ export function calculateModelCost(input: ModelCostInput): ModelCostResult {
     const cachedInputTokens = Math.max(0, input.cachedInputTokens ?? 0);
     const outputTokens = Math.max(0, input.outputTokens ?? 0);
     if (inputTokens > 0 || cachedInputTokens > 0 || outputTokens > 0) {
-      // When only cached tokens are reported, treat them as input for costing.
       const promptTokens = inputTokens > 0 ? inputTokens : cachedInputTokens;
       const cost = estimateCost(modelId, promptTokens, outputTokens, {
         cachedInputTokens: inputTokens > 0 ? cachedInputTokens : 0,
         providerRoute: input.providerRoute,
       });
-      if (cost > 0) return { costUsd: cost, costSource: "estimated" };
+      if (cost > 0) return { costUsd: cost, costSource: "token_rates" };
     }
   }
 

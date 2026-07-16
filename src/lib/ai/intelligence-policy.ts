@@ -3,6 +3,7 @@ import { defaultModelModeForRole } from "@/lib/ai/model-catalog";
 import type { AIEmployee, EmployeeIntelligencePolicy, EmployeeRoleKey } from "@/lib/types";
 
 export type IntelligenceMode =
+  | "auto"
   | "efficient"
   | "balanced"
   | "strong"
@@ -15,7 +16,20 @@ export type BrowserAccess = "none" | "research_only" | "full_later";
 
 export type RoutingPreference = "auto" | "cost_saver" | "quality_first" | "fastest";
 
+/** Member-facing modes when Brain V1 is on — AdeHQ picks the route per task. */
+export const BRAIN_INTELLIGENCE_MODE_OPTIONS: IntelligenceMode[] = ["auto"];
+
 export const INTELLIGENCE_MODE_OPTIONS: IntelligenceMode[] = [
+  "auto",
+  "efficient",
+  "balanced",
+  "strong",
+  "long_context",
+  "coding",
+];
+
+/** Legacy tiers shown only when ADEHQ_BRAIN_V1=0. */
+export const LEGACY_INTELLIGENCE_MODE_OPTIONS: IntelligenceMode[] = [
   "efficient",
   "balanced",
   "strong",
@@ -35,12 +49,32 @@ export const WORK_HOUR_PROFILE_OPTIONS: WorkHourProfile[] = ["light", "moderate"
 export const BROWSER_ACCESS_OPTIONS: BrowserAccess[] = ["none", "research_only", "full_later"];
 
 export const INTELLIGENCE_MODE_LABELS: Record<IntelligenceMode, string> = {
+  auto: "Auto",
   efficient: "Efficient",
   balanced: "Balanced",
   strong: "Strong",
   long_context: "Long context",
   coding: "Coding",
 };
+
+/** Map legacy explicit tiers → intensity floor bias (preserved until admin edits policy). */
+export function preferredIntensityFloorFromMode(
+  mode: IntelligenceMode | string,
+): "fast" | "standard" | "deep" | "research" | null {
+  switch (mode) {
+    case "efficient":
+      return "fast";
+    case "strong":
+      return "deep";
+    case "long_context":
+    case "coding":
+    case "balanced":
+      return "standard";
+    case "auto":
+    default:
+      return null;
+  }
+}
 
 export const ROUTING_PREFERENCE_LABELS: Record<RoutingPreference, string> = {
   auto: "Auto",
@@ -118,6 +152,7 @@ export function modelModeFromIntelligenceMode(mode: IntelligenceMode): ModelMode
       return "long_context";
     case "coding":
       return "coding";
+    case "auto":
     default:
       return "balanced";
   }
@@ -125,6 +160,8 @@ export function modelModeFromIntelligenceMode(mode: IntelligenceMode): ModelMode
 
 export function intelligenceModeFromModelMode(mode?: ModelMode | string | null): IntelligenceMode {
   switch (mode) {
+    case "auto":
+      return "auto";
     case "cheap":
     case "efficient":
       return "efficient";
@@ -143,7 +180,11 @@ export function intelligenceModeFromModelMode(mode?: ModelMode | string | null):
 
 export function normalizeIntelligencePolicy(
   raw: Partial<EmployeeIntelligencePolicy> | null | undefined,
-  fallback?: Partial<EmployeeIntelligencePolicy> & { modelMode?: ModelMode; roleKey?: EmployeeRoleKey },
+  fallback?: Partial<EmployeeIntelligencePolicy> & {
+    modelMode?: ModelMode;
+    roleKey?: EmployeeRoleKey;
+    preferredIntensityFloor?: EmployeeIntelligencePolicy["preferredIntensityFloor"];
+  },
 ): EmployeeIntelligencePolicy {
   const derivedMode = intelligenceModeFromModelMode(
     fallback?.defaultMode && isIntelligenceMode(fallback.defaultMode)
@@ -158,9 +199,15 @@ export function normalizeIntelligencePolicy(
     .map((mode) => (isIntelligenceMode(mode) ? mode : intelligenceModeFromModelMode(mode)))
     .filter((mode, index, arr) => arr.indexOf(mode) === index);
 
+  const floor =
+    raw?.preferredIntensityFloor !== undefined
+      ? raw.preferredIntensityFloor
+      : fallback?.preferredIntensityFloor;
+
   return {
     defaultMode,
     allowedModes: allowedModes.length ? allowedModes : DEFAULT_POLICY.allowedModes,
+    preferredIntensityFloor: floor ?? null,
     routingPreference: normalizeRoutingPreference(
       raw?.routingPreference ?? fallback?.routingPreference ?? DEFAULT_POLICY.routingPreference,
     ),
@@ -261,8 +308,13 @@ export function applyIntelligencePolicyUpdate(
   current: Pick<AIEmployee, "intelligencePolicy" | "modelMode" | "roleKey">,
   patch: Partial<EmployeeIntelligencePolicy>,
 ): { intelligencePolicy: EmployeeIntelligencePolicy; modelMode: ModelMode } {
+  // Admin edit is the consent moment — drop legacy intensity bias.
   const intelligencePolicy = normalizeIntelligencePolicy(
-    { ...resolveEmployeeIntelligencePolicy(current), ...patch },
+    {
+      ...resolveEmployeeIntelligencePolicy(current),
+      ...patch,
+      preferredIntensityFloor: null,
+    },
     { modelMode: current.modelMode, roleKey: current.roleKey },
   );
   return {

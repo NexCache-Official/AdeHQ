@@ -1,0 +1,596 @@
+import type { BrainCapability, CapabilityUnitType } from "./capabilities";
+
+/**
+ * Route environment / lifecycle state.
+ * - production: live scoring primary
+ * - fallback: backup for a production primary (not scored as primary)
+ * - shadow: approved candidate; may run invisibly; not live scoring
+ * - evaluation: experimental shelf; never auto-scored
+ * - disabled: reserved slot (e.g. STT) — not activatable until filled
+ */
+export type BrainRouteEnvironment =
+  | "production"
+  | "fallback"
+  | "shadow"
+  | "evaluation"
+  | "disabled";
+
+export type BrainProvider =
+  | "siliconflow"
+  | "vercel_gateway"
+  | "tavily"
+  | "perplexity"
+  | "exa"
+  | "browserbase"
+  | "mock"
+  | "unassigned";
+
+/**
+ * CapabilityRoute — provider/model implementation. NO prices on the route object.
+ */
+export type CapabilityRoute = {
+  id: string;
+  capability: BrainCapability;
+  provider: BrainProvider;
+  providerRoute: "siliconflow_direct" | "vercel_gateway" | "mock" | null;
+  model: string;
+  gatewayProviderSlug?: string | null;
+  unitType: CapabilityUnitType;
+  environment: BrainRouteEnvironment;
+  /** False only for disabled / incomplete reserved slots. */
+  enabled: boolean;
+  /** Human label for Control (never shown as a model SKU to members). */
+  label: string;
+  contextWindow?: number | null;
+  supportsTools?: boolean;
+  supportsVision?: boolean;
+  supportsJson?: boolean;
+  /** Primary route this backs up (fallback routes). */
+  fallbackForRouteId?: string | null;
+  /** Ordered backup route ids (on production primaries). */
+  fallbackRouteIds?: string[];
+  notes?: string;
+};
+
+export const BRAIN_ROUTES: CapabilityRoute[] = [
+  // ─── Production text ─────────────────────────────────────────────
+  {
+    id: "route_text_v4flash_sf",
+    capability: "reasoning",
+    provider: "siliconflow",
+    providerRoute: "siliconflow_direct",
+    model: "deepseek-ai/DeepSeek-V4-Flash",
+    unitType: "tokens",
+    environment: "production",
+    enabled: true,
+    label: "Everyday employee work",
+    contextWindow: 128_000,
+    supportsTools: true,
+    supportsJson: true,
+    fallbackRouteIds: ["route_text_qwen3_8b_sf"],
+  },
+  {
+    id: "route_text_v4flash_sf_quick",
+    capability: "quick_reply",
+    provider: "siliconflow",
+    providerRoute: "siliconflow_direct",
+    model: "deepseek-ai/DeepSeek-V4-Flash",
+    unitType: "tokens",
+    environment: "production",
+    enabled: true,
+    label: "Quick replies",
+    contextWindow: 128_000,
+    supportsTools: false,
+    supportsJson: true,
+    fallbackRouteIds: ["route_text_v4flash_sf"],
+  },
+  {
+    id: "route_text_v4pro_vg",
+    capability: "deep_reasoning",
+    provider: "vercel_gateway",
+    providerRoute: "vercel_gateway",
+    model: "deepseek/deepseek-v4-pro",
+    gatewayProviderSlug: "deepseek",
+    unitType: "tokens",
+    environment: "production",
+    enabled: true,
+    label: "Complex reasoning",
+    contextWindow: 128_000,
+    supportsTools: true,
+    supportsJson: true,
+    fallbackRouteIds: ["route_text_v4pro_sf_failover"],
+  },
+  {
+    id: "route_text_v4pro_sf_failover",
+    capability: "deep_reasoning",
+    provider: "siliconflow",
+    providerRoute: "siliconflow_direct",
+    model: "deepseek-ai/DeepSeek-V4-Pro",
+    unitType: "tokens",
+    environment: "fallback",
+    enabled: true,
+    label: "Strong reasoning backup (SF)",
+    contextWindow: 128_000,
+    supportsTools: true,
+    supportsJson: true,
+    fallbackForRouteId: "route_text_v4pro_vg",
+    notes: "Much more expensive than Gateway — only when primary fails.",
+  },
+  {
+    id: "route_text_minimax_m25_vg",
+    capability: "long_context",
+    provider: "vercel_gateway",
+    providerRoute: "vercel_gateway",
+    model: "minimax/minimax-m2.5",
+    gatewayProviderSlug: "deepinfra",
+    unitType: "tokens",
+    environment: "production",
+    enabled: true,
+    label: "Long context (DeepInfra)",
+    contextWindow: 1_000_000,
+    supportsTools: true,
+    supportsJson: true,
+    fallbackRouteIds: [
+      "route_text_minimax_m25_vg_native",
+      "route_text_minimax_m25_sf",
+    ],
+  },
+  {
+    id: "route_text_minimax_m25_vg_native",
+    capability: "long_context",
+    provider: "vercel_gateway",
+    providerRoute: "vercel_gateway",
+    model: "minimax/minimax-m2.5",
+    gatewayProviderSlug: "minimax",
+    unitType: "tokens",
+    environment: "fallback",
+    enabled: true,
+    label: "Long context (native Gateway)",
+    contextWindow: 1_000_000,
+    supportsTools: true,
+    supportsJson: true,
+    fallbackForRouteId: "route_text_minimax_m25_vg",
+  },
+  {
+    id: "route_text_minimax_m25_sf",
+    capability: "long_context",
+    provider: "siliconflow",
+    providerRoute: "siliconflow_direct",
+    model: "MiniMaxAI/MiniMax-M2.5",
+    unitType: "tokens",
+    environment: "fallback",
+    enabled: true,
+    label: "Long context (SiliconFlow)",
+    contextWindow: 1_000_000,
+    supportsTools: true,
+    supportsJson: true,
+    fallbackForRouteId: "route_text_minimax_m25_vg",
+  },
+  {
+    id: "route_text_qwen3_coder_sf",
+    capability: "coding",
+    provider: "siliconflow",
+    providerRoute: "siliconflow_direct",
+    model: "Qwen/Qwen3-Coder-30B-A3B-Instruct",
+    unitType: "tokens",
+    environment: "production",
+    enabled: true,
+    label: "Coding",
+    contextWindow: 128_000,
+    supportsTools: true,
+    supportsJson: true,
+    fallbackRouteIds: ["route_eval_kimi_k27_code"],
+  },
+  {
+    id: "route_text_qwen3_8b_sf",
+    capability: "classification",
+    provider: "siliconflow",
+    providerRoute: "siliconflow_direct",
+    model: "Qwen/Qwen3-8B",
+    unitType: "tokens",
+    environment: "production",
+    enabled: true,
+    label: "Basic chat / classifier failover",
+    contextWindow: 32_768,
+    supportsTools: false,
+    supportsJson: true,
+    fallbackRouteIds: [],
+    notes: "Production classifier until Step-3.5-Flash wins shadow eval (PR-13).",
+  },
+  {
+    id: "route_embed_qwen3_sf",
+    capability: "embedding",
+    provider: "siliconflow",
+    providerRoute: "siliconflow_direct",
+    model: "Qwen/Qwen3-Embedding-0.6B",
+    unitType: "tokens",
+    environment: "production",
+    enabled: true,
+    label: "Embeddings",
+    contextWindow: 8_192,
+    supportsTools: false,
+    supportsJson: false,
+    fallbackRouteIds: [],
+  },
+
+  // ─── Production search / browser (current live) ──────────────────
+  {
+    id: "route_search_tavily",
+    capability: "research_planning",
+    provider: "tavily",
+    providerRoute: null,
+    model: "tavily-search",
+    unitType: "search",
+    environment: "production",
+    enabled: true,
+    label: "Tavily search (fallback/extraction)",
+    fallbackRouteIds: [],
+    notes: "Current production search. PR-14 moves Perplexity/Exa ahead.",
+  },
+  {
+    id: "route_browser_browserbase",
+    capability: "browser_research",
+    provider: "browserbase",
+    providerRoute: null,
+    model: "browserbase-session",
+    unitType: "browser_second",
+    environment: "production",
+    enabled: true,
+    label: "Browser automation",
+    fallbackRouteIds: [],
+  },
+
+  // ─── Shadow — approved candidates, NOT live scoring ──────────────
+  {
+    id: "route_classify_step35_flash_sf",
+    capability: "classification",
+    provider: "siliconflow",
+    providerRoute: "siliconflow_direct",
+    model: "stepfun-ai/Step-3.5-Flash",
+    unitType: "tokens",
+    environment: "shadow",
+    enabled: true,
+    label: "Micro-routing / classification candidate",
+    contextWindow: 262_144,
+    supportsTools: false,
+    supportsJson: false,
+    notes:
+      "PR-13 shadow eval vs Qwen3-8B. SF rejects response_format=json_object; use text+parse + enable_thinking=false. Do not promote without proof.",
+  },
+  {
+    id: "route_search_perplexity",
+    capability: "search_fast",
+    provider: "perplexity",
+    providerRoute: null,
+    model: "perplexity-search",
+    unitType: "search",
+    environment: "shadow",
+    enabled: true,
+    label: "Fast current-fact search",
+    notes: "PR-14 candidate primary for fast facts.",
+  },
+  {
+    id: "route_search_exa",
+    capability: "search_semantic",
+    provider: "exa",
+    providerRoute: null,
+    model: "exa-search",
+    unitType: "search",
+    environment: "shadow",
+    enabled: true,
+    label: "Semantic / company / paper discovery",
+    notes: "PR-14 candidate primary for semantic search.",
+  },
+  {
+    id: "route_vision_qwen3_vl_8b_sf",
+    capability: "vision",
+    provider: "siliconflow",
+    providerRoute: "siliconflow_direct",
+    model: "Qwen/Qwen3-VL-8B-Instruct",
+    unitType: "tokens",
+    environment: "shadow",
+    enabled: true,
+    label: "Standard visual understanding",
+    contextWindow: 32_768,
+    supportsVision: true,
+    supportsJson: true,
+    fallbackRouteIds: ["route_vision_qwen3_vl_32b_sf"],
+    notes: "PR-15 — not live.",
+  },
+  {
+    id: "route_vision_qwen3_vl_32b_sf",
+    capability: "vision",
+    provider: "siliconflow",
+    providerRoute: "siliconflow_direct",
+    model: "Qwen/Qwen3-VL-32B-Thinking",
+    unitType: "tokens",
+    environment: "shadow",
+    enabled: true,
+    label: "Difficult visual reasoning",
+    contextWindow: 32_768,
+    supportsVision: true,
+    supportsJson: true,
+    fallbackForRouteId: "route_vision_qwen3_vl_8b_sf",
+    notes: "PR-15 escalation — not live.",
+  },
+  {
+    id: "route_image_z_image_turbo",
+    capability: "image_generation",
+    provider: "siliconflow",
+    providerRoute: "siliconflow_direct",
+    model: "Tongyi-MAI/Z-Image-Turbo",
+    unitType: "image",
+    environment: "shadow",
+    enabled: true,
+    label: "Cheap image generation",
+    notes: "PR-16 — not live. 0.5 WH/image.",
+  },
+  {
+    id: "route_image_qwen_image",
+    capability: "image_generation",
+    provider: "siliconflow",
+    providerRoute: "siliconflow_direct",
+    model: "Qwen/Qwen-Image",
+    unitType: "image",
+    environment: "shadow",
+    enabled: true,
+    label: "Business / text-heavy graphics",
+    notes: "PR-16 — not live. 2 WH/image.",
+  },
+  {
+    id: "route_image_qwen_image_edit",
+    capability: "image_edit",
+    provider: "siliconflow",
+    providerRoute: "siliconflow_direct",
+    model: "Qwen/Qwen-Image-Edit",
+    unitType: "image",
+    environment: "shadow",
+    enabled: true,
+    label: "Image editing",
+    notes: "PR-16 — not live. 4 WH/image.",
+  },
+  {
+    id: "route_image_flux2_flex",
+    capability: "image_generation",
+    provider: "siliconflow",
+    providerRoute: "siliconflow_direct",
+    model: "black-forest-labs/FLUX.2-flex",
+    unitType: "image",
+    environment: "shadow",
+    enabled: true,
+    label: "Premium visual",
+    notes: "PR-16 — not live. 6 WH/image.",
+  },
+  {
+    id: "route_video_wan22_t2v",
+    capability: "video_generation",
+    provider: "siliconflow",
+    providerRoute: "siliconflow_direct",
+    model: "Wan-AI/Wan2.2-T2V-A14B",
+    unitType: "video",
+    environment: "shadow",
+    enabled: true,
+    label: "Text-to-video",
+    notes: "PR-17 — not live. ~29 WH/video. Confirm required.",
+  },
+  {
+    id: "route_video_wan22_i2v",
+    capability: "video_generation",
+    provider: "siliconflow",
+    providerRoute: "siliconflow_direct",
+    model: "Wan-AI/Wan2.2-I2V-A14B",
+    unitType: "video",
+    environment: "shadow",
+    enabled: true,
+    label: "Image-to-video",
+    notes: "PR-17 — not live. ~29 WH/video. Confirm required.",
+  },
+  {
+    id: "route_tts_cosyvoice2",
+    capability: "text_to_speech",
+    provider: "siliconflow",
+    providerRoute: "siliconflow_direct",
+    model: "FunAudioLLM/CosyVoice2-0.5B",
+    unitType: "utf8_bytes",
+    environment: "shadow",
+    enabled: true,
+    label: "Default employee voice",
+    notes: "PR-18 — not live.",
+  },
+  {
+    id: "route_tts_indextts2",
+    capability: "text_to_speech",
+    provider: "siliconflow",
+    providerRoute: "siliconflow_direct",
+    model: "IndexTeam/IndexTTS-2",
+    unitType: "utf8_bytes",
+    environment: "shadow",
+    enabled: true,
+    label: "Expressive narration",
+    notes: "PR-18 — not live.",
+  },
+  {
+    id: "route_tts_fish_speech",
+    capability: "text_to_speech",
+    provider: "siliconflow",
+    providerRoute: "siliconflow_direct",
+    model: "fishaudio/fish-speech-1.5",
+    unitType: "utf8_bytes",
+    environment: "shadow",
+    enabled: true,
+    label: "Premium multilingual speech",
+    notes: "PR-18 — not live.",
+  },
+
+  // ─── Evaluation — never auto-scored ──────────────────────────────
+  {
+    id: "route_eval_kimi_k27_code",
+    capability: "coding",
+    provider: "siliconflow",
+    providerRoute: "siliconflow_direct",
+    model: "moonshotai/Kimi-K2.7-Code",
+    unitType: "tokens",
+    environment: "evaluation",
+    enabled: true,
+    label: "Coding escalation candidate",
+    contextWindow: 256_000,
+    supportsTools: true,
+    supportsJson: true,
+    fallbackForRouteId: "route_text_qwen3_coder_sf",
+    notes: "Promote to fallback only if it wins real coding tests.",
+  },
+  {
+    id: "route_eval_qwen36_35b",
+    capability: "reasoning",
+    provider: "siliconflow",
+    providerRoute: "siliconflow_direct",
+    model: "Qwen/Qwen3.6-35B-A3B",
+    unitType: "tokens",
+    environment: "evaluation",
+    enabled: true,
+    label: "Qwen3.6-35B challenger",
+    contextWindow: 128_000,
+    supportsTools: true,
+    supportsVision: true,
+    supportsJson: true,
+  },
+  {
+    id: "route_eval_qwen36_27b",
+    capability: "reasoning",
+    provider: "siliconflow",
+    providerRoute: "siliconflow_direct",
+    model: "Qwen/Qwen3.6-27B",
+    unitType: "tokens",
+    environment: "evaluation",
+    enabled: true,
+    label: "Qwen3.6-27B dense comparison",
+    contextWindow: 128_000,
+    supportsTools: true,
+    supportsJson: true,
+    notes: "Do not activate by default — expensive vs peers.",
+  },
+  {
+    id: "route_eval_glm52",
+    capability: "deep_reasoning",
+    provider: "siliconflow",
+    providerRoute: "siliconflow_direct",
+    model: "zai-org/GLM-5.2",
+    unitType: "tokens",
+    environment: "evaluation",
+    enabled: true,
+    label: "GLM-5.2 premium agentic",
+    contextWindow: 200_000,
+    supportsTools: true,
+    supportsJson: true,
+  },
+  {
+    id: "route_eval_minimax_m3",
+    capability: "long_context",
+    provider: "siliconflow",
+    providerRoute: "siliconflow_direct",
+    model: "MiniMaxAI/MiniMax-M3",
+    unitType: "tokens",
+    environment: "evaluation",
+    enabled: true,
+    label: "MiniMax M3 challenger",
+    contextWindow: 1_000_000,
+    supportsTools: true,
+    supportsVision: true,
+    supportsJson: true,
+    notes: "Under-512K rates in default snapshot; over-512K is a separate snapshot when needed.",
+  },
+
+  // ─── Disabled — reserved STT slots (model TBD) ───────────────────
+  {
+    id: "route_stt_fast",
+    capability: "speech_to_text",
+    provider: "unassigned",
+    providerRoute: null,
+    model: "stt.fast.unassigned",
+    unitType: "audio_seconds",
+    environment: "disabled",
+    enabled: false,
+    label: "Fast transcription (reserved)",
+    notes: "Do not market voice until STT is selected and metered.",
+  },
+  {
+    id: "route_stt_accurate",
+    capability: "speech_to_text",
+    provider: "unassigned",
+    providerRoute: null,
+    model: "stt.accurate.unassigned",
+    unitType: "audio_seconds",
+    environment: "disabled",
+    enabled: false,
+    label: "Accurate transcription (reserved)",
+  },
+  {
+    id: "route_stt_diarized",
+    capability: "speech_to_text",
+    provider: "unassigned",
+    providerRoute: null,
+    model: "stt.diarized.unassigned",
+    unitType: "audio_seconds",
+    environment: "disabled",
+    enabled: false,
+    label: "Diarized meeting transcription (reserved)",
+  },
+];
+
+export function getBrainRoute(routeId: string): CapabilityRoute | undefined {
+  return BRAIN_ROUTES.find((r) => r.id === routeId);
+}
+
+export function listBrainRoutes(options?: {
+  environment?: BrainRouteEnvironment | BrainRouteEnvironment[];
+  capability?: BrainCapability;
+  enabledOnly?: boolean;
+  /** When true, only routes eligible for production scoring. */
+  productionScoringOnly?: boolean;
+}): CapabilityRoute[] {
+  const envs = options?.environment
+    ? Array.isArray(options.environment)
+      ? options.environment
+      : [options.environment]
+    : null;
+
+  return BRAIN_ROUTES.filter((r) => {
+    if (options?.productionScoringOnly && r.environment !== "production") return false;
+    if (envs && !envs.includes(r.environment)) return false;
+    if (options?.capability && r.capability !== options.capability) return false;
+    if (options?.enabledOnly && !r.enabled) return false;
+    return true;
+  });
+}
+
+/** Resolve a Brain route id from runtime provider + model (best effort). */
+export function resolveRouteIdForModel(input: {
+  modelId?: string | null;
+  providerRoute?: string | null;
+  capability?: BrainCapability | null;
+}): string | null {
+  const modelId = input.modelId?.trim();
+  if (!modelId) return null;
+  const matches = BRAIN_ROUTES.filter(
+    (r) =>
+      r.model === modelId &&
+      r.environment !== "disabled" &&
+      (input.providerRoute == null ||
+        r.providerRoute == null ||
+        r.providerRoute === input.providerRoute),
+  );
+  if (input.capability) {
+    const byCap = matches.find((r) => r.capability === input.capability);
+    if (byCap) return byCap.id;
+  }
+  const production = matches.find((r) => r.environment === "production");
+  return (production ?? matches[0])?.id ?? null;
+}
+
+export function getFallbackChain(routeId: string): CapabilityRoute[] {
+  const primary = getBrainRoute(routeId);
+  if (!primary?.fallbackRouteIds?.length) return [];
+  return primary.fallbackRouteIds
+    .map((id) => getBrainRoute(id))
+    .filter((r): r is CapabilityRoute => Boolean(r));
+}

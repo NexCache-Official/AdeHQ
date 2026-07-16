@@ -854,3 +854,14 @@ on conflict (id) do update set
   category = excluded.category,
   description = excluded.description,
   status = excluded.status;
+
+-- AdeHQ Brain tables/columns: see migrations
+--   20260716190000_brain_pricing_snapshots.sql
+--   20260716190100_brain_pricing_snapshots_seed.sql
+--   20260716191000_brain_ledger_extension.sql
+--   20260716192000_brain_runs_decisions.sql
+--   20260716193000_brain_employee_auto_intelligence.sql
+--   20260716193500_messages_metadata_wh_receipt.sql
+--   20260716194000_brain_drop_legacy_ledger_dedupe.sql
+--   20260716195000_brain_catalog_v2_seed.sql
+-- Living eng plan: docs/architecture/adehq-brain.md (CATALOG_VERSION=2)

@@ -193,9 +193,11 @@ export async function generateEmployeeDirectResponseRuntime(
 
     if (ctx.client && ctx.workspaceId && workUnitId) {
       await completeAiWorkUnit(ctx.client, ctx.workspaceId, workUnitId, {
-        actualCostUsd: result.usage.totalCostUsd,
         actualWorkMinutes: result.workMinutesEstimated,
         modelId: result.usage.modelId,
+        inputTokens: result.usage.inputTokens,
+        outputTokens: result.usage.outputTokens,
+        cachedInputTokens: result.usage.cacheReadTokens,
         metadata: {
           providerRoute: result.usage.providerRoute,
           providerName: result.usage.providerName,
@@ -208,11 +210,13 @@ export async function generateEmployeeDirectResponseRuntime(
           workMinutesEstimated: result.workMinutesEstimated,
           inputTokens: result.usage.inputTokens,
           outputTokens: result.usage.outputTokens,
+          cachedInputTokens: result.usage.cacheReadTokens,
           modelId: result.usage.modelId,
           modelMode,
           intelligenceMode: intelligenceModeFromModelMode(modelMode),
           agentRunId: ctx.agentRunId,
           routeOptimizer: result.routing?.routeOptimizer,
+          providerCalled: true,
         },
       });
     }

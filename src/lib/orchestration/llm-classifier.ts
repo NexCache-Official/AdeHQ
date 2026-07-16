@@ -217,6 +217,7 @@ async function recordClassifierShadowPlanning(
         estimatedWorkMinutes: routing.estimatedWorkMinutes,
         metadata: {
           shadow: true,
+          billableToWorkspace: false,
           topicId: input.topicId,
           roomId: input.roomId,
           messageId: input.messageId,
@@ -254,6 +255,7 @@ export async function classifyWithLlmRuntime(
         objective: "Classify orchestration intent",
         runtimeMode: "efficient",
         metadata: {
+          billableToWorkspace: false,
           topicId: input.topicId,
           roomId: input.roomId,
           messageId: input.messageId,

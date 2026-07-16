@@ -11,12 +11,12 @@ import {
   buildRunEstimate,
   appendRunStep,
 } from "@/lib/supabase/ai-runtime";
-import { estimateCost, getOutputTokenCap, type ModelMode } from "@/lib/ai/model-catalog";
+import { getOutputTokenCap, type ModelMode } from "@/lib/ai/model-catalog";
 import { recordAiRuntime } from "@/lib/ai/runtime-log";
+import { resolveRouteIdForModel } from "@/lib/brain/catalog";
+import { evaluatePlanCostPolicy, loadWorkspaceCostPolicy } from "@/lib/brain/cost-policy";
+import { recordBrainUsage } from "@/lib/brain/metering/record-brain-usage";
 import { checkWorkspaceAiCapacity } from "@/lib/billing/usage/periods";
-import { calculateModelCost } from "@/lib/billing/costing/calculate-model-cost";
-import { recordCostEvent } from "@/lib/billing/costing/record-cost-event";
-import { getWorkHourUsdRate } from "@/lib/billing/costing/work-hours";
 
 export type BeginAiRunContext = {
   client: SupabaseClient;
@@ -74,6 +74,19 @@ export async function beginAiRun(ctx: BeginAiRunContext): Promise<BeginAiRunResu
     ctx.promptLength,
     settings.maxOutputTokens,
   );
+
+  // CostPolicy hard block at plan time (PR-6). Soft confirm/manager paths are UI-gated.
+  const costPolicy = await loadWorkspaceCostPolicy(ctx.client, ctx.workspaceId);
+  const planCost = evaluatePlanCostPolicy({
+    estimatedLikelyCostUsd: estimate.cost,
+    policy: costPolicy,
+  });
+  if (planCost.action === "hard_block") {
+    return {
+      ok: false,
+      reason: planCost.reason ?? "Estimated Work Hours exceed the workspace hard block.",
+    };
+  }
 
   const workspaceUsage = await sumTodayUsage(ctx.client, ctx.workspaceId, {
     includeReserved: true,
@@ -209,6 +222,12 @@ export type FinalizeAiRunParams = {
   fallbackUsed?: boolean;
   errorMessage?: string;
   failed?: boolean;
+  /**
+   * When the work-unit path already meters this call, skip the finalize mirror
+   * (defect E). Prefer passing the shared usageId on work-unit metadata instead.
+   */
+  skipCommercialLedger?: boolean;
+  workUnitId?: string | null;
 };
 
 export async function finalizeAiRun(params: FinalizeAiRunParams): Promise<void> {
@@ -238,9 +257,9 @@ export async function finalizeAiRun(params: FinalizeAiRunParams): Promise<void> 
     errorMessage: params.errorMessage,
   });
 
-  // Customer Usage reads ai_cost_ledger_entries. Shadow work-unit completion is
-  // optional / often skipped — always mirror successful runs into the ledger.
-  if (!params.failed) {
+  // Customer Usage reads ai_cost_ledger_entries. Mirror successful runs unless the
+  // work-unit path is the canonical meter for this call (defect E).
+  if (!params.failed && !params.skipCommercialLedger) {
     try {
       await recordCommercialUsageFromFinalizedRun(params);
     } catch (error) {
@@ -289,66 +308,79 @@ async function recordCommercialUsageFromFinalizedRun(
             ? "siliconflow_direct"
             : null;
 
-  // Prefer token×endpoint rates over caller "actualCostUsd" — call sites often pass
-  // our own estimateCost() result as actual, which historically used stale catalog rates.
-  let { costUsd, costSource } = calculateModelCost({
-    modelId,
-    inputTokens,
-    cachedInputTokens: cachedTokens,
-    outputTokens,
-    providerRoute,
-    estimatedCostUsd:
-      params.actualCostUsd ??
-      (usage?.estimated_cost_usd != null ? Number(usage.estimated_cost_usd) : null),
-  });
+  const routeId =
+    resolveRouteIdForModel({ modelId, providerRoute, capability: "reasoning" }) ??
+    "route_text_v4flash_sf";
 
-  if ((inputTokens > 0 || outputTokens > 0 || cachedTokens > 0) && modelId) {
-    costUsd = estimateCost(modelId, inputTokens > 0 ? inputTokens : cachedTokens, outputTokens, {
-      cachedInputTokens: inputTokens > 0 ? cachedTokens : 0,
-      providerRoute,
-    });
-    costSource = "estimated";
-  }
-  // Completed employee replies with missing token/cost telemetry still consumed
-  // capacity — charge a tiny floor so the Work Hours meter cannot stay stuck at 0.
-  if (costUsd <= 0) {
-    costUsd = 0.0001;
-    costSource = "estimated";
-  }
-  // Customer meter floors to 2dp. If AI_WORK_HOUR_USD is high, a real short
-  // reply can still convert to <0.01h and display as 0.00 — enforce a
-  // visible minimum of 0.01 Work Hours per finalized employee reply.
-  const minBillableCost = getWorkHourUsdRate() * 0.01;
-  if (costUsd < minBillableCost) {
-    costUsd = minBillableCost;
-    costSource = "estimated";
-  }
+  // Shared key so a work-unit complete with metadata.usageId cannot double-charge (defect E).
+  const idempotencyKey = `usage_event:${params.usageId}:llm`;
 
-  await recordCostEvent(params.client, {
+  const entry = await recordBrainUsage({
+    client: params.client,
     workspaceId: params.workspaceId,
+    idempotencyKey,
     employeeId,
+    workUnitId: params.workUnitId ?? null,
     roomId: run?.room_id ? String(run.room_id) : null,
     topicId: run?.topic_id ? String(run.topic_id) : null,
     messageId: params.responseMessageId ?? null,
     sourceType: "llm",
-    providerRoute,
-    providerName: typeof usage?.provider === "string" ? usage.provider : null,
-    modelId,
-    workType: "employee_reply",
-    inputTokens,
-    cachedInputTokens: cachedTokens,
-    outputTokens,
-    estimatedCostUsd: costSource === "estimated" ? costUsd : undefined,
-    actualCostUsd: costSource === "provider_usage" ? costUsd : undefined,
-    costSource,
+    routeId,
+    usage: {
+      inputTokens,
+      cachedInputTokens: cachedTokens,
+      outputTokens,
+      // Do not trust caller actualCostUsd — often our own estimate (defect B).
+    },
     status: "succeeded",
+    billableToWorkspace: true,
+    workType: "employee_reply",
+    capability: "reasoning",
+    providerCalled: true,
     metadata: {
       agentRunId: params.runId,
       usageId: params.usageId,
       mirroredFrom: "finalizeAiRun",
-      tokenRatesApplied: true,
     },
   });
+
+  // Attach WH receipt summary on the response message for member UI (PR-7).
+  if (entry && params.responseMessageId && entry.workHoursCharged > 0) {
+    try {
+      const { data: msg } = await params.client
+        .from("messages")
+        .select("metadata")
+        .eq("workspace_id", params.workspaceId)
+        .eq("id", params.responseMessageId)
+        .maybeSingle();
+      const prev =
+        msg?.metadata && typeof msg.metadata === "object"
+          ? (msg.metadata as Record<string, unknown>)
+          : {};
+      await params.client
+        .from("messages")
+        .update({
+          metadata: {
+            ...prev,
+            workHoursCharged: entry.workHoursCharged,
+            whReceipt: {
+              totalWorkHours: entry.workHoursCharged,
+              lines: [
+                {
+                  capability: "reasoning",
+                  workType: "employee_reply",
+                  workHours: entry.workHoursCharged,
+                },
+              ],
+            },
+          },
+        })
+        .eq("workspace_id", params.workspaceId)
+        .eq("id", params.responseMessageId);
+    } catch (error) {
+      console.warn("[AdeHQ cost ledger] WH receipt metadata update failed", error);
+    }
+  }
 }
 
 export async function loadMaxParallelRuns(

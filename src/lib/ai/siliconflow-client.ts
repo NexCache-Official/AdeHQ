@@ -15,7 +15,13 @@ import { SILICONFLOW_API_BASE_URL } from "@/lib/config/features";
  */
 function modelDefaultsToThinkingMode(modelId: string): boolean {
   const id = modelId.toLowerCase();
-  return id.includes("qwen") || id.includes("deepseek") || id.includes("minimax");
+  return (
+    id.includes("qwen") ||
+    id.includes("deepseek") ||
+    id.includes("minimax") ||
+    id.includes("stepfun") ||
+    id.includes("step-3")
+  );
 }
 
 /**

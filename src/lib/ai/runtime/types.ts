@@ -187,7 +187,13 @@ export type CapabilityRouteDecision = {
   capability: AiCapability;
   reasoningProfile: ReasoningProfile;
   estimatedCostUsd: number;
+  /** @deprecated Brain uses estimatedLikelyCostUsd; kept for legacy callers until cleanup. */
   estimatedWorkMinutes: number;
+  estimatedMinCostUsd?: number;
+  estimatedLikelyCostUsd?: number;
+  estimatedMaxCostUsd?: number;
+  brainRouteId?: string;
+  eligibilityRejections?: Array<{ routeId: string; reason: string }>;
   fallbackCandidates: Array<{
     providerRoute: ProviderRoute;
     modelId: string;

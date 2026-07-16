@@ -20,7 +20,8 @@ export type PlatformFlagKey =
   | "runtime_v2_mode"
   | "route_optimizer_mode"
   | "employee_direct_execution"
-  | "employee_queued_execution";
+  | "employee_queued_execution"
+  | "adehq_brain_v1";
 
 const FLAG_DEFAULTS: Record<string, unknown> = {
   signups_enabled: true,
@@ -36,6 +37,7 @@ const FLAG_DEFAULTS: Record<string, unknown> = {
   route_optimizer_mode: "off",
   employee_direct_execution: false,
   employee_queued_execution: false,
+  adehq_brain_v1: true,
 };
 
 /** Optional env fallbacks if the DB row is missing (e.g. before migration runs). */
@@ -48,6 +50,7 @@ const FLAG_ENV_FALLBACKS: Partial<Record<PlatformFlagKey, string>> = {
   route_optimizer_mode: "AI_RUNTIME_ROUTE_OPTIMIZER",
   employee_direct_execution: "AI_RUNTIME_V2_EMPLOYEE_DIRECT_EXECUTION",
   employee_queued_execution: "AI_RUNTIME_V2_EMPLOYEE_QUEUED_EXECUTION",
+  adehq_brain_v1: "ADEHQ_BRAIN_V1",
 };
 
 const CACHE_TTL_MS = 15_000;

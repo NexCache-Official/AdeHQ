@@ -120,6 +120,19 @@ function employeeFromRow(row: DbRow, tools: ToolAccess[]): AIEmployee {
 }
 
 function messageFromRow(row: DbRow): RoomMessage {
+  const metadata =
+    row.metadata && typeof row.metadata === "object"
+      ? (row.metadata as Record<string, unknown>)
+      : {};
+  const whReceipt =
+    metadata.whReceipt && typeof metadata.whReceipt === "object"
+      ? (metadata.whReceipt as RoomMessage["whReceipt"])
+      : undefined;
+  const workHoursCharged =
+    typeof metadata.workHoursCharged === "number"
+      ? metadata.workHoursCharged
+      : undefined;
+
   return normalizeHumanDelivery({
     id: String(row.id),
     roomId: roomIdFromRow(row),
@@ -138,6 +151,8 @@ function messageFromRow(row: DbRow): RoomMessage {
     pending: row.pending === true,
     clientMessageId: row.client_message_id ? String(row.client_message_id) : undefined,
     createdAt: String(row.created_at ?? nowISO()),
+    workHoursCharged,
+    whReceipt,
   });
 }
 

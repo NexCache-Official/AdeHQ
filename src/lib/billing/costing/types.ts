@@ -10,7 +10,12 @@ export type CostSourceType =
   | "manual_adjustment";
 
 /** How the cost figure was derived. */
-export type CostSource = "provider_usage" | "provider_invoice" | "estimated" | "manual";
+export type CostSource =
+  | "provider_usage"
+  | "provider_invoice"
+  | "token_rates"
+  | "estimated"
+  | "manual";
 
 /** Normalized token usage parsed from a provider response. */
 export type ParsedProviderUsage = {
@@ -56,6 +61,10 @@ export type CostEventInput = {
   browserPagesOpened?: number;
   browserScreenshots?: number;
 
+  imageCount?: number;
+  videoCount?: number;
+  ttsUtf8Bytes?: number;
+
   unitCostUsd?: number | null;
   estimatedCostUsd?: number;
   actualCostUsd?: number;
@@ -67,6 +76,15 @@ export type CostEventInput = {
   status?: "succeeded" | "failed" | "cancelled";
   errorCode?: string | null;
   errorMessage?: string | null;
+
+  pricingSnapshotId?: string | null;
+  idempotencyKey?: string | null;
+  brainRunId?: string | null;
+  decisionAttemptId?: string | null;
+  packetVersion?: string | null;
+  decisionVersion?: string | null;
+  routerVersion?: string | null;
+  catalogVersion?: string | null;
 
   metadata?: Record<string, unknown>;
 };

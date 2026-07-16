@@ -31,7 +31,7 @@ function resolveCostUsd(input: CostEventInput): { actual: number; estimated: num
  * Single write path for billable AI cost events.
  * Inserts one row into ai_cost_ledger_entries and computes Work Hours from the billable cost.
  * Platform-overhead events (internal orchestration) are recorded but not billed to the workspace.
- * Idempotent per (work_unit_id, source_type).
+ * Prefer Brain idempotency_key (multi-step safe). Legacy unique (work_unit_id, source_type) still applies.
  */
 export async function recordCostEvent(
   client: SupabaseClient,
@@ -80,6 +80,9 @@ export async function recordCostEvent(
     browser_session_seconds: input.browserSessionSeconds ?? 0,
     browser_pages_opened: input.browserPagesOpened ?? 0,
     browser_screenshots: input.browserScreenshots ?? 0,
+    image_count: input.imageCount ?? 0,
+    video_count: input.videoCount ?? 0,
+    tts_utf8_bytes: input.ttsUtf8Bytes ?? 0,
     unit_cost_usd: input.unitCostUsd ?? null,
     estimated_cost_usd: estimated,
     actual_cost_usd: actual,
@@ -91,6 +94,14 @@ export async function recordCostEvent(
     status: input.status ?? "succeeded",
     error_code: input.errorCode ?? null,
     error_message: input.errorMessage ?? null,
+    pricing_snapshot_id: input.pricingSnapshotId ?? null,
+    idempotency_key: input.idempotencyKey ?? null,
+    brain_run_id: input.brainRunId ?? null,
+    decision_attempt_id: input.decisionAttemptId ?? null,
+    packet_version: input.packetVersion ?? null,
+    decision_version: input.decisionVersion ?? null,
+    router_version: input.routerVersion ?? null,
+    catalog_version: input.catalogVersion ?? null,
     metadata: input.metadata ?? {},
   };
 

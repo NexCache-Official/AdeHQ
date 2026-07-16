@@ -1,7 +1,6 @@
 import { generateObject, generateText } from "ai";
 import { generateObjectViaJsonMode } from "./json-mode-object";
 import {
-  estimateCost,
   getOutputTokenCap,
   getTimeoutMs,
   normalizeModelMode,
@@ -102,6 +101,7 @@ export function listSiliconFlowRuntimeModelsToTry(params: {
   return modelsToTry(preferred, modelMode);
 }
 
+/** Raw usage only — USD is computed once in the Brain metering spine (defect F). */
 function usageFromTokens(
   modelId: string,
   inputTokens: number,
@@ -110,18 +110,14 @@ function usageFromTokens(
   latencyMs: number,
   credential?: ResolvedCredential,
 ): RuntimeResult["usage"] {
-  const modelCostUsd = estimateCost(modelId, inputTokens, outputTokens, {
-    cachedInputTokens: cachedTokens,
-    providerRoute: CTX.providerRoute,
-  });
   return {
     inputTokens,
     outputTokens,
     cacheReadTokens: cachedTokens,
     cacheWriteTokens: 0,
-    modelCostUsd,
+    modelCostUsd: 0,
     toolCostUsd: 0,
-    totalCostUsd: modelCostUsd,
+    totalCostUsd: 0,
     latencyMs,
     providerRoute: CTX.providerRoute,
     providerName: CTX.providerName,

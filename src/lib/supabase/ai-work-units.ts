@@ -297,6 +297,9 @@ export async function completeAiWorkUnit(
     actualCostUsd?: number;
     actualWorkMinutes?: number;
     modelId?: string | null;
+    inputTokens?: number;
+    outputTokens?: number;
+    cachedInputTokens?: number;
     metadata?: Record<string, unknown>;
   },
 ): Promise<AiWorkUnit> {
@@ -319,6 +322,9 @@ export async function completeAiWorkUnit(
   try {
     await recordCostFromWorkUnit(client, completed, {
       actualCostUsd: result?.actualCostUsd,
+      inputTokens: result?.inputTokens,
+      outputTokens: result?.outputTokens,
+      cachedInputTokens: result?.cachedInputTokens,
       metadata: result?.metadata,
     });
   } catch (error) {
@@ -364,10 +370,28 @@ export async function cancelAiWorkUnit(
   workspaceId: string,
   workUnitId: string,
   reason?: string,
+  result?: {
+    actualCostUsd?: number;
+    metadata?: Record<string, unknown>;
+  },
 ): Promise<AiWorkUnit> {
-  return patchAiWorkUnit(client, workspaceId, workUnitId, {
+  const patch: DbRow = {
     status: "cancelled",
     completed_at: nowISO(),
     error_message: reason ?? null,
-  });
+    actual_cost_usd: result?.actualCostUsd ?? null,
+  };
+  if (result?.metadata) patch.metadata = result.metadata;
+  const cancelled = await patchAiWorkUnit(client, workspaceId, workUnitId, patch);
+  // Partial WH for tokens already spent (defect D).
+  try {
+    await recordCostFromWorkUnit(client, cancelled, {
+      actualCostUsd: result?.actualCostUsd,
+      status: "cancelled",
+      metadata: result?.metadata,
+    });
+  } catch (error) {
+    console.warn("[AdeHQ cost ledger] cancelAiWorkUnit", error);
+  }
+  return cancelled;
 }

@@ -509,11 +509,14 @@ export async function processQueuedAgentRun(
     const rawWorkMode = runMetadata.workMode;
     const workMode: WorkMode | undefined =
       rawWorkMode === "fast" ||
+      rawWorkMode === "standard" ||
       rawWorkMode === "balanced" ||
       rawWorkMode === "deep" ||
       rawWorkMode === "research" ||
       rawWorkMode === "collaboration"
-        ? rawWorkMode
+        ? rawWorkMode === "balanced"
+          ? "standard"
+          : rawWorkMode
         : undefined;
 
     if (isIntelligenceV1Enabled()) {

@@ -6,9 +6,10 @@ import {
   applyIntelligencePolicyUpdate,
   BROWSER_ACCESS_LABELS,
   BROWSER_ACCESS_OPTIONS,
+  BRAIN_INTELLIGENCE_MODE_OPTIONS,
   formatIntelligencePolicyLines,
   INTELLIGENCE_MODE_LABELS,
-  INTELLIGENCE_MODE_OPTIONS,
+  LEGACY_INTELLIGENCE_MODE_OPTIONS,
   resolveEmployeeIntelligencePolicy,
   ROUTING_PREFERENCE_LABELS,
   ROUTING_PREFERENCE_OPTIONS,
@@ -22,19 +23,33 @@ import {
 import { Card, Button } from "@/components/ui";
 import { Brain } from "lucide-react";
 
+/** Client-safe Brain UX: default Auto. Kill switch via NEXT_PUBLIC_ADEHQ_BRAIN_V1=0. */
+function brainV1UiEnabled(): boolean {
+  const env = process.env.NEXT_PUBLIC_ADEHQ_BRAIN_V1?.trim().toLowerCase();
+  if (env === "0" || env === "false" || env === "off") return false;
+  return true;
+}
+
 export function EmployeeIntelligencePanel({
   employee,
   editable = false,
   onSave,
+  /** Admin diagnostics may pass true to show legacy Efficient/Balanced/Strong. */
+  showLegacyModes = false,
 }: {
   employee: AIEmployee;
   editable?: boolean;
   onSave?: (patch: ReturnType<typeof applyIntelligencePolicyUpdate>) => void;
+  showLegacyModes?: boolean;
 }) {
+  const brainOn = brainV1UiEnabled() && !showLegacyModes;
   const policy = useMemo(() => resolveEmployeeIntelligencePolicy(employee), [employee]);
   const lines = useMemo(() => formatIntelligencePolicyLines(policy), [policy]);
-  const [draft, setDraft] = useState(policy);
+  const [draft, setDraft] = useState(() =>
+    brainOn ? { ...policy, defaultMode: "auto" as IntelligenceMode } : policy,
+  );
   const [advancedOpen, setAdvancedOpen] = useState(false);
+  const modeOptions = brainOn ? BRAIN_INTELLIGENCE_MODE_OPTIONS : LEGACY_INTELLIGENCE_MODE_OPTIONS;
 
   const save = () => {
     onSave?.(applyIntelligencePolicyUpdate(employee, draft));
@@ -65,8 +80,8 @@ export function EmployeeIntelligencePanel({
         <div className="space-y-4">
           <FieldSelect
             label="Default intelligence"
-            value={draft.defaultMode as IntelligenceMode}
-            options={INTELLIGENCE_MODE_OPTIONS.map((value) => ({
+            value={(brainOn ? "auto" : draft.defaultMode) as IntelligenceMode}
+            options={modeOptions.map((value) => ({
               value,
               label: INTELLIGENCE_MODE_LABELS[value],
             }))}
@@ -74,6 +89,12 @@ export function EmployeeIntelligencePanel({
               setDraft((current) => ({ ...current, defaultMode: value as IntelligenceMode }))
             }
           />
+          {brainOn ? (
+            <p className="text-xs text-slate-500">
+              Auto — AdeHQ assembles the right brain for each task. Intensity chips in chat
+              set budget/depth only, never a model.
+            </p>
+          ) : null}
           <FieldSelect
             label="Routing preference"
             value={draft.routingPreference as RoutingPreference}

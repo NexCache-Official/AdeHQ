@@ -19,8 +19,6 @@ import {
 } from "./provider-policy";
 import { isMockFallbackAllowed, selectBestModelOffer } from "./route-optimizer";
 import { buildTaskRoutingBrief } from "./task-routing-brief";
-import { estimateWorkMinutesFromCost } from "../work-hours/estimate";
-import { getWorkMinuteUsdRate } from "../work-hours/constants";
 import type {
   AiCapability,
   CapabilityRouteDecision,
@@ -31,15 +29,13 @@ import type {
   RuntimeProviderPref,
 } from "./types";
 
-const WORK_MINUTE_USD = getWorkMinuteUsdRate();
-
+/**
+ * Legacy field on CapabilityRouteDecision — Brain uses estimated*CostUsd.
+ * Kept as a coarse integer derived from USD for old callers (PR-10).
+ */
 function estimateWorkMinutes(costUsd: number): number {
-  const minutes = estimateWorkMinutesFromCost(costUsd);
-  if (minutes > 0) return Math.max(1, Math.ceil(minutes));
-  if (!Number.isFinite(WORK_MINUTE_USD) || WORK_MINUTE_USD <= 0) {
-    return 1;
-  }
-  return Math.max(1, Math.ceil(costUsd / WORK_MINUTE_USD));
+  if (!Number.isFinite(costUsd) || costUsd <= 0) return 1;
+  return Math.max(1, Math.ceil(costUsd / 0.01));
 }
 
 function capabilityDefaultRuntimeMode(capability: AiCapability): RuntimeMode {
@@ -170,14 +166,10 @@ function estimateBrowserResearchWorkMinutes(
   resultCount = 0,
 ): number {
   if (researchProvider === "browserbase") {
-    const fromCost = estimateWorkMinutesFromCost(costUsd);
-    const total = fromCost + Math.max(0, resultCount) * 2;
-    return Math.max(1, Math.round(total * 100) / 100);
+    return estimateWorkMinutes(costUsd) + Math.max(0, resultCount) * 2;
   }
   if (researchProvider === "tavily") {
-    const fromCost = estimateWorkMinutesFromCost(costUsd);
-    const total = fromCost + Math.max(0, resultCount) * 0.25;
-    return Math.max(1, Math.round(total * 100) / 100);
+    return Math.max(1, estimateWorkMinutes(costUsd) + Math.max(0, resultCount));
   }
   return 15;
 }
@@ -416,7 +408,11 @@ function outputTokensFromInput(input: CapabilityRouteInput): number {
   return input.needsLongContext ? 2000 : 800;
 }
 
-/** Capability router — planning only in V19.9.0a (not wired to callers yet). */
+/**
+ * Capability router scoring core (pinned policy + optional route optimizer).
+ * Wired via runtime/index.ts, runtime-log, and browser-research orchestrator.
+ * Prefer routeCapabilityV2 from @/lib/brain/router for eligibility + USD ranges.
+ */
 export function routeCapability(
   input: CapabilityRouteInput,
   providerPref: RuntimeProviderPref = "auto",
