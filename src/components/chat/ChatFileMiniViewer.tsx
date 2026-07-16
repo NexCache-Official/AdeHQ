@@ -16,8 +16,14 @@ import {
   cleanChatFileTitle,
   type ChatFilePreviewKind,
 } from "@/lib/chat/file-preview-kind";
+import {
+  parsePptxSlides,
+  type PptxSlidePreview,
+} from "@/lib/drive/parse-pptx-preview";
 import { cn } from "@/lib/utils";
 import { MessageMarkdown } from "@/components/MessageMarkdown";
+
+const MAX_CHAT_PPTX_SLIDES = 4;
 
 const MAX_PREVIEW_ROWS = 8;
 const MAX_PREVIEW_COLS = 10;
@@ -126,6 +132,7 @@ export function ChatFileMiniViewer({
   const [previewText, setPreviewText] = useState<string | null>(null);
   const [sheet, setSheet] = useState<SheetPreview | null>(null);
   const [docxHtml, setDocxHtml] = useState<string | null>(null);
+  const [pptxSlides, setPptxSlides] = useState<PptxSlidePreview[] | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -138,6 +145,7 @@ export function ChatFileMiniViewer({
       setPdfObjectUrl(null);
       setPreviewText(null);
       setSheet(null);
+      setPptxSlides(null);
       setDocxHtml(null);
 
       try {
@@ -167,7 +175,13 @@ export function ChatFileMiniViewer({
         setSignedUrl(url);
         setPreviewText(text);
 
-        if (url && (kind === "spreadsheet" || kind === "document" || kind === "pdf")) {
+        if (
+          url &&
+          (kind === "spreadsheet" ||
+            kind === "document" ||
+            kind === "pdf" ||
+            kind === "presentation")
+        ) {
           try {
             const buffer = await arrayBufferFromUrl(url);
             if (cancelled) return;
@@ -178,6 +192,9 @@ export function ChatFileMiniViewer({
               const blob = new Blob([buffer], { type: "application/pdf" });
               objectUrl = URL.createObjectURL(blob);
               setPdfObjectUrl(objectUrl);
+            } else if (kind === "presentation") {
+              const slides = await parsePptxSlides(buffer);
+              setPptxSlides(slides.slice(0, MAX_CHAT_PPTX_SLIDES));
             } else if (extension?.toLowerCase() === "docx" || mimeType?.includes("word")) {
               setDocxHtml(await parseDocxHtml(buffer));
             }
@@ -277,6 +294,25 @@ export function ChatFileMiniViewer({
     if (kind === "image" && signedUrl) {
       // eslint-disable-next-line @next/next/no-img-element
       return <img src={signedUrl} alt={displayTitle} className="max-h-56 w-full object-contain bg-white" />;
+    }
+
+    if (kind === "presentation" && pptxSlides && pptxSlides.length > 0) {
+      return (
+        <div className="max-h-56 space-y-2 overflow-y-auto px-3 py-2">
+          {pptxSlides.map((slide) => (
+            <div key={slide.index} className="rounded-lg border border-emerald-100 bg-white px-2.5 py-2">
+              <div className="text-[10px] font-medium uppercase tracking-wide text-emerald-900/60">
+                Slide {slide.index}
+              </div>
+              <div className="truncate text-xs font-semibold text-emerald-950">{slide.title}</div>
+              {slide.lines[0] ? (
+                <p className="mt-0.5 line-clamp-2 text-[11px] text-emerald-900/80">{slide.lines[0]}</p>
+              ) : null}
+            </div>
+          ))}
+          <p className="text-[10px] text-emerald-900/60">Text preview · open in Drive for full deck</p>
+        </div>
+      );
     }
 
     // Presentations: never fall through to the markdown twin (looks like a .md deck).

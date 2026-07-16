@@ -6,7 +6,11 @@ import { Button, Modal, ModalHeader } from "@/components/ui";
 import type { DriveDownloadResponse } from "@/lib/drive/client";
 import { driveFilePresentation } from "@/lib/drive/presentation";
 import { formatDriveBytes } from "@/lib/drive/format";
-import { Download, ExternalLink, Loader2 } from "lucide-react";
+import {
+  parsePptxSlides,
+  type PptxSlidePreview,
+} from "@/lib/drive/parse-pptx-preview";
+import { Download, Loader2 } from "lucide-react";
 
 const MAX_ROWS = 40;
 const MAX_COLS = 16;
@@ -17,10 +21,6 @@ type SheetPreview = {
   headers: string[];
   rows: string[][];
 };
-
-function officeEmbedUrl(signedUrl: string): string {
-  return `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(signedUrl)}`;
-}
 
 async function parseSpreadsheet(buffer: ArrayBuffer): Promise<SheetPreview | null> {
   const XLSX = await import("xlsx");
@@ -59,8 +59,8 @@ export function DrivePreviewModal({
   const [loadingLocal, setLoadingLocal] = useState(false);
   const [sheet, setSheet] = useState<SheetPreview | null>(null);
   const [docxHtml, setDocxHtml] = useState<string | null>(null);
+  const [pptxSlides, setPptxSlides] = useState<PptxSlidePreview[] | null>(null);
   const [pdfObjectUrl, setPdfObjectUrl] = useState<string | null>(null);
-  const [officeEmbedFailed, setOfficeEmbedFailed] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
 
   const meta = useMemo(() => {
@@ -103,29 +103,25 @@ export function DrivePreviewModal({
     return { rawTitle, mimeType, sizeBytes, presentation };
   }, [preview]);
 
-  const isOffice =
-    meta?.presentation.kind === "spreadsheet" ||
-    meta?.presentation.kind === "document" ||
-    meta?.presentation.kind === "presentation";
-  const canOfficeEmbed =
-    Boolean(preview?.signedUrl) &&
-    Boolean(isOffice) &&
-    !officeEmbedFailed &&
-    /^https:\/\//i.test(preview?.signedUrl ?? "");
-
   useEffect(() => {
     setSheet(null);
     setDocxHtml(null);
+    setPptxSlides(null);
     setPdfObjectUrl(null);
-    setOfficeEmbedFailed(false);
     setLocalError(null);
     if (!preview?.signedUrl || !meta) return;
 
-    // Prefer Office Online for Word/PPTX; always load local sheet table as primary for Excel.
-    // PDFs: fetch to a blob URL so cross-origin signed URLs still preview in-iframe.
     const kind = meta.presentation.kind;
-    if (kind !== "spreadsheet" && kind !== "document" && kind !== "pdf") return;
-    if (kind === "document" && canOfficeEmbed) return;
+    // Built-in previews only — Microsoft Office Online can't fetch private
+    // Supabase signed URLs ("This content is blocked").
+    if (
+      kind !== "spreadsheet" &&
+      kind !== "document" &&
+      kind !== "pdf" &&
+      kind !== "presentation"
+    ) {
+      return;
+    }
 
     let cancelled = false;
     let objectUrl: string | null = null;
@@ -140,6 +136,8 @@ export function DrivePreviewModal({
         else if (kind === "pdf") {
           objectUrl = URL.createObjectURL(new Blob([buffer], { type: "application/pdf" }));
           setPdfObjectUrl(objectUrl);
+        } else if (kind === "presentation") {
+          setPptxSlides(await parsePptxSlides(buffer));
         } else setDocxHtml(await parseDocxHtml(buffer));
       } catch (err) {
         if (!cancelled) {
@@ -154,7 +152,7 @@ export function DrivePreviewModal({
       cancelled = true;
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [preview, meta, canOfficeEmbed]);
+  }, [preview, meta]);
 
   if (!preview || !meta) return null;
 
@@ -239,24 +237,6 @@ export function DrivePreviewModal({
               {sheet.sheetNames.length > 1 ? ` (${sheet.sheetNames.length} sheets)` : ""}
             </p>
           </div>
-        ) : canOfficeEmbed && preview.signedUrl ? (
-          <div className="relative h-[70vh] w-full bg-white">
-            <iframe
-              title={presentation.displayTitle}
-              src={officeEmbedUrl(preview.signedUrl)}
-              className="h-full w-full"
-            />
-            <p className="absolute bottom-2 left-3 rounded-md bg-white/90 px-2 py-1 text-[10px] text-ink-3 shadow-sm">
-              Preview via Microsoft Office Online ·{" "}
-              <button
-                type="button"
-                className="underline"
-                onClick={() => setOfficeEmbedFailed(true)}
-              >
-                use built-in preview
-              </button>
-            </p>
-          </div>
         ) : loadingLocal ? (
           <div className="flex h-48 items-center justify-center gap-2 text-sm text-ink-3">
             <Loader2 className="h-4 w-4 animate-spin" />
@@ -267,6 +247,37 @@ export function DrivePreviewModal({
             className="prose prose-sm max-h-[70vh] max-w-none overflow-y-auto bg-white px-8 py-6"
             dangerouslySetInnerHTML={{ __html: docxHtml }}
           />
+        ) : presentation.kind === "presentation" && pptxSlides && pptxSlides.length > 0 ? (
+          <div className="max-h-[70vh] space-y-3 overflow-y-auto bg-muted/40 px-4 py-4">
+            {pptxSlides.map((slide) => (
+              <article
+                key={slide.index}
+                className="rounded-xl border border-border bg-white px-5 py-4 shadow-sm"
+              >
+                <div className="mb-2 flex items-baseline gap-2">
+                  <span className="text-[11px] font-medium uppercase tracking-wide text-ink-3">
+                    Slide {slide.index}
+                  </span>
+                  <h3 className="min-w-0 text-sm font-semibold text-ink">{slide.title}</h3>
+                </div>
+                {slide.lines.length > 0 ? (
+                  <ul className="list-disc space-y-1 pl-5 text-sm text-ink-2">
+                    {slide.lines.map((line, i) => (
+                      <li key={`${slide.index}-${i}`} className="leading-snug">
+                        {line}
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-xs text-ink-3">No text on this slide.</p>
+                )}
+              </article>
+            ))}
+            <p className="px-1 text-[11px] text-ink-3">
+              Text preview of {pptxSlides.length} slide
+              {pptxSlides.length === 1 ? "" : "s"} · download for full layout and images
+            </p>
+          </div>
         ) : preview.previewText ? (
           <div className="max-h-[70vh] overflow-y-auto bg-white px-6 py-5">
             <MessageMarkdown content={preview.previewText} />
@@ -280,28 +291,15 @@ export function DrivePreviewModal({
       </div>
       <div className="flex flex-wrap gap-2 border-t border-border px-6 py-4">
         {preview.signedUrl && (
-          <>
-            <a
-              href={preview.signedUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border bg-surface px-3 text-xs font-medium text-ink hover:bg-muted"
-            >
-              <Download className="h-3.5 w-3.5" />
-              Download {presentation.typeLabel}
-            </a>
-            {isOffice && (
-              <a
-                href={officeEmbedUrl(preview.signedUrl)}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border bg-surface px-3 text-xs font-medium text-ink hover:bg-muted"
-              >
-                <ExternalLink className="h-3.5 w-3.5" />
-                Open in Office Online
-              </a>
-            )}
-          </>
+          <a
+            href={preview.signedUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border bg-surface px-3 text-xs font-medium text-ink hover:bg-muted"
+          >
+            <Download className="h-3.5 w-3.5" />
+            Download {presentation.typeLabel}
+          </a>
         )}
         <Button variant="ghost" size="sm" onClick={onClose}>
           Close
