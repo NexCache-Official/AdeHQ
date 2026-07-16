@@ -70,6 +70,16 @@ export const CAPABILITY_DOMAINS: Record<CapabilityDomain, CapabilityDomainInfo> 
     description: "Delegate to and coordinate with other AI employees across shared rooms.",
     catalogToolId: "adehq-team",
   },
+  research: {
+    domain: "research",
+    label: "Web Research",
+    description:
+      "Live web search (Exa → AI Gateway → Tavily) to find current facts, competitors, pricing, and cite sources.",
+    // Read-only web research travels with the workspace's knowledge/Drive access,
+    // so it reuses the adehq-drive catalog grant rather than a new gated tool —
+    // every Drive-enabled role gets it, and the executor still self-heals grants.
+    catalogToolId: "adehq-drive",
+  },
 };
 
 export function capabilityDomainForTool(toolName: string): CapabilityDomain | null {

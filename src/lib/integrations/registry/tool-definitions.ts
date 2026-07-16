@@ -955,6 +955,11 @@ export const CoordinateArgsSchema = z.object({
 });
 export type CoordinateArgs = z.infer<typeof CoordinateArgsSchema>;
 
+export const WebSearchArgsSchema = z.object({
+  query: z.string().min(1),
+});
+export type WebSearchArgs = z.infer<typeof WebSearchArgsSchema>;
+
 const suggestColleagues: ToolDefinition<SuggestColleaguesArgs> = {
   name: "team.suggestColleagues",
   domain: "team",
@@ -995,6 +1000,26 @@ const coordinate: ToolDefinition<CoordinateArgs> = {
   }),
 };
 
+const webSearch: ToolDefinition<WebSearchArgs> = {
+  name: "research.webSearch",
+  domain: "research",
+  provider: "internal",
+  description:
+    "Search the live web (Exa → AI Gateway → Tavily) and return a synthesized answer with cited sources. Use for current facts, competitor/pricing research, and anything you don't already know.",
+  readOnly: true,
+  risk: "low",
+  approval: "none",
+  argsSchema: WebSearchArgsSchema,
+  promptUsage:
+    'research.webSearch — args: { "query": "top DTC vitamin-C serum brands 2026 pricing and positioning" }. Returns a synthesized answer plus source URLs. Prefer a specific, self-contained query. Use this instead of guessing or saying you cannot access the web.',
+  buildPreview: (args) => ({
+    title: "Web search",
+    summary: `Search the web for "${args.query.slice(0, 120)}".`,
+    fields: fields([["Query", args.query]]),
+    risk: "low",
+  }),
+};
+
 // ---------------------------------------------------------------------------
 // Registry access
 // ---------------------------------------------------------------------------
@@ -1030,6 +1055,7 @@ const TOOL_DEFINITIONS = [
   createInvestorFollowUp,
   suggestColleagues,
   coordinate,
+  webSearch,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
 ] as ToolDefinition<any>[];
 

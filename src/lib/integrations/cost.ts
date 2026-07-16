@@ -41,6 +41,9 @@ const TOOL_COST_TABLE: Record<string, ToolRunCostEstimate> = {
   "investor.updatePipeline": { costUsd: 0, workMinutes: 0 },
   "investor.scoreFit": { costUsd: 0, workMinutes: 0 },
   "investor.createFollowUp": { costUsd: 0, workMinutes: 0 },
+  // Real Exa/Gateway/Tavily spend is metered inside executeSearchAnswer's work
+  // unit; this modest estimate just lets the autopilot budget account for a search.
+  "research.webSearch": { costUsd: 0.01, workMinutes: 1 },
 };
 
 export function estimateToolRunCost(toolName: string, mode: ToolCallMode): ToolRunCostEstimate {
