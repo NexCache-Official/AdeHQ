@@ -8,7 +8,15 @@ import type {
   WorkspaceStorageQuota,
 } from "@/lib/types";
 import type { DriveSection } from "@/lib/drive/constants";
+import { DRIVE_PAGE_SIZE } from "@/lib/drive/constants";
 import { demoDriveList, demoDriveQuota } from "@/lib/drive/demo-data";
+
+export type DriveSectionCounts = {
+  files: number;
+  artifacts: number;
+  evidence: number;
+  exports: number;
+};
 
 export type DriveListResponse = {
   section: DriveSection | "all";
@@ -19,6 +27,11 @@ export type DriveListResponse = {
   evidence: BrowserEvidence[];
   exports: DriveExport[];
   breadcrumb: DriveFolder[];
+  page: number;
+  pageSize: number;
+  totalItems: number;
+  totalPages: number;
+  sectionCounts: DriveSectionCounts;
 };
 
 export type DriveDownloadResponse = {
@@ -43,12 +56,16 @@ export async function fetchDriveList(params: {
   section?: DriveSection | "all";
   folderId?: string | null;
   query?: string;
+  page?: number;
+  pageSize?: number;
 }): Promise<DriveListResponse> {
   const headers = await authHeaders();
   const search = new URLSearchParams({ workspaceId: params.workspaceId });
   if (params.section) search.set("section", params.section);
   if (params.folderId) search.set("folderId", params.folderId);
   if (params.query?.trim()) search.set("q", params.query.trim());
+  search.set("page", String(params.page ?? 1));
+  search.set("pageSize", String(params.pageSize ?? DRIVE_PAGE_SIZE));
 
   const res = await fetch(`/api/drive?${search.toString()}`, { headers });
   return parseJson(res);

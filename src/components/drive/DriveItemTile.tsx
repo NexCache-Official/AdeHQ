@@ -117,7 +117,7 @@ export function DriveArtifactTile({
     <DriveItemTileShell
       viewMode={viewMode}
       presentation={presentation}
-      meta={`${presentation.typeLabel} · ${presentation.categoryLabel}`}
+      meta={presentation.categoryLabel}
       draggable={draggable}
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}
@@ -243,10 +243,12 @@ function DriveItemTileShell({
   return (
     <div
       className={cn(
-        "group relative rounded-2xl border bg-surface transition-all hover:border-border-2 hover:shadow-md",
-        viewMode === "grid" ? "p-4" : "flex items-center gap-3 p-3",
+        "group relative border bg-surface transition-colors hover:bg-muted/50",
+        viewMode === "grid"
+          ? "flex flex-col items-center gap-1.5 rounded-lg border-border px-2 py-3 text-center"
+          : "flex items-center gap-3 rounded-md border-transparent px-2 py-1.5 hover:border-border",
         onOpen && "cursor-pointer",
-        dropHighlight ? "border-accent bg-accent-soft/20 ring-2 ring-accent/30" : "border-border",
+        dropHighlight && "border-accent bg-accent-soft/20 ring-1 ring-accent/30",
       )}
       draggable={draggable}
       onDragStart={(e) => {
@@ -268,31 +270,51 @@ function DriveItemTileShell({
       role={onOpen ? "button" : undefined}
       tabIndex={onOpen ? 0 : undefined}
     >
-      <div className={cn("relative flex h-11 w-11 shrink-0 items-center justify-center rounded-xl", presentation.iconClass)}>
-        <Icon className="h-5 w-5" />
-        {presentation.kind === "spreadsheet" && (
-          <span className="absolute -bottom-1 -right-1 rounded-md bg-emerald-600 px-1 py-0.5 text-[8px] font-bold uppercase tracking-wide text-white">
+      <div
+        className={cn(
+          "relative flex shrink-0 items-center justify-center",
+          viewMode === "grid" ? "h-10 w-10 rounded-lg" : "h-8 w-8 rounded-md",
+          presentation.iconClass,
+        )}
+      >
+        <Icon className={viewMode === "grid" ? "h-5 w-5" : "h-4 w-4"} />
+        {presentation.kind === "spreadsheet" && viewMode === "grid" && (
+          <span className="absolute -bottom-1 -right-1 rounded bg-emerald-600 px-1 py-px text-[7px] font-bold uppercase tracking-wide text-white">
             {presentation.typeLabel}
           </span>
         )}
       </div>
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2">
-          <p className="truncate text-sm font-medium text-ink">{presentation.displayTitle}</p>
-          {highlightDownload && (
-            <span className="shrink-0 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-700">
+      <div className={cn("min-w-0", viewMode === "grid" ? "w-full" : "flex-1")}>
+        <div className={cn("flex items-center gap-2", viewMode === "grid" && "justify-center")}>
+          <p
+            className={cn(
+              "truncate font-medium text-ink",
+              viewMode === "grid" ? "text-[12px] leading-tight" : "text-[13px]",
+            )}
+          >
+            {presentation.displayTitle}
+          </p>
+          {highlightDownload && viewMode === "list" && (
+            <span className="shrink-0 rounded bg-emerald-50 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-700">
               {presentation.typeLabel}
             </span>
           )}
         </div>
-        <p className="truncate text-xs text-ink-3">{meta}</p>
+        <p
+          className={cn(
+            "truncate text-ink-3",
+            viewMode === "grid" ? "text-[10px]" : "text-[11px]",
+          )}
+        >
+          {meta}
+        </p>
       </div>
       <div
         className={cn(
-          "flex gap-1",
+          "flex gap-0.5",
           viewMode === "grid"
-            ? "absolute right-2 top-2 opacity-0 transition-opacity group-hover:opacity-100"
-            : "shrink-0 opacity-100",
+            ? "absolute right-1 top-1 opacity-0 transition-opacity group-hover:opacity-100"
+            : "shrink-0 opacity-0 transition-opacity group-hover:opacity-100",
         )}
       >
         {onDownload && (

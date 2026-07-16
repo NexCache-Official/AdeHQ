@@ -5,7 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { useStore } from "@/lib/demo-store";
 import { ENABLE_DEMO_MODE } from "@/lib/config/features";
 import type { DriveSection } from "@/lib/drive/constants";
-import { DRIVE_SECTIONS } from "@/lib/drive/constants";
+import { DRIVE_PAGE_SIZE, DRIVE_SECTIONS } from "@/lib/drive/constants";
 import { driveUsagePercent, formatDriveBytes } from "@/lib/drive/format";
 import {
   createDriveFolder,
@@ -45,16 +45,17 @@ import { PANE_PRESETS } from "@/lib/layout/pane-prefs";
 import { cn } from "@/lib/utils";
 import {
   Camera,
+  ChevronLeft,
   ChevronRight,
   Download,
   FileSpreadsheet,
-  FileText,
   Folder,
   FolderPlus,
   Grid3X3,
   HardDrive,
   LayoutList,
   Loader2,
+  Package,
   Search,
   Upload,
 } from "lucide-react";
@@ -62,9 +63,10 @@ import {
 type ViewMode = "grid" | "list";
 
 function sectionIcon(section: DriveSection | "all") {
-  if (section === "artifacts") return FileText;
+  if (section === "artifacts") return Package;
   if (section === "evidence") return Camera;
-  if (section === "exports") return Download;
+  if (section === "exports") return FileSpreadsheet;
+  if (section === "files") return Upload;
   return Folder;
 }
 
@@ -75,7 +77,8 @@ export default function DrivePage() {
   const [section, setSection] = useState<DriveSection | "all" | "quotas">("all");
   const [folderId, setFolderId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
-  const [viewMode, setViewMode] = useState<ViewMode>("grid");
+  const [page, setPage] = useState(1);
+  const [viewMode, setViewMode] = useState<ViewMode>("list");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<DriveListResponse | null>(null);
@@ -102,7 +105,7 @@ export default function DrivePage() {
     if (exportParam) {
       setSection("exports");
     } else if (artifactParam) {
-      setSection(sectionParam === "artifacts" ? "artifacts" : "all");
+      setSection("artifacts");
     } else if (
       sectionParam === "files" ||
       sectionParam === "artifacts" ||
@@ -137,6 +140,8 @@ export default function DrivePage() {
           section: activeSection,
           folderId,
           query: query.trim() || undefined,
+          page,
+          pageSize: DRIVE_PAGE_SIZE,
         }),
         new Promise<never>((_, reject) => {
           window.setTimeout(
@@ -160,11 +165,15 @@ export default function DrivePage() {
     } finally {
       setLoading(false);
     }
-  }, [activeSection, backend, folderId, query, workspaceId]);
+  }, [activeSection, backend, folderId, page, query, workspaceId]);
 
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [activeSection, folderId, query]);
 
   useEffect(() => {
     const refresh = () => void load();
@@ -190,15 +199,11 @@ export default function DrivePage() {
     );
   }, [data]);
 
-  const sectionCounts = useMemo(() => {
-    if (!data) return null;
-    return {
-      files: data.files.length,
-      artifacts: data.artifacts.length,
-      evidence: data.evidence.length,
-      exports: data.exports.length,
-    };
-  }, [data]);
+  const sectionCounts = data?.sectionCounts ?? null;
+  const totalPages = data?.totalPages ?? 1;
+  const totalItems = data?.totalItems ?? 0;
+  const rangeStart = totalItems === 0 ? 0 : (page - 1) * DRIVE_PAGE_SIZE + 1;
+  const rangeEnd = Math.min(page * DRIVE_PAGE_SIZE, totalItems);
 
   const handleCreateFolder = async () => {
     const name = folderName.trim();
@@ -455,40 +460,24 @@ export default function DrivePage() {
       )}
 
       {quota && (
-        <div className="mb-5 rounded-2xl border border-border bg-surface p-4">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <p className="text-sm font-medium text-ink">Storage quota</p>
-              <p className="text-xs text-ink-3">
+        <div className="mb-3 flex items-center gap-3 rounded-lg border border-border bg-surface px-3 py-2">
+          <HardDrive className="h-3.5 w-3.5 shrink-0 text-ink-3" />
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center justify-between gap-2 text-[11px] text-ink-3">
+              <span className="truncate">
                 {formatDriveBytes(quota.usedBytes)} of {formatDriveBytes(quota.maxWorkspaceBytes)} used
-                {quota.breakdown
-                  ? ` · ${quota.breakdown.totalFiles} files in Supabase`
-                  : ""}
-                {" · "}
-                {quota.planTier} plan · max {formatDriveBytes(quota.maxFileBytes)} per file
-              </p>
-              {quota.breakdown && (
-                <p className="mt-1 text-[11px] text-ink-3">
-                  Uploads {quota.breakdown.uploads.count} ({formatDriveBytes(quota.breakdown.uploads.bytes)})
-                  {" · "}
-                  Exports {quota.breakdown.exports.count} ({formatDriveBytes(quota.breakdown.exports.bytes)})
-                  {" · "}
-                  Evidence {quota.breakdown.evidence.count} ({formatDriveBytes(quota.breakdown.evidence.bytes)})
-                </p>
-              )}
+              </span>
+              <span className="shrink-0 font-medium text-ink-2">{usagePct}%</span>
             </div>
-            <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-ink-2">
-              {usagePct}% full
-            </span>
-          </div>
-          <div className="mt-3 h-2 overflow-hidden rounded-full bg-muted">
-            <div
-              className={cn(
-                "h-full rounded-full transition-all",
-                usagePct >= 90 ? "bg-rose-500" : usagePct >= 70 ? "bg-amber-500" : "bg-accent",
-              )}
-              style={{ width: `${Math.max(usagePct, quota.usedBytes > 0 ? 1 : 0)}%` }}
-            />
+            <div className="mt-1 h-1 overflow-hidden rounded-full bg-muted">
+              <div
+                className={cn(
+                  "h-full rounded-full transition-all",
+                  usagePct >= 90 ? "bg-rose-500" : usagePct >= 70 ? "bg-amber-500" : "bg-accent",
+                )}
+                style={{ width: `${Math.max(usagePct, quota.usedBytes > 0 ? 1 : 0)}%` }}
+              />
+            </div>
           </div>
         </div>
       )}
@@ -503,42 +492,93 @@ export default function DrivePage() {
           collapsedLabel="Drive"
         >
           <aside className="h-full w-full min-w-0">
-            <nav className="min-w-0 space-y-1 overflow-hidden rounded-2xl border border-border bg-surface p-2">
-              {[...DRIVE_SECTIONS, { id: "quotas" as const, label: "Quotas" }].map((item) => (
+            <nav className="min-w-0 space-y-3 overflow-hidden rounded-xl border border-border bg-surface p-2">
+              <div className="space-y-0.5">
+                <p className="px-2 pb-1 text-[10px] font-semibold uppercase tracking-wide text-ink-3">
+                  Library
+                </p>
+                {DRIVE_SECTIONS.filter((item) => item.group === "library").map((item) => {
+                  const Icon = sectionIcon(item.id);
+                  const count =
+                    item.id === "all"
+                      ? sectionCounts
+                        ? sectionCounts.files + sectionCounts.exports + sectionCounts.evidence
+                        : null
+                      : sectionCounts && item.id in sectionCounts
+                        ? sectionCounts[item.id as keyof typeof sectionCounts]
+                        : null;
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => {
+                        setSection(item.id);
+                        if (item.id !== section) setFolderId(null);
+                      }}
+                      className={cn(
+                        "flex w-full items-center justify-between gap-2 rounded-lg px-2.5 py-1.5 text-left text-[13px] transition-colors",
+                        section === item.id
+                          ? "bg-accent-soft font-medium text-accent-d"
+                          : "text-ink-2 hover:bg-muted hover:text-ink",
+                      )}
+                    >
+                      <span className="flex min-w-0 items-center gap-2">
+                        <Icon className="h-3.5 w-3.5 shrink-0" />
+                        <span className="truncate">{item.label}</span>
+                      </span>
+                      {count != null && (
+                        <span className="shrink-0 text-[10px] tabular-nums text-ink-3">{count}</span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="space-y-0.5 border-t border-border pt-2">
+                <p className="px-2 pb-1 text-[10px] font-semibold uppercase tracking-wide text-ink-3">
+                  AI workspace
+                </p>
+                {DRIVE_SECTIONS.filter((item) => item.group === "ai").map((item) => {
+                  const Icon = sectionIcon(item.id);
+                  const count = sectionCounts?.artifacts ?? null;
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => {
+                        setSection(item.id);
+                        if (item.id !== section) setFolderId(null);
+                      }}
+                      className={cn(
+                        "flex w-full items-center justify-between gap-2 rounded-lg px-2.5 py-1.5 text-left text-[13px] transition-colors",
+                        section === item.id
+                          ? "bg-accent-soft font-medium text-accent-d"
+                          : "text-ink-2 hover:bg-muted hover:text-ink",
+                      )}
+                    >
+                      <span className="flex min-w-0 items-center gap-2">
+                        <Icon className="h-3.5 w-3.5 shrink-0" />
+                        <span className="truncate">{item.label}</span>
+                      </span>
+                      {count != null && (
+                        <span className="shrink-0 text-[10px] tabular-nums text-ink-3">{count}</span>
+                      )}
+                    </button>
+                  );
+                })}
                 <button
-                  key={item.id}
                   type="button"
-                  onClick={() => {
-                    setSection(item.id);
-                    if (item.id !== section) setFolderId(null);
-                  }}
+                  onClick={() => setSection("quotas")}
                   className={cn(
-                    "flex w-full items-center justify-between gap-2 rounded-xl px-3 py-2 text-left text-sm transition-colors",
-                    section === item.id
-                      ? "bg-accent-soft text-accent-d font-medium"
+                    "flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-[13px] transition-colors",
+                    section === "quotas"
+                      ? "bg-accent-soft font-medium text-accent-d"
                       : "text-ink-2 hover:bg-muted hover:text-ink",
                   )}
                 >
-                  <span className="flex min-w-0 items-center gap-2">
-                    {item.id === "quotas" ? (
-                      <HardDrive className="h-4 w-4 shrink-0" />
-                    ) : item.id === "exports" ? (
-                      <FileSpreadsheet className="h-4 w-4 shrink-0" />
-                    ) : (
-                      (() => {
-                        const Icon = sectionIcon(item.id);
-                        return <Icon className="h-4 w-4 shrink-0" />;
-                      })()
-                    )}
-                    <span className="truncate">{item.label}</span>
-                  </span>
-                  {sectionCounts && item.id in sectionCounts && (
-                    <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-ink-3">
-                      {sectionCounts[item.id as keyof typeof sectionCounts]}
-                    </span>
-                  )}
+                  <HardDrive className="h-3.5 w-3.5 shrink-0" />
+                  <span className="truncate">Storage</span>
                 </button>
-              ))}
+              </div>
             </nav>
           </aside>
         </ResizablePane>
@@ -622,6 +662,12 @@ export default function DrivePage() {
                 </div>
               )}
 
+              {section === "artifacts" && (
+                <p className="mb-3 text-[12px] text-ink-3">
+                  AI-generated notes and drafts live here — separate from My Drive uploads and binary exports.
+                </p>
+              )}
+
               {loading ? (
                 <div className="flex items-center justify-center py-20 text-sm text-ink-3">
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -634,38 +680,78 @@ export default function DrivePage() {
                   </p>
                 ) : (
                   <EmptyState
-                    icon={HardDrive}
-                    title="This folder is empty"
-                    description="Upload files or create folders to organize your workspace knowledge."
+                    icon={section === "artifacts" ? Package : HardDrive}
+                    title={section === "artifacts" ? "No artifacts yet" : "This folder is empty"}
+                    description={
+                      section === "artifacts"
+                        ? "When AI employees save notes, email drafts, and briefs, they show up here in a compact list."
+                        : "Upload files or create folders to organize your workspace knowledge."
+                    }
                   />
                 )
               ) : (
-                <DriveItemsGrid
-                  data={data}
-                  viewMode={viewMode}
-                  dragItem={dragItem}
-                  dropTargetFolderId={dropTargetFolderId}
-                  onDragStart={(type, id) => setDragItem({ type, id })}
-                  onDragEnd={() => {
-                    setDragItem(null);
-                    setDropTargetFolderId(null);
-                  }}
-                  onDropOnFolder={(folderId) => {
-                    if (dragItem) void handleMoveItem(dragItem.type, dragItem.id, folderId);
-                    setDragItem(null);
-                    setDropTargetFolderId(null);
-                  }}
-                  onFolderDragEnter={setDropTargetFolderId}
-                  onOpenFolder={setFolderId}
-                  onDeleteFolder={handleDeleteFolder}
-                  onDeleteFile={handleDeleteFile}
-                  onOpenArtifact={(artifact) => {
-                    setPreview(null);
-                    setViewerArtifact(artifact);
-                  }}
-                  onPreview={handlePreview}
-                  onDownload={handleDownload}
-                />
+                <>
+                  <DriveItemsGrid
+                    data={data}
+                    viewMode={viewMode}
+                    dragItem={dragItem}
+                    dropTargetFolderId={dropTargetFolderId}
+                    onDragStart={(type, id) => setDragItem({ type, id })}
+                    onDragEnd={() => {
+                      setDragItem(null);
+                      setDropTargetFolderId(null);
+                    }}
+                    onDropOnFolder={(folderId) => {
+                      if (dragItem) void handleMoveItem(dragItem.type, dragItem.id, folderId);
+                      setDragItem(null);
+                      setDropTargetFolderId(null);
+                    }}
+                    onFolderDragEnter={setDropTargetFolderId}
+                    onOpenFolder={setFolderId}
+                    onDeleteFolder={handleDeleteFolder}
+                    onDeleteFile={handleDeleteFile}
+                    onOpenArtifact={(artifact) => {
+                      setPreview(null);
+                      setViewerArtifact(artifact);
+                    }}
+                    onPreview={handlePreview}
+                    onDownload={handleDownload}
+                  />
+                  {totalPages > 1 && (
+                    <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-border pt-3 text-[12px] text-ink-3">
+                      <span>
+                        Showing {rangeStart}–{rangeEnd} of {totalItems}
+                      </span>
+                      <div className="flex items-center gap-1">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-8 px-2"
+                          disabled={page <= 1 || loading}
+                          onClick={() => setPage((p) => Math.max(1, p - 1))}
+                        >
+                          <ChevronLeft className="h-4 w-4" />
+                          Previous
+                        </Button>
+                        <span className="px-2 tabular-nums text-ink-2">
+                          {page} / {totalPages}
+                        </span>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-8 px-2"
+                          disabled={page >= totalPages || loading}
+                          onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                        >
+                          Next
+                          <ChevronRight className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </>
               )}
             </>
           )}
@@ -796,8 +882,8 @@ function DriveItemsGrid({
 }) {
   const gridClass =
     viewMode === "grid"
-      ? "grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3"
-      : "flex flex-col gap-2";
+      ? "grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6"
+      : "flex flex-col divide-y divide-border rounded-lg border border-border bg-surface";
 
   return (
     <div className={gridClass}>

@@ -178,9 +178,11 @@ export function driveFilePresentation(input: {
       kind = "markdown";
     }
     categoryLabel =
-      kind === "markdown" || /\.md$/i.test(displayTitle) || /AI source/i.test(displayTitle)
-        ? "AI note (.md)"
-        : "Artifact";
+      input.artifactType === "email_draft"
+        ? "Email draft"
+        : kind === "markdown" || /\.md$/i.test(displayTitle) || /AI source/i.test(displayTitle)
+          ? "AI note"
+          : "Artifact";
   } else if (input.itemType === "evidence") {
     kind = input.mimeType?.startsWith("image/") ? "image" : "evidence";
     categoryLabel = "Evidence";

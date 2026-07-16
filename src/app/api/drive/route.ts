@@ -16,6 +16,8 @@ export async function GET(request: NextRequest) {
     const sectionParam = (request.nextUrl.searchParams.get("section") ?? "all") as DriveSection | "all";
     const folderId = request.nextUrl.searchParams.get("folderId");
     const query = request.nextUrl.searchParams.get("q") ?? undefined;
+    const page = Number(request.nextUrl.searchParams.get("page") ?? "1");
+    const pageSize = Number(request.nextUrl.searchParams.get("pageSize") ?? "48");
 
     if (!workspaceId) {
       return NextResponse.json({ error: "workspaceId is required." }, { status: 400 });
@@ -35,6 +37,8 @@ export async function GET(request: NextRequest) {
       section: sectionParam,
       folderId: folderId || null,
       query,
+      page: Number.isFinite(page) ? page : 1,
+      pageSize: Number.isFinite(pageSize) ? pageSize : 48,
     });
 
     return NextResponse.json(payload);

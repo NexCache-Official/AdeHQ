@@ -9,9 +9,33 @@ import type {
 } from "@/lib/types";
 import { artifactFromRow, workspaceFileFromRow } from "@/lib/files/records";
 import { driveFolderFromRow } from "@/lib/drive/quota";
+import { DRIVE_MERGE_FETCH_CAP, DRIVE_PAGE_SIZE } from "@/lib/drive/constants";
 import { nowISO } from "@/lib/utils";
 
 type DbRow = Record<string, unknown>;
+
+export type DriveSectionCounts = {
+  files: number;
+  artifacts: number;
+  evidence: number;
+  exports: number;
+};
+
+export type DriveListPayload = {
+  section: DriveSection | "all";
+  folderId: string | null;
+  folders: DriveFolder[];
+  files: WorkspaceFile[];
+  artifacts: SavedArtifact[];
+  evidence: BrowserEvidence[];
+  exports: DriveExport[];
+  breadcrumb: DriveFolder[];
+  page: number;
+  pageSize: number;
+  totalItems: number;
+  totalPages: number;
+  sectionCounts: DriveSectionCounts;
+};
 
 export function browserEvidenceFromRow(row: DbRow): BrowserEvidence {
   return {
@@ -85,6 +109,53 @@ async function buildBreadcrumb(
   return trail;
 }
 
+async function loadSectionCounts(
+  client: SupabaseClient,
+  workspaceId: string,
+): Promise<DriveSectionCounts> {
+  const [filesRes, artifactsRes, evidenceRes, exportsRes] = await Promise.all([
+    client
+      .from("workspace_files")
+      .select("id", { count: "exact", head: true })
+      .eq("workspace_id", workspaceId)
+      .neq("status", "failed"),
+    client
+      .from("artifacts")
+      .select("id", { count: "exact", head: true })
+      .eq("workspace_id", workspaceId)
+      .neq("status", "archived"),
+    client
+      .from("browser_evidence")
+      .select("id", { count: "exact", head: true })
+      .eq("workspace_id", workspaceId),
+    client
+      .from("drive_exports")
+      .select("id", { count: "exact", head: true })
+      .eq("workspace_id", workspaceId),
+  ]);
+  return {
+    files: filesRes.count ?? 0,
+    artifacts: artifactsRes.count ?? 0,
+    evidence: evidenceRes.count ?? 0,
+    exports: exportsRes.count ?? 0,
+  };
+}
+
+type DatedItem =
+  | { type: "file"; createdAt: string; file: WorkspaceFile }
+  | { type: "artifact"; createdAt: string; artifact: SavedArtifact }
+  | { type: "evidence"; createdAt: string; evidence: BrowserEvidence }
+  | { type: "export"; createdAt: string; export: DriveExport };
+
+function filterByQuery<T>(
+  items: T[],
+  q: string | undefined,
+  getName: (item: T) => string,
+): T[] {
+  if (!q) return items;
+  return items.filter((item) => getName(item).toLowerCase().includes(q));
+}
+
 export async function listDriveContents(
   client: SupabaseClient,
   params: {
@@ -92,19 +163,16 @@ export async function listDriveContents(
     section: DriveSection | "all";
     folderId?: string | null;
     query?: string;
+    page?: number;
+    pageSize?: number;
   },
-): Promise<{
-  section: DriveSection | "all";
-  folderId: string | null;
-  folders: DriveFolder[];
-  files: WorkspaceFile[];
-  artifacts: SavedArtifact[];
-  evidence: BrowserEvidence[];
-  exports: DriveExport[];
-  breadcrumb: DriveFolder[];
-}> {
+): Promise<DriveListPayload> {
   const folderId = params.folderId ?? null;
-  const q = params.query?.trim().toLowerCase();
+  const q = params.query?.trim().toLowerCase() || undefined;
+  const pageSize = Math.min(Math.max(params.pageSize ?? DRIVE_PAGE_SIZE, 12), 96);
+  const page = Math.max(params.page ?? 1, 1);
+  const from = (page - 1) * pageSize;
+  const to = from + pageSize - 1;
 
   let foldersQuery = client
     .from("drive_folders")
@@ -121,11 +189,23 @@ export async function listDriveContents(
     : foldersQuery.is("parent_id", null);
 
   const breadcrumb = await buildBreadcrumb(client, params.workspaceId, folderId);
+  const sectionCounts = await loadSectionCounts(client, params.workspaceId);
 
+  // My Drive = library files only. Artifacts stay in the dedicated Artifacts section.
   const includeFiles = params.section === "all" || params.section === "files";
-  const includeArtifacts = params.section === "all" || params.section === "artifacts";
+  const includeArtifacts = params.section === "artifacts";
   const includeEvidence = params.section === "all" || params.section === "evidence";
   const includeExports = params.section === "all" || params.section === "exports";
+
+  const singleType =
+    params.section === "files" ||
+    params.section === "artifacts" ||
+    params.section === "evidence" ||
+    params.section === "exports";
+
+  const fetchLimit = singleType && !q ? pageSize : DRIVE_MERGE_FETCH_CAP;
+  const fetchFrom = singleType && !q ? from : 0;
+  const fetchTo = singleType && !q ? to : fetchLimit - 1;
 
   const [foldersResult, filesResult, artifactsResult, evidenceResult, exportsResult] =
     await Promise.all([
@@ -134,11 +214,11 @@ export async function listDriveContents(
         ? (() => {
             let query = client
               .from("workspace_files")
-              .select("*")
+              .select("*", singleType && !q ? { count: "exact" } : undefined)
               .eq("workspace_id", params.workspaceId)
               .neq("status", "failed")
               .order("created_at", { ascending: false })
-              .limit(200);
+              .range(fetchFrom, fetchTo);
             query = folderId
               ? query.eq("drive_folder_id", folderId)
               : query.is("drive_folder_id", null);
@@ -147,50 +227,50 @@ export async function listDriveContents(
             }
             return query;
           })()
-        : Promise.resolve({ data: [], error: null }),
+        : Promise.resolve({ data: [], error: null, count: 0 }),
       includeArtifacts
         ? (() => {
             let query = client
               .from("artifacts")
-              .select("*")
+              .select("*", singleType && !q ? { count: "exact" } : undefined)
               .eq("workspace_id", params.workspaceId)
               .neq("status", "archived")
               .order("created_at", { ascending: false })
-              .limit(200);
+              .range(fetchFrom, fetchTo);
             query = folderId
               ? query.eq("drive_folder_id", folderId)
               : query.is("drive_folder_id", null);
             return query;
           })()
-        : Promise.resolve({ data: [], error: null }),
+        : Promise.resolve({ data: [], error: null, count: 0 }),
       includeEvidence
         ? (() => {
             let query = client
               .from("browser_evidence")
-              .select("*")
+              .select("*", singleType && !q ? { count: "exact" } : undefined)
               .eq("workspace_id", params.workspaceId)
               .order("created_at", { ascending: false })
-              .limit(200);
+              .range(fetchFrom, fetchTo);
             query = folderId
               ? query.eq("drive_folder_id", folderId)
               : query.is("drive_folder_id", null);
             return query;
           })()
-        : Promise.resolve({ data: [], error: null }),
+        : Promise.resolve({ data: [], error: null, count: 0 }),
       includeExports
         ? (() => {
             let query = client
               .from("drive_exports")
-              .select("*")
+              .select("*", singleType && !q ? { count: "exact" } : undefined)
               .eq("workspace_id", params.workspaceId)
               .order("created_at", { ascending: false })
-              .limit(200);
+              .range(fetchFrom, fetchTo);
             query = folderId
               ? query.eq("drive_folder_id", folderId)
               : query.is("drive_folder_id", null);
             return query;
           })()
-        : Promise.resolve({ data: [], error: null }),
+        : Promise.resolve({ data: [], error: null, count: 0 }),
     ]);
 
   if (foldersResult.error) throw foldersResult.error;
@@ -199,61 +279,106 @@ export async function listDriveContents(
   if (evidenceResult.error) throw evidenceResult.error;
   if (exportsResult.error) throw exportsResult.error;
 
-  const filterName = <T extends { title?: string; displayName?: string; name?: string }>(
-    items: T[],
-    getName: (item: T) => string,
-  ) => {
-    if (!q) return items;
-    return items.filter((item) => getName(item).toLowerCase().includes(q));
-  };
-
-  const folders = ((foldersResult.data ?? []) as DbRow[]).map(driveFolderFromRow);
-  const files = filterName(
+  const folders = filterByQuery(
+    ((foldersResult.data ?? []) as DbRow[]).map(driveFolderFromRow),
+    q,
+    (f) => f.name,
+  );
+  let files = filterByQuery(
     ((filesResult.data ?? []) as DbRow[]).map(workspaceFileFromRow),
+    q,
     (f) => f.displayName,
   );
-  const allArtifacts = filterName(
+  let artifacts = filterByQuery(
     ((artifactsResult.data ?? []) as DbRow[]).map(artifactFromRow),
+    q,
     (a) => a.title,
   );
-  const evidence = filterName(
+  let evidence = filterByQuery(
     ((evidenceResult.data ?? []) as DbRow[]).map(browserEvidenceFromRow),
+    q,
     (e) => e.title,
   );
-  const exports = filterName(
+  let exports = filterByQuery(
     ((exportsResult.data ?? []) as DbRow[]).map(driveExportFromRow),
+    q,
     (e) => e.title,
   );
 
-  // Binary create* jobs also write a markdown "AI source" twin. Keep those under
-  // the AI notes section only so All / Exports stay focused on real files.
-  const artifactIdsWithBinaryExport = new Set<string>();
-  for (const item of exports) {
-    for (const id of item.sourceArtifactIds ?? []) {
-      if (id) artifactIdsWithBinaryExport.add(id);
+  // Hide markdown twins of binary exports inside Artifacts when browsing All
+  // (artifacts are already excluded from All; keep for exports-linked cleanup if reused).
+  if (params.section !== "artifacts" && artifacts.length && exports.length) {
+    const artifactIdsWithBinaryExport = new Set<string>();
+    for (const item of exports) {
+      for (const id of item.sourceArtifactIds ?? []) {
+        if (id) artifactIdsWithBinaryExport.add(id);
+      }
     }
+    artifacts = artifacts.filter((artifact) => {
+      const meta = artifact.metadata ?? {};
+      const isBinaryCompanion =
+        meta.binaryCompanion === true ||
+        meta.integrationGenerated === true ||
+        Boolean(meta.binaryExportExt);
+      if (!isBinaryCompanion) return true;
+      return !artifactIdsWithBinaryExport.has(artifact.id);
+    });
   }
-  const artifacts =
-    params.section === "artifacts"
-      ? allArtifacts
-      : allArtifacts.filter((artifact) => {
-          const meta = artifact.metadata ?? {};
-          const isBinaryCompanion =
-            meta.binaryCompanion === true ||
-            meta.integrationGenerated === true ||
-            Boolean(meta.binaryExportExt);
-          if (!isBinaryCompanion) return true;
-          return !artifactIdsWithBinaryExport.has(artifact.id);
-        });
+
+  // Folders stay pinned to page 1 (Google Drive-style); pagination applies to files.
+  const pageFolders = page === 1 ? folders : [];
+  let totalItems = 0;
+
+  if (singleType && !q) {
+    totalItems =
+      params.section === "files"
+        ? (filesResult.count ?? files.length)
+        : params.section === "artifacts"
+          ? (artifactsResult.count ?? artifacts.length)
+          : params.section === "evidence"
+            ? (evidenceResult.count ?? evidence.length)
+            : (exportsResult.count ?? exports.length);
+  } else {
+    const dated: DatedItem[] = [
+      ...files.map((file) => ({ type: "file" as const, createdAt: file.createdAt, file })),
+      ...artifacts.map((artifact) => ({
+        type: "artifact" as const,
+        createdAt: artifact.createdAt,
+        artifact,
+      })),
+      ...evidence.map((item) => ({
+        type: "evidence" as const,
+        createdAt: item.createdAt,
+        evidence: item,
+      })),
+      ...exports.map((item) => ({
+        type: "export" as const,
+        createdAt: item.createdAt,
+        export: item,
+      })),
+    ].sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt));
+
+    totalItems = dated.length;
+    const slice = dated.slice(from, from + pageSize);
+    files = slice.filter((i) => i.type === "file").map((i) => i.file);
+    artifacts = slice.filter((i) => i.type === "artifact").map((i) => i.artifact);
+    evidence = slice.filter((i) => i.type === "evidence").map((i) => i.evidence);
+    exports = slice.filter((i) => i.type === "export").map((i) => i.export);
+  }
 
   return {
     section: params.section,
     folderId,
-    folders,
+    folders: pageFolders,
     files,
     artifacts,
     evidence,
     exports,
     breadcrumb,
+    page,
+    pageSize,
+    totalItems,
+    totalPages: Math.max(1, Math.ceil(totalItems / pageSize) || 1),
+    sectionCounts,
   };
 }

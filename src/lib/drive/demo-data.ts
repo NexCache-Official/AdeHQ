@@ -109,6 +109,11 @@ export function demoDriveList(): DriveListResponse {
       },
     ],
     breadcrumb: [],
+    page: 1,
+    pageSize: 48,
+    totalItems: 2,
+    totalPages: 1,
+    sectionCounts: { files: 1, artifacts: 1, evidence: 0, exports: 1 },
   };
 }
 

@@ -10,13 +10,25 @@ export const LEGACY_FILE_BUCKET = "workspace-files";
 
 export type DriveSection = "files" | "artifacts" | "evidence" | "exports";
 
-export const DRIVE_SECTIONS: Array<{ id: DriveSection | "all"; label: string }> = [
-  { id: "all", label: "All files" },
-  { id: "files", label: "Uploads" },
-  { id: "exports", label: "Spreadsheets, PDF, Word, PPTX" },
-  { id: "artifacts", label: "AI notes (.md)" },
-  { id: "evidence", label: "Screenshots / Evidence" },
+/**
+ * Sidebar navigation. "My Drive" (all) is uploads + exports + evidence only —
+ * AI artifacts live in their own compact Artifacts section.
+ */
+export const DRIVE_SECTIONS: Array<{
+  id: DriveSection | "all";
+  label: string;
+  group?: "library" | "ai";
+}> = [
+  { id: "all", label: "My Drive", group: "library" },
+  { id: "files", label: "Uploads", group: "library" },
+  { id: "exports", label: "Spreadsheets & docs", group: "library" },
+  { id: "evidence", label: "Screenshots", group: "library" },
+  { id: "artifacts", label: "Artifacts", group: "ai" },
 ];
+
+export const DRIVE_PAGE_SIZE = 48;
+/** Cap when merging mixed types for My Drive before slicing pages. */
+export const DRIVE_MERGE_FETCH_CAP = 400;
 
 export const FREE_TIER_MAX_WORKSPACE_BYTES = 100 * 1024 * 1024;
 export const FREE_TIER_MAX_FILE_BYTES = 10 * 1024 * 1024;
