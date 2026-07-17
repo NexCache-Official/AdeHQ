@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createRevolutCheckout, isRevolutConfigured } from "@/lib/billing/revolut/create-checkout";
+import { getRevolutCurrency } from "@/lib/billing/revolut/client";
 
 export type StartCheckoutParams = {
   workspaceId: string;
@@ -45,6 +46,7 @@ export async function startCheckout(
     throw new Error(`Plan is not available for checkout: ${params.planSlug}`);
   }
 
+  const currency = getRevolutCurrency();
   const { data: intent, error } = await client
     .from("billing_checkout_intents")
     .insert({
@@ -55,6 +57,7 @@ export async function startCheckout(
       status: "pending",
       provider: "revolut",
       amount_cents: price.amountCents,
+      currency,
       metadata: params.promoCode ? { promoCode: params.promoCode } : {},
     })
     .select("id")

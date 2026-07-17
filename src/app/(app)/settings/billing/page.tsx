@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useStore } from "@/lib/demo-store";
 import { authHeaders } from "@/lib/api/auth-client";
 import { canViewBilling } from "@/lib/workspace/permissions";
@@ -25,6 +25,7 @@ type BillingSummary = {
   subscriptionStatus: string | null;
   renewalDate: string | null;
   billingInterval: "monthly" | "annual" | null;
+  cancelAtPeriodEnd?: boolean;
   freePlanStartedAt?: string | null;
   currentPlanStartedAt?: string | null;
   capacity: {
@@ -47,11 +48,26 @@ type BillingSummary = {
 function formatDate(iso: string | null): string {
   if (!iso) return "—";
   const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? "—" : d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+  return Number.isNaN(d.getTime())
+    ? "—"
+    : d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+}
+
+function formatMoney(cents: number, currency = "USD"): string {
+  try {
+    return new Intl.NumberFormat(undefined, {
+      style: "currency",
+      currency: currency.toUpperCase(),
+      maximumFractionDigits: 0,
+    }).format(cents / 100);
+  } catch {
+    return `$${(cents / 100).toFixed(0)}`;
+  }
 }
 
 export default function SettingsBillingPage() {
-  const { state } = useStore();
+  const { state, actions } = useStore();
+  const router = useRouter();
   const workspaceId = state.workspace.id;
   const myRole = state.workspaceMembers.find((m) => m.userId === state.user?.id)?.role ?? "member";
   const searchParams = useSearchParams();
@@ -97,7 +113,7 @@ export default function SettingsBillingPage() {
     let cancelled = false;
     let attempts = 0;
     setConfirmingPayment(true);
-    setNotice("Confirming payment with Revolut…");
+    setNotice(null);
 
     const poll = async () => {
       try {
@@ -106,9 +122,14 @@ export default function SettingsBillingPage() {
         const body = (await res.json()) as BillingSummary;
         if (!cancelled && res.ok) {
           setSummary(body);
-          if (body.subscriptionStatus === "active" || (body.currentPlanSlug && body.currentPlanSlug !== "free")) {
+          if (
+            body.subscriptionStatus === "active" ||
+            (body.currentPlanSlug && body.currentPlanSlug !== "free")
+          ) {
             setConfirmingPayment(false);
             setNotice("Payment confirmed. Your plan and weekly AI Work Hours are updated.");
+            await actions.refreshWorkspace().catch(() => undefined);
+            router.replace("/settings/billing");
             return;
           }
         }
@@ -122,6 +143,7 @@ export default function SettingsBillingPage() {
         setNotice(
           "Payment received — plan activation can take a moment. Refresh this page if it has not updated yet.",
         );
+        router.replace("/settings/billing");
         return;
       }
       window.setTimeout(() => {
@@ -133,7 +155,7 @@ export default function SettingsBillingPage() {
     return () => {
       cancelled = true;
     };
-  }, [checkoutResult, myRole, workspaceId]);
+  }, [actions, checkoutResult, myRole, router, workspaceId]);
 
   const startCheckout = async (planSlug: string) => {
     setBusyPlan(planSlug);
@@ -170,17 +192,19 @@ export default function SettingsBillingPage() {
   }
 
   const cap = summary?.capacity;
-  const pct = cap && !cap.unlimited && cap.allowance ? Math.min(100, (cap.used / cap.allowance) * 100) : 0;
+  const pct =
+    cap && !cap.unlimited && cap.allowance ? Math.min(100, (cap.used / cap.allowance) * 100) : 0;
+  const isFree = !summary?.currentPlanSlug || summary.currentPlanSlug === "free";
 
   return (
     <>
       <PageHeader
         title="Billing"
-        subtitle="Manage your plan, AI Work Hours, and payment details."
+        subtitle="Plan, Work Hours, and payment history for this workspace."
         icon={<CreditCard className="h-5 w-5" />}
       />
 
-      {checkoutResult === "success" && confirmingPayment && (
+      {confirmingPayment && (
         <Card className="mb-4 border-accent/30 bg-accent/[0.06] p-4 text-sm text-ink-2">
           Confirming payment with Revolut…
         </Card>
@@ -190,45 +214,82 @@ export default function SettingsBillingPage() {
           Checkout was not completed. Your plan was not changed — you can try again below.
         </Card>
       )}
-      {notice && <Card className="mb-4 p-4 text-sm text-ink-2">{notice}</Card>}
+      {notice && !confirmingPayment && (
+        <Card className="mb-4 border-emerald-500/30 bg-emerald-500/[0.06] p-4 text-sm text-emerald-800">
+          {notice}
+        </Card>
+      )}
       {error && <p className="mb-4 rounded-xl bg-danger/10 px-3 py-2 text-sm text-danger">{error}</p>}
 
       {loading ? (
         <Card className="p-6 text-sm text-ink-3">Loading…</Card>
       ) : summary ? (
         <div className="space-y-6">
-          <Card className="p-6">
-            <div className="flex flex-wrap items-start justify-between gap-4">
-              <div>
-                <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-3">Current plan</p>
-                <p className="mt-1 text-2xl font-semibold text-ink">
-                  {summary.planDisplayName ?? summary.currentPlanSlug}
-                </p>
-                <p className="mt-0.5 text-sm text-ink-3">
-                  {summary.subscriptionStatus ? `Status: ${summary.subscriptionStatus}` : "No active subscription"}
-                  {summary.billingInterval ? ` · ${summary.billingInterval}` : ""}
-                </p>
-                <p className="text-sm text-ink-3">Free since {formatDate(summary.freePlanStartedAt ?? null)}</p>
-                <p className="text-sm text-ink-3">
-                  Current term started {formatDate(summary.currentPlanStartedAt ?? null)}
-                </p>
-                {summary.renewalDate && (
-                  <p className="text-sm text-ink-3">Renews {formatDate(summary.renewalDate)}</p>
-                )}
+          <Card className="overflow-hidden p-0">
+            <div className="border-b border-border-2 bg-gradient-to-br from-accent/[0.06] to-transparent px-6 py-5">
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-3">
+                    Current plan
+                  </p>
+                  <p className="mt-1 text-3xl font-semibold tracking-tight text-ink">
+                    {summary.planDisplayName ?? summary.currentPlanSlug}
+                  </p>
+                  <p className="mt-1 text-sm text-ink-3">
+                    {summary.subscriptionStatus
+                      ? `Status: ${summary.subscriptionStatus}`
+                      : isFree
+                        ? "Free plan"
+                        : "Subscription"}
+                    {summary.billingInterval ? ` · billed ${summary.billingInterval}` : ""}
+                    {summary.cancelAtPeriodEnd ? " · cancels at period end" : ""}
+                  </p>
+                </div>
+                <div className="rounded-xl border border-border/70 bg-surface/80 px-4 py-3 text-right backdrop-blur">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-3">
+                    AI Work Hours
+                  </p>
+                  <p className="mt-1 text-2xl font-semibold tabular-nums text-ink">
+                    {cap?.unlimited ? "Unlimited" : `${(cap?.remaining ?? 0).toFixed(1)} left`}
+                  </p>
+                  <p className="text-sm text-ink-3">Resets {formatDate(cap?.resetsAt ?? null)}</p>
+                </div>
               </div>
-              <div className="text-right">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-3">AI Work Hours</p>
-                <p className="mt-1 text-2xl font-semibold tabular-nums text-ink">
-                  {cap?.unlimited ? "Unlimited" : `${(cap?.remaining ?? 0).toFixed(1)} left`}
+            </div>
+            <div className="grid gap-3 px-6 py-4 text-sm sm:grid-cols-3">
+              {isFree ? (
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-3">
+                    Free since
+                  </p>
+                  <p className="mt-0.5 text-ink-2">{formatDate(summary.freePlanStartedAt ?? null)}</p>
+                </div>
+              ) : (
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-3">
+                    Member since
+                  </p>
+                  <p className="mt-0.5 text-ink-2">{formatDate(summary.freePlanStartedAt ?? null)}</p>
+                </div>
+              )}
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-3">
+                  Current term started
                 </p>
-                <p className="text-sm text-ink-3">Resets {formatDate(cap?.resetsAt ?? null)}</p>
+                <p className="mt-0.5 text-ink-2">{formatDate(summary.currentPlanStartedAt ?? null)}</p>
+              </div>
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-3">
+                  {summary.cancelAtPeriodEnd ? "Access until" : "Renews"}
+                </p>
+                <p className="mt-0.5 text-ink-2">{formatDate(summary.renewalDate)}</p>
               </div>
             </div>
             {cap && !cap.unlimited && (
-              <div className="mt-4">
+              <div className="border-t border-border-2 px-6 py-4">
                 <Progress value={pct} />
                 <p className="mt-1 text-xs text-ink-3">
-                  {cap.used.toFixed(1)} of {cap.allowance?.toFixed(0)} used
+                  {cap.used.toFixed(1)} of {cap.allowance?.toFixed(0)} Work Hours used this period
                 </p>
               </div>
             )}
@@ -256,22 +317,45 @@ export default function SettingsBillingPage() {
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {summary.plans.map((plan) => {
                 const isCurrent = plan.planSlug === summary.currentPlanSlug;
-                const priceCents = interval === "annual" ? plan.annualPriceCents : plan.monthlyPriceCents;
+                const priceCents =
+                  interval === "annual" ? plan.annualPriceCents : plan.monthlyPriceCents;
                 const isEnterprise = plan.planSlug === "enterprise";
                 return (
-                  <Card key={plan.planSlug} className={cn("p-5", isCurrent && "ring-2 ring-accent/40")}>
+                  <Card
+                    key={plan.planSlug}
+                    className={cn(
+                      "flex flex-col p-5 transition-shadow",
+                      isCurrent && "ring-2 ring-accent/40 shadow-lift",
+                    )}
+                  >
                     <div className="flex items-center gap-2">
                       <h3 className="text-base font-semibold text-ink">{plan.displayName}</h3>
-                      {isCurrent && <span className="rounded-md bg-accent-soft px-1.5 py-0.5 text-[10px] font-medium text-accent-d">Current</span>}
+                      {isCurrent && (
+                        <span className="rounded-md bg-accent-soft px-1.5 py-0.5 text-[10px] font-medium text-accent-d">
+                          Current
+                        </span>
+                      )}
                     </div>
                     <p className="mt-2 text-2xl font-semibold tabular-nums text-ink">
-                      {isEnterprise ? "Custom" : `$${(priceCents / 100).toFixed(0)}`}
-                      {!isEnterprise && <span className="text-sm font-normal text-ink-3">/{interval === "annual" ? "yr" : "mo"}</span>}
+                      {isEnterprise ? "Custom" : formatMoney(priceCents)}
+                      {!isEnterprise && (
+                        <span className="text-sm font-normal text-ink-3">
+                          /{interval === "annual" ? "yr" : "mo"}
+                        </span>
+                      )}
                     </p>
-                    <ul className="mt-3 space-y-1.5 text-sm text-ink-2">
-                      <li className="flex items-center gap-2"><Check className="h-3.5 w-3.5 text-accent" /> {plan.unlimitedWorkHours ? "Custom" : `${plan.weeklyWorkHours}`} AI Work Hours/wk</li>
-                      <li className="flex items-center gap-2"><Check className="h-3.5 w-3.5 text-accent" /> Unlimited humans</li>
-                      <li className="flex items-center gap-2"><Check className="h-3.5 w-3.5 text-accent" /> Unlimited AI employees</li>
+                    <ul className="mt-3 flex-1 space-y-1.5 text-sm text-ink-2">
+                      <li className="flex items-center gap-2">
+                        <Check className="h-3.5 w-3.5 text-accent" />{" "}
+                        {plan.unlimitedWorkHours ? "Custom" : `${plan.weeklyWorkHours}`} AI Work
+                        Hours/wk
+                      </li>
+                      <li className="flex items-center gap-2">
+                        <Check className="h-3.5 w-3.5 text-accent" /> Unlimited humans
+                      </li>
+                      <li className="flex items-center gap-2">
+                        <Check className="h-3.5 w-3.5 text-accent" /> Unlimited AI employees
+                      </li>
                     </ul>
                     {summary.permissions.canStartCheckout && !isCurrent && !isEnterprise && (
                       <Button
@@ -318,10 +402,13 @@ export default function SettingsBillingPage() {
             ) : (
               <div className="space-y-2">
                 {summary.invoices.map((inv) => (
-                  <div key={inv.id} className="flex items-center justify-between rounded-lg border border-border-2 px-3 py-2 text-sm">
+                  <div
+                    key={inv.id}
+                    className="flex items-center justify-between rounded-xl border border-border-2 px-3 py-2.5 text-sm"
+                  >
                     <span className="text-ink-2">{formatDate(inv.createdAt)}</span>
-                    <span className="tabular-nums text-ink">
-                      {inv.currency} {(inv.amountCents / 100).toFixed(2)}
+                    <span className="tabular-nums font-medium text-ink">
+                      {formatMoney(inv.amountCents, inv.currency)}
                     </span>
                     <span className="capitalize text-ink-3">{inv.status}</span>
                   </div>

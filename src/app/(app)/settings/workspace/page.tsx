@@ -36,20 +36,23 @@ export default function SettingsWorkspacePage() {
       />
 
       <div className="space-y-6">
-        <Card className="p-6">
-          <h2 className="mb-1 text-sm font-semibold text-ink">Plan</h2>
-          <p className="mb-4 text-sm text-ink-3">
-            Commercial plan for this workspace. Billing dates are set securely on the server.
-          </p>
-          <dl className="grid gap-3 text-sm sm:grid-cols-2">
+        <Card className="overflow-hidden p-0">
+          <div className="border-b border-border-2 bg-gradient-to-br from-accent/[0.05] to-transparent px-6 py-5">
+            <h2 className="text-sm font-semibold text-ink">Plan</h2>
+            <p className="mt-1 text-sm text-ink-3">
+              Commercial plan for this workspace. Dates are set securely when you sign up or upgrade.
+            </p>
+            <p className="mt-3 text-2xl font-semibold tracking-tight text-ink">
+              {state.workspace.planDisplayName ?? state.workspace.planSlug ?? state.workspace.plan}
+            </p>
+          </div>
+          <dl className="grid gap-3 px-6 py-4 text-sm sm:grid-cols-2">
             <div>
-              <dt className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-3">Current plan</dt>
-              <dd className="mt-0.5 font-semibold text-ink">
-                {state.workspace.planDisplayName ?? state.workspace.planSlug ?? state.workspace.plan}
-              </dd>
-            </div>
-            <div>
-              <dt className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-3">Free since</dt>
+              <dt className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-3">
+                {(state.workspace.planSlug ?? state.workspace.plan) === "free"
+                  ? "Free since"
+                  : "Member since"}
+              </dt>
               <dd className="mt-0.5 text-ink-2">
                 {state.workspace.freePlanStartedAt
                   ? new Date(state.workspace.freePlanStartedAt).toLocaleDateString(undefined, {
@@ -61,7 +64,9 @@ export default function SettingsWorkspacePage() {
               </dd>
             </div>
             <div>
-              <dt className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-3">Current term started</dt>
+              <dt className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-3">
+                Current term started
+              </dt>
               <dd className="mt-0.5 text-ink-2">
                 {state.workspace.currentPlanStartedAt
                   ? new Date(state.workspace.currentPlanStartedAt).toLocaleDateString(undefined, {
@@ -72,7 +77,7 @@ export default function SettingsWorkspacePage() {
                   : "—"}
               </dd>
             </div>
-            <div className="flex items-end">
+            <div className="sm:col-span-2">
               <Button size="sm" variant="outline" onClick={() => router.push("/settings/billing")}>
                 Manage billing
               </Button>
