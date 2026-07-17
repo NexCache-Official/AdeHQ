@@ -44,7 +44,14 @@ export async function POST(request: NextRequest) {
     if (error instanceof AuthError) {
       return NextResponse.json({ error: error.message }, { status: error.status });
     }
-    console.error("[AdeHQ ensure-first-room]", error);
+    const pg =
+      error && typeof error === "object" && "code" in error
+        ? {
+            code: String((error as { code?: unknown }).code ?? ""),
+            message: String((error as { message?: unknown }).message ?? ""),
+          }
+        : null;
+    console.error("[AdeHQ ensure-first-room]", pg ?? error);
     return NextResponse.json({ error: "Unable to ensure first room." }, { status: 500 });
   }
 }

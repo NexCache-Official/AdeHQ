@@ -58,6 +58,11 @@ export async function ensureFirstProjectRoom(
     name: desiredName,
     kind: "room",
     dm_employee_id: null,
+    dm_owner_user_id: null,
+    dm_peer_user_id: null,
+    dm_pair_key: null,
+    // Group rooms require a non-null visibility (rooms_kind_shape).
+    room_visibility: "workspace",
     description,
     brief: "",
     unread: 0,
