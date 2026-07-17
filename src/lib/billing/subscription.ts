@@ -5,6 +5,9 @@ import {
   resolveWorkspacePlan,
 } from "@/lib/billing/plans/resolve-workspace-plan";
 import type { PlanConfig, SubscriptionStatus } from "@/lib/billing/plans/types";
+import { getPricingPageCatalog } from "@/lib/billing/commerce/catalog";
+import { resolveWorkspaceCommercial } from "@/lib/billing/commerce/resolver";
+import { REFUND_POLICY_COPY } from "@/lib/billing/commerce/types";
 
 export type PublicPlanCard = {
   planSlug: string;
@@ -45,6 +48,17 @@ export type WorkspaceBillingSummary = {
   };
   plans: PublicPlanCard[];
   invoices: BillingInvoiceRow[];
+  commerce?: {
+    serviceAccessStatus: string;
+    providerStatus: string | null;
+    serviceAccessEndsAt: string | null;
+    usageAnchorAt: string | null;
+    usagePeriodKey: string | null;
+    availableWh: number | null;
+    refundPolicy: string;
+    legacyManualRenew: boolean;
+    pricingCatalog: Awaited<ReturnType<typeof getPricingPageCatalog>>;
+  };
 };
 
 function toCard(config: PlanConfig): PublicPlanCard {
@@ -72,7 +86,9 @@ export async function getWorkspaceBillingSummary(
     listActivePlanConfigs(client),
     client
       .from("billing_subscriptions")
-      .select("status, current_period_end, cancel_at_period_end, metadata, created_at")
+      .select(
+        "status, current_period_end, cancel_at_period_end, metadata, created_at, billing_cadence, provider_status, service_access_status, service_access_ends_at, legacy_manual_renew",
+      )
       .eq("workspace_id", workspaceId)
       .order("created_at", { ascending: false })
       .limit(1)
@@ -89,7 +105,11 @@ export async function getWorkspaceBillingSummary(
   const subscription = subscriptionRes.error ? null : subscriptionRes.data;
   const metadata = (subscription?.metadata as Record<string, unknown> | undefined) ?? {};
   const billingInterval =
-    metadata.interval === "annual" ? "annual" : metadata.interval === "monthly" ? "monthly" : null;
+    subscription?.billing_cadence === "annual" || metadata.interval === "annual"
+      ? "annual"
+      : subscription?.billing_cadence === "monthly" || metadata.interval === "monthly"
+        ? "monthly"
+        : null;
 
   const invoices: BillingInvoiceRow[] = invoicesRes.error
     ? []
@@ -101,6 +121,25 @@ export async function getWorkspaceBillingSummary(
         createdAt: String(row.created_at),
         hostedInvoiceUrl: row.hosted_invoice_url ? String(row.hosted_invoice_url) : null,
       }));
+
+  let commerce: WorkspaceBillingSummary["commerce"];
+  try {
+    const commercial = await resolveWorkspaceCommercial(client, workspaceId);
+    const pricingCatalog = await getPricingPageCatalog(client);
+    commerce = {
+      serviceAccessStatus: commercial.serviceAccess,
+      providerStatus: commercial.providerStatus,
+      serviceAccessEndsAt: commercial.subscription?.serviceAccessEndsAt ?? null,
+      usageAnchorAt: commercial.usageAnchorAt ? String(commercial.usageAnchorAt) : null,
+      usagePeriodKey: commercial.usagePeriod.periodKey,
+      availableWh: commercial.wallets.unlimited ? null : commercial.wallets.availableWh,
+      refundPolicy: REFUND_POLICY_COPY,
+      legacyManualRenew: Boolean(commercial.subscription?.legacyManualRenew),
+      pricingCatalog,
+    };
+  } catch {
+    commerce = undefined;
+  }
 
   return {
     currentPlanSlug: resolved.planSlug,
@@ -122,5 +161,6 @@ export async function getWorkspaceBillingSummary(
     },
     plans: plans.map(toCard),
     invoices,
+    commerce,
   };
 }

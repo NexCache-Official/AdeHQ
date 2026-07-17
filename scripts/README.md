@@ -11,6 +11,7 @@ Runnable tooling for AdeHQ. Prefer **npm scripts** from the repo root (`package.
 | Work Hours | `npm run test:work-hours` (+ `:shadow`, `:calibration`, …) |
 | Plan terms / Revolut helpers | `npm run test:workspace-plan-terms` |
 | WH workforce offline | `npm run test:workforce-wh-offline` |
+| Versioned commerce (clocks, pricing math, Revolut API pin) | `npm run test:commerce` |
 | AdeHQ Brain | `npm run test:brain` (catalog, metering matrix, steward, media CTA audit) |
 | Release baseline | `npm run verify:release` (+ optional `BUILD_INFO_URL=…` for prod probe) |
 | Brain reliability | `npm run test:brain:reliability` (PR-17.5 retry/idempotency/circuit) |

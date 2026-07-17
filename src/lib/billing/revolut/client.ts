@@ -70,7 +70,11 @@ export function getRevolutConfig(): RevolutConfig | null {
   const environment = getRevolutEnvironment();
   const baseUrl =
     process.env.REVOLUT_API_BASE_URL?.trim() || REVOLUT_BASE_URLS[environment];
-  const apiVersion = process.env.REVOLUT_API_VERSION?.trim() || "2024-09-01";
+  // Pinned Merchant API version for subscription operations (see revolut-integration-contract.md).
+  const apiVersion =
+    process.env.REVOLUT_MERCHANT_API_VERSION?.trim() ||
+    process.env.REVOLUT_API_VERSION?.trim() ||
+    "2026-04-20";
   const appBaseUrl = getPublicAppUrl();
   return {
     apiKey,

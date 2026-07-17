@@ -1,40 +1,49 @@
 # Revolut billing setup
 
-AdeHQ uses **Revolut Merchant** as the only payment provider. There is no Stripe checkout.
+AdeHQ uses **Revolut Merchant** as the only payment provider. Paid plans use **native Revolut Subscriptions** (auto-renew until cancelled). Top-ups use one-time orders.
 
-## What you configure
+## Locked docs
 
-1. Create a Revolut Merchant account (sandbox, then production).
-2. Set these environment variables (local `.env.local` and Vercel):
+1. [commercial-policy.md](./commercial-policy.md)
+2. [plan-entitlement-matrix-v1.md](./plan-entitlement-matrix-v1.md)
+3. [commerce-domain-ledger.md](./commerce-domain-ledger.md)
+4. [revolut-integration-contract.md](./revolut-integration-contract.md)
+5. [promotions-and-offers.md](./promotions-and-offers.md)
+6. [control-commerce.md](./control-commerce.md)
+
+## Environment
 
 | Variable | Required | Notes |
 |----------|----------|--------|
 | `REVOLUT_MERCHANT_API_KEY` | Yes | Merchant API secret (server-only) |
 | `REVOLUT_WEBHOOK_SECRET` | Yes in production | Verifies webhook HMAC |
 | `REVOLUT_ENVIRONMENT` | No | `sandbox` (default) or `production` |
+| `REVOLUT_MERCHANT_API_VERSION` | Yes | Pin `2026-04-20` (`REVOLUT_API_VERSION` accepted) |
 | `REVOLUT_CURRENCY` | No | ISO currency, default `USD` |
 | `NEXT_PUBLIC_APP_URL` | Yes for redirects | Public app origin |
 
-3. In Revolut Business → Merchant API → Webhooks, add:
+## Webhooks
 
 ```text
 https://<your-host>/api/billing/revolut/webhook
 ```
 
-Subscribe to `ORDER_COMPLETED` and `ORDER_AUTHORISED`.
+Subscribe to order completion/authorisation and subscription lifecycle events for the pinned API version. Fulfilment is state-based and idempotent; a reconciliation worker re-fetches provider state for pending/overdue/recently cancelled subscriptions.
 
-## How upgrades work
+## How subscribe works
 
 1. Admin starts checkout from **Settings → Billing**.
-2. Browser opens Revolut hosted payment page.
-3. Revolut POSTs to our webhook; AdeHQ activates the plan term (`current_plan_started_at` updates).
-4. Weekly AI Work Hours allowance refreshes from the new plan.
+2. AdeHQ freezes a checkout snapshot, syncs/selects a published price with Revolut variation, creates a Revolut subscription (HPP).
+3. Customer pays; payment method is saved for recurring cycles.
+4. Webhook + authoritative retrieve activates AdeHQ service access and the usage clock.
 
-Renewals are **local plan terms**: AdeHQ stores `current_period_end` and customers re-checkout (or receive an AdeHQ promo / platform override). This release does **not** use Revolut Subscriptions for automatic recurring charges.
+## Cancellation
+
+Revolut cancel is immediate (no new cycles). AdeHQ keeps paid access until `service_access_ends_at` (already-paid billing period end).
 
 ## Verify
 
-- Platform admin → **Billing** shows Revolut readiness (key, webhook secret, environment, currency).
-- Sandbox: complete a test checkout; billing page should poll until the plan updates.
+- Platform admin → **Commerce / Billing** shows Revolut readiness and provider sync health.
+- Sandbox: complete a test subscribe; billing page should show plan, next invoice, and usage period.
 
 See also [`.env.example`](../../.env.example).

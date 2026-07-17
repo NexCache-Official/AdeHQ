@@ -26,6 +26,7 @@ import {
   ScrollText,
   Cpu,
   KeyRound,
+  Layers,
   Shield,
   ShieldAlert,
   Siren,
@@ -91,7 +92,8 @@ const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
   {
     title: "Commercial",
     items: [
-      { href: "/admin/plans", label: "Plans", icon: ListChecks },
+      { href: "/admin/commerce", label: "Commerce", icon: Layers },
+      { href: "/admin/plans", label: "Plans (legacy)", icon: ListChecks },
       { href: "/admin/promo-codes", label: "Promo Codes", icon: Ticket },
       { href: "/admin/billing", label: "Billing", icon: CreditCard },
     ],

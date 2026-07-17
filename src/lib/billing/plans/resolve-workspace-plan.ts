@@ -102,7 +102,7 @@ export async function resolveWorkspacePlan(
       .maybeSingle(),
     client
       .from("billing_subscriptions")
-      .select("plan_slug, status")
+      .select("plan_slug, status, service_access_status, plan_version_id")
       .eq("workspace_id", workspaceId)
       .order("created_at", { ascending: false })
       .limit(1)
@@ -119,10 +119,19 @@ export async function resolveWorkspacePlan(
   const subscription =
     !subscriptionRes.error && subscriptionRes.data ? subscriptionRes.data : null;
   const subscriptionStatus = (subscription?.status as SubscriptionStatus | undefined) ?? null;
+  const serviceAccess = subscription
+    ? String((subscription as { service_access_status?: string }).service_access_status ?? "")
+    : "";
+  const serviceAccessGrantsPlan =
+    serviceAccess === "active" ||
+    serviceAccess === "grace" ||
+    serviceAccess === "scheduled_to_end" ||
+    serviceAccess === "read_only";
   const subscriptionActive =
     subscription != null &&
-    subscriptionStatus != null &&
-    ACTIVE_SUBSCRIPTION_STATUSES.includes(subscriptionStatus);
+    ((subscriptionStatus != null &&
+      ACTIVE_SUBSCRIPTION_STATUSES.includes(subscriptionStatus)) ||
+      serviceAccessGrantsPlan);
 
   const workspacePlanSlug =
     (workspaceRes.data?.plan_slug as string | null) ??

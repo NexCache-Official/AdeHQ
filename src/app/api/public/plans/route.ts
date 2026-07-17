@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createSupabaseSecretClient } from "@/lib/supabase/server";
+import { getPricingPageCatalog } from "@/lib/billing/commerce/catalog";
 import { listActivePlanConfigs } from "@/lib/billing/plans/resolve-workspace-plan";
 
 export const runtime = "nodejs";
@@ -9,8 +10,32 @@ export const dynamic = "force-dynamic";
 export async function GET() {
   try {
     const service = createSupabaseSecretClient();
+
+    try {
+      const catalog = await getPricingPageCatalog(service);
+      if (catalog.length > 0) {
+        return NextResponse.json({
+          cadenceToggle: true,
+          plans: catalog.map((plan) => ({
+            planSlug: plan.planCode,
+            displayName: plan.publicName,
+            eyebrow: plan.eyebrow,
+            description: plan.description,
+            weeklyWorkHours: plan.weeklyIncludedWh,
+            unlimitedWorkHours: plan.entitlements.unlimited_work_hours === true,
+            entitlements: plan.entitlements,
+            monthly: plan.monthly,
+            annual: plan.annual,
+          })),
+        });
+      }
+    } catch {
+      /* fall through to legacy projection */
+    }
+
     const plans = await listActivePlanConfigs(service);
     return NextResponse.json({
+      cadenceToggle: true,
       plans: plans.map((plan) => {
         const unlimited =
           plan.entitlements?.unlimited_work_hours === true ||

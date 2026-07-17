@@ -126,11 +126,66 @@ function rowToPeriod(row: Record<string, unknown>, unlimited: boolean): Workspac
   };
 }
 
-/** Get or lazily create the current usage period (Mon 00:00 UTC week, month-clipped). */
+/** Get or lazily create the current usage period.
+ * Prefers activation-anchored 168h commerce clock when usage_anchor_at is set;
+ * falls back to legacy Monday-UTC week for workspaces not yet migrated.
+ */
 export async function getOrCreateCurrentPeriod(
   client: SupabaseClient,
   workspaceId: string,
 ): Promise<WorkspaceUsagePeriod> {
+  const { data: wsClock } = await client
+    .from("workspaces")
+    .select("usage_anchor_at")
+    .eq("id", workspaceId)
+    .maybeSingle();
+
+  if (wsClock?.usage_anchor_at) {
+    try {
+      const { ensureCurrentUsagePeriodGrant } = await import(
+        "@/lib/billing/commerce/grants"
+      );
+      const { sumCreditLotRemaining } = await import("@/lib/billing/commerce/ledger");
+      const grant = await ensureCurrentUsagePeriodGrant(client, workspaceId);
+      const { planSlug, allowance, unlimited } = await getWorkspaceAllowance(
+        client,
+        workspaceId,
+      );
+      const { data: row } = await client
+        .from("workspace_usage_periods")
+        .select("*")
+        .eq("id", grant.periodId)
+        .maybeSingle();
+      if (row) {
+        const lots = await sumCreditLotRemaining(client, workspaceId).catch(() => 0);
+        const baseAllowance = Number(row.base_wh_granted ?? row.ai_work_hours_allowance ?? 0);
+        const promo = Number(row.promotional_wh_granted ?? 0);
+        const effectiveAllowance = unlimited
+          ? UNLIMITED_ALLOWANCE
+          : Math.max(allowance, baseAllowance + promo + lots);
+        // Keep legacy allowance column roughly aligned for consumers
+        if (Math.abs(Number(row.ai_work_hours_allowance) - effectiveAllowance) > 0.0001) {
+          await client
+            .from("workspace_usage_periods")
+            .update({
+              ai_work_hours_allowance: effectiveAllowance,
+              plan_slug: planSlug,
+            })
+            .eq("id", grant.periodId);
+          const refreshed = await client
+            .from("workspace_usage_periods")
+            .select("*")
+            .eq("id", grant.periodId)
+            .single();
+          if (refreshed.data) return rowToPeriod(refreshed.data, unlimited);
+        }
+        return rowToPeriod(row, unlimited);
+      }
+    } catch (err) {
+      console.error("[usage.periods] commerce clock failed; falling back", err);
+    }
+  }
+
   const { startIso, endExclusiveIso } = getCurrentUsagePeriodRange(new Date());
   const { planSlug, allowance, unlimited } = await getWorkspaceAllowance(client, workspaceId);
 

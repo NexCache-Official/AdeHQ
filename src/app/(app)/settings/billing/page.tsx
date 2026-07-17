@@ -43,6 +43,13 @@ type BillingSummary = {
     canApplyPromoCode: boolean;
     canChangePlan: boolean;
   };
+  commerce?: {
+    serviceAccessStatus: string;
+    providerStatus: string | null;
+    serviceAccessEndsAt: string | null;
+    refundPolicy: string;
+    legacyManualRenew: boolean;
+  };
 };
 
 function formatDate(iso: string | null): string {
@@ -182,6 +189,35 @@ export default function SettingsBillingPage() {
     }
   };
 
+  const cancelSubscription = async () => {
+    if (
+      !window.confirm(
+        "Cancel auto-renewal? You keep access until the end of the current paid period. Payments are non-refundable except where required by law.",
+      )
+    ) {
+      return;
+    }
+    setBusyPlan("cancel");
+    setNotice(null);
+    setError(null);
+    try {
+      const headers = await authHeaders();
+      const res = await fetch(`/api/workspaces/${workspaceId}/billing/cancel`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ reason: "Customer cancelled from Settings → Billing" }),
+      });
+      const body = await res.json();
+      if (!res.ok) throw new Error(body?.error ?? "Cancel failed.");
+      setNotice(body.message ?? "Subscription cancelled at period end.");
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Cancel failed.");
+    } finally {
+      setBusyPlan(null);
+    }
+  };
+
   if (!canViewBilling(myRole)) {
     return (
       <>
@@ -242,7 +278,13 @@ export default function SettingsBillingPage() {
                         ? "Free plan"
                         : "Subscription"}
                     {summary.billingInterval ? ` · billed ${summary.billingInterval}` : ""}
-                    {summary.cancelAtPeriodEnd ? " · cancels at period end" : ""}
+                    {summary.cancelAtPeriodEnd ||
+                    summary.commerce?.serviceAccessStatus === "scheduled_to_end"
+                      ? " · cancels at period end"
+                      : ""}
+                    {summary.commerce?.serviceAccessStatus
+                      ? ` · access: ${summary.commerce.serviceAccessStatus}`
+                      : ""}
                   </p>
                 </div>
                 <div className="rounded-xl border border-border/70 bg-surface/80 px-4 py-3 text-right backdrop-blur">
@@ -280,11 +322,37 @@ export default function SettingsBillingPage() {
               </div>
               <div>
                 <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-3">
-                  {summary.cancelAtPeriodEnd ? "Access until" : "Renews"}
+                  {summary.cancelAtPeriodEnd ||
+                  summary.commerce?.serviceAccessStatus === "scheduled_to_end"
+                    ? "Access until"
+                    : "Renews"}
                 </p>
-                <p className="mt-0.5 text-ink-2">{formatDate(summary.renewalDate)}</p>
+                <p className="mt-0.5 text-ink-2">
+                  {formatDate(
+                    summary.commerce?.serviceAccessEndsAt ?? summary.renewalDate,
+                  )}
+                </p>
               </div>
             </div>
+            {!isFree &&
+            summary.permissions.canChangePlan &&
+            summary.commerce?.serviceAccessStatus !== "scheduled_to_end" &&
+            !summary.cancelAtPeriodEnd ? (
+              <div className="border-t border-border-2 px-6 py-4">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  disabled={busyPlan === "cancel"}
+                  onClick={() => void cancelSubscription()}
+                >
+                  {busyPlan === "cancel" ? "Cancelling…" : "Cancel subscription"}
+                </Button>
+                <p className="mt-2 text-xs text-ink-3">
+                  {summary.commerce?.refundPolicy ??
+                    "Payments are non-refundable except where required by applicable law."}
+                </p>
+              </div>
+            ) : null}
             {cap && !cap.unlimited && (
               <div className="border-t border-border-2 px-6 py-4">
                 <Progress value={pct} />

@@ -1,6 +1,9 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { getOrCreateCurrentPeriod } from "@/lib/billing/usage/periods";
 import { startPlanTerm } from "@/lib/billing/plans/plan-terms";
+import { ensureCurrentUsagePeriodGrant } from "@/lib/billing/commerce/grants";
+import { addBillingPeriod, floorToHour } from "@/lib/billing/commerce/usage-clock";
+import { retrieveRevolutSubscription } from "@/lib/billing/revolut/subscriptions";
+import type { BillingCadence } from "@/lib/billing/commerce/types";
 
 type CheckoutIntent = {
   id: string;
@@ -14,21 +17,17 @@ type CheckoutIntent = {
   metadata: Record<string, unknown> | null;
 };
 
-function addInterval(interval: string): string {
-  const end = new Date();
-  if (interval === "annual") end.setUTCFullYear(end.getUTCFullYear() + 1);
-  else end.setUTCMonth(end.getUTCMonth() + 1);
-  return end.toISOString();
-}
-
 /**
- * Activate a workspace subscription from a completed checkout intent.
- * Idempotent: a completed intent is not processed twice.
+ * Activate from checkout intent after setup order / subscription becomes active.
+ * Idempotent via intent status + subscription-activation key.
  */
 export async function activateSubscriptionFromIntent(
   client: SupabaseClient,
   intentId: string,
-  options: { externalPaymentId?: string | null } = {},
+  options: {
+    externalPaymentId?: string | null;
+    revolutSubscriptionId?: string | null;
+  } = {},
 ): Promise<{ activated: boolean; workspaceId?: string }> {
   const { data: intentRow, error } = await client
     .from("billing_checkout_intents")
@@ -43,9 +42,231 @@ export async function activateSubscriptionFromIntent(
     return { activated: false, workspaceId: intent.workspace_id };
   }
 
+  const revolutSubId =
+    options.revolutSubscriptionId ??
+    (typeof intent.metadata?.revolutSubscriptionId === "string"
+      ? intent.metadata.revolutSubscriptionId
+      : null);
+
+  if (revolutSubId) {
+    return activateFromRevolutSubscription(client, {
+      workspaceId: intent.workspace_id,
+      intentId: intent.id,
+      userId: intent.user_id,
+      planSlug: intent.plan_slug,
+      interval: intent.interval as BillingCadence,
+      amountCents: intent.amount_cents ?? 0,
+      currency: intent.currency,
+      revolutSubscriptionId: revolutSubId,
+      externalPaymentId: options.externalPaymentId ?? null,
+      planVersionId:
+        typeof intent.metadata?.planVersionId === "string"
+          ? intent.metadata.planVersionId
+          : null,
+      priceId: typeof intent.metadata?.priceId === "string" ? intent.metadata.priceId : null,
+      snapshotId:
+        typeof intent.metadata?.snapshotId === "string" ? intent.metadata.snapshotId : null,
+      promoCode:
+        typeof intent.metadata?.promoCode === "string" ? intent.metadata.promoCode : null,
+    });
+  }
+
+  // Legacy one-time order path (grandfather)
+  return activateLegacyOneTimeOrder(client, intent, options.externalPaymentId ?? null);
+}
+
+export async function activateFromRevolutSubscription(
+  client: SupabaseClient,
+  input: {
+    workspaceId: string;
+    intentId?: string | null;
+    userId?: string | null;
+    planSlug: string;
+    interval: BillingCadence;
+    amountCents: number;
+    currency: string;
+    revolutSubscriptionId: string;
+    externalPaymentId?: string | null;
+    planVersionId?: string | null;
+    priceId?: string | null;
+    snapshotId?: string | null;
+    promoCode?: string | null;
+  },
+): Promise<{ activated: boolean; workspaceId?: string }> {
+  const idempotencyKey = `subscription-activation:${input.revolutSubscriptionId}`;
+
+  const { data: existingEvent } = await client
+    .from("billing_events")
+    .select("id")
+    .eq("external_event_id", idempotencyKey)
+    .maybeSingle();
+  if (existingEvent) {
+    return { activated: false, workspaceId: input.workspaceId };
+  }
+
+  // Authoritative retrieve
+  let providerState: string = "active";
+  try {
+    const remote = await retrieveRevolutSubscription(input.revolutSubscriptionId);
+    providerState = remote.state;
+    if (remote.state === "pending") {
+      await client
+        .from("billing_subscriptions")
+        .update({
+          provider_status: "pending",
+          external_subscription_id: input.revolutSubscriptionId,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("workspace_id", input.workspaceId);
+      return { activated: false, workspaceId: input.workspaceId };
+    }
+    if (remote.state !== "active") {
+      await client
+        .from("billing_subscriptions")
+        .update({
+          provider_status: remote.state,
+          external_subscription_id: input.revolutSubscriptionId,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("workspace_id", input.workspaceId);
+      return { activated: false, workspaceId: input.workspaceId };
+    }
+  } catch {
+    /* sandbox / retrieve failure: proceed if webhook indicated completion */
+    providerState = "active";
+  }
+
+  if (providerState !== "active") {
+    return { activated: false, workspaceId: input.workspaceId };
+  }
+
+  const periodStart = new Date();
+  const periodEnd = addBillingPeriod(periodStart, input.interval);
+  const usageAnchor = floorToHour(periodStart).toISOString();
+
+  const { data: existing } = await client
+    .from("billing_subscriptions")
+    .select("id")
+    .eq("workspace_id", input.workspaceId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const subscriptionPayload = {
+    workspace_id: input.workspaceId,
+    plan_slug: input.planSlug,
+    plan_version_id: input.planVersionId,
+    price_id: input.priceId,
+    checkout_snapshot_id: input.snapshotId,
+    billing_cadence: input.interval,
+    currency: input.currency,
+    status: "active",
+    provider: "revolut",
+    external_subscription_id: input.revolutSubscriptionId,
+    provider_status: "active",
+    service_access_status: "active",
+    service_access_ends_at: null,
+    cancel_at_period_end: false,
+    cancel_requested_at: null,
+    current_period_start: periodStart.toISOString(),
+    current_period_end: periodEnd.toISOString(),
+    legacy_manual_renew: false,
+    metadata: {
+      interval: input.interval,
+      provider: "revolut",
+      intentId: input.intentId ?? null,
+    },
+    updated_at: new Date().toISOString(),
+  };
+
+  if (existing) {
+    await client.from("billing_subscriptions").update(subscriptionPayload).eq("id", existing.id);
+  } else {
+    await client.from("billing_subscriptions").insert(subscriptionPayload);
+  }
+
+  await client
+    .from("workspaces")
+    .update({
+      plan_slug: input.planSlug,
+      plan: input.planSlug,
+      plan_version_id: input.planVersionId,
+      usage_clock_kind: "paid",
+      usage_anchor_at: usageAnchor,
+      current_plan_started_at: periodStart.toISOString(),
+    })
+    .eq("id", input.workspaceId);
+
+  await startPlanTerm(client, {
+    workspaceId: input.workspaceId,
+    planSlug: input.planSlug,
+    source: "checkout",
+    actorUserId: input.userId ?? null,
+    reason: `Revolut subscription ${input.interval}`,
+    metadata: {
+      intentId: input.intentId ?? null,
+      externalPaymentId: input.externalPaymentId ?? null,
+      revolutSubscriptionId: input.revolutSubscriptionId,
+    },
+    force: true,
+  });
+
+  await client.from("billing_invoices").insert({
+    workspace_id: input.workspaceId,
+    amount_cents: input.amountCents,
+    currency: (input.currency ?? "USD").toLowerCase(),
+    status: "paid",
+    external_payment_id: input.externalPaymentId ?? null,
+  });
+
+  if (input.intentId) {
+    await client
+      .from("billing_checkout_intents")
+      .update({ status: "completed" })
+      .eq("id", input.intentId);
+  }
+
+  try {
+    await client.from("billing_events").insert({
+      event_type: "subscription_activation",
+      external_event_id: idempotencyKey,
+      payload: { revolutSubscriptionId: input.revolutSubscriptionId },
+      processed_at: new Date().toISOString(),
+    });
+  } catch {
+    /* duplicate */
+  }
+
+  if (input.promoCode?.trim()) {
+    await redeemPromoForWorkspace(
+      client,
+      input.promoCode.trim(),
+      input.workspaceId,
+      input.userId ?? null,
+    );
+  }
+
+  try {
+    await ensureCurrentUsagePeriodGrant(client, input.workspaceId);
+  } catch (err) {
+    console.error("[activate] usage period grant failed", err);
+  }
+
+  return { activated: true, workspaceId: input.workspaceId };
+}
+
+async function activateLegacyOneTimeOrder(
+  client: SupabaseClient,
+  intent: CheckoutIntent,
+  externalPaymentId: string | null,
+): Promise<{ activated: boolean; workspaceId?: string }> {
   const workspaceId = intent.workspace_id;
-  const periodStart = new Date().toISOString();
-  const periodEnd = addInterval(intent.interval);
+  const periodStart = new Date();
+  const periodEnd = addBillingPeriod(
+    periodStart,
+    intent.interval === "annual" ? "annual" : "monthly",
+  );
+  const usageAnchor = floorToHour(periodStart).toISOString();
 
   const { data: existing } = await client
     .from("billing_subscriptions")
@@ -59,10 +280,15 @@ export async function activateSubscriptionFromIntent(
     workspace_id: workspaceId,
     plan_slug: intent.plan_slug,
     status: "active",
-    current_period_start: periodStart,
-    current_period_end: periodEnd,
+    provider_status: "active",
+    service_access_status: "active",
+    current_period_start: periodStart.toISOString(),
+    current_period_end: periodEnd.toISOString(),
     cancel_at_period_end: false,
-    metadata: { interval: intent.interval, provider: "revolut" },
+    legacy_manual_renew: true,
+    billing_cadence: intent.interval,
+    metadata: { interval: intent.interval, provider: "revolut", legacy: true },
+    updated_at: new Date().toISOString(),
   };
 
   if (existing) {
@@ -70,6 +296,14 @@ export async function activateSubscriptionFromIntent(
   } else {
     await client.from("billing_subscriptions").insert(subscriptionPayload);
   }
+
+  await client
+    .from("workspaces")
+    .update({
+      usage_clock_kind: "paid",
+      usage_anchor_at: usageAnchor,
+    })
+    .eq("id", workspaceId);
 
   await startPlanTerm(client, {
     workspaceId,
@@ -79,7 +313,7 @@ export async function activateSubscriptionFromIntent(
     reason: `Revolut checkout ${intent.interval}`,
     metadata: {
       intentId: intent.id,
-      externalPaymentId: options.externalPaymentId ?? null,
+      externalPaymentId,
     },
     force: true,
   });
@@ -89,23 +323,18 @@ export async function activateSubscriptionFromIntent(
     amount_cents: intent.amount_cents ?? 0,
     currency: (intent.currency ?? "USD").toLowerCase(),
     status: "paid",
-    external_payment_id: options.externalPaymentId ?? null,
+    external_payment_id: externalPaymentId,
   });
 
   await client
     .from("billing_checkout_intents")
     .update({ status: "completed" })
-    .eq("id", intentId);
-
-  const promoCode = intent.metadata?.promoCode;
-  if (typeof promoCode === "string" && promoCode.trim()) {
-    await redeemPromoForWorkspace(client, promoCode.trim(), workspaceId, intent.user_id);
-  }
+    .eq("id", intent.id);
 
   try {
-    await getOrCreateCurrentPeriod(client, workspaceId);
+    await ensureCurrentUsagePeriodGrant(client, workspaceId);
   } catch {
-    /* period table optional */
+    /* optional */
   }
 
   return { activated: true, workspaceId };

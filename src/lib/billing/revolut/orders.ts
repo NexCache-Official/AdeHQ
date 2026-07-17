@@ -54,3 +54,14 @@ export async function createRevolutHostedOrder(
   const checkoutUrl = order.checkout_url ?? `${redirectBase}?checkout=cancelled`;
   return { orderId: order.id, checkoutUrl };
 }
+
+/** Retrieve an order (used for subscription setup_order_id → checkout_url). */
+export async function retrieveRevolutOrder(orderId: string): Promise<RevolutOrderResponse> {
+  const { getRevolutConfig } = await import("./client");
+  const config = getRevolutConfig();
+  if (!config) throw new Error("Revolut is not configured.");
+  return revolutFetch<RevolutOrderResponse>(
+    config,
+    `/orders/${encodeURIComponent(orderId)}`,
+  );
+}
