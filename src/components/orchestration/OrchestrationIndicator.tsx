@@ -51,7 +51,7 @@ export function OrchestrationIndicator({
   if (!label && !showDebug) return null;
 
   return (
-    <div className="mx-auto mb-2 max-w-3xl rounded-lg border border-slate-200 bg-slate-50/90 px-3 py-2 text-xs text-slate-600">
+    <div className="mx-auto mb-2 max-w-[920px] rounded-lg border border-slate-200 bg-slate-50/90 px-3 py-2 text-xs text-slate-600">
       {label && (
         <div className="flex items-center gap-1.5 font-medium text-slate-700">
           <Users className="h-3.5 w-3.5 shrink-0" />

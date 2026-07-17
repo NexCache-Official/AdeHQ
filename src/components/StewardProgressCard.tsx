@@ -20,7 +20,7 @@ export function StewardProgressCard({
   return (
     <div
       className={cn(
-        "mx-auto mb-2 max-w-3xl rounded-xl border border-border bg-surface-1 px-3 py-2.5 text-xs text-ink-2",
+        "mx-auto mb-2 max-w-[920px] rounded-xl border border-border bg-surface-1 px-3 py-2.5 text-xs text-ink-2",
         className,
       )}
     >

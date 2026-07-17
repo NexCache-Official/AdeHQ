@@ -1877,12 +1877,12 @@ export function RoomChat({
             />
             <div className="min-w-0">
               <div className="flex items-center gap-1.5">
-                <span className="truncate text-sm font-semibold text-ink">{dmEmployee.name}</span>
-                <span className="rounded-[5px] bg-accent-soft px-[5px] py-0.5 text-[9px] font-bold text-accent">
+                <span className="truncate text-[15px] font-semibold text-ink">{dmEmployee.name}</span>
+                <span className="rounded-[5px] bg-accent-soft px-[5px] py-0.5 text-[9.5px] font-bold text-accent">
                   AI
                 </span>
               </div>
-              <div className="flex items-center gap-1.5 text-[11.5px] text-ink-2">
+              <div className="flex items-center gap-1.5 text-[12px] text-ink-2">
                 {dmEmployee && isMayaEmployee(dmEmployee) ? (
                   <>
                     <EmployeeStatusDot status={effectiveEmployeeStatus(dmEmployee)} />
@@ -1896,7 +1896,7 @@ export function RoomChat({
                 ) : null}
               </div>
               {isMayaDmEmployee && isMainChat && (
-                <p className="truncate text-[10.5px] text-ink-3">{MAYA_EMPLOYEE_SUBTITLE}</p>
+                <p className="truncate text-[11px] text-ink-3">{MAYA_EMPLOYEE_SUBTITLE}</p>
               )}
             </div>
           </>
@@ -1976,7 +1976,7 @@ export function RoomChat({
       <div
         ref={messagesScrollRef}
         onScroll={handleMessagesScroll}
-        className="h-full overflow-y-auto px-[22px] pb-3.5 pt-4"
+        className="h-full overflow-y-auto px-7 pb-4 pt-4"
       >
         {isMayaHiringMode && !mayaHiring ? (
           <div className="flex h-full min-h-[200px] items-center justify-center gap-2 text-sm text-ink-3">

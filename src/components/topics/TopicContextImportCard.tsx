@@ -22,7 +22,7 @@ export function TopicContextImportCard({
         : "previous conversation");
 
   return (
-    <div className="mx-auto mb-4 max-w-3xl rounded-xl border border-slate-200 bg-slate-50/80 p-4 shadow-sm">
+    <div className="mx-auto mb-4 max-w-[920px] rounded-xl border border-slate-200 bg-slate-50/80 p-4 shadow-sm">
       <div className="flex items-start gap-3">
         <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white text-slate-600">
           <FileInput className="h-4 w-4" />

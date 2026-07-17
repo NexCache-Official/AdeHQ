@@ -34,7 +34,7 @@ export function CollaborationPlanBanner({
   return (
     <div
       className={cn(
-        "mx-auto mb-2 max-w-3xl rounded-xl border border-slate-200 bg-slate-50/90 px-3 py-2.5 text-xs",
+        "mx-auto mb-2 max-w-[920px] rounded-xl border border-slate-200 bg-slate-50/90 px-3 py-2.5 text-xs",
         className,
       )}
     >

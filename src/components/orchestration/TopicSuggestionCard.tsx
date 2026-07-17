@@ -78,7 +78,7 @@ export function TopicSuggestionCard({
   };
 
   return (
-    <div className="mx-auto mb-3 max-w-3xl rounded-xl border border-accent-200 bg-accent-50/60 p-4 shadow-sm">
+    <div className="mx-auto mb-3 max-w-[920px] rounded-xl border border-accent-200 bg-accent-50/60 p-4 shadow-sm">
       <div className="flex items-start gap-3">
         <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white text-accent-600">
           <Hash className="h-4 w-4" />

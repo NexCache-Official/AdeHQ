@@ -236,7 +236,7 @@ export function MayaHiringInlineCards({
   const showCandidates = session.step === "shortlist" && visibleCandidates.length > 0;
 
   return (
-    <div className={cn("mx-auto w-full max-w-3xl space-y-2 px-1 pb-3", className)}>
+    <div className={cn("mx-auto w-full max-w-[920px] space-y-2 px-1 pb-3", className)}>
       <HiringSessionCard
         roleTitle={roleTitle}
         status={status}

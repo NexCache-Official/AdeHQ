@@ -682,7 +682,7 @@ export function RoomMessageItem({
       <div className="relative min-w-0 flex-1">
         {!grouped && (
           <div className="mb-0.5 flex flex-wrap items-center gap-1.5">
-            <span className="text-[13.5px] font-semibold text-ink">{message.senderName}</span>
+            <span className="text-[14px] font-semibold text-ink">{message.senderName}</span>
             {!isHuman && (
               <span className="rounded-[5px] bg-accent-soft px-1.5 py-0.5 text-[10px] font-bold text-accent">
                 AI
