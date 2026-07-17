@@ -21,7 +21,6 @@ Runnable tooling for AdeHQ. Prefer **npm scripts** from the repo root (`package.
 | AI caller audit | `npm run audit:ai-callers` |
 | Model pricing sync | `npm run sync:model-pricing` |
 | Activate live env merge | `npm run env:activate-live` (**writes `.env.local` — never commit**) |
-| Headed product E2E | [`e2e-playbook/README.md`](./e2e-playbook/README.md) |
 | Roles smoke | `node scripts/smoke-workspace-roles.mjs` |
 
 ## Categories
@@ -40,7 +39,6 @@ Runnable tooling for AdeHQ. Prefer **npm scripts** from the repo root (`package.
 
 | Script | Use |
 |--------|-----|
-| `e2e-playbook/*.mjs` | Playwright production walkthroughs — see playbook README |
 | `archive-duplicate-rooms.ts` (+ `.sql`) | One-off DB cleanup |
 | `backfill-drive-storage-paths.ts` | One-off Drive path backfill |
 | `generate-email-assets.mjs` | Regenerate `public/email` assets |

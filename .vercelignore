@@ -8,6 +8,7 @@
 scripts/tmp-*
 **/tmp-*.mjs
 /tmp/
+scripts/e2e-playbook/
 
 # Dev / tooling noise
 .node_modules

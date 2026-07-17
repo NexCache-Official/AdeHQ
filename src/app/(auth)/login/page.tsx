@@ -89,10 +89,11 @@ function LoginForm() {
   return (
     <AuthShell scene="signin">
       <AuthModeTabs mode="signin" nextPath={nextPath} />
-      <h1 className="mb-2 text-[27px] font-semibold leading-[1.15] tracking-[-0.03em] text-[#111113]">
-        Welcome back.
+      <h1 className="mb-2 text-[27px] font-semibold leading-[1.15] tracking-[-0.03em] text-ink">
+        Welcome back
+        <span className="text-accent">.</span>
       </h1>
-      <p className="mb-7 text-[14.5px] leading-relaxed text-[#111113]/55">
+      <p className="mb-7 text-[14.5px] leading-relaxed text-ink-2">
         Sign in to see what your <span className="font-serif italic">AI workforce</span> got done.
       </p>
 
@@ -104,7 +105,7 @@ function LoginForm() {
         }}
       >
         <label className="block space-y-1.5">
-          <span className="text-xs font-semibold text-slate-500">Email</span>
+          <span className="text-xs font-semibold text-ink-3">Email</span>
           <input
             type="email"
             className="input-field"
@@ -115,8 +116,8 @@ function LoginForm() {
         </label>
         <label className="block space-y-1.5">
           <div className="flex items-center justify-between gap-2">
-            <span className="text-xs font-semibold text-slate-500">Password</span>
-            <Link href="/forgot-password" className="text-xs font-medium text-accent-600 hover:text-accent-700">
+            <span className="text-xs font-semibold text-ink-3">Password</span>
+            <Link href="/forgot-password" className="text-xs font-medium text-accent hover:text-accent-d">
               Forgot password?
             </Link>
           </div>
@@ -194,11 +195,11 @@ function LoginForm() {
         </>
       )}
 
-      <p className="mt-[26px] text-center text-[13.5px] text-[#111113]/55">
+      <p className="mt-[26px] text-center text-[13.5px] text-ink-2">
         New to AdeHQ?{" "}
         <Link
           href={nextPath ? `/signup?next=${encodeURIComponent(nextPath)}` : "/signup"}
-          className="font-semibold text-[#111113] hover:underline"
+          className="font-semibold text-ink hover:underline"
         >
           Create a workspace
         </Link>

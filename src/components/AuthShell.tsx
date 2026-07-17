@@ -2,9 +2,16 @@
 
 import { useState, type ReactNode } from "react";
 import Link from "next/link";
+import { BrandLockup, BrandMark } from "@/components/brand/Brand";
 import { cn } from "@/lib/utils";
 
-export type AuthScene = "signin" | "signup" | "verify" | "createWorkspace";
+export type AuthScene =
+  | "signin"
+  | "signup"
+  | "verify"
+  | "createWorkspace"
+  | "trouble"
+  | "reset";
 
 const SCENE_COPY: Record<
   AuthScene,
@@ -30,34 +37,48 @@ const SCENE_COPY: Record<
     headline: "Spin up another workspace.",
     subhead: "Same rules, fresh rooms — onboard this HQ before your team moves in.",
   },
+  trouble: {
+    eyebrow: "Link hiccup",
+    headline: "That door didn’t open.",
+    subhead: "Email links expire, get reused, or land on the wrong origin — easy fix from here.",
+  },
+  reset: {
+    eyebrow: "Key exchange",
+    headline: "New password, same desk.",
+    subhead: "We’ll send a short-lived link — then you’re back in the rooms.",
+  },
 };
 
 const CHIPS = [
   {
-    label: "En",
+    label: "Ma",
+    name: "Maya",
     pos: "left-1.5 top-1.5",
-    tone: "bg-gradient-to-br from-indigo-500 to-indigo-600",
+    tone: "bg-gradient-to-br from-sky-400 to-accent",
     anim: "animate-[lgFloatA_5s_ease-in-out_infinite]",
     parallax: [-16, -16] as const,
   },
   {
-    label: "Sa",
+    label: "Ca",
+    name: "Casey",
     pos: "right-0.5 top-[26px]",
-    tone: "bg-gradient-to-br from-rose-400 to-orange-400",
+    tone: "bg-gradient-to-br from-emerald-400 to-teal-500",
     anim: "animate-[lgFloatB_6s_ease-in-out_infinite]",
     parallax: [18, -10] as const,
   },
   {
-    label: "Mk",
+    label: "Ju",
+    name: "Jules",
     pos: "bottom-0 left-[26px]",
-    tone: "bg-gradient-to-br from-emerald-400 to-teal-500",
+    tone: "bg-gradient-to-br from-amber-400 to-orange-500",
     anim: "animate-[lgFloatC_4.5s_ease-in-out_infinite]",
     parallax: [-12, 14] as const,
   },
   {
-    label: "Pr",
+    label: "La",
+    name: "Lane",
     pos: "bottom-3.5 right-[22px]",
-    tone: "bg-gradient-to-br from-violet-500 to-purple-500",
+    tone: "bg-gradient-to-br from-rose-400 to-pink-500",
     anim: "animate-[lgFloatA_5.5s_ease-in-out_infinite]",
     parallax: [14, 16] as const,
   },
@@ -72,7 +93,7 @@ export function AuthModeTabs({
 }) {
   const qs = nextPath ? `?next=${encodeURIComponent(nextPath)}` : "";
   return (
-    <div className="mb-[26px] flex rounded-[12px] bg-[#111113]/[0.06] p-1">
+    <div className="mb-[26px] flex rounded-[12px] bg-ink/[0.06] p-1">
       {(
         [
           { value: "signin" as const, label: "Sign in", href: `/login${qs}` },
@@ -87,14 +108,32 @@ export function AuthModeTabs({
             className={cn(
               "flex h-10 flex-1 items-center justify-center rounded-[10px] text-[13.5px] font-semibold transition-colors",
               active
-                ? "bg-white text-[#111113] shadow-sm"
-                : "text-[#111113]/55 hover:text-[#111113]",
+                ? "bg-surface text-ink shadow-sm"
+                : "text-ink/55 hover:text-ink",
             )}
           >
             {item.label}
           </Link>
         );
       })}
+    </div>
+  );
+}
+
+/** Mono status chip used on auth intermediate states (matches 404 language). */
+export function AuthStatusChip({
+  label,
+  tone = "amber",
+}: {
+  label: string;
+  tone?: "amber" | "green" | "accent";
+}) {
+  const dot =
+    tone === "green" ? "bg-green" : tone === "accent" ? "bg-accent" : "bg-amber-400";
+  return (
+    <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-border bg-surface/90 px-3 py-1.5 font-mono text-[11px] uppercase tracking-[0.08em] text-ink-3 shadow-sm">
+      <span className={cn("h-1.5 w-1.5 rounded-full", dot)} />
+      {label}
     </div>
   );
 }
@@ -111,23 +150,37 @@ export function AuthShell({
   const [my, setMy] = useState(0);
 
   return (
-    <div className="grid min-h-screen bg-white font-sans text-[#111113] lg:grid-cols-[min(480px,42vw)_1fr]">
+    <div className="grid min-h-screen bg-canvas font-sans text-ink lg:grid-cols-[min(480px,42vw)_1fr]">
       {/* Left — form panel */}
-      <div className="relative flex min-h-screen flex-col px-6 py-10 sm:px-12 lg:px-12">
-        <Link href="/login" className="inline-flex items-center gap-2.5">
-          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[#111113] text-[15px] font-bold tracking-tight text-white">
-            A
-          </span>
-          <span className="text-base font-semibold tracking-tight">AdeHQ</span>
+      <div className="relative flex min-h-screen flex-col overflow-hidden px-6 py-10 sm:px-12 lg:px-12">
+        <div
+          aria-hidden
+          className="pointer-events-none absolute -left-28 -top-36 h-72 w-72 rounded-full bg-[radial-gradient(circle,rgb(var(--c-accent)/0.14),transparent_68%)] blur-3xl"
+        />
+        <div
+          aria-hidden
+          className="pointer-events-none absolute -bottom-40 -right-24 h-80 w-80 rounded-full bg-[radial-gradient(circle,rgb(var(--c-accent-2)/0.1),transparent_70%)] blur-3xl"
+        />
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0 opacity-[0.28]"
+          style={{
+            backgroundImage: "radial-gradient(rgb(var(--c-ink) / 0.05) 1px, transparent 1px)",
+            backgroundSize: "22px 22px",
+          }}
+        />
+
+        <Link href="/login" className="relative z-10 inline-flex items-center" aria-label="AdeHQ home">
+          <BrandLockup size={30} />
         </Link>
 
-        <div className="flex flex-1 items-center justify-center py-10">
+        <div className="relative z-10 flex flex-1 items-center justify-center py-10">
           <div className="w-full max-w-[340px] animate-[lgFadeUp_0.5s_cubic-bezier(0.2,0.7,0.3,1)_both]">
             {children}
           </div>
         </div>
 
-        <p className="text-xs text-[#111113]/45">
+        <p className="relative z-10 text-xs text-ink-3">
           By continuing you agree to AdeHQ&apos;s Terms &amp; Privacy Policy.
         </p>
       </div>
@@ -147,11 +200,11 @@ export function AuthShell({
       >
         <div
           aria-hidden
-          className="pointer-events-none absolute -left-[140px] -top-[160px] h-[520px] w-[520px] rounded-full bg-[radial-gradient(circle,#6366F1,transparent_70%)] opacity-35 blur-[60px] animate-[lgAurora_14s_ease-in-out_infinite]"
+          className="pointer-events-none absolute -left-[140px] -top-[160px] h-[520px] w-[520px] rounded-full bg-[radial-gradient(circle,rgb(var(--c-accent)),transparent_70%)] opacity-35 blur-[60px] animate-[lgAurora_14s_ease-in-out_infinite]"
         />
         <div
           aria-hidden
-          className="pointer-events-none absolute -bottom-[200px] -right-[160px] h-[560px] w-[560px] rounded-full bg-[radial-gradient(circle,#22D3EE,transparent_70%)] opacity-28 blur-[70px] animate-[lgAurora_16s_ease-in-out_infinite_reverse]"
+          className="pointer-events-none absolute -bottom-[200px] -right-[160px] h-[560px] w-[560px] rounded-full bg-[radial-gradient(circle,rgb(var(--c-accent-2)),transparent_70%)] opacity-28 blur-[70px] animate-[lgAurora_16s_ease-in-out_infinite_reverse]"
         />
 
         <div
@@ -173,16 +226,19 @@ export function AuthShell({
         <div className="relative z-10 flex min-h-[150px] items-center justify-center">
           <div className="relative h-[150px] w-[260px]">
             <div
-              className="absolute left-1/2 top-1/2 h-24 w-24 -translate-x-1/2 -translate-y-1/2 rounded-[32px] bg-[linear-gradient(140deg,#6366F1,#22D3EE)] shadow-[0_20px_50px_-14px_rgba(99,102,241,0.55)] transition-transform duration-200 ease-out"
+              className="absolute left-1/2 top-1/2 flex h-24 w-24 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-[32px] bg-white/10 shadow-[0_20px_50px_-14px_rgba(47,111,237,0.45)] ring-1 ring-white/15 transition-transform duration-200 ease-out"
               style={{ transform: `translate(calc(-50% + ${mx * 8}px), calc(-50% + ${my * 8}px))` }}
-            />
+            >
+              <BrandMark size={52} nativeColor title="AdeHQ" />
+            </div>
             {CHIPS.map((chip) => (
               <div
-                key={chip.label}
+                key={chip.name}
                 className={cn("absolute transition-transform duration-200 ease-out", chip.pos)}
                 style={{
                   transform: `translate(${chip.parallax[0] * mx}px, ${chip.parallax[1] * my}px)`,
                 }}
+                title={chip.name}
               >
                 <div
                   className={cn(
@@ -204,7 +260,7 @@ export function AuthShell({
             I&apos;d finished my coffee.&quot;
           </p>
           <div className="mt-3 flex items-center gap-[9px]">
-            <span className="h-[26px] w-[26px] shrink-0 rounded-full bg-gradient-to-br from-violet-500 to-indigo-500" />
+            <span className="h-[26px] w-[26px] shrink-0 rounded-full bg-gradient-to-br from-sky-400 to-accent" />
             <span className="text-[12.5px] text-white/55">Early workspace owner</span>
           </div>
         </div>

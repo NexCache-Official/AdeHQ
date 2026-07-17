@@ -11,7 +11,7 @@ import {
   Rocket,
   User,
 } from "lucide-react";
-import { BrandMark } from "@/components/brand/Brand";
+import { BrandLockup } from "@/components/brand/Brand";
 import { useStore } from "@/lib/demo-store";
 import {
   NEW_WORKSPACE_FOCUS_KEY,
@@ -307,12 +307,12 @@ export function OnboardingFlow({
 
         <header className="relative z-[3] flex flex-col gap-3">
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-[var(--accent)] to-[var(--accent-2)] shadow-[0_8px_24px_-8px_rgba(47,111,237,.55)]">
-              <BrandMark size={20} />
+            <div className="flex h-11 items-center rounded-xl bg-white/95 px-2.5 py-1.5 shadow-[0_8px_24px_-8px_rgba(47,111,237,.45)]">
+              <BrandLockup size={26} />
             </div>
             <div className="flex min-w-0 flex-col gap-0.5">
               <span className="font-mono text-[10px] uppercase tracking-[0.09em] text-white/45">
-                AdeHQ workspace setup
+                Workspace setup
               </span>
               <span className="truncate text-[15px] font-bold tracking-tight">{companyName}</span>
             </div>
@@ -403,8 +403,9 @@ export function OnboardingFlow({
       <main className="relative flex min-w-0 flex-1 flex-col bg-[var(--canvas)]">
         <div className="flex-none px-12 pt-[22px]">
           <div className="mb-3 flex items-center justify-between">
-            <span className="font-mono text-[10px] uppercase tracking-[0.09em] text-ink-3">
-              Guided setup
+            <span className="inline-flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.09em] text-ink-3">
+              <span className="h-1.5 w-1.5 rounded-full bg-accent" />
+              Status · guided setup
             </span>
             <span className="text-[12.5px] font-medium text-ink-2">{STAGE_LABELS[stage]}</span>
           </div>
@@ -421,15 +422,17 @@ export function OnboardingFlow({
             {/* Stage 0 — Welcome */}
             {stage === 0 && (
               <div className="flex flex-col gap-0 py-3.5">
-                <span className="mb-4 font-mono text-[11px] font-semibold uppercase tracking-[0.09em] text-[var(--accent)]">
+                <span className="mb-4 inline-flex items-center gap-2 rounded-full border border-border bg-surface/90 px-3 py-1.5 font-mono text-[11px] font-semibold uppercase tracking-[0.09em] text-accent shadow-sm">
+                  <span className="h-1.5 w-1.5 rounded-full bg-accent" />
                   Welcome to AdeHQ
                 </span>
-                <h1 className="mb-4 max-w-[15ch] text-[40px] font-bold leading-[1.05] tracking-[-0.035em]">
-                  Let&apos;s build {companyName}&apos;s AI workforce.
+                <h1 className="mb-4 max-w-[16ch] text-[40px] font-bold leading-[1.05] tracking-[-0.035em]">
+                  Let&apos;s build {companyName}&apos;s AI workforce
+                  <span className="text-accent">.</span>
                 </h1>
                 <p className="mb-6 max-w-[52ch] text-base leading-relaxed text-ink-2">
-                  In three quick steps, Maya helps you define the work, open your first room, and get
-                  ready to hire. Nothing is created yet — you stay fully in control.
+                  Three quick steps: name the work, open a room, meet Maya. Nothing ships until you
+                  say so — you stay the hiring manager.
                 </p>
                 <div className="mb-[30px] flex gap-[26px]">
                   <div className="flex flex-col gap-0.5">
@@ -463,11 +466,12 @@ export function OnboardingFlow({
               <div className="flex flex-col gap-[26px]">
                 <div>
                   <h1 className="mb-2.5 text-[32px] font-bold leading-[1.1] tracking-[-0.025em]">
-                    What should your AI workforce move forward?
+                    What should your AI workforce move forward
+                    <span className="text-accent">?</span>
                   </h1>
                   <p className="max-w-[58ch] text-[15px] leading-relaxed text-ink-2">
-                    Pick the outcome you care about most. Maya uses this to recommend your first room
-                    and first hire.
+                    Pick the outcome you care about most. Maya will use it to recommend your first
+                    room — and who to hire into it.
                   </p>
                 </div>
                 <div className="grid grid-cols-2 gap-3.5">
@@ -543,10 +547,11 @@ export function OnboardingFlow({
               <div className="flex flex-col gap-[26px]">
                 <div>
                   <h1 className="mb-2.5 text-[32px] font-bold leading-[1.1] tracking-[-0.025em]">
-                    Create your first room
+                    Open your first room
+                    <span className="text-accent">.</span>
                   </h1>
                   <p className="max-w-[58ch] text-[15px] leading-relaxed text-ink-2">
-                    Rooms are where your humans and AI employees collaborate. Start with one focused
+                    Rooms are where humans and AI employees share a desk. Start with one focused
                     work area — you can add more later.
                   </p>
                 </div>
@@ -634,10 +639,11 @@ export function OnboardingFlow({
                 <div>
                   <h1 className="mb-2.5 text-[32px] font-bold leading-[1.1] tracking-[-0.025em]">
                     Meet Maya
+                    <span className="text-accent">.</span>
                   </h1>
                   <p className="max-w-[58ch] text-[15px] leading-relaxed text-ink-2">
-                    Maya is your AI Workforce Manager. She helps you hire, organize, improve, and
-                    govern your AI employees.
+                    Your AI Workforce Manager — she helps you hire, organize, improve, and keep the
+                    org chart honest.
                   </p>
                 </div>
                 <div className="relative overflow-hidden rounded-[20px] border border-border bg-surface p-[26px] shadow-[0_12px_30px_-14px_rgba(40,34,24,0.22)]">
@@ -689,15 +695,17 @@ export function OnboardingFlow({
                   <div className="obd-pop-center mb-[18px] flex h-[60px] w-[60px] items-center justify-center rounded-full bg-gradient-to-br from-[#1BA672] to-[#54C79A] shadow-[0_14px_34px_-10px_rgba(27,166,114,.6)]">
                     <Check className="h-[29px] w-[29px] text-white" strokeWidth={2.6} />
                   </div>
-                  <span className="obd-fade-up mb-3 font-mono text-[11px] font-semibold uppercase tracking-[0.09em] text-[var(--accent)]">
-                    Setup complete
+                  <span className="obd-fade-up mb-3 inline-flex items-center gap-2 rounded-full border border-border bg-surface/90 px-3 py-1.5 font-mono text-[11px] font-semibold uppercase tracking-[0.09em] text-accent shadow-sm">
+                    <span className="h-1.5 w-1.5 rounded-full bg-green" />
+                    Status · setup complete
                   </span>
                   <h1 className="obd-fade-up mb-3 text-[36px] font-bold leading-[1.06] tracking-[-0.03em]">
-                    Your workspace is ready.
+                    Your workspace is ready
+                    <span className="text-accent">.</span>
                   </h1>
                   <p className="obd-fade-up mb-[22px] max-w-[50ch] text-[15.5px] leading-relaxed text-ink-2">
-                    {companyName} is set up around{" "}
-                    <strong className="font-semibold text-ink">{outcomeTitle}</strong>. Maya is ready
+                    {companyName} is wired around{" "}
+                    <strong className="font-semibold text-ink">{outcomeTitle}</strong>. Maya is waiting
                     in <strong className="font-semibold text-ink">{roomName}</strong> to help you hire
                     your {hireName}.
                   </p>

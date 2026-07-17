@@ -331,10 +331,15 @@ export function Sidebar() {
         <button
           type="button"
           onClick={ui.openHire}
-          className="flex w-full min-w-0 items-center justify-center gap-2 rounded-[11px] bg-accent px-2.5 py-2.5 text-[12.5px] font-semibold text-white shadow-glow transition-all hover:brightness-105 active:scale-[0.99]"
+          className="group flex w-full min-w-0 flex-col items-center gap-0.5 rounded-[11px] bg-accent px-2.5 py-2.5 text-white shadow-glow transition-all hover:brightness-105 active:scale-[0.99]"
         >
-          <UserPlus className="h-4 w-4 shrink-0" strokeWidth={2} />
-          <span className="min-w-0 truncate">Hire AI Employee</span>
+          <span className="flex min-w-0 items-center justify-center gap-2 text-[12.5px] font-semibold">
+            <UserPlus className="h-4 w-4 shrink-0" strokeWidth={2} />
+            <span className="min-w-0 truncate">Hire AI Employee</span>
+          </span>
+          <span className="font-mono text-[9px] uppercase tracking-[0.1em] text-white/70">
+            Open role
+          </span>
         </button>
 
         <button

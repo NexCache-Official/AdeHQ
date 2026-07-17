@@ -62,6 +62,7 @@ const config: Config = {
       fontFamily: {
         sans: ["var(--font-schibsted)", "system-ui", "sans-serif"],
         mono: ["var(--font-geist-mono)", "ui-monospace", "monospace"],
+        serif: ["var(--font-newsreader)", "Georgia", "serif"],
       },
       boxShadow: {
         glow: "0 4px 14px -6px rgba(47, 111, 237, 0.55)",

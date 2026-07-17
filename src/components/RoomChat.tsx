@@ -1814,6 +1814,7 @@ export function RoomChat({
       <div className="flex h-full items-center justify-center p-8">
         <EmptyState
           icon={MessagesSquare}
+          eyebrow={isDm ? "Status · opening DM" : "Status · no topic selected"}
           title={isDm ? "Opening chat…" : "Choose or create a topic"}
           description={
             isDm
@@ -2004,6 +2005,11 @@ export function RoomChat({
           <div className="flex h-full flex-col items-center justify-center gap-4">
             <EmptyState
               icon={MessagesSquare}
+              eyebrow={
+                isDm && dmEmployee
+                  ? `Status · desk open for ${dmEmployee.name}`
+                  : "Status · empty workstream"
+              }
               title={isDm && dmEmployee ? `Message ${dmEmployee.name}` : `Start ${displayTitle}`}
               description={
                 isDm && dmEmployee

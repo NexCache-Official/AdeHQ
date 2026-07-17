@@ -108,7 +108,10 @@ export function RecruiterChat({
   return (
     <div className="flex h-full min-h-0 flex-col bg-canvas">
       <div className="flex shrink-0 items-center gap-2.5 border-b border-border bg-surface px-5 py-3">
-        <AdeOrb size={32} initials="M" />
+        <div className="relative shrink-0">
+          <div className="obd-maya-ring absolute left-1/2 top-1/2 h-9 w-9 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-cyan-400/40" />
+          <AdeOrb size={32} initials="M" />
+        </div>
         <div className="min-w-0 flex-1">
           <div className="text-sm font-semibold">{MAYA_EMPLOYEE_NAME}</div>
           <div className="truncate text-xs text-ink-3">
@@ -118,7 +121,13 @@ export function RecruiterChat({
           </div>
         </div>
         {messages.length > 0 && (
-          <div className="shrink-0 rounded-full border border-border bg-muted px-2.5 py-1 text-[11px] text-ink-2">
+          <div className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-border bg-muted px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.06em] text-ink-2">
+            <span
+              className={cn(
+                "h-1.5 w-1.5 rounded-full",
+                readiness.ready ? "bg-green animate-glowpulse" : "bg-amber-400",
+              )}
+            />
             {readinessLabel} · {readiness.score}%
           </div>
         )}
@@ -157,7 +166,24 @@ export function RecruiterChat({
         onScroll={handleMessagesScroll}
         className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto overscroll-contain px-5 py-4"
       >
-        {messages.length === 0 && emptyState}
+        {messages.length === 0 &&
+          (emptyState ?? (
+            <div className="flex flex-1 flex-col items-center justify-center py-12 text-center">
+              <div className="relative mb-4">
+                <div className="obd-maya-ring absolute left-1/2 top-1/2 h-16 w-16 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-cyan-400/45" />
+                <div className="obd-float">
+                  <AdeOrb size={52} initials="M" />
+                </div>
+              </div>
+              <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-border bg-muted/80 px-3 py-1 font-mono text-[10px] uppercase tracking-[0.08em] text-ink-3">
+                <span className="h-1.5 w-1.5 rounded-full bg-accent animate-glowpulse" />
+                Live · waiting for your first note
+              </div>
+              <p className="max-w-[280px] text-sm leading-relaxed text-ink-2">
+                Tell {MAYA_EMPLOYEE_NAME} what the role needs to ship — she&apos;ll dig for the gaps.
+              </p>
+            </div>
+          ))}
         {messages.map((m, i) => (
           <RecruiterMessageRow
             key={`${i}-${m.text.slice(0, 24)}`}

@@ -5,7 +5,7 @@ import {
 } from "@/lib/hiring/maya";
 import { cn } from "@/lib/utils";
 import type { HiringStep } from "@/lib/hiring/types";
-import { BrandMark } from "@/components/brand/Brand";
+import { BrandLockup } from "@/components/brand/Brand";
 import { ArrowLeft } from "lucide-react";
 
 export function HireExitConfirmDialog({
@@ -86,13 +86,14 @@ export function HireHeader({
             {backLabel ?? "Back"}
           </button>
         )}
-        <div className="flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-lg bg-ink text-accent">
-          <BrandMark size={16} />
-        </div>
-        <div className="flex min-w-0 items-baseline gap-2">
-          <span className="text-[15px] font-semibold tracking-tight text-ink">AdeHQ</span>
+        <div className="flex min-w-0 items-center gap-2.5">
+          <BrandLockup size={22} />
           <span className="text-ink-3">/</span>
           <span className="truncate text-sm text-ink-2">Hire an AI employee</span>
+          <span className="hidden items-center gap-1.5 rounded-full border border-border bg-surface px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.08em] text-ink-3 sm:inline-flex">
+            <span className="h-1.5 w-1.5 rounded-full bg-accent animate-glowpulse" />
+            Recruiting session
+          </span>
         </div>
       </div>
       <div className="flex items-center gap-2.5">

@@ -56,10 +56,11 @@ export default function NewWorkspacePage() {
 
   return (
     <AuthShell scene="createWorkspace">
-      <h1 className="mb-2 text-[27px] font-semibold leading-[1.15] tracking-[-0.03em] text-[#111113]">
-        Name this headquarters.
+      <h1 className="mb-2 text-[27px] font-semibold leading-[1.15] tracking-[-0.03em] text-ink">
+        Name this headquarters
+        <span className="text-accent">.</span>
       </h1>
-      <p className="mb-7 text-[14.5px] leading-relaxed text-[#111113]/55">
+      <p className="mb-7 text-[14.5px] leading-relaxed text-ink-2">
         Each workspace gets its own rooms, employees, and onboarding. You&apos;ll finish setup
         before product access.
       </p>
@@ -72,7 +73,7 @@ export default function NewWorkspacePage() {
         }}
       >
         <label className="block space-y-1.5">
-          <span className="text-xs font-semibold text-slate-500">Workspace name</span>
+          <span className="text-xs font-semibold text-ink-3">Workspace name</span>
           <input
             className="input-field"
             placeholder="Acme Growth HQ"
@@ -82,9 +83,9 @@ export default function NewWorkspacePage() {
           />
         </label>
         <label className="block space-y-1.5">
-          <span className="text-xs font-semibold text-slate-500">
+          <span className="text-xs font-semibold text-ink-3">
             What will this workspace focus on?{" "}
-            <span className="font-normal text-slate-400">(optional)</span>
+            <span className="font-normal text-ink-3/70">(optional)</span>
           </span>
           <input
             className="input-field"

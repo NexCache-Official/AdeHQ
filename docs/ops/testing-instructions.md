@@ -32,8 +32,9 @@ builder, not an MCP client, not a Slack clone — see
 
 ## 3. How to run a testing session
 
-Reusable Playwright scripts live in `scripts/e2e-playbook/` (see that folder’s
-README). Prefer extending those over creating new one-off `tmp-*.mjs` files.
+Prefer manual product QA in the browser against `http://localhost:3000`
+(with `.env.local` pointed at the real Supabase/services). Do not commit
+one-off `tmp-*.mjs` Playwright harnesses or passwords.
 
 1. Log in via the Browser tool (not Bash) — `preview_start`/`navigate` to
    localhost, or the deployed URL if the user specifies one.

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { AuthShell } from "@/components/AuthShell";
+import { AuthShell, AuthStatusChip } from "@/components/AuthShell";
 import { Button } from "@/components/ui";
 import { useStore } from "@/lib/demo-store";
 import { supabase } from "@/lib/supabase/client";
@@ -99,12 +99,17 @@ export default function InviteAcceptPage() {
 
   if (loadError) {
     return (
-      <AuthShell>
-        <h1 className="text-[28px] font-semibold tracking-[-0.03em] text-slate-950">
+      <AuthShell scene="trouble">
+        <AuthStatusChip label="Status · invite unavailable" />
+        <h1 className="text-[27px] font-semibold tracking-[-0.03em] text-ink">
           Invitation unavailable
+          <span className="text-accent">.</span>
         </h1>
-        <p className="mt-2 text-[15px] text-slate-500">{loadError}</p>
-        <Link href="/login" className="mt-6 inline-flex text-sm font-medium text-accent-600">
+        <p className="mt-2 text-[14.5px] text-ink-2">{loadError}</p>
+        <Link
+          href="/login"
+          className="mt-7 inline-flex h-11 items-center justify-center rounded-xl bg-accent px-5 text-sm font-semibold text-white transition hover:bg-accent-d"
+        >
           Go to sign in
         </Link>
       </AuthShell>
@@ -113,8 +118,9 @@ export default function InviteAcceptPage() {
 
   if (!preview) {
     return (
-      <AuthShell>
-        <p className="text-sm text-slate-500">Loading invitation…</p>
+      <AuthShell scene="signin">
+        <AuthStatusChip label="Status · loading invite" tone="accent" />
+        <p className="text-sm text-ink-2">Loading invitation…</p>
       </AuthShell>
     );
   }
@@ -123,15 +129,17 @@ export default function InviteAcceptPage() {
     preview.status === "pending" && !preview.expired && authed === true && hydrated;
 
   return (
-    <AuthShell>
-      <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100 text-slate-700">
-        <Building2 className="h-6 w-6" />
+    <AuthShell scene="signin">
+      <AuthStatusChip label="Status · workspace invite" tone="accent" />
+      <div className="mb-5 flex h-[72px] w-[72px] items-center justify-center rounded-[22px] bg-muted text-ink ring-1 ring-border">
+        <Building2 className="h-8 w-8" strokeWidth={1.75} />
       </div>
-      <h1 className="text-[28px] font-semibold leading-tight tracking-[-0.03em] text-slate-950">
+      <h1 className="text-[27px] font-semibold leading-tight tracking-[-0.03em] text-ink">
         Join {preview.workspaceName}
+        <span className="text-accent">.</span>
       </h1>
-      <p className="mt-2 text-[15px] leading-relaxed text-slate-500">
-        You&apos;ve been invited as <span className="font-medium text-slate-700">{roleLabel(preview.role)}</span>
+      <p className="mt-2 text-[14.5px] leading-relaxed text-ink-2">
+        You&apos;ve been invited as <span className="font-semibold text-ink">{roleLabel(preview.role)}</span>
         {" "}
         ({preview.invitedEmail}).
       </p>

@@ -56,7 +56,7 @@ Scope of this pass: Phase 1 (partial), Phase 2/3 (partial via Maya/Elena/David),
 - Wired in `process-queued-run.ts` + background drain so the chain continues without the tab babysitting
 - Prompt ban on empty deferrals; continuation turn forbids stalling again
 
-**Verify:** After deploy, ask Casey a tool-heavy inbox/calendar ask; if she stalls once, a second run should auto-fire and deliver. Playwright wave: `scripts/e2e-playbook/saas-slice-f-collab-wave.mjs`.
+**Verify:** After deploy, ask Casey a tool-heavy inbox/calendar ask; if she stalls once, a second run should auto-fire and deliver.
 
 ---
 
@@ -98,7 +98,7 @@ Scope of this pass: Phase 1 (partial), Phase 2/3 (partial via Maya/Elena/David),
 - Added an explicit `support` case to `roleWorkflowRules()` and enhanced the `default` case in `prompts.ts` so every role is told to call `email.listRecent`/`email.getThread` for inbox reads and `tasks.createTask` for reminders (no calendar-event tool exists — a due-dated task is the reminder).
 - Strengthened the self-continuation nudge in `queue-follow-up-runs.ts` to name `email.listRecent`/`email.getThread` explicitly instead of a generic "tools required" line.
 
-**Verify:** Re-run `scripts/e2e-playbook/saas-slice-f-collab-wave.mjs` against a multi-part inbox+product+calendar ask; Casey should either deliver real inbox data via `email.listRecent` in-turn, or the last-resort synthesis should attach it even if she narrates instead of calling the tool.
+**Verify:** Against a multi-part inbox+product+calendar ask, Casey should either deliver real inbox data via `email.listRecent` in-turn, or the last-resort synthesis should attach it even if she narrates instead of calling the tool.
 
 ---
 
@@ -131,16 +131,13 @@ Scope of this pass: Phase 1 (partial), Phase 2/3 (partial via Maya/Elena/David),
 | P1 | Lane CRM ask became a Tasks card; `/crm` stayed empty (false-pass in CRM wave) | **Verified** Casey DM creates Contact + Deal + Task; CRM shows $18k Qualified (duplicate deal cards noted as P2) |
 | P1 | Room collab silent after AI tool cards (ambient governance) | **Fixed** — work intents (`task_request`, `direct_question`, collab, etc.) bypass after-AI skip (`ambient-governance.ts`); marathon now `@mentions` team |
 | P1 | Drive stuck on "Loading Drive…" (no Retry) | **Fixed** — 25s list timeout + Retry (`drive/page.tsx`)
-| — | Jules DOCX + email draft to skumar@nexcache.com | **Verified** `saas-jules-drive-wave.mjs` bugs: [] |
+| — | Jules DOCX + email draft to skumar@nexcache.com | **Verified** in browser (DOCX + draft path) |
 | P1 | "At capacity — logged in task book" after abandoned agent runs | **Fixed** — 60s stale reap + @mention skip + DM rooms skip admission (`admission.ts`, `queue-agent-runs.ts`)
 | — | Engineering @mention collab (Casey+Lane one-liner) | **Verified** after wait baseline fix |
 | P2 | Duplicate identical CRM deals from repeated Casey asks | Observed; defer de-dupe |
 
 ### Scripts
-- `scripts/e2e-playbook/saas-company1-marathon.mjs` (~70m waves)
-- `scripts/e2e-playbook/saas-casey-email.mjs` (focused inbox tool path)
-- `scripts/e2e-playbook/saas-crm-tasks-wave.mjs` (Casey CRM contact/deal + tasks)
-- `scripts/e2e-playbook/saas-approve-pending-emails.mjs`
+- Manual SaaS Company 1 waves in the browser (inbox email, CRM/tasks, approvals)
 
 ## Session 2026-07-15 — Hybrid workforce + topic/memory suggestion retest
 

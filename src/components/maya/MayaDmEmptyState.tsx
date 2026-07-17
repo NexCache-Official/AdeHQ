@@ -90,21 +90,35 @@ export function MayaDmEmptyState({
   };
 
   return (
-    <div className="mx-auto flex w-full max-w-[520px] flex-col items-center px-2 py-6 text-center sm:py-8">
-      <AdeOrb size={56} initials="M" />
+    <div className="relative mx-auto flex w-full max-w-[520px] flex-col items-center px-2 py-6 text-center animate-[lgFadeUp_0.5s_cubic-bezier(0.2,0.7,0.3,1)_both] sm:py-8">
+      <div
+        aria-hidden
+        className="pointer-events-none absolute left-1/2 top-0 h-40 w-40 -translate-x-1/2 rounded-full bg-[radial-gradient(circle,rgb(var(--c-accent)/0.16),transparent_68%)] blur-2xl"
+      />
+      <div className="relative mb-1">
+        <div className="obd-maya-ring absolute left-1/2 top-1/2 h-[72px] w-[72px] -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-cyan-400/45" />
+        <div className="obd-float">
+          <AdeOrb size={56} initials="M" />
+        </div>
+      </div>
       <div className="mt-3 flex items-center gap-2">
         <h2 className="text-lg font-semibold text-ink">{MAYA_EMPLOYEE_NAME}</h2>
-        <span className="rounded-full border border-border bg-muted px-2 py-0.5 text-[10px] font-medium text-ink-2">
+        <span className="rounded-full border border-border bg-muted px-2 py-0.5 font-mono text-[10px] font-medium uppercase tracking-[0.06em] text-ink-2">
           {MAYA_WORKFORCE_BADGE}
         </span>
       </div>
       <p className="text-sm text-ink-2">{MAYA_EMPLOYEE_SUBTITLE}</p>
-      <h3 className="mt-5 text-base font-semibold text-ink">
+      <div className="mt-5 inline-flex items-center gap-2 rounded-full border border-border bg-surface/90 px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.08em] text-ink-3 shadow-sm">
+        <span className="h-1.5 w-1.5 rounded-full bg-green animate-glowpulse" />
+        Status · open for workforce questions
+      </div>
+      <h3 className="mt-4 text-base font-semibold text-ink">
         Ask Maya anything about your AI workforce
+        <span className="text-accent">.</span>
       </h3>
       <p className="mt-2 max-w-md text-[13px] leading-relaxed text-ink-2">
-        Maya can help you hire employees, organize rooms, improve existing employees, review your
-        workforce, and explain how AdeHQ works.
+        Hire employees, organize rooms, improve existing teammates, review the org chart — or just ask
+        what to do next, {firstName}.
       </p>
       {welcomeOverride && (
         <p className="mt-4 whitespace-pre-line text-left text-[14px] leading-relaxed text-ink-2">
@@ -117,7 +131,7 @@ export function MayaDmEmptyState({
             key={action.id}
             type="button"
             onClick={() => handleAction(action)}
-            className="rounded-full border border-border bg-surface px-3.5 py-2 text-[13px] font-medium text-ink-2 transition hover:border-ink/30 hover:text-ink"
+            className="lift rounded-full border border-border bg-surface px-3.5 py-2 text-[13px] font-medium text-ink-2 transition hover:border-ink/30 hover:text-ink"
           >
             {action.label}
           </button>

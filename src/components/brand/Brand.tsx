@@ -20,12 +20,28 @@ export function BrandMark({
   size = 34,
   className,
   title = "AdeHQ",
+  /** When true, render the source SVG (brand blue) instead of a currentColor mask. */
+  nativeColor = false,
 }: {
   size?: number;
   className?: string;
   title?: string;
+  nativeColor?: boolean;
 }) {
   const width = Math.round(size * ICON_RATIO);
+  if (nativeColor) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={ICON_URL}
+        alt={title}
+        width={width}
+        height={size}
+        className={cn("inline-block shrink-0", className)}
+        style={{ width, height: size }}
+      />
+    );
+  }
   return (
     <span
       role="img"
@@ -77,19 +93,32 @@ export function BrandLockup({
   size = 40,
   className,
   markClassName,
+  /** Prefer the brand-blue SVG asset (transparent bg) over a tinted mask. */
+  nativeColor = true,
 }: {
   variant?: "lockup" | "icon";
   /** Icon height in px; wordmark scales to match. */
   size?: number;
   className?: string;
   markClassName?: string;
+  nativeColor?: boolean;
 }) {
   if (variant === "icon") {
-    return <BrandMark size={size} className={cn("text-accent", markClassName)} />;
+    return (
+      <BrandMark
+        size={size}
+        nativeColor={nativeColor}
+        className={cn(!nativeColor && "text-accent", markClassName)}
+      />
+    );
   }
   return (
-    <span className={cn("inline-flex items-center gap-2", className)}>
-      <BrandMark size={size} className={cn("text-accent", markClassName)} />
+    <span className={cn("inline-flex items-center gap-2.5", className)}>
+      <BrandMark
+        size={size}
+        nativeColor={nativeColor}
+        className={cn(!nativeColor && "text-accent", markClassName)}
+      />
       {/* Slightly larger wordmark relative to icon for the desired brand feel. */}
       <BrandWordmark height={Math.round(size * 0.93)} />
     </span>

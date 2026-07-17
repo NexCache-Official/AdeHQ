@@ -81,17 +81,32 @@ export function RoleStepPanel({
   };
 
   return (
-    <motion.div initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-[980px]">
-      <div className="mb-8 mt-2 text-center">
-        <div className="mb-5 inline-flex items-center gap-1.5 rounded-full border border-border bg-surface px-3 py-1.5 text-[12.5px] text-ink-2 shadow-sm">
-          <span className="h-1.5 w-1.5 rounded-full bg-green" />
-          Your AI workforce, hired like real teammates
+    <motion.div
+      initial={{ opacity: 0, y: 14 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="relative w-full max-w-[980px]"
+    >
+      <div
+        aria-hidden
+        className="pointer-events-none absolute -left-24 -top-16 h-64 w-64 rounded-full bg-[radial-gradient(circle,rgb(var(--c-accent)/0.14),transparent_68%)] blur-3xl"
+      />
+      <div
+        aria-hidden
+        className="pointer-events-none absolute -right-20 top-8 h-56 w-56 rounded-full bg-[radial-gradient(circle,rgb(var(--c-accent-2)/0.12),transparent_70%)] blur-3xl"
+      />
+
+      <div className="relative mb-8 mt-2 text-center">
+        <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-border bg-surface/90 px-3 py-1.5 font-mono text-[11px] uppercase tracking-[0.08em] text-ink-3 shadow-sm">
+          <span className="h-1.5 w-1.5 rounded-full bg-green animate-glowpulse" />
+          Status · recruiting session
         </div>
-        <h1 className="mb-3 text-[42px] font-semibold leading-[1.04] tracking-[-1.6px]">
-          Who do you want to hire?
+        <h1 className="mb-3 text-[42px] font-semibold leading-[1.04] tracking-[-1.6px] text-ink">
+          Who do you want to hire
+          <span className="text-accent">?</span>
         </h1>
         <p className="mx-auto max-w-[560px] text-[17px] leading-relaxed text-ink-2">
-          Describe the role. {MAYA_EMPLOYEE_NAME} will ask what&apos;s missing, draft a job brief, and shortlist three AI employee candidates.
+          Describe the role. {MAYA_EMPLOYEE_NAME} will ask what&apos;s missing, draft a job brief, and
+          shortlist three AI employee candidates.
         </p>
       </div>
 

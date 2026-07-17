@@ -3,7 +3,7 @@
 import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { AuthShell } from "@/components/AuthShell";
+import { AuthShell, AuthStatusChip } from "@/components/AuthShell";
 import { PasswordStrengthField } from "@/components/auth/PasswordStrengthField";
 import { Button } from "@/components/ui";
 import { getPasswordStrength, passwordsMatch } from "@/lib/auth/password";
@@ -15,7 +15,7 @@ import {
 } from "@/lib/auth/recovery";
 import { authHeaders } from "@/lib/api/auth-client";
 import { supabase } from "@/lib/supabase/client";
-import { ArrowRight, KeyRound, ShieldCheck } from "lucide-react";
+import { ArrowRight, KeyRound, Loader2, ShieldCheck } from "lucide-react";
 
 function ResetPasswordForm() {
   const router = useRouter();
@@ -120,27 +120,33 @@ function ResetPasswordForm() {
 
   if (checking) {
     return (
-      <AuthShell>
-        <p className="text-sm text-slate-500">Verifying your reset link…</p>
+      <AuthShell scene="reset">
+        <AuthStatusChip label="Status · verifying link" tone="accent" />
+        <div className="flex items-center gap-2 text-sm text-ink-2">
+          <Loader2 className="h-4 w-4 animate-spin text-accent" />
+          Verifying your reset link…
+        </div>
       </AuthShell>
     );
   }
 
   if (!sessionReady && !done) {
     return (
-      <AuthShell>
-        <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-rose-500/10 text-rose-600">
-          <KeyRound className="h-6 w-6" />
+      <AuthShell scene="trouble">
+        <AuthStatusChip label="Status · link clocked out" />
+        <div className="mb-5 flex h-[72px] w-[72px] items-center justify-center rounded-[22px] bg-rose-50 text-rose-600 ring-1 ring-rose-200">
+          <KeyRound className="h-8 w-8" strokeWidth={1.75} />
         </div>
-        <h1 className="mt-5 text-[30px] font-semibold leading-tight tracking-[-0.03em] text-slate-950">
-          Link expired.
+        <h1 className="text-[27px] font-semibold leading-[1.15] tracking-[-0.03em] text-ink">
+          Link expired
+          <span className="text-accent">.</span>
         </h1>
-        <p className="mt-2 text-[15px] leading-relaxed text-slate-500">
+        <p className="mt-2 text-[14.5px] leading-relaxed text-ink-2">
           {error ?? "This password reset link is no longer valid."}
         </p>
         <Link
           href="/forgot-password"
-          className="mt-6 inline-flex items-center gap-2 text-sm font-medium text-accent-600 hover:text-accent-700"
+          className="mt-7 inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-accent px-5 text-sm font-semibold text-white transition hover:bg-accent-d"
         >
           Request a new reset link
           <ArrowRight className="h-4 w-4" />
@@ -151,14 +157,16 @@ function ResetPasswordForm() {
 
   if (done) {
     return (
-      <AuthShell>
-        <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-500/10 text-emerald-600">
-          <ShieldCheck className="h-6 w-6" />
+      <AuthShell scene="reset">
+        <AuthStatusChip label="Status · password updated" tone="green" />
+        <div className="mb-5 flex h-[72px] w-[72px] items-center justify-center rounded-[22px] bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200">
+          <ShieldCheck className="h-8 w-8" strokeWidth={1.75} />
         </div>
-        <h1 className="mt-5 text-[30px] font-semibold leading-tight tracking-[-0.03em] text-slate-950">
-          Password updated.
+        <h1 className="text-[27px] font-semibold leading-[1.15] tracking-[-0.03em] text-ink">
+          Password updated
+          <span className="text-accent">.</span>
         </h1>
-        <p className="mt-2 text-[15px] leading-relaxed text-slate-500">
+        <p className="mt-2 text-[14.5px] leading-relaxed text-ink-2">
           Your new password is set. Taking you back to sign in…
         </p>
       </AuthShell>
@@ -166,12 +174,15 @@ function ResetPasswordForm() {
   }
 
   return (
-    <AuthShell>
-      <h1 className="text-[30px] font-semibold leading-tight tracking-[-0.03em] text-slate-950">
-        Choose a new password.
+    <AuthShell scene="reset">
+      <AuthStatusChip label="Status · choose a new key" tone="accent" />
+      <h1 className="text-[27px] font-semibold leading-[1.15] tracking-[-0.03em] text-ink">
+        Choose a new password
+        <span className="text-accent">.</span>
       </h1>
-      <p className="mt-2 text-[15px] leading-relaxed text-slate-500">
-        Pick something strong you haven&apos;t used elsewhere. You&apos;ll sign in again once this is saved.
+      <p className="mt-2 text-[14.5px] leading-relaxed text-ink-2">
+        Pick something strong you haven&apos;t used elsewhere. You&apos;ll sign in again once this is
+        saved.
       </p>
 
       <form
@@ -200,7 +211,7 @@ function ResetPasswordForm() {
       </form>
 
       {error && (
-        <p className="mt-3 rounded-lg bg-rose-500/10 px-3 py-2 text-sm text-rose-700">{error}</p>
+        <p className="mt-3 rounded-lg bg-danger-soft px-3 py-2 text-sm text-danger">{error}</p>
       )}
     </AuthShell>
   );
@@ -210,7 +221,7 @@ export default function ResetPasswordPage() {
   return (
     <Suspense
       fallback={
-        <div className="flex min-h-screen items-center justify-center text-sm text-slate-500">Loading…</div>
+        <div className="flex min-h-screen items-center justify-center text-sm text-ink-3">Loading…</div>
       }
     >
       <ResetPasswordForm />
