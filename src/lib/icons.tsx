@@ -106,6 +106,12 @@ export const STATUS_META: Record<
   working: { label: "Working", dot: "bg-emerald-400", text: "text-emerald-700", ring: "ring-emerald-400/20" },
   waiting_approval: { label: "Waiting for approval", dot: "bg-amber-400", text: "text-amber-700", ring: "ring-amber-400/20" },
   on_call: { label: "On call", dot: "bg-sky-400", text: "text-sky-700", ring: "ring-sky-400/20" },
+  offline: {
+    label: "Offline — Work Hours used up",
+    dot: "bg-slate-400",
+    text: "text-slate-600",
+    ring: "ring-slate-400/20",
+  },
   blocked: { label: "Blocked", dot: "bg-rose-400", text: "text-rose-600", ring: "ring-rose-400/20" },
 };
 

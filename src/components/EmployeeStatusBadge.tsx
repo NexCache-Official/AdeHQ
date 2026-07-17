@@ -17,6 +17,12 @@ const STATUS_STYLE: Record<
     dot: "bg-amber",
   },
   on_call: { label: "On call", color: "#2F6FED", soft: "#E5EDFD", dot: "bg-info" },
+  offline: {
+    label: "Offline — Work Hours used up",
+    color: "#6B7280",
+    soft: "#F3F4F6",
+    dot: "bg-ink-3",
+  },
   blocked: { label: "Blocked", color: "#D9483B", soft: "#FBE3E0", dot: "bg-danger" },
 };
 

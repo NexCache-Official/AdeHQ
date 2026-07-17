@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getOrCreateCurrentPeriod } from "@/lib/billing/usage/periods";
+import { startPlanTerm } from "@/lib/billing/plans/plan-terms";
 
 type CheckoutIntent = {
   id: string;
@@ -23,7 +24,6 @@ function addInterval(interval: string): string {
 /**
  * Activate a workspace subscription from a completed checkout intent.
  * Idempotent: a completed intent is not processed twice.
- * Updates the subscription, workspace plan, an invoice row, and refreshes the usage period.
  */
 export async function activateSubscriptionFromIntent(
   client: SupabaseClient,
@@ -44,9 +44,9 @@ export async function activateSubscriptionFromIntent(
   }
 
   const workspaceId = intent.workspace_id;
+  const periodStart = new Date().toISOString();
   const periodEnd = addInterval(intent.interval);
 
-  // Upsert the subscription (latest wins).
   const { data: existing } = await client
     .from("billing_subscriptions")
     .select("id")
@@ -59,7 +59,7 @@ export async function activateSubscriptionFromIntent(
     workspace_id: workspaceId,
     plan_slug: intent.plan_slug,
     status: "active",
-    current_period_start: new Date().toISOString(),
+    current_period_start: periodStart,
     current_period_end: periodEnd,
     cancel_at_period_end: false,
     metadata: { interval: intent.interval, provider: "revolut" },
@@ -71,34 +71,37 @@ export async function activateSubscriptionFromIntent(
     await client.from("billing_subscriptions").insert(subscriptionPayload);
   }
 
-  // Point the workspace at the new plan.
-  await client
-    .from("workspaces")
-    .update({ plan_slug: intent.plan_slug, plan: intent.plan_slug })
-    .eq("id", workspaceId);
+  await startPlanTerm(client, {
+    workspaceId,
+    planSlug: intent.plan_slug,
+    source: "checkout",
+    actorUserId: intent.user_id,
+    reason: `Revolut checkout ${intent.interval}`,
+    metadata: {
+      intentId: intent.id,
+      externalPaymentId: options.externalPaymentId ?? null,
+    },
+    force: true,
+  });
 
-  // Record a paid invoice for payment history.
   await client.from("billing_invoices").insert({
     workspace_id: workspaceId,
     amount_cents: intent.amount_cents ?? 0,
     currency: (intent.currency ?? "USD").toLowerCase(),
     status: "paid",
-    stripe_invoice_id: options.externalPaymentId ?? null,
+    external_payment_id: options.externalPaymentId ?? null,
   });
 
-  // Mark the intent completed.
   await client
     .from("billing_checkout_intents")
     .update({ status: "completed" })
     .eq("id", intentId);
 
-  // Redeem promo code if one was attached to the checkout.
   const promoCode = intent.metadata?.promoCode;
   if (typeof promoCode === "string" && promoCode.trim()) {
     await redeemPromoForWorkspace(client, promoCode.trim(), workspaceId, intent.user_id);
   }
 
-  // Ensure the current usage period reflects the new allowance.
   try {
     await getOrCreateCurrentPeriod(client, workspaceId);
   } catch {
@@ -117,15 +120,41 @@ async function redeemPromoForWorkspace(
   try {
     const { data: promo } = await client
       .from("promo_codes")
-      .select("id, active")
+      .select("id, active, discount_type, applies_to_plan, extra_work_hours_per_week")
       .eq("code", code.toUpperCase())
       .maybeSingle();
     if (!promo || !promo.active || !userId) return;
+
     await client.from("promo_code_redemptions").insert({
       promo_code_id: promo.id,
       user_id: userId,
       workspace_id: workspaceId,
     });
+
+    if (
+      promo.discount_type === "plan_override" &&
+      typeof promo.applies_to_plan === "string" &&
+      promo.applies_to_plan.trim()
+    ) {
+      const planSlug = promo.applies_to_plan.trim();
+      await client.from("workspace_plan_overrides").upsert(
+        {
+          workspace_id: workspaceId,
+          plan_slug: planSlug,
+          reason: `Promo ${code}`,
+          created_by: userId,
+        },
+        { onConflict: "workspace_id" },
+      );
+      await startPlanTerm(client, {
+        workspaceId,
+        planSlug,
+        source: "promo",
+        actorUserId: userId,
+        reason: `Promo code ${code}`,
+        force: true,
+      });
+    }
   } catch {
     /* redemption is best-effort */
   }

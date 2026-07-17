@@ -27,11 +27,14 @@ export type BillingInvoiceRow = {
 
 export type WorkspaceBillingSummary = {
   currentPlanSlug: string;
+  planDisplayName: string;
   planSource: string;
   subscriptionStatus: SubscriptionStatus | null;
   renewalDate: string | null;
   billingInterval: "monthly" | "annual" | null;
   cancelAtPeriodEnd: boolean;
+  freePlanStartedAt: string | null;
+  currentPlanStartedAt: string | null;
   capacity: {
     allowance: number | null;
     used: number;
@@ -101,11 +104,14 @@ export async function getWorkspaceBillingSummary(
 
   return {
     currentPlanSlug: resolved.planSlug,
+    planDisplayName: resolved.config.displayName,
     planSource: resolved.source,
     subscriptionStatus: resolved.subscriptionStatus,
     renewalDate: subscription?.current_period_end ? String(subscription.current_period_end) : null,
     billingInterval,
     cancelAtPeriodEnd: Boolean(subscription?.cancel_at_period_end),
+    freePlanStartedAt: resolved.freePlanStartedAt,
+    currentPlanStartedAt: resolved.currentPlanStartedAt,
     capacity: {
       allowance: capacity.unlimited ? null : capacity.allowance,
       used: capacity.used,

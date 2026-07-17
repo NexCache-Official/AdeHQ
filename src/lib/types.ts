@@ -8,6 +8,7 @@ export type EmployeeStatus =
   | "working"
   | "waiting_approval"
   | "on_call"
+  | "offline"
   | "blocked";
 
 export type ToolStatus = "connected" | "mock" | "not_connected" | "coming_soon";
@@ -28,6 +29,11 @@ export type Workspace = {
   name: string;
   slug?: string;
   plan: string;
+  /** Commercial plan slug (free | pro | …). Prefer over legacy `plan` display. */
+  planSlug?: string;
+  planDisplayName?: string;
+  freePlanStartedAt?: string;
+  currentPlanStartedAt?: string;
   workspaceMode: WorkspaceMode;
   onboardingComplete?: boolean;
 };

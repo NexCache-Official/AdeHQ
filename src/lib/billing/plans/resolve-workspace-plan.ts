@@ -90,7 +90,11 @@ export async function resolveWorkspacePlan(
   const now = Date.now();
 
   const [workspaceRes, overrideRes, subscriptionRes] = await Promise.all([
-    client.from("workspaces").select("plan_slug, plan").eq("id", workspaceId).maybeSingle(),
+    client
+      .from("workspaces")
+      .select("plan_slug, plan, free_plan_started_at, current_plan_started_at")
+      .eq("id", workspaceId)
+      .maybeSingle(),
     client
       .from("workspace_plan_overrides")
       .select("*")
@@ -170,6 +174,12 @@ export async function resolveWorkspacePlan(
     config,
     weeklyWorkHoursBase,
     unlimitedWorkHours,
+    freePlanStartedAt: workspaceRes.data?.free_plan_started_at
+      ? String(workspaceRes.data.free_plan_started_at)
+      : null,
+    currentPlanStartedAt: workspaceRes.data?.current_plan_started_at
+      ? String(workspaceRes.data.current_plan_started_at)
+      : null,
     override: override
       ? {
           weeklyWorkHoursOverride: overrideWorkHours,

@@ -20,6 +20,14 @@ type BillingResponse = {
   paymentsConnected: boolean;
   paymentsMode: PaymentsMode;
   webhookVerified: boolean;
+  currency?: string;
+  readiness?: {
+    merchantApiKey: boolean;
+    webhookSecret: boolean;
+    environment: string;
+    currency: string;
+    webhookPath: string;
+  };
   mrrCents: number | null;
   activePaidWorkspaces: number;
   billingCustomers: number;
@@ -96,6 +104,40 @@ export default function AdminBillingPage() {
               <AdminMetricCard label="Active subs" value={data.activePaidWorkspaces} />
               <AdminMetricCard label="Customers" value={data.billingCustomers} />
             </div>
+
+            {data.readiness && (
+              <Card className="p-5">
+                <h2 className="mb-2 text-sm font-semibold text-ink">Revolut readiness</h2>
+                <p className="mb-3 text-sm text-ink-3">
+                  Plug in env keys, then register the webhook URL in the Revolut Merchant dashboard.
+                  Hosted checkout activates a local plan term (re-checkout to renew — not Revolut Subscriptions).
+                </p>
+                <ul className="space-y-1.5 text-sm text-ink-2">
+                  <li>
+                    REVOLUT_MERCHANT_API_KEY:{" "}
+                    <span className="font-medium">{data.readiness.merchantApiKey ? "set" : "missing"}</span>
+                  </li>
+                  <li>
+                    REVOLUT_WEBHOOK_SECRET:{" "}
+                    <span className="font-medium">{data.readiness.webhookSecret ? "set" : "missing"}</span>
+                  </li>
+                  <li>
+                    REVOLUT_ENVIRONMENT:{" "}
+                    <span className="font-medium">{data.readiness.environment}</span>
+                  </li>
+                  <li>
+                    REVOLUT_CURRENCY:{" "}
+                    <span className="font-medium">{data.readiness.currency}</span>
+                  </li>
+                  <li>
+                    Webhook path:{" "}
+                    <code className="rounded bg-surface-2 px-1.5 py-0.5 text-xs">
+                      {data.readiness.webhookPath}
+                    </code>
+                  </li>
+                </ul>
+              </Card>
+            )}
 
             <div className="grid gap-4 lg:grid-cols-2">
               <Card className="p-5">

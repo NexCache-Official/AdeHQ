@@ -9,10 +9,23 @@ export type RevolutWebhookHeaders = {
 };
 
 /**
+ * Extract all v1 hex signatures from a Revolut-Signature header
+ * (Revolut may send multiple comma-separated values).
+ */
+export function parseRevolutSignatureHeader(header: string | null | undefined): string[] {
+  if (!header) return [];
+  return header
+    .split(",")
+    .map((part) => part.trim())
+    .filter((part) => part.startsWith("v1="))
+    .map((part) => part.slice(3).trim())
+    .filter(Boolean);
+}
+
+/**
  * Verify a Revolut webhook signature.
- * Revolut signs `v1.{timestamp}.{rawBody}` with the webhook secret (HMAC-SHA256) and sends the
- * result as `Revolut-Signature: v1=<hex>`. Production always fails closed
- * when the webhook secret is absent.
+ * Revolut signs `v1.{timestamp}.{rawBody}` with the webhook secret (HMAC-SHA256).
+ * Production fails closed when the webhook secret is absent.
  */
 export function verifyRevolutSignature(
   rawBody: string,
@@ -25,23 +38,47 @@ export function verifyRevolutSignature(
 
   const payloadToSign = `v1.${headers.timestamp}.${rawBody}`;
   const expected = createHmac("sha256", secret).update(payloadToSign).digest("hex");
-  const provided = headers.signature.replace(/^v1=/, "");
+  const candidates = parseRevolutSignatureHeader(headers.signature);
+  if (candidates.length === 0) {
+    // Legacy single value without comma list
+    const provided = headers.signature.replace(/^v1=/, "").trim();
+    if (provided) candidates.push(provided);
+  }
 
-  const a = Buffer.from(expected);
-  const b = Buffer.from(provided);
-  if (a.length !== b.length) return false;
-  return timingSafeEqual(a, b);
+  const expectedBuf = Buffer.from(expected);
+  for (const candidate of candidates) {
+    const providedBuf = Buffer.from(candidate);
+    if (
+      expectedBuf.length === providedBuf.length &&
+      timingSafeEqual(expectedBuf, providedBuf)
+    ) {
+      return true;
+    }
+  }
+  return false;
 }
 
 type RevolutWebhookEvent = {
   event?: string;
   order_id?: string;
   merchant_order_ext_ref?: string;
+  merchant_order_data?: { reference?: string };
+  metadata?: { checkout_intent_id?: string };
 };
+
+function resolveIntentId(payload: RevolutWebhookEvent): string | null {
+  const fromData = payload.merchant_order_data?.reference;
+  if (typeof fromData === "string" && fromData.trim()) return fromData.trim();
+  if (typeof payload.merchant_order_ext_ref === "string" && payload.merchant_order_ext_ref.trim()) {
+    return payload.merchant_order_ext_ref.trim();
+  }
+  const fromMeta = payload.metadata?.checkout_intent_id;
+  if (typeof fromMeta === "string" && fromMeta.trim()) return fromMeta.trim();
+  return null;
+}
 
 /**
  * Handle a verified Revolut webhook payload. Activates the subscription on order completion.
- * Persists the raw event for audit/idempotency.
  */
 export async function handleRevolutWebhook(
   client: SupabaseClient,
@@ -49,24 +86,25 @@ export async function handleRevolutWebhook(
 ): Promise<{ handled: boolean }> {
   const eventType = payload.event ?? "";
 
-  // Persist the event (best-effort).
   try {
     await client.from("billing_events").insert({
       event_type: eventType,
       payload: payload as unknown as Record<string, unknown>,
       processed_at: new Date().toISOString(),
+      external_event_id: payload.order_id ? `${eventType}:${payload.order_id}` : null,
     });
   } catch {
-    /* events table optional */
+    /* events table optional / duplicate external_event_id */
   }
 
   const isCompletion = eventType === "ORDER_COMPLETED" || eventType === "ORDER_AUTHORISED";
   if (!isCompletion) return { handled: false };
 
-  // Resolve the checkout intent: prefer our merchant ext ref, fall back to the external order id.
-  const intentId = payload.merchant_order_ext_ref ?? null;
+  const intentId = resolveIntentId(payload);
   if (intentId) {
-    await activateSubscriptionFromIntent(client, intentId, { externalPaymentId: payload.order_id ?? null });
+    await activateSubscriptionFromIntent(client, intentId, {
+      externalPaymentId: payload.order_id ?? null,
+    });
     return { handled: true };
   }
 

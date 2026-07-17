@@ -84,6 +84,10 @@ export type ResolvedWorkspacePlan = {
   weeklyWorkHoursBase: number;
   /** True when the plan grants uncapped weekly Work Hours (enterprise/custom). */
   unlimitedWorkHours: boolean;
+  /** Immutable: when the workspace first entered Free. */
+  freePlanStartedAt: string | null;
+  /** When the current plan term started (signup, upgrade, promo, or override). */
+  currentPlanStartedAt: string | null;
   /** Applied override metadata, if any. */
   override: {
     weeklyWorkHoursOverride: number | null;

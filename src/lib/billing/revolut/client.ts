@@ -23,7 +23,16 @@ export type RevolutStatus = {
   environment: RevolutEnvironment;
   /** True when a webhook secret is set (order confirmations are signature-verified). */
   webhookVerified: boolean;
+  /** ISO currency for hosted orders (default USD). */
+  currency: string;
 };
+
+/** Merchant order currency — must match Revolut account support. */
+export function getRevolutCurrency(): string {
+  const raw = process.env.REVOLUT_CURRENCY?.trim().toUpperCase();
+  if (raw && /^[A-Z]{3}$/.test(raw)) return raw;
+  return "USD";
+}
 
 /** Base merchant API URLs per environment. Overridable via REVOLUT_API_BASE_URL. */
 const REVOLUT_BASE_URLS: Record<RevolutEnvironment, string> = {
@@ -50,6 +59,7 @@ export function getRevolutStatus(): RevolutStatus {
     configured: Boolean(process.env.REVOLUT_MERCHANT_API_KEY?.trim()),
     environment: getRevolutEnvironment(),
     webhookVerified: Boolean(process.env.REVOLUT_WEBHOOK_SECRET?.trim()),
+    currency: getRevolutCurrency(),
   };
 }
 

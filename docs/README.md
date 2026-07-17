@@ -16,6 +16,7 @@ This folder is the **engineering companion** for AI agents and contributors work
 | [`inbox/`](./inbox/) | Inbox-specific proof / slice notes |
 | [`audits/`](./audits/) | QA / E2E evaluation logs (living + archive) |
 | [`ops/`](./ops/) | How to run agent-driven product tests and similar ops |
+| [`billing/`](./billing/) | Revolut Merchant setup (sole payment provider) |
 
 ## Start here (agents)
 

@@ -125,11 +125,15 @@ export async function createWorkspaceForUser(
 
   const name = resolveWorkspaceName(user, workspaceName);
 
+  const now = new Date().toISOString();
   const { data: workspaceRow, error: workspaceError } = await client
     .from("workspaces")
     .insert({
       name,
-      plan: "Founder",
+      plan: "free",
+      plan_slug: "free",
+      free_plan_started_at: now,
+      current_plan_started_at: now,
       workspace_mode: "real",
       owner_id: user.id,
       onboarding_complete: false,
@@ -140,6 +144,11 @@ export async function createWorkspaceForUser(
   if (workspaceError) throw workspaceError;
 
   const workspaceId = String((workspaceRow as DbRow).id);
+
+  const { initializeFreePlanTerm } = await import("@/lib/billing/plans/plan-terms");
+  await initializeFreePlanTerm(client, workspaceId, user.id).catch((error) => {
+    console.warn("[AdeHQ plan terms] initialize free term failed", error);
+  });
 
   await ensureMemberRow(client, workspaceId, user.id);
   await seedWorkspaceTools(client, workspaceId);

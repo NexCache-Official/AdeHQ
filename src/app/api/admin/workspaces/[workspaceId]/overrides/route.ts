@@ -92,6 +92,15 @@ export async function POST(
           .select("*")
           .single();
         if (error) throw error;
+        const { startPlanTerm } = await import("@/lib/billing/plans/plan-terms");
+        await startPlanTerm(serviceClient, {
+          workspaceId,
+          planSlug,
+          source: "override",
+          actorUserId: admin.userId,
+          reason: reason ?? "Platform plan override",
+          force: true,
+        });
         await writeAuditLog(serviceClient, {
           adminUserId: admin.userId,
           action: "workspace_plan_override_set",
@@ -153,6 +162,19 @@ export async function POST(
             .single();
           if (res.error) throw res.error;
           data = res.data;
+        }
+        const effectivePlan =
+          planSlug || (data?.plan_slug ? String(data.plan_slug) : "");
+        if (effectivePlan && ["comped", "manual", "enterprise", "active", "trialing"].includes(status)) {
+          const { startPlanTerm } = await import("@/lib/billing/plans/plan-terms");
+          await startPlanTerm(serviceClient, {
+            workspaceId,
+            planSlug: effectivePlan,
+            source: "admin",
+            actorUserId: admin.userId,
+            reason: reason ?? `Subscription status → ${status}`,
+            force: true,
+          });
         }
         await writeAuditLog(serviceClient, {
           adminUserId: admin.userId,

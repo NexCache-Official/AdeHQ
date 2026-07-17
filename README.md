@@ -92,13 +92,13 @@ ADEHQ_SECRET_ENCRYPTION_KEY=...
 ADEHQ_SECRET_ENCRYPTION_KEY_VERSION=1
 ALLOW_PROVIDER_ENV_FALLBACK=true
 
-# Revolut Pay (payment processor for AdeHQ subscriptions)
-# The platform runs against Revolut's sandbox by default and degrades gracefully
-# until a merchant key is set: checkout still records an intent, no payment is taken.
-# Set REVOLUT_ENVIRONMENT=production to go live.
+# Revolut Merchant (sole billing provider — see docs/billing/revolut-setup.md)
+# Sandbox by default. Set REVOLUT_ENVIRONMENT=production with live keys to go live.
+# Also register webhook: https://<host>/api/billing/revolut/webhook
 REVOLUT_ENVIRONMENT=sandbox            # sandbox (default) | production
 REVOLUT_MERCHANT_API_KEY=...           # Merchant API secret key (server-only)
 REVOLUT_WEBHOOK_SECRET=...             # Verifies ORDER_COMPLETED webhook signatures
+# REVOLUT_CURRENCY=USD
 # REVOLUT_API_BASE_URL=...             # Optional override; defaults per environment
 # REVOLUT_API_VERSION=2024-09-01       # Optional Revolut-Api-Version override
 

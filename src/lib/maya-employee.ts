@@ -53,14 +53,18 @@ export function isSystemEmployee(
   return Boolean(employee.isSystemEmployee || employee.systemEmployeeKey);
 }
 
-export function mayaEmployeeStatus(): AIEmployee["status"] {
+export function mayaEmployeeStatus(
+  employee?: Pick<AIEmployee, "status">,
+): AIEmployee["status"] {
+  if (employee?.status === "offline") return "offline";
   return "online";
 }
 
 export function effectiveEmployeeStatus(
   employee: Pick<AIEmployee, "status" | "systemEmployeeKey" | "id">,
 ): AIEmployee["status"] {
-  if (isMayaEmployee(employee)) return mayaEmployeeStatus();
+  if (employee.status === "offline") return "offline";
+  if (isMayaEmployee(employee)) return mayaEmployeeStatus(employee);
   if (employee.status === "idle") return "online";
   return employee.status ?? "online";
 }

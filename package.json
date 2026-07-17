@@ -32,6 +32,8 @@
     "test:brain:video": "tsx scripts/test-brain-video.ts",
     "test:brain:step-shadow": "tsx -r dotenv/config scripts/test-brain-step-classifier-shadow.ts dotenv_config_path=.env.local",
     "test:brain:step-harness": "tsx -r dotenv/config scripts/test-brain-step-agreement-harness.ts dotenv_config_path=.env.local",
+    "test:workspace-plan-terms": "tsx scripts/test-workspace-plan-terms.ts",
+    "test:workforce-wh-offline": "tsx scripts/test-workforce-wh-offline.ts",
     "test:work-hours": "tsx scripts/simulate-work-hours.ts",
     "test:work-hours:shadow": "tsx scripts/test-work-hours-shadow.ts",
     "test:work-hours:ui": "tsx scripts/test-work-hours-shadow-ui.ts",

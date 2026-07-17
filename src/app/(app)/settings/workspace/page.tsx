@@ -37,6 +37,50 @@ export default function SettingsWorkspacePage() {
 
       <div className="space-y-6">
         <Card className="p-6">
+          <h2 className="mb-1 text-sm font-semibold text-ink">Plan</h2>
+          <p className="mb-4 text-sm text-ink-3">
+            Commercial plan for this workspace. Billing dates are set securely on the server.
+          </p>
+          <dl className="grid gap-3 text-sm sm:grid-cols-2">
+            <div>
+              <dt className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-3">Current plan</dt>
+              <dd className="mt-0.5 font-semibold text-ink">
+                {state.workspace.planDisplayName ?? state.workspace.planSlug ?? state.workspace.plan}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-3">Free since</dt>
+              <dd className="mt-0.5 text-ink-2">
+                {state.workspace.freePlanStartedAt
+                  ? new Date(state.workspace.freePlanStartedAt).toLocaleDateString(undefined, {
+                      month: "short",
+                      day: "numeric",
+                      year: "numeric",
+                    })
+                  : "—"}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-3">Current term started</dt>
+              <dd className="mt-0.5 text-ink-2">
+                {state.workspace.currentPlanStartedAt
+                  ? new Date(state.workspace.currentPlanStartedAt).toLocaleDateString(undefined, {
+                      month: "short",
+                      day: "numeric",
+                      year: "numeric",
+                    })
+                  : "—"}
+              </dd>
+            </div>
+            <div className="flex items-end">
+              <Button size="sm" variant="outline" onClick={() => router.push("/settings/billing")}>
+                Manage billing
+              </Button>
+            </div>
+          </dl>
+        </Card>
+
+        <Card className="p-6">
           <h2 className="mb-4 text-sm font-semibold text-ink">Workspace name</h2>
           <label className="block space-y-1.5">
             <span className="text-xs font-medium text-ink-3">Name</span>

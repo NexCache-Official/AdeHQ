@@ -21,9 +21,12 @@ type PlanCard = {
 
 type BillingSummary = {
   currentPlanSlug: string;
+  planDisplayName?: string;
   subscriptionStatus: string | null;
   renewalDate: string | null;
   billingInterval: "monthly" | "annual" | null;
+  freePlanStartedAt?: string | null;
+  currentPlanStartedAt?: string | null;
   capacity: {
     allowance: number | null;
     used: number;
@@ -63,6 +66,7 @@ export default function SettingsBillingPage() {
   const [promo, setPromo] = useState("");
   const [busyPlan, setBusyPlan] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [confirmingPayment, setConfirmingPayment] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -73,8 +77,10 @@ export default function SettingsBillingPage() {
       const body = await res.json();
       if (!res.ok) throw new Error(body?.error ?? "Failed to load billing.");
       setSummary(body as BillingSummary);
+      return body as BillingSummary;
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load billing.");
+      return null;
     } finally {
       setLoading(false);
     }
@@ -84,6 +90,50 @@ export default function SettingsBillingPage() {
     if (canViewBilling(myRole)) void load();
     else setLoading(false);
   }, [load, myRole]);
+
+  // After Revolut redirect, poll until webhook activates the plan (or timeout).
+  useEffect(() => {
+    if (checkoutResult !== "success" || !canViewBilling(myRole)) return;
+    let cancelled = false;
+    let attempts = 0;
+    setConfirmingPayment(true);
+    setNotice("Confirming payment with Revolut…");
+
+    const poll = async () => {
+      try {
+        const headers = await authHeaders();
+        const res = await fetch(`/api/workspaces/${workspaceId}/billing`, { headers });
+        const body = (await res.json()) as BillingSummary;
+        if (!cancelled && res.ok) {
+          setSummary(body);
+          if (body.subscriptionStatus === "active" || (body.currentPlanSlug && body.currentPlanSlug !== "free")) {
+            setConfirmingPayment(false);
+            setNotice("Payment confirmed. Your plan and weekly AI Work Hours are updated.");
+            return;
+          }
+        }
+      } catch {
+        /* keep polling */
+      }
+      attempts += 1;
+      if (cancelled) return;
+      if (attempts >= 20) {
+        setConfirmingPayment(false);
+        setNotice(
+          "Payment received — plan activation can take a moment. Refresh this page if it has not updated yet.",
+        );
+        return;
+      }
+      window.setTimeout(() => {
+        void poll();
+      }, 2000);
+    };
+
+    void poll();
+    return () => {
+      cancelled = true;
+    };
+  }, [checkoutResult, myRole, workspaceId]);
 
   const startCheckout = async (planSlug: string) => {
     setBusyPlan(planSlug);
@@ -130,9 +180,9 @@ export default function SettingsBillingPage() {
         icon={<CreditCard className="h-5 w-5" />}
       />
 
-      {checkoutResult === "success" && (
-        <Card className="mb-4 border-emerald-500/30 bg-emerald-500/[0.06] p-4 text-sm text-emerald-700">
-          Payment successful. Your plan and weekly AI Work Hours have been updated.
+      {checkoutResult === "success" && confirmingPayment && (
+        <Card className="mb-4 border-accent/30 bg-accent/[0.06] p-4 text-sm text-ink-2">
+          Confirming payment with Revolut…
         </Card>
       )}
       {checkoutResult === "cancelled" && (
@@ -151,10 +201,16 @@ export default function SettingsBillingPage() {
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div>
                 <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-3">Current plan</p>
-                <p className="mt-1 text-2xl font-semibold capitalize text-ink">{summary.currentPlanSlug}</p>
+                <p className="mt-1 text-2xl font-semibold text-ink">
+                  {summary.planDisplayName ?? summary.currentPlanSlug}
+                </p>
                 <p className="mt-0.5 text-sm text-ink-3">
                   {summary.subscriptionStatus ? `Status: ${summary.subscriptionStatus}` : "No active subscription"}
                   {summary.billingInterval ? ` · ${summary.billingInterval}` : ""}
+                </p>
+                <p className="text-sm text-ink-3">Free since {formatDate(summary.freePlanStartedAt ?? null)}</p>
+                <p className="text-sm text-ink-3">
+                  Current term started {formatDate(summary.currentPlanStartedAt ?? null)}
                 </p>
                 {summary.renewalDate && (
                   <p className="text-sm text-ink-3">Renews {formatDate(summary.renewalDate)}</p>

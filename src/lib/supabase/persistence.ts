@@ -87,12 +87,34 @@ function profileFromRow(row: DbRow, user: User): HumanUser {
   };
 }
 
+function planDisplayNameFromSlug(slug: string): string {
+  const map: Record<string, string> = {
+    free: "Free",
+    pro: "Pro",
+    team: "Team",
+    business: "Business",
+    enterprise: "Enterprise",
+  };
+  return map[slug] ?? slug.charAt(0).toUpperCase() + slug.slice(1);
+}
+
 function workspaceFromRow(row: DbRow): Workspace {
+  const planSlug = String(row.plan_slug ?? row.plan ?? "free")
+    .toLowerCase()
+    .replace(/^founder$/, "free");
   return {
     id: row.id,
     name: row.name,
     slug: row.slug ?? undefined,
-    plan: row.plan ?? "Founder",
+    plan: planSlug,
+    planSlug,
+    planDisplayName: planDisplayNameFromSlug(planSlug),
+    freePlanStartedAt: row.free_plan_started_at
+      ? String(row.free_plan_started_at)
+      : undefined,
+    currentPlanStartedAt: row.current_plan_started_at
+      ? String(row.current_plan_started_at)
+      : undefined,
     workspaceMode: row.workspace_mode === "demo" ? "demo" : "real",
     onboardingComplete: Boolean(row.onboarding_complete),
   };
@@ -304,7 +326,9 @@ export function buildPendingSignupState(user: User, profile: HumanUser): DemoSta
   const placeholder: Workspace = {
     id: "",
     name: workspaceName,
-    plan: "Founder",
+    plan: "free",
+    planSlug: "free",
+    planDisplayName: "Free",
     workspaceMode: "real",
     onboardingComplete: false,
   };

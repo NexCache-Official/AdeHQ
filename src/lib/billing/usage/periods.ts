@@ -182,6 +182,7 @@ export async function getOrCreateCurrentPeriod(
     // Keep allowance in sync if the plan/credits changed mid-period.
     const current = rowToPeriod(existing.data, unlimited);
     if (Math.abs(current.allowance - allowance) > 0.0001 || current.planSlug !== planSlug) {
+      const previousAllowance = current.allowance;
       const { data: updated, error: updateError } = await client
         .from("workspace_usage_periods")
         .update({ ai_work_hours_allowance: allowance, plan_slug: planSlug })
@@ -189,7 +190,13 @@ export async function getOrCreateCurrentPeriod(
         .select("*")
         .single();
       if (updateError) throw updateError;
-      return rowToPeriod(updated, unlimited);
+      const period = rowToPeriod(updated, unlimited);
+      // Only restore when capacity grew (upgrade / credits), not on every read.
+      if (period.unlimited || (allowance > previousAllowance && period.remaining > 0)) {
+        const { restoreWorkforceFromOffline } = await import("./workforce-capacity");
+        await restoreWorkforceFromOffline(client, workspaceId).catch(() => undefined);
+      }
+      return period;
     }
     return current;
   }
@@ -223,7 +230,12 @@ export async function getOrCreateCurrentPeriod(
     throw insertError;
   }
 
-  return rowToPeriod(inserted, unlimited);
+  const created = rowToPeriod(inserted, unlimited);
+  if (created.unlimited || created.remaining > 0) {
+    const { restoreWorkforceFromOffline } = await import("./workforce-capacity");
+    await restoreWorkforceFromOffline(client, workspaceId).catch(() => undefined);
+  }
+  return created;
 }
 
 /** Increment the current period's used Work Hours + actual cost (billable events only). */
@@ -241,6 +253,19 @@ export async function applyCostToPeriod(
     p_cost_usd: actualCostUsd,
   });
   if (error) throw error;
+
+  // Overage is allowed and counted; once used crosses allowance, take workforce offline.
+  try {
+    const capacity = await getWorkspaceCapacity(client, workspaceId);
+    const { syncWorkforceToCapacity } = await import("./workforce-capacity");
+    await syncWorkforceToCapacity(client, workspaceId, {
+      used: capacity.used,
+      allowance: capacity.allowance,
+      unlimited: capacity.unlimited,
+    });
+  } catch (syncError) {
+    console.warn("[AdeHQ usage] workforce capacity sync failed", syncError);
+  }
 }
 
 export type CapacityCheck = {

@@ -69,6 +69,18 @@ export async function queueAgentRuns(
     };
   }
 
+  const { checkWorkspaceAiCapacity } = await import("@/lib/billing/usage/periods");
+  const capacity = await checkWorkspaceAiCapacity(aiClient, params.workspaceId);
+  if (!capacity.allowed) {
+    return {
+      queued: [],
+      blocked: params.responders.map((r) => ({
+        employeeId: r.employee.id,
+        reason: capacity.reason ?? "AI Work Hours are exhausted for this period.",
+      })),
+    };
+  }
+
   const rootTriggerMessageId =
     params.rootTriggerMessageId ?? params.triggerMessageId;
 

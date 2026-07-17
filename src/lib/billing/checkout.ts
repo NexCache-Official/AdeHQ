@@ -68,7 +68,8 @@ export async function startCheckout(
       intentId,
       checkoutUrl: null,
       providerConfigured: false,
-      message: "Payments are not enabled yet. Your upgrade request has been recorded.",
+      message:
+        "Billing is not configured. Set REVOLUT_MERCHANT_API_KEY (and webhook secret) on the server, then try again.",
     };
   }
 

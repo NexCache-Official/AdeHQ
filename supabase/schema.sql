@@ -1138,3 +1138,4 @@ alter table public.dm_ownership_migration_report enable row level security;
 -- Brain reliability (PR-17.5): 20260717150000_brain_reliability_foundation.sql
 -- Steward execution (PR-19): 20260717160000_brain_steward_execution.sql
 -- Voice (PR-18): 20260717170000_brain_voice_v1.sql
+-- Plan terms + Revolut billing cleanup: 20260717192753_workspace_plan_terms_revolut_billing.sql

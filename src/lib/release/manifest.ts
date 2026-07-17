@@ -34,7 +34,7 @@ export const RELEASE_MANIFEST: ReleaseManifest = {
   releaseId: "baseline-pr11-17-hybrid-access",
   appVersion: "20.1.5",
   catalogVersion: 7,
-  requiredMigrationVersion: "20260717170000",
+  requiredMigrationVersion: "20260717192753",
   baselineCommits: {
     pr14Search: "49b8c5a444624d2152e833aeac9baa95ae283f9c",
     pr15Vision: "3ea98a1ef6b7458cbaf1c8d4839a043ce371e463",
@@ -55,6 +55,8 @@ export const RELEASE_MANIFEST: ReleaseManifest = {
   notes: [
     "PR-19 Steward shadow plans via ADEHQ_BRAIN_STEWARD_SHADOW=1 (no execution until stewardV1).",
     "PR-19 execution builds on PR-17.5 reliability before PR-18 Voice.",
+    "Deploy with ADEHQ_BRAIN_STEWARD_V1=0 and ADEHQ_BRAIN_VOICE_V1=0 until workspace rollout.",
+    "Billing: Revolut-only; plan terms migration 20260717192753.",
     "Production human QA requires /api/build-info to match this manifest.",
   ],
 };

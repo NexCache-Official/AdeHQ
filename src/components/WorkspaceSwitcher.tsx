@@ -100,8 +100,16 @@ export function WorkspaceSwitcher({
             {state.workspace.name || "Workspace"}
           </div>
           {isRail ? (
-            <div className="truncate text-[11px] text-[var(--rail-ink-3)]">{myRoleLabel}</div>
-          ) : null}
+            <div className="truncate text-[11px] text-[var(--rail-ink-3)]">
+              {[state.workspace.planDisplayName ?? state.workspace.planSlug ?? state.workspace.plan, myRoleLabel]
+                .filter(Boolean)
+                .join(" · ")}
+            </div>
+          ) : (
+            <div className="truncate text-[11px] text-ink-3">
+              {state.workspace.planDisplayName ?? state.workspace.planSlug ?? state.workspace.plan}
+            </div>
+          )}
         </div>
         {pendingInvites.length > 0 ? (
           <span className="shrink-0 rounded-full bg-amber-soft px-1.5 text-[10px] font-medium text-amber">
