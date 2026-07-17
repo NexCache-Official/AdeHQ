@@ -1220,7 +1220,7 @@ export function ChatComposer({
         </div>
       </div>
 
-      <div className="mt-1.5 hidden flex-wrap items-center gap-1.5 px-1 text-[11px] text-ink-3 sm:flex">
+      <div className="mt-1.5 hidden flex-wrap items-center gap-1.5 px-1 text-[11.5px] text-ink-3 sm:flex">
         {QUICK_COMMANDS.slice(0, 3).map((command) => (
           <button
             key={command.label}
@@ -1229,7 +1229,7 @@ export function ChatComposer({
               setValue(command.text);
               inputRef.current?.focus();
             }}
-            className="inline-flex items-center gap-1 rounded-full border border-border bg-surface px-2 py-1 transition-colors hover:bg-muted hover:text-ink-2"
+            className="inline-flex items-center gap-1 rounded-full border border-border bg-surface px-2.5 py-1 transition-colors hover:bg-muted hover:text-ink-2"
           >
             <ChevronDown className="h-3 w-3 rotate-[-90deg]" />
             {command.label}

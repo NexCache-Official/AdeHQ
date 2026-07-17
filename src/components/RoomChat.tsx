@@ -2227,7 +2227,7 @@ export function RoomChat({
         </div>
       )}
 
-      <div className="shrink-0 px-[22px] pb-4 pt-1.5">
+      <div className="shrink-0 px-7 pb-4 pt-1.5">
         <div className={cn("mx-auto", ROOM_CHAT_MAX_WIDTH)}>
           {contextImportWarning ? (
             <div className="mb-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
