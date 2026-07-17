@@ -10,6 +10,12 @@ Runnable tooling for AdeHQ. Prefer **npm scripts** from the repo root (`package.
 | AI runtime smoke | `npm run test:runtime:mock` then `npm run test:runtime` |
 | Work Hours | `npm run test:work-hours` (+ `:shadow`, `:calibration`, …) |
 | AdeHQ Brain | `npm run test:brain` (catalog, metering matrix, steward, media CTA audit) |
+| Release baseline | `npm run verify:release` (+ optional `BUILD_INFO_URL=…` for prod probe) |
+| Brain reliability | `npm run test:brain:reliability` (PR-17.5 retry/idempotency/circuit) |
+| Steward shadow | `npm run test:brain:steward-shadow` (PR-19 plan-only golden scenarios) |
+| Steward execution | `npm run test:brain:steward-execution` (PR-19 leases/findings/receipts/DAG) |
+| Brain voice | `npm run test:brain:voice` (PR-18 STT/TTS routes, policy, metering) |
+| Brain gauntlet | `npm run test:brain:gauntlet` (release + reliability + steward shadow + brain + access) |
 | Brain Step shadow | `npm run test:brain:step-shadow` (live SF: Qwen3-8B vs Step-3.5-Flash) |
 | Brain Step harness | `npm run test:brain:step-harness` (larger agreement + WH cost report) |
 | Brain Exa search | `npm run test:brain:search` (Exa-first chain, routing, citations) |

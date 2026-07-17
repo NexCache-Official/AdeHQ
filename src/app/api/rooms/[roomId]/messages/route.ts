@@ -48,6 +48,12 @@ import { isMayaEmployee } from "@/lib/maya-employee";
 import { messageError, serializeUnknownError, debugErrorPayload } from "@/lib/server/message-errors";
 import { detectArtifactIntent } from "@/lib/server/file-context";
 import { detectWorkStopRequest } from "@/lib/orchestration/work-stop";
+import { isBrainStewardShadowEnabled, isBrainStewardV1Enabled } from "@/lib/brain/flags";
+import {
+  buildStewardShadowPlan,
+  type StewardShadowPlanResult,
+} from "@/lib/brain/steward";
+import type { StewardProgressSnapshot } from "@/lib/brain/steward/types-execution";
 import { cancelActiveTopicWork, type CancelActiveTopicWorkResult } from "@/lib/server/cancel-active-topic-work";
 import type { MentionRef, MessageArtifact } from "@/lib/types";
 
@@ -534,6 +540,54 @@ export async function POST(
         );
 
     const { plan: conversationPlan, decisions: rawDecisions } = legacyResult;
+
+    // PR-19 Session 2: shadow CollaborationPlan only — never executes delegation.
+    let stewardShadow: StewardShadowPlanResult | null = null;
+    if (isBrainStewardShadowEnabled()) {
+      try {
+        const accessibleIds = orchestrationEmployees.map((e) => e.id);
+        stewardShadow = buildStewardShadowPlan({
+          message: trimmed,
+          candidates: orchestrationEmployees.map((e) => ({
+            id: e.id,
+            name: e.name,
+            role: e.role,
+            roleKey: e.roleKey,
+          })),
+          accessibleEmployeeIds: accessibleIds,
+          roomEmployeeIds: accessibleIds,
+          preferredEmployeeIds: mentions,
+          orchestrationSelectedIds: orchestrationPlan.selectedEmployeeIds,
+          dmEmployeeId: respondersCtx.room.dmEmployeeId,
+          isPrivateDm: isEmployeeDm,
+          legacyMode: conversationPlan.mode,
+          legacy: {
+            mode: conversationPlan.mode,
+            leadEmployeeId: conversationPlan.participants[0]?.employeeId ?? null,
+            participantEmployeeIds: conversationPlan.participants.map((p) => p.employeeId),
+            selectedEmployeeIds: orchestrationPlan.selectedEmployeeIds,
+          },
+        });
+        if (
+          process.env.NODE_ENV === "development" ||
+          request.headers.get("X-AdeHQ-Debug") === "true"
+        ) {
+          console.info("[AdeHQ steward shadow]", {
+            roomId: params.roomId,
+            topicId,
+            mode: stewardShadow.plan?.mode,
+            lead: stewardShadow.plan?.leadEmployeeId,
+            steps: stewardShadow.plan?.steps.length,
+            collaborate: stewardShadow.trigger.collaborate,
+            validationOk: stewardShadow.validation.ok,
+            comparison: stewardShadow.comparison,
+          });
+        }
+      } catch (shadowError) {
+        console.warn("[AdeHQ steward shadow] plan failed", shadowError);
+      }
+    }
+
     const researchSignals = {
       preferTavily: Boolean(body.preferTavily ?? body.preferResearch),
       preferAgentMode: Boolean(body.preferAgentMode ?? body.preferBrowserbase),
@@ -550,13 +604,39 @@ export async function POST(
             mentions[0] ??
             orchestrationEmployees[0]?.id;
 
-      workStopCancelResult = await cancelActiveTopicWork(createSupabaseSecretClient(), {
+      const secret = createSupabaseSecretClient();
+      workStopCancelResult = await cancelActiveTopicWork(secret, {
         workspaceId,
         roomId: params.roomId,
         topicId,
         employeeId: stopEmployeeId,
         reason: stopDetection.reason,
       });
+      // Cancel any in-flight Steward collaboration for this topic
+      try {
+        const { data: activeSteward } = await secret
+          .from("brain_runs")
+          .select("id")
+          .eq("workspace_id", workspaceId)
+          .eq("topic_id", topicId)
+          .in("lifecycle_status", ["running", "planning", "waiting_for_approval"])
+          .not("steward_plan", "is", null)
+          .limit(5);
+        if (activeSteward?.length) {
+          const { cancelStewardCollaboration } = await import("@/lib/brain/steward/cancel");
+          for (const row of activeSteward) {
+            await cancelStewardCollaboration(secret, {
+              workspaceId,
+              brainRunId: String(row.id),
+              roomId: params.roomId,
+              topicId,
+              reason: stopDetection.reason,
+            });
+          }
+        }
+      } catch (stewardCancelErr) {
+        console.warn("[AdeHQ messages] steward cancel on stop", stewardCancelErr);
+      }
     }
 
     const workStopSignals =
@@ -566,6 +646,22 @@ export async function POST(
             cancelledBrowserResearchCount:
               workStopCancelResult?.cancelledBrowserResearchRuns.length ?? 0,
             cancelledAgentRunCount: workStopCancelResult?.cancelledAgentRunIds.length ?? 0,
+          }
+        : {};
+
+    const shadowMeta =
+      stewardShadow?.plan && stewardShadow.validation.ok
+        ? {
+            stewardShadowPlan: {
+              mode: stewardShadow.plan.mode,
+              leadEmployeeId: stewardShadow.plan.leadEmployeeId,
+              stepCount: stewardShadow.plan.steps.length,
+              estimatedWhMax: stewardShadow.plan.estimatedWhMax,
+              approvalRequired: stewardShadow.plan.approvalRequired,
+              triggerReasons: stewardShadow.trigger.reasons,
+              comparison: stewardShadow.comparison,
+              executed: false as const,
+            },
           }
         : {};
 
@@ -580,6 +676,7 @@ export async function POST(
             artifactIntent: artifactIntent ?? undefined,
             ...researchSignals,
             ...workStopSignals,
+            ...shadowMeta,
           },
         }))
       : rawDecisions.map((d) => ({
@@ -591,6 +688,7 @@ export async function POST(
             artifactIntent: artifactIntent ?? undefined,
             ...researchSignals,
             ...workStopSignals,
+            ...shadowMeta,
           },
         }));
     const orchestratorDebug =
@@ -623,14 +721,111 @@ export async function POST(
           }
         : undefined;
 
-    const { queued, blocked } = await queueAgentRuns(client, {
-      workspaceId,
-      roomId: params.roomId,
-      topicId,
-      triggerMessageId: humanMessage.id,
-      responders: decisions,
-      content: trimmed,
-    });
+    let queued: Awaited<ReturnType<typeof queueAgentRuns>>["queued"] = [];
+    let blocked: Awaited<ReturnType<typeof queueAgentRuns>>["blocked"] = [];
+    let stewardProgress: StewardProgressSnapshot | null = null;
+    let stewardBrainRunId: string | null = null;
+    let stewardExecutionUsed = false;
+    let stewardApprovalHint: string | undefined;
+
+    // PR-19 Session 3: execute validated CollaborationPlan when steward V1 is on.
+    if (isBrainStewardV1Enabled() && !stopDetection.isStop && !isEmployeeDm) {
+      try {
+        const {
+          startStewardExecution,
+          buildStewardResponders,
+          leaseReadySteps,
+        } = await import("@/lib/brain/steward/execute");
+        const accessibleIds = orchestrationEmployees.map((e) => e.id);
+        const started = await startStewardExecution(client, {
+          workspaceId,
+          initiatedByUserId: user.id,
+          roomId: params.roomId,
+          topicId,
+          triggerMessageId: humanMessage.id,
+          employees: orchestrationEmployees,
+          planInput: {
+            message: trimmed,
+            candidates: orchestrationEmployees.map((e) => ({
+              id: e.id,
+              name: e.name,
+              role: e.role,
+              roleKey: e.roleKey,
+            })),
+            accessibleEmployeeIds: accessibleIds,
+            roomEmployeeIds: accessibleIds,
+            preferredEmployeeIds: mentions,
+            orchestrationSelectedIds: orchestrationPlan.selectedEmployeeIds,
+            dmEmployeeId: respondersCtx.room.dmEmployeeId,
+            isPrivateDm: isEmployeeDm,
+            legacyMode: conversationPlan.mode,
+          },
+        });
+
+        if (started) {
+          stewardProgress = started.progress;
+          stewardBrainRunId = started.brainRunId;
+          if (started.blockedReason === "approval_required") {
+            stewardExecutionUsed = true;
+            stewardApprovalHint = `${started.progress.leadEmployeeName ?? "An employee"} proposes a collaboration using up to ${started.plan.estimatedWhMax.toFixed(1)} Work Hours. Approve to continue.`;
+          } else if (started.readySteps.length) {
+            await leaseReadySteps(client, {
+              workspaceId,
+              brainRunId: started.brainRunId,
+              plan: started.plan,
+              steps: started.readySteps,
+            });
+            const stewardResponders = buildStewardResponders({
+              plan: started.plan,
+              readySteps: started.readySteps,
+              employees: orchestrationEmployees,
+              brainRunId: started.brainRunId,
+              collaborationId: conversationPlan.collaborationId,
+              rootTriggerMessageId: humanMessage.id,
+            }).map((d) => ({
+              ...d,
+              runMetadata: {
+                ...d.runMetadata,
+                orchestrationId,
+                attachmentFileIds: priorityFileIds,
+                contextFileIds,
+                artifactIntent: artifactIntent ?? undefined,
+                ...researchSignals,
+                ...workStopSignals,
+                ...shadowMeta,
+              },
+            }));
+            const stewardQueued = await queueAgentRuns(client, {
+              workspaceId,
+              roomId: params.roomId,
+              topicId,
+              triggerMessageId: humanMessage.id,
+              responders: stewardResponders,
+              content: trimmed,
+              createdByType: "steward",
+            });
+            queued = stewardQueued.queued;
+            blocked = stewardQueued.blocked;
+            stewardExecutionUsed = true;
+          }
+        }
+      } catch (stewardExecError) {
+        console.warn("[AdeHQ steward] execution start failed; falling back", stewardExecError);
+      }
+    }
+
+    if (!stewardExecutionUsed) {
+      const legacyQueued = await queueAgentRuns(client, {
+        workspaceId,
+        roomId: params.roomId,
+        topicId,
+        triggerMessageId: humanMessage.id,
+        responders: decisions,
+        content: trimmed,
+      });
+      queued = legacyQueued.queued;
+      blocked = legacyQueued.blocked;
+    }
 
     if (orchestrationId && queued.length) {
       try {
@@ -659,8 +854,8 @@ export async function POST(
     }
 
     const participationMode = getAiParticipationMode(topic);
-    let hint: string | undefined;
-    if (queued.length === 0 && decisions.length === 0) {
+    let hint: string | undefined = stewardApprovalHint;
+    if (queued.length === 0 && decisions.length === 0 && !hint) {
       if (orchestrationPlan.suggestedActions.length > 0) {
         const invites = orchestrationPlan.suggestedActions.filter((a) => a.type === "invite_employee");
         if (invites.length) {
@@ -711,6 +906,9 @@ export async function POST(
       collaborationPlan: conversationPlan,
       orchestrationPlan,
       orchestrationId,
+      stewardShadowPlan: stewardShadow,
+      stewardProgress,
+      stewardBrainRunId,
       orchestratorDebug,
       topicSuggestions,
       smartAssistSuggestions: orchestrationPlan.suggestedActions.filter(

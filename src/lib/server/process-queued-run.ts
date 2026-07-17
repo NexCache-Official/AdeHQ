@@ -393,6 +393,12 @@ export async function processQueuedAgentRun(
     let content = options.content ?? (triggerMsg?.content ? String(triggerMsg.content) : "");
     /** Human turn text before lead-reply scaffolding is appended — used for tool intent. */
     const triggerUserContent = content;
+    if (
+      typeof runMetadata.stewardObjectivePrompt === "string" &&
+      runMetadata.stewardObjectivePrompt.trim()
+    ) {
+      content = `${runMetadata.stewardObjectivePrompt.trim()}\n\n---\nUser request:\n${content}`;
+    }
 
     const stopDetection = detectWorkStopRequest(content);
     const workStopAck = Boolean(runMetadata.workStopAck) || stopDetection.isStop;
@@ -2085,8 +2091,136 @@ export async function processQueuedAgentRun(
 
     let followUpRuns: QueuedRun[] = [];
     let activatedRuns: QueuedRun[] = [];
+    let stewardProgress: import("@/lib/brain/steward/types-execution").StewardProgressSnapshot | undefined;
+    let stewardReceipt: import("@/lib/brain/steward/types-execution").CollaborationReceipt | null = null;
 
-    if (!isGreetingRun && isLive) {
+    // PR-19: advance Steward DAG instead of legacy collaborator fan-out
+    const stewardBrainRunId =
+      typeof runMetadata.stewardBrainRunId === "string"
+        ? runMetadata.stewardBrainRunId
+        : typeof runMetadata.brainRunId === "string"
+          ? runMetadata.brainRunId
+          : null;
+    const stewardStepId =
+      typeof runMetadata.stewardStepId === "string" ? runMetadata.stewardStepId : null;
+
+    if (!isGreetingRun && isLive && stewardBrainRunId && stewardStepId) {
+      try {
+        if (runMetadata.stewardInternalStep) {
+          const { data: msgRow } = await client
+            .from("messages")
+            .select("metadata")
+            .eq("workspace_id", workspaceId)
+            .eq("id", aiMessage.id)
+            .maybeSingle();
+          const prior =
+            msgRow?.metadata && typeof msgRow.metadata === "object"
+              ? (msgRow.metadata as Record<string, unknown>)
+              : {};
+          await client
+            .from("messages")
+            .update({
+              metadata: {
+                ...prior,
+                stewardInternalStep: true,
+                stewardBrainRunId,
+                stewardStepId,
+                hiddenFromFeed: true,
+              },
+            })
+            .eq("workspace_id", workspaceId)
+            .eq("id", aiMessage.id);
+        }
+
+        const { advanceStewardAfterStep } = await import("@/lib/brain/steward/execute");
+        const advanced = await advanceStewardAfterStep(client, {
+          workspaceId,
+          brainRunId: stewardBrainRunId,
+          stepId: stewardStepId,
+          employeeId,
+          employeeName: employee.name,
+          reply: response.reply,
+          failed: failed || aiMode === "error",
+          actualWh:
+            typeof metrics?.estimatedCostUsd === "number"
+              ? metrics.estimatedCostUsd / 0.01
+              : undefined,
+          employees: ctx.employees,
+          roomId,
+          topicId,
+          rootTriggerMessageId,
+        });
+        stewardProgress = advanced.progress;
+        stewardReceipt = advanced.receipt;
+
+        if (advanced.nextResponders.length) {
+          const { queueAgentRuns } = await import("@/lib/server/queue-agent-runs");
+          const next = await queueAgentRuns(client, {
+            workspaceId,
+            roomId,
+            topicId,
+            triggerMessageId: rootTriggerMessageId,
+            rootTriggerMessageId,
+            parentRunId: runId,
+            responders: advanced.nextResponders,
+            content: triggerUserContent,
+            skipAdmission: true,
+            createdByType: "steward",
+          });
+          activatedRuns = next.queued;
+          if (activatedRuns.length && handoffDepth === 0) {
+            void import("@/lib/server/background-agent-drainer").then(
+              ({ drainQueuedAgentRunsForRoot }) =>
+                drainQueuedAgentRunsForRoot(client, {
+                  workspaceId,
+                  rootTriggerMessageId,
+                  maxRuns: 8,
+                }),
+            );
+          }
+        }
+
+        if (stewardReceipt && !runMetadata.stewardInternalStep) {
+          const { data: msgRow } = await client
+            .from("messages")
+            .select("metadata")
+            .eq("workspace_id", workspaceId)
+            .eq("id", aiMessage.id)
+            .maybeSingle();
+          const prior =
+            msgRow?.metadata && typeof msgRow.metadata === "object"
+              ? (msgRow.metadata as Record<string, unknown>)
+              : {};
+          await client
+            .from("messages")
+            .update({
+              metadata: {
+                ...prior,
+                stewardReceipt,
+                stewardAttribution: stewardReceipt.attribution,
+                whReceipt: {
+                  brainRunId: stewardBrainRunId,
+                  messageId: aiMessage.id,
+                  totalWorkHours: stewardReceipt.totalWorkHours,
+                  displayTotalWorkHours: stewardReceipt.totalWorkHours,
+                  lines: stewardReceipt.lines.map((l) => ({
+                    capability: l.label,
+                    workType: null,
+                    workHours: l.workHours,
+                    displayWorkHours: l.workHours,
+                  })),
+                },
+              },
+            })
+            .eq("workspace_id", workspaceId)
+            .eq("id", aiMessage.id);
+        }
+      } catch (stewardErr) {
+        console.warn("[AdeHQ steward] advance after step failed", stewardErr);
+      }
+    }
+
+    if (!isGreetingRun && isLive && !stewardBrainRunId) {
       const pendingCollaborators = Array.isArray(runMetadata.pendingCollaboratorIds)
         ? (runMetadata.pendingCollaboratorIds as string[])
         : [];

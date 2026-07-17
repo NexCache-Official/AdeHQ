@@ -57,6 +57,7 @@ export async function POST(
     const response = await processEmployeeResponse(client, ctx, params.employeeId, body.content, {
       mode: body.mode,
       triggerMessageId: body.triggerMessageId,
+      initiatedByUserId: user.id,
     });
 
     return NextResponse.json(

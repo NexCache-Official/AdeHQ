@@ -64,6 +64,7 @@ export type CostEventInput = {
   imageCount?: number;
   videoCount?: number;
   ttsUtf8Bytes?: number;
+  audioSeconds?: number;
 
   unitCostUsd?: number | null;
   estimatedCostUsd?: number;

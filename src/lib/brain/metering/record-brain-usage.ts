@@ -97,6 +97,7 @@ export async function recordBrainUsage(input: BrainUsageInput): Promise<CostLedg
     imageCount: input.usage.imageCount ?? 0,
     videoCount: input.usage.videoCount ?? 0,
     ttsUtf8Bytes: input.usage.ttsUtf8Bytes ?? 0,
+    audioSeconds: input.usage.audioSeconds ?? 0,
     actualCostUsd: computed.costUsd,
     estimatedCostUsd: computed.costSource === "estimated" ? computed.costUsd : computed.costUsd,
     costSource: computed.costSource,

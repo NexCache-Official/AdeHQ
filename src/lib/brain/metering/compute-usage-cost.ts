@@ -15,6 +15,7 @@ export type RawBrainUsageUnits = {
   imageCount?: number;
   videoCount?: number;
   ttsUtf8Bytes?: number;
+  audioSeconds?: number;
   searchRequests?: number;
   browserSessionSeconds?: number;
   /** When the provider bills a total directly. */
@@ -39,6 +40,7 @@ function hasAnyUnits(usage: RawBrainUsageUnits): boolean {
     (usage.imageCount ?? 0) > 0 ||
     (usage.videoCount ?? 0) > 0 ||
     (usage.ttsUtf8Bytes ?? 0) > 0 ||
+    (usage.audioSeconds ?? 0) > 0 ||
     (usage.searchRequests ?? 0) > 0 ||
     (usage.browserSessionSeconds ?? 0) > 0
   );

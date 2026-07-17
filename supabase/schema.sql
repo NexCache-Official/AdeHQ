@@ -1131,6 +1131,10 @@ alter table public.dm_ownership_migration_report enable row level security;
 --   20260716193500_messages_metadata_wh_receipt.sql
 --   20260716194000_brain_drop_legacy_ledger_dedupe.sql
 --   20260716195000_brain_catalog_v2_seed.sql
--- Living eng plan: docs/architecture/adehq-brain.md (CATALOG_VERSION=2)
+-- Living eng plan: docs/architecture/adehq-brain.md (CATALOG_VERSION=7)
 -- Private DMs / hybrid access: 20260717120000_private_dms_hybrid_access.sql
 --   20260717130000_access_scoped_memory_tasks.sql
+-- Profile avatars: 20260717140000_profile_avatars.sql
+-- Brain reliability (PR-17.5): 20260717150000_brain_reliability_foundation.sql
+-- Steward execution (PR-19): 20260717160000_brain_steward_execution.sql
+-- Voice (PR-18): 20260717170000_brain_voice_v1.sql

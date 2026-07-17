@@ -3,6 +3,8 @@ export const DRIVE_BUCKETS = {
   artifacts: "adehq-artifacts",
   evidence: "adehq-browser-evidence",
   exports: "adehq-exports",
+  /** Private audio — never public; signed URLs only. */
+  audio: "adehq-audio",
 } as const;
 
 /** Legacy bucket — existing uploads may still reference this. */

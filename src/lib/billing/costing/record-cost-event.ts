@@ -83,6 +83,7 @@ export async function recordCostEvent(
     image_count: input.imageCount ?? 0,
     video_count: input.videoCount ?? 0,
     tts_utf8_bytes: input.ttsUtf8Bytes ?? 0,
+    audio_seconds: input.audioSeconds ?? 0,
     unit_cost_usd: input.unitCostUsd ?? null,
     estimated_cost_usd: estimated,
     actual_cost_usd: actual,

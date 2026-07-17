@@ -2,8 +2,12 @@
 
 > Living doc. Supersedes [intelligence-v2-plan.md](intelligence-v2-plan.md) for routing/metering/costing concerns.
 > Status: **V1 landed (PR-1…PR-12). PR-14 search + PR-15 vision + PR-16 image + PR-17 video landed (CATALOG_VERSION=6).**  
-> Next: PR-13 Step-3.5 promote only after agreement harness proves parity → voice/TTS media slice.  
-> Last grounded against the codebase 2026-07-16.
+> **PR-17.5 Brain Reliability Foundation** landed (lifecycle, envelopes, idempotency, cancel, retry, circuit breakers).  
+> **PR-19 Steward shadow** landed: typed `CollaborationPlan` + validation + golden scenarios; `ADEHQ_BRAIN_STEWARD_SHADOW=1` plans only.  
+> **PR-19 Steward execution** landed behind `ADEHQ_BRAIN_STEWARD_V1=1`: work leases, shared findings, DAG advance, progress UI, WH caps/receipts, cancel/fail handling.  
+> **PR-18 Voice** landed behind `ADEHQ_BRAIN_VOICE_V1=1` (+ `NEXT_PUBLIC_ADEHQ_BRAIN_VOICE_V1=1` for UI): STT/TTS routes, voice notes, Listen, async meetings, private `adehq-audio`, metering. CATALOG_VERSION=7.  
+> Release baseline: `/api/build-info` + `npm run verify:release`.  
+> Last grounded against the codebase 2026-07-17.
 
 ## Product lock
 

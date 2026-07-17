@@ -115,6 +115,26 @@ function ttsSnap(id: string, routeId: string, perThousandUtf8Bytes: number): Bra
   };
 }
 
+function sttSnap(id: string, routeId: string, perAudioSecond: number): BrainPricingSnapshot {
+  return {
+    id,
+    routeId,
+    currency: "USD",
+    effectiveFrom: SEED_EFFECTIVE_FROM,
+    effectiveTo: null,
+    inputPerMillion: null,
+    outputPerMillion: null,
+    cachedInputPerMillion: null,
+    perImage: null,
+    perVideo: null,
+    perThousandUtf8Bytes: null,
+    perSearchRequest: null,
+    perBrowserSecond: null,
+    perAudioSecond,
+    source: "seed",
+  };
+}
+
 function searchSnap(id: string, routeId: string, perSearchRequest: number): BrainPricingSnapshot {
   return {
     id,
@@ -185,6 +205,10 @@ export const SEEDED_PRICING_SNAPSHOTS: BrainPricingSnapshot[] = [
   ttsSnap("ps_tts_cosyvoice2_2026-07-16", "route_tts_cosyvoice2", 0.00715),
   ttsSnap("ps_tts_indextts2_2026-07-16", "route_tts_indextts2", 0.00715),
   ttsSnap("ps_tts_fish_speech_2026-07-16", "route_tts_fish_speech", 0.015),
+  // STT — provisional per-second rates pending live reconciliation
+  sttSnap("ps_stt_fast_2026-07-17", "route_stt_fast", 0.00006),
+  sttSnap("ps_stt_accurate_2026-07-17", "route_stt_accurate", 0.00012),
+  sttSnap("ps_stt_diarized_2026-07-17", "route_stt_diarized", 0.00015),
 
   // Evaluation
   tokenSnap("ps_eval_kimi_k27_2026-07-16", "route_eval_kimi_k27_code", 0.8592, 3.8, 0.1799),

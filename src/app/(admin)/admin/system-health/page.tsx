@@ -42,6 +42,48 @@ export default function AdminSystemHealthPage() {
             </div>
 
             <Card className="p-5">
+              <h2 className="mb-3 text-sm font-semibold text-ink">Release baseline</h2>
+              <div className="grid grid-cols-2 gap-3 text-sm md:grid-cols-4">
+                <div>
+                  <p className="text-xs text-ink-3">Commit</p>
+                  <p className="font-mono text-ink">{data.buildInfo.gitCommit.slice(0, 12)}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-ink-3">Environment</p>
+                  <p className="text-ink">{data.buildInfo.environment}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-ink-3">Catalog</p>
+                  <p className="text-ink">v{data.buildInfo.catalogVersion}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-ink-3">Migration</p>
+                  <p className="font-mono text-ink">{data.buildInfo.migrationVersion}</p>
+                </div>
+              </div>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {Object.entries(data.buildInfo.enabledFeatures).map(([key, on]) => (
+                  <span
+                    key={key}
+                    className={`rounded-md px-2 py-0.5 text-xs ${
+                      on ? "bg-emerald-50 text-emerald-800" : "bg-surface-2 text-ink-3"
+                    }`}
+                  >
+                    {key}:{on ? "on" : "off"}
+                  </span>
+                ))}
+              </div>
+              {data.buildInfo.mismatches.length > 0 && (
+                <p className="mt-3 text-xs text-rose-700">
+                  Mismatches: {data.buildInfo.mismatches.join("; ")}
+                </p>
+              )}
+              <p className="mt-2 text-xs text-ink-3">
+                Public probe: <span className="font-mono">/api/build-info</span>
+              </p>
+            </Card>
+
+            <Card className="p-5">
               <h2 className="mb-3 text-sm font-semibold text-ink">Provider health</h2>
               <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
                 {data.providerHealth.map((p) => (

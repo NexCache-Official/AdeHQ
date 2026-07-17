@@ -9,6 +9,7 @@ import type { WorkMode } from "@/lib/ai/intelligence/intelligence-context";
 import { resolveMessageMentions, type MentionParticipant } from "@/lib/mentions";
 import { EmployeeAvatar, HumanAvatar } from "./EmployeeAvatar";
 import { FileArtifactCard } from "./ArtifactCard";
+import { VoiceNoteButton } from "./VoiceNoteButton";
 import {
   AtSign,
   Bold,
@@ -252,6 +253,10 @@ export function ChatComposer({
   browserResearchTavilyConfigured = false,
   browserResearchLiveReady = false,
   browserResearchBusy = false,
+  workspaceId,
+  roomId,
+  topicId,
+  voiceEnabled = false,
 }: {
   employees: AIEmployee[];
   mentionHumans?: MentionHuman[];
@@ -267,6 +272,11 @@ export function ChatComposer({
   /** Broadcast local human typing for topic presence / AI pause. */
   onTypingChange?: (typing: boolean) => void;
   disabled?: boolean;
+  workspaceId?: string;
+  roomId?: string;
+  topicId?: string;
+  /** PR-18 — show mic when ADEHQ_BRAIN_VOICE_V1 is on (client hint). */
+  voiceEnabled?: boolean;
   placeholder?: string;
   draftText?: string;
   onDraftConsumed?: () => void;
@@ -1067,6 +1077,22 @@ export function ChatComposer({
           >
             <Paperclip className="h-4 w-4" strokeWidth={1.8} />
           </button>
+          {voiceEnabled && workspaceId ? (
+            <VoiceNoteButton
+              workspaceId={workspaceId}
+              roomId={roomId}
+              topicId={topicId}
+              disabled={disabled}
+              onTranscript={(transcript) => {
+                setValue((prev) => {
+                  const next = prev.trim() ? `${prev.trim()}\n\n${transcript}` : transcript;
+                  return next;
+                });
+                onTypingChange?.(true);
+                inputRef.current?.focus();
+              }}
+            />
+          ) : null}
           <textarea
             ref={inputRef}
             value={value}

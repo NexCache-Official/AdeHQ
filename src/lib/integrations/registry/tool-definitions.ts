@@ -1165,6 +1165,74 @@ const regenerateImage: ToolDefinition<RegenerateImageArgs> = {
   }),
 };
 
+export const SynthesizeSpeechArgsSchema = z.object({
+  intent: z.enum(["read_aloud", "narration", "premium_voiceover"]).default("read_aloud"),
+  text: z.string().min(1).max(8000),
+  confirmed: z.boolean().optional(),
+});
+export type SynthesizeSpeechArgs = z.infer<typeof SynthesizeSpeechArgsSchema>;
+
+export const TranscribeSpeechArgsSchema = z.object({
+  intent: z.enum(["voice_note", "accurate", "meeting"]).default("voice_note"),
+  audioFileId: z.string().optional(),
+  durationSeconds: z.number().positive().optional(),
+  requireDiarization: z.boolean().optional(),
+  confirmed: z.boolean().optional(),
+  title: z.string().max(200).optional(),
+});
+export type TranscribeSpeechArgs = z.infer<typeof TranscribeSpeechArgsSchema>;
+
+const synthesizeSpeech: ToolDefinition<SynthesizeSpeechArgs> = {
+  name: "speech.synthesize",
+  domain: "artifact",
+  provider: "internal",
+  description:
+    "Generate spoken audio from text for the user (Listen / narration). Never name models. Text remains the authoritative reply.",
+  readOnly: false,
+  risk: "low",
+  approval: "none",
+  asyncJobType: "speech_synthesize",
+  argsSchema: SynthesizeSpeechArgsSchema,
+  promptUsage:
+    'speech.synthesize — args: { "intent": "read_aloud"|"narration"|"premium_voiceover", "text": "...", "confirmed"?: true }. ' +
+    "Member labels only: Listen, Generate narration, Create premium voiceover. Do not autoplay.",
+  buildPreview: (args) => ({
+    title: `Speech — ${args.intent}`,
+    summary: "Generate spoken audio from text. Work Hours based on text length.",
+    fields: fields([
+      ["Intent", args.intent],
+      ["Text", args.text.slice(0, 200)],
+    ]),
+    risk: "low",
+  }),
+};
+
+const transcribeSpeech: ToolDefinition<TranscribeSpeechArgs> = {
+  name: "speech.transcribe",
+  domain: "artifact",
+  provider: "internal",
+  description:
+    "Transcribe a voice note or meeting recording. Long meetings are async Drive artifacts. Never name models.",
+  readOnly: false,
+  risk: "medium",
+  approval: "none",
+  asyncJobType: "speech_transcribe",
+  argsSchema: TranscribeSpeechArgsSchema,
+  promptUsage:
+    'speech.transcribe — args: { "intent": "voice_note"|"accurate"|"meeting", "audioFileId"?, "durationSeconds"?, "confirmed"?: true }. ' +
+    "Voice notes are sync with editable transcript; meetings are async.",
+  buildPreview: (args) => ({
+    title: `Transcription — ${args.intent}`,
+    summary: "Transcribe audio. Long recordings show an estimate before processing.",
+    fields: fields([
+      ["Intent", args.intent],
+      ["Duration (s)", args.durationSeconds != null ? String(args.durationSeconds) : null],
+      ["File", args.audioFileId],
+    ]),
+    risk: "medium",
+  }),
+};
+
 const createVideo: ToolDefinition<CreateVideoArgs> = {
   name: "video.create",
   domain: "artifact",
@@ -1240,6 +1308,8 @@ const TOOL_DEFINITIONS = [
   editImage,
   regenerateImage,
   createVideo,
+  synthesizeSpeech,
+  transcribeSpeech,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
 ] as ToolDefinition<any>[];
 

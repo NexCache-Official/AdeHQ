@@ -233,7 +233,7 @@ const APPROVED: Array<{
   {
     id: "route_tts_cosyvoice2",
     model: "FunAudioLLM/CosyVoice2-0.5B",
-    environment: "shadow",
+    environment: "production",
     unitType: "utf8_bytes",
     provider: "siliconflow",
     rates: { perThousandUtf8: 0.00715 },
@@ -241,7 +241,7 @@ const APPROVED: Array<{
   {
     id: "route_tts_indextts2",
     model: "IndexTeam/IndexTTS-2",
-    environment: "shadow",
+    environment: "production",
     unitType: "utf8_bytes",
     provider: "siliconflow",
     rates: { perThousandUtf8: 0.00715 },
@@ -249,7 +249,7 @@ const APPROVED: Array<{
   {
     id: "route_tts_fish_speech",
     model: "fishaudio/fish-speech-1.5",
-    environment: "shadow",
+    environment: "production",
     unitType: "utf8_bytes",
     provider: "siliconflow",
     rates: { perThousandUtf8: 0.015 },
@@ -298,35 +298,32 @@ const APPROVED: Array<{
     rates: { input: 0.3, output: 1.2, cached: 0.06 },
   },
 
-  // Disabled STT reserved
+  // PR-18 STT — SiliconFlow SenseVoice / TeleSpeech; diarized stays shadow
   {
     id: "route_stt_fast",
-    model: "stt.fast.unassigned",
-    environment: "disabled",
+    model: "FunAudioLLM/SenseVoiceSmall",
+    environment: "production",
     unitType: "audio_seconds",
-    provider: "unassigned",
-    enabled: false,
+    provider: "siliconflow",
   },
   {
     id: "route_stt_accurate",
-    model: "stt.accurate.unassigned",
-    environment: "disabled",
+    model: "TeleAI/TeleSpeechASR",
+    environment: "production",
     unitType: "audio_seconds",
-    provider: "unassigned",
-    enabled: false,
+    provider: "siliconflow",
   },
   {
     id: "route_stt_diarized",
-    model: "stt.diarized.unassigned",
-    environment: "disabled",
+    model: "FunAudioLLM/SenseVoiceSmall",
+    environment: "shadow",
     unitType: "audio_seconds",
-    provider: "unassigned",
-    enabled: false,
+    provider: "siliconflow",
   },
 ];
 
 function main() {
-  assert(CATALOG_VERSION === "6", "CATALOG_VERSION must be 6 after PR-17 video");
+  assert(CATALOG_VERSION === "7", "CATALOG_VERSION must be 7 after PR-18 voice");
 
   const ids = BRAIN_ROUTES.map((r) => r.id);
   assert(new Set(ids).size === ids.length, "route ids must be unique");
@@ -448,10 +445,20 @@ function main() {
     assert(r?.environment === "production", `${id} must be production`);
     assert(r?.unitType === "video", `${id} bills per video`);
   }
-  for (const id of ["route_tts_cosyvoice2"]) {
+  for (const id of ["route_tts_cosyvoice2", "route_tts_indextts2", "route_tts_fish_speech"]) {
     const r = getBrainRoute(id);
-    assert(r && r.environment !== "production", `${id} must not be production yet`);
+    assert(r?.environment === "production", `${id} must be production`);
+    assert(r?.unitType === "utf8_bytes", `${id} bills utf8 bytes`);
   }
+  for (const id of ["route_stt_fast", "route_stt_accurate"]) {
+    const r = getBrainRoute(id);
+    assert(r?.environment === "production", `${id} must be production`);
+    assert(r?.unitType === "audio_seconds", `${id} bills audio seconds`);
+  }
+  assert(
+    getBrainRoute("route_stt_diarized")?.environment === "shadow",
+    "diarized STT stays shadow until benchmark gate",
+  );
 
   console.log(`PASS  test-brain-catalog-invariants (${APPROVED.length} approved routes)`);
 }

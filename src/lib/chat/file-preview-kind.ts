@@ -7,6 +7,7 @@ export type ChatFilePreviewKind =
   | "presentation"
   | "image"
   | "video"
+  | "audio"
   | "other";
 
 const EXT_KIND: Record<string, ChatFilePreviewKind> = {
@@ -26,6 +27,12 @@ const EXT_KIND: Record<string, ChatFilePreviewKind> = {
   mp4: "video",
   webm: "video",
   mov: "video",
+  mp3: "audio",
+  wav: "audio",
+  ogg: "audio",
+  m4a: "audio",
+  aac: "audio",
+  flac: "audio",
 };
 
 export function extensionFromToolName(toolName?: string | null): string | undefined {
@@ -36,6 +43,7 @@ export function extensionFromToolName(toolName?: string | null): string | undefi
   if (toolName.includes("Presentation") || toolName.includes("presentation")) return "pptx";
   if (toolName.startsWith("image.")) return "png";
   if (toolName.startsWith("video.")) return "mp4";
+  if (toolName.startsWith("speech.")) return "mp3";
   return undefined;
 }
 
@@ -60,6 +68,7 @@ export function chatFilePreviewKind(input: {
   if (mime.includes("presentation") || mime.includes("powerpoint")) return "presentation";
   if (mime.startsWith("image/")) return "image";
   if (mime.startsWith("video/")) return "video";
+  if (mime.startsWith("audio/")) return "audio";
 
   const name = input.fileName ?? "";
   const dot = name.lastIndexOf(".");

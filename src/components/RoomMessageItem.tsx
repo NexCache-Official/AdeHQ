@@ -29,6 +29,7 @@ import {
 } from "@/lib/chat/file-preview-kind";
 import { MessageMarkdown } from "./MessageMarkdown";
 import { WorkHoursReceipt } from "@/components/chat/WorkHoursReceipt";
+import { ListenButton } from "@/components/ListenButton";
 import { displayWorkHours } from "@/lib/billing/costing/work-hours";
 import { EmailBridgeMessageCard } from "@/components/chat/EmailBridgeMessageCard";
 import {
@@ -766,6 +767,23 @@ export function RoomMessageItem({
               mentionParticipants={mentionParticipants}
               citationSources={inlineCitationSources}
             />
+            {typeof message.metadata?.stewardAttribution === "string" ? (
+              <p className="mt-1 text-[11px] text-slate-500">
+                {String(message.metadata.stewardAttribution)}
+              </p>
+            ) : null}
+            {message.senderType === "ai" &&
+            process.env.NEXT_PUBLIC_ADEHQ_BRAIN_VOICE_V1 === "1" &&
+            state.workspace?.id ? (
+              <ListenButton
+                workspaceId={state.workspace.id}
+                text={message.content}
+                messageId={message.id}
+                roomId={message.roomId}
+                topicId={message.topicId}
+                employeeId={message.senderId}
+              />
+            ) : null}
             {message.whReceipt || (message.workHoursCharged != null && message.workHoursCharged > 0) ? (
               <WorkHoursReceipt
                 receipt={{

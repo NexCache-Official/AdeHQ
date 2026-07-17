@@ -21,6 +21,7 @@ import { nowISO } from "@/lib/utils";
 import "./artifact-handlers";
 import "./image-handlers";
 import "./video-handlers";
+import "./voice-handlers";
 
 type DbRow = Record<string, unknown>;
 

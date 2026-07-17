@@ -460,6 +460,8 @@ export type RoomMessage = {
       workHours: number;
     }>;
   };
+  /** Optional message metadata (steward findings, receipts, etc.). */
+  metadata?: Record<string, unknown>;
 };
 
 export type WorkspaceFileStatus = "uploaded" | "processing" | "ready" | "failed";

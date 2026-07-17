@@ -31,6 +31,8 @@ import { parseJsonResponse } from "@/lib/api/parse-json-response";
 import { isGeneralTopic, mainChatLabel } from "@/lib/topics";
 import { ROOM_CHAT_MAX_WIDTH, ROOM_CHAT_WIDE_MAX_WIDTH } from "@/lib/chat/layout";
 import { RoomMessageItem } from "./RoomMessageItem";
+import { StewardProgressCard } from "./StewardProgressCard";
+import type { StewardProgressSnapshot } from "@/lib/brain/steward/types-execution";
 import { ChatComposer, type ComposerUploadedFile, type SlashCommandResult } from "./ChatComposer";
 import type { MessageActionHandlers } from "@/lib/message-actions";
 import { EmptyState } from "./States";
@@ -293,6 +295,7 @@ export function RoomChat({
   const [sendError, setSendError] = useState<string | null>(null);
   const [activeRuns, setActiveRuns] = useState<ActiveRun[]>([]);
   const [collaborationPlan, setCollaborationPlan] = useState<ConversationPlan | null>(null);
+  const [stewardProgress, setStewardProgress] = useState<StewardProgressSnapshot | null>(null);
   const [orchestratorDebug, setOrchestratorDebug] = useState<Record<string, unknown> | null>(null);
   const [topicSuggestions, setTopicSuggestions] = useState<TopicSuggestionPayload[]>([]);
   const [contextImports, setContextImports] = useState<TopicContextImportRecord[]>([]);
@@ -376,15 +379,17 @@ export function RoomChat({
 
   const displayMessages = useMemo(
     () =>
-      topicMessages.map((message) => ({
-        ...message,
-        seenBy: enrichHumanSeenBy(
-          message,
-          topicMessages,
-          topicMembersForTopic,
-          state.workspaceMembers,
-        ),
-      })),
+      topicMessages
+        .filter((message) => !message.metadata?.hiddenFromFeed && !message.metadata?.stewardInternalStep)
+        .map((message) => ({
+          ...message,
+          seenBy: enrichHumanSeenBy(
+            message,
+            topicMessages,
+            topicMembersForTopic,
+            state.workspaceMembers,
+          ),
+        })),
     [topicMessages, topicMembersForTopic, state.workspaceMembers],
   );
 
@@ -1413,6 +1418,8 @@ export function RoomChat({
         orchestrationId?: string | null;
         orchestrationPlan?: OrchestrationPlan | null;
         collaborationPlan?: ConversationPlan | null;
+        stewardProgress?: StewardProgressSnapshot | null;
+        stewardBrainRunId?: string | null;
         topicSuggestions?: TopicSuggestionPayload[];
         smartAssistSuggestions?: SuggestedConversationAction[];
         error?: string;
@@ -1527,6 +1534,9 @@ export function RoomChat({
 
       if (payload.collaborationPlan) {
         setCollaborationPlan(payload.collaborationPlan);
+      }
+      if (payload.stewardProgress) {
+        setStewardProgress(payload.stewardProgress);
       }
       if (payload.orchestratorDebug) {
         setOrchestratorDebug(payload.orchestratorDebug);
@@ -2063,6 +2073,7 @@ export function RoomChat({
                 </p>
               </div>
             ) : null}
+            {stewardProgress ? <StewardProgressCard progress={stewardProgress} /> : null}
             {chatTimelineItems.map((item) =>
               item.kind === "message" ? (
                 <div key={item.row.message.id}>
@@ -2293,6 +2304,10 @@ export function RoomChat({
             browserResearchTavilyConfigured={browserResearchConfig?.tavilyConfigured ?? false}
             browserResearchLiveReady={browserResearchConfig?.liveReady ?? false}
             browserResearchBusy={browserResearchBusy}
+            workspaceId={state.workspace?.id}
+            roomId={room.id}
+            topicId={topic?.id}
+            voiceEnabled={process.env.NEXT_PUBLIC_ADEHQ_BRAIN_VOICE_V1 === "1"}
           />
           {!chatDisabled && (
           <p className="px-1.5 pt-1.5 text-[11px] text-ink-3">

@@ -6,7 +6,9 @@ function resolveBoolFlag(
     | "adehq_brain_search_v1"
     | "adehq_brain_vision_v1"
     | "adehq_brain_image_v1"
-    | "adehq_brain_video_v1",
+    | "adehq_brain_video_v1"
+    | "adehq_brain_voice_v1"
+    | "adehq_brain_steward_v1",
   envKey: string,
   defaultOn: boolean,
 ): boolean {
@@ -75,4 +77,28 @@ export function isBrainImageV1Enabled(): boolean {
  */
 export function isBrainVideoV1Enabled(): boolean {
   return resolveBoolFlag("adehq_brain_video_v1", "ADEHQ_BRAIN_VIDEO_V1", true);
+}
+
+/**
+ * PR-18 voice kill switch — default OFF until STT/TTS routes graduate.
+ * ADEHQ_BRAIN_VOICE_V1=1 enables voice capability surfaces.
+ */
+export function isBrainVoiceV1Enabled(): boolean {
+  return resolveBoolFlag("adehq_brain_voice_v1", "ADEHQ_BRAIN_VOICE_V1", false);
+}
+
+/**
+ * PR-19 multi-agent Steward kill switch — default OFF.
+ * Shadow-plan mode may use ADEHQ_BRAIN_STEWARD_SHADOW=1 separately.
+ * ADEHQ_BRAIN_STEWARD_V1=1 enables collaborative execution.
+ */
+export function isBrainStewardV1Enabled(): boolean {
+  return resolveBoolFlag("adehq_brain_steward_v1", "ADEHQ_BRAIN_STEWARD_V1", false);
+}
+
+/** Plan-only multi-agent mode (no delegation execution). */
+export function isBrainStewardShadowEnabled(): boolean {
+  const env = process.env.ADEHQ_BRAIN_STEWARD_SHADOW?.trim().toLowerCase();
+  if (env === "1" || env === "true" || env === "on" || env === "yes") return true;
+  return false;
 }

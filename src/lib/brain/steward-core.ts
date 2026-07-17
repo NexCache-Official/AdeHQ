@@ -35,8 +35,8 @@ export type StewardDecideInput =
     };
 
 /**
- * Steward Core facade — single seam for Phase 3 (leases, blackboard).
- * Internally dispatches to existing room/dm/topic stewards unchanged.
+ * Steward Core facade — room/DM/topic intent classifiers.
+ * PR-19 CollaborationPlan shadow lives in `@/lib/brain/steward` (plan-only until stewardV1).
  */
 export async function decide(input: StewardDecideInput): Promise<StewardDecision> {
   switch (input.channel) {

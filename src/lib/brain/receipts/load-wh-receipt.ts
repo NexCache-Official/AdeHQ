@@ -74,11 +74,15 @@ export async function loadWhReceipt(
               ? "Image edit"
               : capabilityRaw === "video_generation" || workTypeRaw === "video_generation"
                 ? "Video creation"
-                : capabilityRaw === "reasoning" ||
-                    capabilityRaw === "quick_reply" ||
-                    capabilityRaw === "structured_chat"
-                  ? "Answer synthesis"
-                  : capabilityRaw;
+                : capabilityRaw === "speech_to_text" || workTypeRaw === "stt"
+                  ? "Transcription"
+                  : capabilityRaw === "text_to_speech" || workTypeRaw === "tts"
+                    ? "Spoken reply"
+                    : capabilityRaw === "reasoning" ||
+                        capabilityRaw === "quick_reply" ||
+                        capabilityRaw === "structured_chat"
+                      ? "Answer synthesis"
+                      : capabilityRaw;
     return {
       capability: input.includeAdminDetail ? capabilityRaw : memberCapability,
       workType: workTypeRaw,

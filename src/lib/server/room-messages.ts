@@ -153,6 +153,7 @@ function messageFromRow(row: DbRow): RoomMessage {
     createdAt: String(row.created_at ?? nowISO()),
     workHoursCharged,
     whReceipt,
+    metadata: Object.keys(metadata).length ? metadata : undefined,
   });
 }
 

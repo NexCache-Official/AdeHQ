@@ -36,6 +36,8 @@ export type ProcessEmployeeOptions = {
   mode?: "mock" | "live";
   triggerMessageId?: string;
   skipCostGuard?: boolean;
+  /** Human who initiated the response — stamps Brain reliability envelope. */
+  initiatedByUserId?: string;
 };
 
 export async function processEmployeeResponse(
@@ -201,6 +203,7 @@ export async function processEmployeeResponse(
   });
 
   let runId: string | undefined;
+  let brainRunId: string | undefined;
   let usageId: string | undefined;
   let maxOutputTokens: number | undefined;
 
@@ -249,6 +252,53 @@ export async function processEmployeeResponse(
     runId = begun.runId;
     usageId = begun.usageId;
     maxOutputTokens = begun.maxOutputTokens;
+
+    // PR-17.5: stamp unified Brain run + permission envelope (non-fatal)
+    const initiatorId =
+      options.initiatedByUserId ?? ctx.humanParticipants[0]?.id ?? null;
+    if (initiatorId) {
+      try {
+        const { beginUnifiedBrainRun } = await import("@/lib/brain/reliability/lifecycle");
+        const intensity =
+          modelMode === "cheap"
+            ? "fast"
+            : modelMode === "strong"
+              ? "deep"
+              : modelMode === "long_context"
+                ? "research"
+                : "standard";
+        const begunBrain = await beginUnifiedBrainRun(client, {
+          workspaceId: ctx.workspaceId,
+          initiatedByUserId: initiatorId,
+          leadEmployeeId: employeeId,
+          roomId: ctx.room.id,
+          topicId,
+          triggerMessageId: options.triggerMessageId,
+          intensity,
+          agentRunId: runId,
+        });
+        brainRunId = begunBrain.brainRunId;
+        const { data: existingRun } = await client
+          .from("agent_runs")
+          .select("run_metadata")
+          .eq("workspace_id", ctx.workspaceId)
+          .eq("id", runId)
+          .maybeSingle();
+        const priorMeta =
+          existingRun?.run_metadata && typeof existingRun.run_metadata === "object"
+            ? (existingRun.run_metadata as Record<string, unknown>)
+            : {};
+        await client
+          .from("agent_runs")
+          .update({
+            run_metadata: { ...priorMeta, brainRunId, reliability: "pr17_5" },
+          })
+          .eq("workspace_id", ctx.workspaceId)
+          .eq("id", runId);
+      } catch (err) {
+        console.warn("[AdeHQ brain reliability] beginUnifiedBrainRun", err);
+      }
+    }
 
     await appendRunStep(client, {
       workspaceId: ctx.workspaceId,
@@ -460,6 +510,19 @@ export async function processEmployeeResponse(
       failed: failed || aiMode === "error",
       errorMessage,
     });
+  }
+
+  if (brainRunId) {
+    try {
+      const { finishBrainRun } = await import("@/lib/brain/reliability/lifecycle");
+      await finishBrainRun(
+        client,
+        brainRunId,
+        failed || aiMode === "error" ? "failed" : "completed",
+      );
+    } catch (err) {
+      console.warn("[AdeHQ brain reliability] finishBrainRun", err);
+    }
   }
 
   return {
