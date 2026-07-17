@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { AuthError, requireAuthUser } from "@/lib/supabase/auth-server";
 import { createSupabaseSecretClient } from "@/lib/supabase/server";
+import { applyInviteAccessPackage } from "@/lib/server/apply-invite-access";
 import { normalizeWorkspaceRole } from "@/lib/workspace/permissions";
 
 export const runtime = "nodejs";
@@ -81,6 +82,19 @@ export async function POST(
       .eq("id", invite.id)
       .eq("status", "pending");
     if (inviteError) throw inviteError;
+
+    try {
+      await applyInviteAccessPackage(service, {
+        workspaceId: String(invite.workspace_id),
+        userId: user.id,
+        inviteId: String(invite.id),
+        role,
+        preset: invite.access_preset ? String(invite.access_preset) : "full_member",
+      });
+    } catch (provisionError) {
+      console.error("[AdeHQ invitation accept] access package", provisionError);
+      // Membership already committed — repair path can finish grants.
+    }
 
     const { data: workspace } = await service
       .from("workspaces")

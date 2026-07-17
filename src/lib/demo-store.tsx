@@ -169,6 +169,7 @@ type StoreActions = {
   // rooms
   createRoom: (room: Partial<ProjectRoom> & { name: string }) => ProjectRoom;
   openOrCreateDM: (employeeId: string) => ProjectRoom;
+  openOrCreateHumanDM: (peerUserId: string) => ProjectRoom;
   updateRoom: (id: string, patch: Partial<ProjectRoom>) => void;
   removeRoomPermanently: (roomId: string) => void;
   addEmployeeToRoom: (roomId: string, employeeId: string) => void;
@@ -1232,6 +1233,10 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 
       hireEmployee: (employee) => {
         const current = stateRef.current;
+        const myRole = current.workspaceMembers.find((m) => m.userId === current.user?.id)?.role;
+        if (myRole !== "admin") {
+          throw new Error("Only workspace admins can hire AI employees.");
+        }
         // Capture HQ at hire time — do not use whatever workspace is active when the queue runs.
         const hireWorkspaceId = current.workspace.id;
         if (!hireWorkspaceId) {
@@ -1322,6 +1327,11 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 
       removeEmployee: (id) => {
         const current = stateRef.current;
+        const myRole = current.workspaceMembers.find((m) => m.userId === current.user?.id)?.role;
+        if (myRole !== "admin") {
+          setError("Only workspace admins can remove AI employees.");
+          return;
+        }
         const target = current.employees.find((e) => e.id === id);
         if (target && isSystemEmployee(target)) {
           setError("Maya is a permanent workspace guide and cannot be removed.");
@@ -1354,6 +1364,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           id,
           name: uniqueName,
           kind: "room",
+          roomVisibility: room.roomVisibility ?? "workspace",
           description: room.description ?? "",
           brief: room.brief ?? "",
           humans: room.humans ?? (stateRef.current.user?.id ? [stateRef.current.user.id] : []),
@@ -1396,56 +1407,56 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         const s = stateRef.current;
         const employee = s.employees.find((e) => e.id === employeeId);
         const userId = s.user?.id;
+        const workspaceId = s.workspace?.id;
         if (!userId) throw new Error("Sign in to open a direct message.");
+        if (!workspaceId) throw new Error("No workspace selected.");
 
         const isMaya = employee ? isMayaEmployee(employee) : false;
         if (isMaya) {
-          const welcomeContent = s.user?.name
-            ? mayaWelcomeMessage(s.user.name.split(" ")[0] ?? "there")
-            : mayaWelcomeMessage("there");
-          const canonical = buildMayaDmRoom(userId, welcomeContent);
-          const existing = s.rooms.find(
-            (room) => room.kind === "dm" && room.dmEmployeeId === employeeId,
-          );
-
-          if (existing?.id === canonical.id) {
-            set((st) =>
-              ensureMayaDmTopicsInState(dedupeMayaDmRooms(st), userId),
-            );
-            void ensureMayaDmRemote(canonical.id);
-            return existing;
+          const role = s.workspaceMembers.find((m) => m.userId === userId)?.role;
+          if (role !== "admin") {
+            throw new Error("Only workspace admins can message Maya.");
           }
-
-          set((st) => {
-            const withoutDupes = st.rooms.filter(
-              (room) => !(room.kind === "dm" && room.dmEmployeeId === employeeId),
-            );
-            return ensureMayaDmTopicsInState(
-              { ...st, rooms: [canonical, ...withoutDupes] },
-              userId,
-            );
-          });
-
-          void ensureMayaDmRemote(canonical.id);
-
-          return canonical;
         }
 
-        const existing = s.rooms.find((r) => r.kind === "dm" && r.dmEmployeeId === employeeId);
+        const existing = s.rooms.find(
+          (r) =>
+            r.kind === "dm" &&
+            r.dmEmployeeId === employeeId &&
+            (!r.dmOwnerUserId || r.dmOwnerUserId === userId),
+        );
         if (existing) {
           set((st) => ensureDmGeneralTopicInState(st, existing.id, userId, employeeId).state);
           void refreshTopicsForRoom(existing.id);
+          // Ensure server identity exists / is reconciled
+          void (async () => {
+            try {
+              const { authHeaders } = await import("@/lib/api/auth-client");
+              const headers = await authHeaders();
+              await fetch("/api/rooms/dm", {
+                method: "POST",
+                headers,
+                body: JSON.stringify({ workspaceId, employeeId }),
+              });
+            } catch {
+              /* ignore */
+            }
+          })();
           return existing;
         }
+
         const id = uid("dm");
         const timestamp = nowISO();
-        const welcomeContent = `This is the start of your direct message with ${employee?.name ?? "your employee"}.`;
+        const welcomeContent = isMaya
+          ? mayaWelcomeMessage(s.user?.name?.split(" ")[0] ?? "there")
+          : `This is the start of your direct message with ${employee?.name ?? "your employee"}.`;
         const topicId = `topic-general-${id}`;
         const created: ProjectRoom = {
           id,
           name: employee?.name ?? "Direct message",
           kind: "dm",
           dmEmployeeId: employeeId,
+          dmOwnerUserId: userId,
           description: `Direct message with ${employee?.name ?? "an employee"}`,
           brief: employee?.instructions ?? "",
           humans: [userId],
@@ -1455,9 +1466,9 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
               id: uid("msg"),
               roomId: id,
               topicId,
-              senderType: "system",
-              senderId: "system",
-              senderName: "AdeHQ",
+              senderType: isMaya ? "ai" : "system",
+              senderId: isMaya ? employeeId : "system",
+              senderName: isMaya ? (employee?.name ?? "Maya") : "AdeHQ",
               content: welcomeContent,
               createdAt: timestamp,
             },
@@ -1475,19 +1486,114 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           return ensureDmGeneralTopicInState(withRoom, created.id, userId, employeeId).state;
         });
 
-        runRemote(async (workspaceId) => {
-          await persistRoom(workspaceId, created);
-          await Promise.all([
-            ...created.humans.map((memberId) =>
-              persistRoomMember(workspaceId, created.id, "human", memberId),
-            ),
-            ...created.aiEmployees.map((memberId) =>
-              persistRoomMember(workspaceId, created.id, "ai", memberId),
-            ),
-          ]);
-          await persistMessage(workspaceId, created.messages[0]);
-          await refreshTopicsForRoom(created.id);
-        });
+        // Authoritative create via unique (workspace, owner, employee)
+        void (async () => {
+          try {
+            const { authHeaders } = await import("@/lib/api/auth-client");
+            const headers = await authHeaders();
+            const res = await fetch("/api/rooms/dm", {
+              method: "POST",
+              headers,
+              body: JSON.stringify({ workspaceId, employeeId }),
+            });
+            const payload = (await res.json().catch(() => ({}))) as { roomId?: string; error?: string };
+            if (!res.ok || !payload.roomId) {
+              console.error("[openOrCreateDM]", payload.error ?? res.status);
+              return;
+            }
+            if (payload.roomId !== created.id) {
+              set((st) => {
+                const withoutPlaceholder = st.rooms.filter((r) => r.id !== created.id);
+                const serverRoom: ProjectRoom = {
+                  ...created,
+                  id: payload.roomId!,
+                  messages: created.messages.map((m) => ({
+                    ...m,
+                    roomId: payload.roomId!,
+                    topicId: `topic-general-${payload.roomId}`,
+                  })),
+                };
+                return ensureDmGeneralTopicInState(
+                  { ...st, rooms: [serverRoom, ...withoutPlaceholder] },
+                  serverRoom.id,
+                  userId,
+                  employeeId,
+                ).state;
+              });
+            }
+            await refreshTopicsForRoom(payload.roomId);
+          } catch (err) {
+            console.error("[openOrCreateDM]", err);
+          }
+        })();
+
+        return created;
+      },
+
+      openOrCreateHumanDM: (peerUserId: string) => {
+        const s = stateRef.current;
+        const userId = s.user?.id;
+        const workspaceId = s.workspace?.id;
+        if (!userId || !workspaceId) throw new Error("Sign in to open a direct message.");
+        if (peerUserId === userId) throw new Error("Cannot DM yourself.");
+
+        const existing = s.rooms.find(
+          (r) =>
+            r.kind === "dm" &&
+            !r.dmEmployeeId &&
+            ((r.dmOwnerUserId === userId && r.dmPeerUserId === peerUserId) ||
+              (r.dmOwnerUserId === peerUserId && r.dmPeerUserId === userId)),
+        );
+        if (existing) return existing;
+
+        const peer = s.workspaceMembers.find((m) => m.userId === peerUserId);
+        const id = uid("dm");
+        const timestamp = nowISO();
+        const [owner, peerId] =
+          userId < peerUserId ? [userId, peerUserId] : [peerUserId, userId];
+        const created: ProjectRoom = {
+          id,
+          name: peer?.name ?? "Direct message",
+          kind: "dm",
+          dmOwnerUserId: owner,
+          dmPeerUserId: peerId,
+          dmPairKey: `${owner}:${peerId}`,
+          description: "Direct message",
+          brief: "",
+          humans: [userId, peerUserId],
+          aiEmployees: [],
+          messages: [],
+          tasks: [],
+          memory: [],
+          unread: 0,
+          accent: "#3B4C6B",
+          createdAt: timestamp,
+          updatedAt: timestamp,
+        };
+        set((st) => ({ ...st, rooms: [created, ...st.rooms] }));
+
+        void (async () => {
+          try {
+            const { authHeaders } = await import("@/lib/api/auth-client");
+            const headers = await authHeaders();
+            const res = await fetch("/api/rooms/dm", {
+              method: "POST",
+              headers,
+              body: JSON.stringify({ workspaceId, peerUserId }),
+            });
+            const payload = (await res.json().catch(() => ({}))) as { roomId?: string };
+            if (res.ok && payload.roomId && payload.roomId !== created.id) {
+              set((st) => ({
+                ...st,
+                rooms: st.rooms.map((r) =>
+                  r.id === created.id ? { ...r, id: payload.roomId! } : r,
+                ),
+              }));
+            }
+          } catch {
+            /* ignore */
+          }
+        })();
 
         return created;
       },

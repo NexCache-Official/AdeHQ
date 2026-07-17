@@ -38,7 +38,7 @@ import {
   generateRecruiterResponse,
   getRecruiterRuntimeDispatch,
 } from "@/lib/hiring/recruiter-llm";
-import { resolveHiringWorkspaceContext } from "@/lib/server/hiring-workspace-context";
+import { resolveHiringWorkspaceContextForAdmin } from "@/lib/server/hiring-workspace-context";
 import {
   MAYA_EMPLOYEE_NAME,
   MAYA_EMPLOYEE_SYSTEM_PROMPT,
@@ -416,6 +416,14 @@ export async function POST(request: NextRequest) {
     const { user, client } = await requireAuthUser(request);
     const body = (await request.json()) as RecruiterBody;
 
+    // Gate every recruiter turn — including deterministic paths without LLM.
+    await resolveHiringWorkspaceContextForAdmin(client, user.id, {
+      workspaceId: body.workspaceId,
+      hiringSessionId: body.hiringSessionId,
+      topicId: body.topicId,
+      mayaRoomId: body.mayaRoomId,
+    });
+
     const { conversation, departmentId, roleKey, action } = normalizeBody(body);
 
     if (!body.roleSeed?.trim() && !departmentId && !roleKey) {
@@ -486,7 +494,7 @@ export async function POST(request: NextRequest) {
       .join("\n\n");
 
     try {
-      const hiringContext = await resolveHiringWorkspaceContext(client, user.id, {
+      const hiringContext = await resolveHiringWorkspaceContextForAdmin(client, user.id, {
         workspaceId: body.workspaceId,
         hiringSessionId: body.hiringSessionId,
         topicId: body.topicId,

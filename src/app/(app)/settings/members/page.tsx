@@ -19,9 +19,17 @@ type MemberRow = {
 
 type InviteRow = { id: string; invited_email: string; role: string; status: string };
 
+type AccessPreset = "full_member" | "standard_member" | "restricted_member";
+
 const ROLE_HELP: Record<WorkspaceMemberRole, string> = {
   admin: "Admin can manage billing and members",
   member: "Member can use rooms, AI employees, CRM, and the rest of the product",
+};
+
+const PRESET_HELP: Record<AccessPreset, string> = {
+  full_member: "Full: all workspace rooms + workspace AI employees (Maya/hire stay admin-only)",
+  standard_member: "Standard: workspace rooms + workspace AI; no extra restricted rooms",
+  restricted_member: "Restricted: only rooms and AI grants you attach to the invite",
 };
 
 export default function SettingsMembersPage() {
@@ -35,6 +43,7 @@ export default function SettingsMembersPage() {
   const [loading, setLoading] = useState(true);
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState<WorkspaceMemberRole>("member");
+  const [invitePreset, setInvitePreset] = useState<AccessPreset>("full_member");
   const [inviteBusy, setInviteBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -130,7 +139,11 @@ export default function SettingsMembersPage() {
         const res = await fetch(`/api/workspaces/${workspaceId}/invitations`, {
           method: "POST",
           headers: { ...headers, "Content-Type": "application/json" },
-          body: JSON.stringify({ email: inviteEmail, role: inviteRole }),
+          body: JSON.stringify({
+            email: inviteEmail,
+            role: inviteRole,
+            accessPreset: invitePreset,
+          }),
         });
         const body = await res.json();
         if (!res.ok) throw new Error(body?.error ?? "Unable to create invite.");
@@ -138,6 +151,7 @@ export default function SettingsMembersPage() {
         await actions.inviteWorkspaceMember(inviteEmail, inviteRole);
       }
       setInviteEmail("");
+      setInvitePreset("full_member");
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to create invite.");
@@ -173,7 +187,11 @@ export default function SettingsMembersPage() {
                   key={member.userId}
                   className="flex items-center gap-3 rounded-xl border border-border-2 bg-muted/40 px-3 py-2.5"
                 >
-                  <HumanAvatar name={member.name ?? member.email ?? "Member"} size="sm" />
+                  <HumanAvatar
+                    name={member.name ?? member.email ?? "Member"}
+                    size="sm"
+                    userId={member.userId}
+                  />
                   <div className="min-w-0 flex-1">
                     <div className="truncate text-sm font-medium text-ink">
                       {member.name ?? "Workspace member"}
@@ -217,7 +235,7 @@ export default function SettingsMembersPage() {
             <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-ink">
               <UserPlus className="h-4 w-4 text-accent" /> Invite a teammate
             </div>
-            <div className="grid gap-3 sm:grid-cols-[1fr_160px_auto]">
+            <div className="grid gap-3 sm:grid-cols-[1fr_140px_1fr_auto]">
               <input
                 type="email"
                 className="input-field"
@@ -236,11 +254,22 @@ export default function SettingsMembersPage() {
                   </option>
                 ))}
               </select>
+              <select
+                className="input-field"
+                value={invitePreset}
+                onChange={(e) => setInvitePreset(e.target.value as AccessPreset)}
+              >
+                <option value="full_member">Full access</option>
+                <option value="standard_member">Standard</option>
+                <option value="restricted_member">Restricted</option>
+              </select>
               <Button onClick={sendInvite} disabled={inviteBusy}>
                 <Mail className="h-4 w-4" /> {inviteBusy ? "Inviting…" : "Invite"}
               </Button>
             </div>
-            <p className="mt-2 text-xs text-ink-3">{ROLE_HELP[inviteRole]}</p>
+            <p className="mt-2 text-xs text-ink-3">
+              {ROLE_HELP[inviteRole]}. {PRESET_HELP[invitePreset]}
+            </p>
           </div>
         ) : (
           <p className="mt-4 rounded-xl bg-muted/60 px-3 py-3 text-sm text-ink-3">

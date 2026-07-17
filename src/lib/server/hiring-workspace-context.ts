@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { requireWorkspaceMembership } from "@/lib/supabase/auth-server";
+import { AuthError, requireWorkspaceMembership } from "@/lib/supabase/auth-server";
+import { requireHireAdmin } from "@/lib/server/require-hire-admin";
 
 export type HiringWorkspaceContextInput = {
   workspaceId?: string | null;
@@ -93,4 +94,18 @@ export async function resolveHiringWorkspaceContext(
   }
 
   return {};
+}
+
+/** Resolve hiring context and require workspace admin (hire / manage AI). */
+export async function resolveHiringWorkspaceContextForAdmin(
+  client: SupabaseClient,
+  userId: string,
+  input: HiringWorkspaceContextInput,
+): Promise<ResolvedHiringWorkspaceContext & { workspaceId: string }> {
+  const ctx = await resolveHiringWorkspaceContext(client, userId, input);
+  if (!ctx.workspaceId) {
+    throw new AuthError("Workspace context required for hiring.", 400);
+  }
+  await requireHireAdmin(client, ctx.workspaceId, userId);
+  return { ...ctx, workspaceId: ctx.workspaceId };
 }

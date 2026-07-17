@@ -18,9 +18,11 @@ import { useShellUI } from "./AppShell";
 import { useDebugTrace } from "./DebugProvider";
 import { WorkspaceSwitcher } from "./WorkspaceSwitcher";
 import { SidebarWorkHoursMeter } from "./SidebarWorkHoursMeter";
-import { roleLabel } from "@/lib/workspace/permissions";
+import { canManageAiEmployees, roleLabel } from "@/lib/workspace/permissions";
+import { canAccessMaya } from "@/lib/workspace/access";
 import { Toggle } from "./ui";
-import { EmployeeAvatar } from "./EmployeeAvatar";
+import { EmployeeAvatar, HumanAvatar } from "./EmployeeAvatar";
+import { avatarAccentForId } from "@/lib/avatar-accent";
 import {
   SidebarCollapsibleSection,
   SidebarNestedButton,
@@ -55,7 +57,7 @@ import {
 import { AnimatePresence, motion } from "framer-motion";
 
 const WORKFORCE_NAV = [
-  { href: "/workforce", label: "AI Workforce", icon: Bot },
+  { href: "/workforce", label: "Workforce", icon: Bot },
   { href: "/crm", label: "CRM", icon: Briefcase },
   { href: "/calendar", label: "Calendar", icon: CalendarDays },
   { href: "/investors", label: "Investors", icon: TrendingUp },
@@ -103,14 +105,21 @@ export function Sidebar() {
     };
   }, [state.workspace?.id, pathname]);
 
+  const myRole = state.workspaceMembers.find((m) => m.userId === state.user?.id)?.role;
+  const canHire = canManageAiEmployees(myRole);
+  const showMaya = canAccessMaya(myRole);
   const workingCount = state.employees.filter((e) => e.status === "working").length;
   const pendingApprovals = state.approvals.filter((a) => a.status === "pending").length;
   const openTasks = state.tasks.filter((t) => t.status !== "done").length;
   const rooms = getGroupRooms(state.rooms);
   const { maya, hired } = partitionWorkforce(state.employees);
-  const sidebarDmEmployees = [...maya, ...hired];
+  const sidebarDmEmployees = [...(showMaya ? maya : []), ...hired];
+  const humanPeers = state.workspaceMembers.filter(
+    (m) => m.userId !== state.user?.id && m.status !== "removed",
+  );
   const dmRooms = getDirectMessages(state.rooms);
   const hasDmUnread = dmRooms.some((r) => r.unread > 0);
+  const sidebarDmCount = sidebarDmEmployees.length + humanPeers.length;
 
   const activeRoomId = pathname.match(/^\/rooms\/([^/]+)/)?.[1];
   const activeRoom = useMemo(
@@ -125,6 +134,11 @@ export function Sidebar() {
 
   const openDM = (employeeId: string) => {
     const room = actions.openOrCreateDM(employeeId);
+    router.push(`/rooms/${room.id}`);
+  };
+
+  const openHumanDM = (peerUserId: string) => {
+    const room = actions.openOrCreateHumanDM(peerUserId);
     router.push(`/rooms/${room.id}`);
   };
 
@@ -228,51 +242,83 @@ export function Sidebar() {
           label="Direct messages"
           icon={MessageSquare}
           href="/dm"
-          count={sidebarDmEmployees.length}
+          count={sidebarDmCount}
           showUnreadDot={hasDmUnread}
           isSectionActive={pathname === "/dm" || !!onDmRoom}
           forceOpen={!!onDmRoom}
         >
-          {sidebarDmEmployees.length === 0 ? (
+          {sidebarDmCount === 0 ? (
             <p className="px-2 py-1.5 text-[11px] leading-relaxed text-[var(--rail-ink-3)]">
-              Maya will appear here once your workspace loads
+              {showMaya
+                ? "Maya will appear here once your workspace loads"
+                : "Message teammates and AI employees here"}
             </p>
           ) : (
-            sidebarDmEmployees.slice(0, MAX_SIDEBAR_ITEMS).map((employee) => {
-              const dm = findDmRoomForEmployee(state.rooms, employee.id);
-              const active = dm ? activeRoomId === dm.id : false;
-              const isMaya = isMayaEmployee(employee);
-              return (
-                <SidebarNestedButton
-                  key={employee.id}
-                  onClick={() => openDM(employee.id)}
-                  active={active}
-                  icon={
-                    <EmployeeAvatar
-                      employee={employee}
-                      size="xs"
-                      showStatus={false}
+            <>
+              {humanPeers.slice(0, Math.min(6, MAX_SIDEBAR_ITEMS)).map((peer) => {
+                const dm = state.rooms.find(
+                  (r) =>
+                    r.kind === "dm" &&
+                    !r.dmEmployeeId &&
+                    (r.dmPeerUserId === peer.userId || r.dmOwnerUserId === peer.userId),
+                );
+                const active = dm ? activeRoomId === dm.id : false;
+                const accent = avatarAccentForId(peer.userId);
+                return (
+                  <SidebarNestedButton
+                    key={`human-${peer.userId}`}
+                    onClick={() => openHumanDM(peer.userId)}
+                    active={active}
+                    icon={
+                      <HumanAvatar
+                        name={peer.name ?? peer.email ?? "Member"}
+                        size="xs"
+                        accent={accent.background}
+                      />
+                    }
+                    label={peer.name ?? peer.email ?? "Member"}
+                    badge={dm ? unreadBadge(dm.unread) : undefined}
+                  />
+                );
+              })}
+              {sidebarDmEmployees
+                .slice(0, Math.max(0, MAX_SIDEBAR_ITEMS - Math.min(6, humanPeers.length)))
+                .map((employee) => {
+                  const dm = findDmRoomForEmployee(state.rooms, employee.id, state.user?.id);
+                  const active = dm ? activeRoomId === dm.id : false;
+                  const isMaya = isMayaEmployee(employee);
+                  return (
+                    <SidebarNestedButton
+                      key={employee.id}
+                      onClick={() => openDM(employee.id)}
+                      active={active}
+                      icon={
+                        <EmployeeAvatar
+                          employee={employee}
+                          size="xs"
+                          showStatus={false}
+                        />
+                      }
+                      label={employee.name}
+                      badge={
+                        isMaya ? (
+                          <span className="ml-auto shrink-0 rounded-full bg-[var(--rail-badge-bg)] px-1.5 font-mono text-[9px] text-[var(--rail-badge-ink)]">
+                            {MAYA_WORKFORCE_BADGE}
+                          </span>
+                        ) : dm ? (
+                          unreadBadge(dm.unread)
+                        ) : undefined
+                      }
                     />
-                  }
-                  label={employee.name}
-                  badge={
-                    isMaya ? (
-                      <span className="ml-auto shrink-0 rounded-full bg-[var(--rail-badge-bg)] px-1.5 font-mono text-[9px] text-[var(--rail-badge-ink)]">
-                        {MAYA_WORKFORCE_BADGE}
-                      </span>
-                    ) : dm ? (
-                      unreadBadge(dm.unread)
-                    ) : undefined
-                  }
-                />
-              );
-            })
+                  );
+                })}
+            </>
           )}
-          {sidebarDmEmployees.length > MAX_SIDEBAR_ITEMS && (
+          {sidebarDmCount > MAX_SIDEBAR_ITEMS && (
             <SidebarNestedLink
               href="/dm"
               icon={<MessageSquare className="h-3.5 w-3.5" strokeWidth={2} />}
-              label={`+${sidebarDmEmployees.length - MAX_SIDEBAR_ITEMS} more`}
+              label={`+${sidebarDmCount - MAX_SIDEBAR_ITEMS} more`}
             />
           )}
         </SidebarCollapsibleSection>
@@ -328,19 +374,21 @@ export function Sidebar() {
           </div>
         )}
 
-        <button
-          type="button"
-          onClick={ui.openHire}
-          className="group flex w-full min-w-0 flex-col items-center gap-0.5 rounded-[11px] bg-accent px-2.5 py-2.5 text-white shadow-glow transition-all hover:brightness-105 active:scale-[0.99]"
-        >
-          <span className="flex min-w-0 items-center justify-center gap-2 text-[12.5px] font-semibold">
-            <UserPlus className="h-4 w-4 shrink-0" strokeWidth={2} />
-            <span className="min-w-0 truncate">Hire AI Employee</span>
-          </span>
-          <span className="font-mono text-[9px] uppercase tracking-[0.1em] text-white/70">
-            Open role
-          </span>
-        </button>
+        {canHire && (
+          <button
+            type="button"
+            onClick={ui.openHire}
+            className="group flex w-full min-w-0 flex-col items-center gap-0.5 rounded-[11px] bg-accent px-2.5 py-2.5 text-white shadow-glow transition-all hover:brightness-105 active:scale-[0.99]"
+          >
+            <span className="flex min-w-0 items-center justify-center gap-2 text-[12.5px] font-semibold">
+              <UserPlus className="h-4 w-4 shrink-0" strokeWidth={2} />
+              <span className="min-w-0 truncate">Hire AI Employee</span>
+            </span>
+            <span className="font-mono text-[9px] uppercase tracking-[0.1em] text-white/70">
+              Open role
+            </span>
+          </button>
+        )}
 
         <button
           type="button"

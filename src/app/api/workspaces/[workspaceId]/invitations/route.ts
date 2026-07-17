@@ -38,15 +38,29 @@ export async function POST(
     const body = (await request.json().catch(() => ({}))) as {
       email?: string;
       role?: string;
+      accessPreset?: "full_member" | "standard_member" | "restricted_member";
+      accessPackage?: Record<string, unknown>;
+      aiGrants?: Array<{
+        employeeId: string;
+        accessEffect?: "allow" | "deny";
+        canDm?: boolean;
+      }>;
+      roomGrants?: string[];
+      topicDenies?: string[];
     };
     const invitedEmail = body.email?.trim().toLowerCase();
     const invitedRole = normalizeWorkspaceRole(body.role?.trim() || "member");
+    const accessPreset = body.accessPreset ?? "full_member";
+    const validPresets = new Set(["full_member", "standard_member", "restricted_member"]);
 
     if (!invitedEmail || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(invitedEmail)) {
       return NextResponse.json({ error: "Enter a valid email address." }, { status: 400 });
     }
     if (!VALID_ROLES.has(invitedRole)) {
       return NextResponse.json({ error: "Invalid role." }, { status: 400 });
+    }
+    if (!validPresets.has(accessPreset)) {
+      return NextResponse.json({ error: "Invalid access preset." }, { status: 400 });
     }
 
     const service = createSupabaseSecretClient();
@@ -61,25 +75,27 @@ export async function POST(
     }
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60_000).toISOString();
 
+    const invitePayload = {
+      workspace_id: params.workspaceId,
+      invited_email: invitedEmail,
+      invited_by: user.id,
+      role: invitedRole,
+      status: "pending" as const,
+      accepted_by: null,
+      accepted_at: null,
+      expires_at: expiresAt,
+      access_preset: accessPreset,
+      access_package: body.accessPackage ?? { preset: accessPreset },
+    };
+
     const { data: invite, error: inviteError } = await service
       .from("workspace_invitations")
-      .upsert(
-        {
-          workspace_id: params.workspaceId,
-          invited_email: invitedEmail,
-          invited_by: user.id,
-          role: invitedRole,
-          status: "pending",
-          accepted_by: null,
-          accepted_at: null,
-          expires_at: expiresAt,
-        },
-        { onConflict: "workspace_id,invited_email" },
-      )
+      .upsert(invitePayload, { onConflict: "workspace_id,invited_email" })
       .select("*")
       .single();
 
-    if (inviteError) {
+    let savedInvite = invite;
+    if (inviteError || !savedInvite) {
       const { data: inserted, error: insertError } = await service
         .from("workspace_invitations")
         .insert({
@@ -89,16 +105,61 @@ export async function POST(
           role: invitedRole,
           status: "pending",
           expires_at: expiresAt,
+          access_preset: accessPreset,
+          access_package: body.accessPackage ?? { preset: accessPreset },
         })
         .select("*")
         .single();
       if (insertError) throw insertError;
-      await sendInviteEmail(service, params.workspaceId, invitedEmail, invitedRole, user, String(inserted.token));
-      return NextResponse.json({ ok: true, invitation: inserted });
+      savedInvite = inserted;
     }
 
-    await sendInviteEmail(service, params.workspaceId, invitedEmail, invitedRole, user, String(invite.token));
-    return NextResponse.json({ ok: true, invitation: invite });
+    const inviteId = String(savedInvite.id);
+
+    // Replace package grant rows for this invite
+    await service.from("invite_ai_employee_grants").delete().eq("invite_id", inviteId);
+    await service.from("invite_room_grants").delete().eq("invite_id", inviteId);
+    await service.from("invite_topic_grants").delete().eq("invite_id", inviteId);
+
+    if (body.aiGrants?.length) {
+      const { error } = await service.from("invite_ai_employee_grants").insert(
+        body.aiGrants.map((g) => ({
+          invite_id: inviteId,
+          employee_id: g.employeeId,
+          access_effect: g.accessEffect === "deny" ? "deny" : "allow",
+          can_dm: g.canDm !== false,
+        })),
+      );
+      if (error) throw error;
+    }
+
+    if (body.roomGrants?.length) {
+      const { error } = await service.from("invite_room_grants").insert(
+        body.roomGrants.map((roomId) => ({ invite_id: inviteId, room_id: roomId })),
+      );
+      if (error) throw error;
+    }
+
+    if (body.topicDenies?.length) {
+      const { error } = await service.from("invite_topic_grants").insert(
+        body.topicDenies.map((topicId) => ({
+          invite_id: inviteId,
+          topic_id: topicId,
+          access: "denied",
+        })),
+      );
+      if (error) throw error;
+    }
+
+    await sendInviteEmail(
+      service,
+      params.workspaceId,
+      invitedEmail,
+      invitedRole,
+      user,
+      String(savedInvite.token),
+    );
+    return NextResponse.json({ ok: true, invitation: savedInvite });
   } catch (error) {
     if (error instanceof AuthError) {
       return NextResponse.json({ error: error.message }, { status: error.status });

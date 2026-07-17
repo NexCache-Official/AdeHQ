@@ -27,9 +27,30 @@ export function getDmEmployeeId(room: ProjectRoom): string | undefined {
   return room.dmEmployeeId ?? room.aiEmployees[0];
 }
 
+/** Find the current user's private AI DM with an employee (owner-scoped). */
 export function findDmRoomForEmployee(
   rooms: ProjectRoom[],
   employeeId: string,
+  ownerUserId?: string,
 ): ProjectRoom | undefined {
-  return rooms.find((r) => isDirectMessage(r) && getDmEmployeeId(r) === employeeId);
+  return rooms.find(
+    (r) =>
+      isDirectMessage(r) &&
+      getDmEmployeeId(r) === employeeId &&
+      (!ownerUserId || !r.dmOwnerUserId || r.dmOwnerUserId === ownerUserId),
+  );
+}
+
+export function findHumanDmRoom(
+  rooms: ProjectRoom[],
+  userId: string,
+  peerUserId: string,
+): ProjectRoom | undefined {
+  return rooms.find(
+    (r) =>
+      isDirectMessage(r) &&
+      !r.dmEmployeeId &&
+      ((r.dmOwnerUserId === userId && r.dmPeerUserId === peerUserId) ||
+        (r.dmOwnerUserId === peerUserId && r.dmPeerUserId === userId)),
+  );
 }

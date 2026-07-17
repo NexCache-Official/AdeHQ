@@ -3,7 +3,7 @@ import { z } from "zod";
 import { AuthError, requireAuthUser } from "@/lib/supabase/auth-server";
 import { briefSchema } from "@/lib/hiring/brief-schema";
 import { generateCandidateInterviewReply } from "@/lib/hiring/candidate-interview";
-import { resolveHiringWorkspaceContext } from "@/lib/server/hiring-workspace-context";
+import { resolveHiringWorkspaceContextForAdmin } from "@/lib/server/hiring-workspace-context";
 import type { AiEmployeeApplicant, AiEmployeeJobBrief, RecruiterMessage } from "@/lib/hiring/types";
 import { createSupabaseSecretClient } from "@/lib/supabase/server";
 import {
@@ -86,7 +86,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = parsed.data;
-    await resolveHiringWorkspaceContext(client, user.id, {
+    await resolveHiringWorkspaceContextForAdmin(client, user.id, {
       workspaceId: body.workspaceId,
       hiringSessionId: body.hiringSessionId,
       topicId: body.topicId,

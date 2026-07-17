@@ -154,6 +154,10 @@ export type AIEmployee = {
   participationStyle?: ParticipationStyle;
   isSystemEmployee?: boolean;
   systemEmployeeKey?: string | null;
+  /** workspace_employee | system_manager */
+  employeeKind?: "workspace_employee" | "system_manager";
+  /** workspace | department | restricted */
+  employeeAccess?: "workspace" | "department" | "restricted";
   metadata?: SystemEmployeeMetadata;
   intelligencePolicy?: EmployeeIntelligencePolicy;
   routingPolicyId?: string;
@@ -647,8 +651,16 @@ export type ProjectRoom = {
   id: string;
   name: string;
   kind: RoomKind;
-  /** Required when kind === "dm" — the AI employee this DM belongs to. */
+  /** AI employee for human↔AI DMs. Null/undefined for human↔human DMs. */
   dmEmployeeId?: string;
+  /** Owning human for private AI DMs; participant A for human DMs. */
+  dmOwnerUserId?: string;
+  /** Other human for human↔human DMs. */
+  dmPeerUserId?: string;
+  /** Canonical pair key for human DMs. */
+  dmPairKey?: string;
+  /** Group room visibility; ignored for DMs. */
+  roomVisibility?: "workspace" | "restricted" | "private";
   description: string;
   brief: string;
   humans: string[];

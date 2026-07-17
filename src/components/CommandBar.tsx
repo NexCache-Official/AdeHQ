@@ -80,8 +80,23 @@ export function CommandBar({
       { id: "n-calls", label: WORKFORCE_CALLS_ENABLED ? "Calls" : "Calls (soon)", icon: Phone, run: go("/calls") },
       { id: "n-settings", label: "Settings", icon: Settings, run: go("/settings") },
     ];
+    const myRole = state.workspaceMembers.find((m) => m.userId === state.user?.id)?.role;
+    const canHire = myRole === "admin";
     const actions: Item[] = [
-      { id: "a-hire", label: "Hire AI Employee", hint: "Action", icon: UserPlus, run: () => { onClose(); onHire(); } },
+      ...(canHire
+        ? [
+            {
+              id: "a-hire",
+              label: "Hire AI Employee",
+              hint: "Action",
+              icon: UserPlus,
+              run: () => {
+                onClose();
+                onHire();
+              },
+            } satisfies Item,
+          ]
+        : []),
       { id: "a-room", label: "Create Project Room", hint: "Action", icon: Plus, run: () => { onClose(); onCreateRoom(); } },
     ];
     const employees: Item[] = state.employees.map((e) => ({
@@ -107,7 +122,16 @@ export function CommandBar({
       run: () => { router.push(`/rooms/${r.id}`); onClose(); },
     }));
     return [...actions, ...nav, ...employees, ...rooms, ...dms];
-  }, [router, onClose, onHire, onCreateRoom, state.employees, state.rooms]);
+  }, [
+    router,
+    onClose,
+    onHire,
+    onCreateRoom,
+    state.employees,
+    state.rooms,
+    state.user?.id,
+    state.workspaceMembers,
+  ]);
 
   const filtered = useMemo(() => {
     if (!query.trim()) return items;

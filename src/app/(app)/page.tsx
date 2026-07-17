@@ -7,6 +7,8 @@ import { partitionWorkforce } from "@/lib/maya-employee";
 import { MAYA_EMPLOYEE_NAME } from "@/lib/hiring/maya";
 import { getGroupRooms } from "@/lib/rooms";
 import { WORKFORCE_CALLS_ENABLED } from "@/lib/config/features";
+import { canManageAiEmployees } from "@/lib/workspace/permissions";
+import { canAccessMaya } from "@/lib/workspace/access";
 import { useShellUI } from "@/components/AppShell";
 import { PageContainer } from "@/components/Page";
 import { EmployeeCard } from "@/components/EmployeeCard";
@@ -52,13 +54,16 @@ export default function HomePage() {
   const recentLog = [...state.workLog]
     .sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt))
     .slice(0, 6);
+  const myRole = state.workspaceMembers.find((m) => m.userId === state.user?.id)?.role;
+  const canHire = canManageAiEmployees(myRole);
   const { hired, maya } = partitionWorkforce(employees);
+  const visibleMaya = canAccessMaya(myRole) ? maya : [];
   const workingCount = hired.filter((e) => e.status === "working").length;
   const rooms = getGroupRooms(state.rooms);
   const firstName = state.user?.name?.split(" ")[0] ?? "there";
 
   const stats = [
-    { label: "AI employees", value: hired.length, sub: maya.length ? `${MAYA_EMPLOYEE_NAME} included · ${workingCount} working` : `${workingCount} working now`, href: "/workforce" },
+    { label: "AI employees", value: hired.length, sub: visibleMaya.length ? `${MAYA_EMPLOYEE_NAME} included · ${workingCount} working` : `${workingCount} working now`, href: "/workforce" },
     { label: "Rooms", value: rooms.length, sub: "Active workstreams", href: "/rooms" },
     { label: "Open tasks", value: activeTasks.length, sub: "Across all rooms", href: "/tasks" },
     { label: "Approvals", value: pendingApprovals.length, sub: pendingApprovals.length ? "Needs review" : "All clear", href: "/approvals", alert: pendingApprovals.length > 0 },
@@ -90,13 +95,15 @@ export default function HomePage() {
           </h1>
           <p className="mt-2 max-w-xl text-[14.5px] text-white/62">{heroSub}</p>
           <div className="mt-5 flex flex-wrap gap-2.5">
-            <button
-              type="button"
-              onClick={ui.openHire}
-              className="inline-flex items-center gap-2 rounded-xl bg-accent px-4 py-2.5 text-[13px] font-semibold text-white shadow-glow transition-all hover:brightness-105"
-            >
-              <UserPlus className="h-4 w-4" /> Hire AI Employee
-            </button>
+            {canHire && (
+              <button
+                type="button"
+                onClick={ui.openHire}
+                className="inline-flex items-center gap-2 rounded-xl bg-accent px-4 py-2.5 text-[13px] font-semibold text-white shadow-glow transition-all hover:brightness-105"
+              >
+                <UserPlus className="h-4 w-4" /> Hire AI Employee
+              </button>
+            )}
             <button
               type="button"
               onClick={ui.openCreateRoom}

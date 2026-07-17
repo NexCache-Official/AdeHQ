@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { AuthError, requireAuthUser, requireWorkspaceMembership, getRequestWorkspaceId } from "@/lib/supabase/auth-server";
-import { assertCanSendRoomMessage } from "@/lib/server/room-access";
+import { assertCanSendRoomMessage, assertEffectiveAiAccess } from "@/lib/server/room-access";
 import {
   AmbiguousRoomWorkspaceError,
   getWorkspaceIdForRoom,
@@ -39,6 +39,14 @@ export async function POST(
 
     const { role } = await requireWorkspaceMembership(client, workspaceId, user.id);
     await assertCanSendRoomMessage(client, workspaceId, body.roomId, user.id, role);
+    await assertEffectiveAiAccess(
+      client,
+      workspaceId,
+      body.roomId,
+      user.id,
+      role,
+      params.employeeId,
+    );
 
     const ctx = await loadRoomContext(client, workspaceId, body.roomId);
     const employee = ctx.employees.find((e) => e.id === params.employeeId);

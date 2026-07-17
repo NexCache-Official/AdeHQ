@@ -4,7 +4,7 @@ import {
   requireAuthUser,
   requireWorkspaceMembership,
 } from "@/lib/supabase/auth-server";
-import { assertCanAccessRoom } from "@/lib/server/room-access";
+import { assertCanAccessRoom, assertEffectiveAiAccess } from "@/lib/server/room-access";
 import { runToolCall } from "@/lib/integrations/executor/tool-executor";
 import {
   ensureDefaultEmployeeToolGrants,
@@ -82,6 +82,14 @@ export async function POST(request: NextRequest) {
 
     if (body.roomId) {
       await assertCanAccessRoom(client, body.workspaceId, body.roomId, user.id, role);
+      await assertEffectiveAiAccess(
+        client,
+        body.workspaceId,
+        body.roomId,
+        user.id,
+        role,
+        body.employeeId,
+      );
     }
 
     // Service role for tool writes (outbox, drafts, CRM) after auth gates above.

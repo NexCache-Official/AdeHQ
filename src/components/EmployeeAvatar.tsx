@@ -3,6 +3,7 @@
 import { effectiveEmployeeStatus } from "@/lib/maya-employee";
 import { AIEmployee, EmployeeStatus } from "@/lib/types";
 import { cn, avatarGradient, initials } from "@/lib/utils";
+import { avatarAccentForId } from "@/lib/avatar-accent";
 import { STATUS_META } from "@/lib/icons";
 
 const SIZES = {
@@ -27,6 +28,7 @@ export function EmployeeAvatar({
   const s = SIZES[size];
   const status: EmployeeStatus = effectiveEmployeeStatus(employee);
   const meta = STATUS_META[status];
+  const accent = employee.accent || avatarAccentForId(employee.id).background;
 
   return (
     <div className={cn("relative shrink-0", className)}>
@@ -35,7 +37,7 @@ export function EmployeeAvatar({
           "flex items-center justify-center font-bold text-white",
           s.box,
         )}
-        style={{ backgroundImage: avatarGradient(employee.accent) }}
+        style={{ backgroundImage: avatarGradient(accent) }}
       >
         {initials(employee.name)}
       </div>
@@ -56,15 +58,19 @@ export function EmployeeAvatar({
 export function HumanAvatar({
   name,
   size = "md",
-  accent = "#3B4C6B",
+  accent,
+  userId,
   className,
 }: {
   name: string;
   size?: keyof typeof SIZES;
   accent?: string;
+  /** When set, picks a deterministic accent from the palette. */
+  userId?: string;
   className?: string;
 }) {
   const s = SIZES[size];
+  const resolved = accent ?? (userId ? avatarAccentForId(userId).background : "#3B4C6B");
   return (
     <div
       className={cn(
@@ -72,7 +78,7 @@ export function HumanAvatar({
         s.box,
         className,
       )}
-      style={{ backgroundImage: avatarGradient(accent) }}
+      style={{ backgroundImage: avatarGradient(resolved) }}
     >
       {initials(name)}
     </div>

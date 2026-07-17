@@ -6,6 +6,7 @@ import { HireFlow } from "@/components/hiring/HireFlow";
 import { useConfirmedEmailGate } from "@/components/auth/useConfirmedEmailGate";
 import { LoadingState } from "@/components/States";
 import { useStore } from "@/lib/demo-store";
+import { canManageAiEmployees } from "@/lib/workspace/permissions";
 
 function HirePageInner() {
   const { state, hydrated } = useStore();
@@ -18,6 +19,8 @@ function HirePageInner() {
       : ("hire_route" as const);
   const hireFlowKey = searchParams.get("fresh") ?? entrySource;
   const emailGate = useConfirmedEmailGate();
+  const myRole = state.workspaceMembers.find((m) => m.userId === state.user?.id)?.role;
+  const canHire = canManageAiEmployees(myRole);
 
   useEffect(() => {
     if (!hydrated || emailGate !== "allowed") return;
@@ -31,14 +34,31 @@ function HirePageInner() {
     }
     if (!onboarding && !state.onboardingComplete) {
       router.replace("/onboarding");
+      return;
     }
-  }, [hydrated, state.user, state.workspace.id, state.onboardingComplete, onboarding, emailGate, router]);
+    if (!canHire) {
+      router.replace("/workforce");
+    }
+  }, [
+    hydrated,
+    state.user,
+    state.workspace.id,
+    state.onboardingComplete,
+    onboarding,
+    emailGate,
+    canHire,
+    router,
+  ]);
 
   if (emailGate !== "allowed" || !hydrated || !state.user || !state.workspace.id) {
     return <LoadingState full label="Loading…" />;
   }
 
   if (!onboarding && !state.onboardingComplete) {
+    return <LoadingState full label="Redirecting…" />;
+  }
+
+  if (!canHire) {
     return <LoadingState full label="Redirecting…" />;
   }
 

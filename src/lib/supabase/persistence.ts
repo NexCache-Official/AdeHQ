@@ -583,6 +583,18 @@ export async function loadWorkspaceState(
         memoryByRoom.get(row.id)?.map((entry) => entry.id) ?? [],
       ),
     )
+    // Defense in depth: DM owner/peer + restricted/private membership
+    .filter((room) => {
+      const uid = user.id;
+      if (room.kind === "dm") {
+        if (room.dmOwnerUserId && room.dmOwnerUserId === uid) return true;
+        if (room.dmPeerUserId && room.dmPeerUserId === uid) return true;
+        return false;
+      }
+      const visibility = room.roomVisibility ?? "workspace";
+      if (visibility === "workspace") return true;
+      return room.humans.includes(uid);
+    })
     .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
 
   const calls = ((callsResult.data as DbRow[] | null) ?? [])
@@ -603,12 +615,36 @@ export async function loadWorkspaceState(
   let finalTopics = topics;
   let finalTopicMembers = topicMembers;
 
-  const mayaDmRoom = rooms.find((room) => room.kind === "dm" && room.dmEmployeeId === MAYA_EMPLOYEE_ID);
+  const myRole = workspaceMembers.find((m) => m.userId === user.id)?.role;
+  const isAdmin = myRole === "admin";
+
+  // Repair workspace-room participation state (non-blocking)
+  if (workspaceId) {
+    void (async () => {
+      try {
+        const headers = await authHeaders();
+        await fetch("/api/workspaces/ensure-member-access", {
+          method: "POST",
+          headers: { ...headers, "Content-Type": "application/json" },
+          body: JSON.stringify({ workspaceId }),
+        });
+      } catch {
+        /* ignore */
+      }
+    })();
+  }
+
+  const mayaDmRoom = rooms.find(
+    (room) =>
+      room.kind === "dm" &&
+      room.dmEmployeeId === MAYA_EMPLOYEE_ID &&
+      (!room.dmOwnerUserId || room.dmOwnerUserId === user.id),
+  );
   const needsMayaEnsure =
     !employees.some(isMayaEmployee) ||
-    !rooms.some((room) => room.kind === "dm" && room.dmEmployeeId === MAYA_EMPLOYEE_ID) ||
-    (Boolean(mayaDmRoom) &&
-      !topics.some((topic) => topic.roomId === mayaDmRoom?.id && isGeneralTopic(topic)));
+    (isAdmin &&
+      (!mayaDmRoom ||
+        !topics.some((topic) => topic.roomId === mayaDmRoom?.id && isGeneralTopic(topic))));
 
   if (needsMayaEnsure) {
     try {
@@ -647,8 +683,14 @@ export async function loadWorkspaceState(
               memoryByRoom.get(row.id)?.map((entry) => entry.id) ?? [],
             ),
           );
-          const dmIds = new Set(dmRooms.map((r) => r.id));
-          finalRooms = [...dmRooms, ...rooms.filter((r) => !dmIds.has(r.id))].sort((a, b) =>
+          const ownedDmRooms = dmRooms.filter(
+            (r) =>
+              r.kind !== "dm" ||
+              r.dmOwnerUserId === user.id ||
+              r.dmPeerUserId === user.id,
+          );
+          const dmIds = new Set(ownedDmRooms.map((r) => r.id));
+          finalRooms = [...ownedDmRooms, ...rooms.filter((r) => !dmIds.has(r.id))].sort((a, b) =>
             b.updatedAt.localeCompare(a.updatedAt),
           );
         }
@@ -684,6 +726,69 @@ export async function loadWorkspaceState(
     mayaWelcomeMessage(profile.name?.split(" ")[0] ?? "there"),
   );
 
+  // Filter AI list: Maya admin-only; drop employees the user cannot access
+  const { canAccessAiEmployee, canAccessMaya } = await import("@/lib/workspace/access");
+  let grantsByEmployee = new Map<string, { accessEffect: "allow" | "deny"; canDm: boolean }>();
+  try {
+    const { data: grantRows } = await supabase
+      .from("ai_employee_user_grants")
+      .select("employee_id, access_effect, can_dm")
+      .eq("workspace_id", workspaceId)
+      .eq("user_id", user.id);
+    grantsByEmployee = new Map(
+      ((grantRows as DbRow[] | null) ?? []).map((g) => [
+        String(g.employee_id),
+        {
+          accessEffect: g.access_effect === "deny" ? "deny" : "allow",
+          canDm: g.can_dm !== false,
+        },
+      ]),
+    );
+  } catch {
+    /* grants table may not exist pre-migration */
+  }
+
+  const actor = {
+    userId: user.id,
+    role: (myRole === "admin" ? "admin" : "member") as "admin" | "member",
+    status: "active" as const,
+  };
+
+  const visibleEmployees = mergedState.employees.filter((emp) => {
+    if (emp.employeeKind === "system_manager" || emp.systemEmployeeKey === "maya" || isMayaEmployee(emp)) {
+      return canAccessMaya(actor.role);
+    }
+    const g = grantsByEmployee.get(emp.id);
+    return canAccessAiEmployee({
+      actor,
+      employee: {
+        id: emp.id,
+        employeeKind: emp.employeeKind ?? "workspace_employee",
+        employeeAccess: emp.employeeAccess ?? "workspace",
+        isSystemManager: false,
+      },
+      grant: g
+        ? {
+            workspaceId,
+            userId: user.id,
+            employeeId: emp.id,
+            accessEffect: g.accessEffect,
+            canDm: g.canDm,
+            canAssignWork: true,
+            canViewSharedOutputs: true,
+          }
+        : null,
+    });
+  });
+
+  const accessibleRoomIds = new Set(mergedState.rooms.map((r) => r.id));
+  const scopedTopics = (mergedState.topics ?? finalTopics).filter((t) =>
+    accessibleRoomIds.has(t.roomId),
+  );
+  const scopedTopicMembers = (mergedState.topicMembers ?? finalTopicMembers).filter((m) =>
+    scopedTopics.some((t) => t.id === m.topicId),
+  );
+
   return {
     version: buildDemoState().version,
     user: profile,
@@ -691,12 +796,12 @@ export async function loadWorkspaceState(
     workspaceMembers,
     workspaceInvitations,
     onboardingComplete: Boolean(workspaceRow.onboarding_complete),
-    employees: mergedState.employees,
+    employees: visibleEmployees,
     rooms: mergedState.rooms,
-    topics: mergedState.topics ?? finalTopics,
-    topicMembers: mergedState.topicMembers ?? finalTopicMembers,
-    tasks,
-    memory,
+    topics: scopedTopics,
+    topicMembers: scopedTopicMembers,
+    tasks: tasks.filter((t) => accessibleRoomIds.has(t.roomId)),
+    memory: memory.filter((m) => accessibleRoomIds.has(m.roomId)),
     approvals,
     workLog,
     tools,
@@ -856,6 +961,16 @@ function employeeFromRow(row: DbRow, tools: ToolAccess[]): AIEmployee {
     participationStyle: row.participation_style ?? "balanced_teammate",
     isSystemEmployee: Boolean(row.is_system_employee),
     systemEmployeeKey: row.system_employee_key ?? undefined,
+    employeeKind:
+      row.employee_kind === "system_manager" ||
+      Boolean(row.is_system_employee) ||
+      row.system_employee_key === "maya"
+        ? "system_manager"
+        : "workspace_employee",
+    employeeAccess:
+      row.employee_access === "restricted" || row.employee_access === "department"
+        ? row.employee_access
+        : "workspace",
     metadata: jsonObject<SystemEmployeeMetadata>(row.metadata, {}),
     intelligencePolicy: normalizeIntelligencePolicy(
       row.intelligence_policy
@@ -893,6 +1008,12 @@ function roomFromRow(
     name: row.name,
     kind: row.kind,
     dmEmployeeId: row.dm_employee_id ?? undefined,
+    dmOwnerUserId: row.dm_owner_user_id ? String(row.dm_owner_user_id) : undefined,
+    dmPeerUserId: row.dm_peer_user_id ? String(row.dm_peer_user_id) : undefined,
+    dmPairKey: row.dm_pair_key ? String(row.dm_pair_key) : undefined,
+    roomVisibility: row.room_visibility
+      ? (String(row.room_visibility) as ProjectRoom["roomVisibility"])
+      : undefined,
     description: row.description ?? "",
     brief: row.brief ?? "",
     humans: members.filter((m) => m.member_type === "human").map((m) => m.member_id),
@@ -1102,6 +1223,10 @@ function roomRow(workspaceId: string, room: ProjectRoom): DbRow {
     name: room.name,
     kind: room.kind,
     dm_employee_id: room.dmEmployeeId ?? null,
+    dm_owner_user_id: room.dmOwnerUserId ?? null,
+    dm_peer_user_id: room.dmPeerUserId ?? null,
+    dm_pair_key: room.dmPairKey ?? null,
+    room_visibility: room.kind === "dm" ? null : (room.roomVisibility ?? "workspace"),
     description: room.description,
     brief: room.brief,
     unread: room.unread,

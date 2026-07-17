@@ -112,18 +112,28 @@ export function partitionWorkforce(employees: AIEmployee[]) {
   return { maya, hired, all: employees };
 }
 
-export function mayaDmRoomId(): string {
-  return `dm-${MAYA_EMPLOYEE_ID}`;
+/** @deprecated Prefer looking up by dmOwnerUserId + dmEmployeeId; IDs are generated. */
+export function mayaDmRoomId(ownerUserId?: string): string {
+  return ownerUserId ? `dm-${MAYA_EMPLOYEE_ID}-${ownerUserId.slice(0, 8)}` : `dm-${MAYA_EMPLOYEE_ID}`;
 }
 
-export function findMayaDmRoom(rooms: Pick<ProjectRoom, "id" | "kind" | "dmEmployeeId">[]): ProjectRoom | undefined {
-  return rooms.find((room) => room.kind === "dm" && room.dmEmployeeId === MAYA_EMPLOYEE_ID) as
-    | ProjectRoom
-    | undefined;
+export function findMayaDmRoom(
+  rooms: Pick<ProjectRoom, "id" | "kind" | "dmEmployeeId" | "dmOwnerUserId">[],
+  ownerUserId?: string,
+): ProjectRoom | undefined {
+  return rooms.find(
+    (room) =>
+      room.kind === "dm" &&
+      room.dmEmployeeId === MAYA_EMPLOYEE_ID &&
+      (!ownerUserId || !room.dmOwnerUserId || room.dmOwnerUserId === ownerUserId),
+  ) as ProjectRoom | undefined;
 }
 
-export function resolveMayaDmRoomId(rooms: Pick<ProjectRoom, "id" | "kind" | "dmEmployeeId">[]): string {
-  return findMayaDmRoom(rooms)?.id ?? mayaDmRoomId();
+export function resolveMayaDmRoomId(
+  rooms: Pick<ProjectRoom, "id" | "kind" | "dmEmployeeId" | "dmOwnerUserId">[],
+  ownerUserId?: string,
+): string {
+  return findMayaDmRoom(rooms, ownerUserId)?.id ?? mayaDmRoomId(ownerUserId);
 }
 
 export function mayaDmGeneralTopicId(roomId = mayaDmRoomId()): string {
@@ -233,7 +243,8 @@ export function buildMayaEmployee(timestamp = nowISO()): AIEmployee {
 }
 
 export function buildMayaDmRoom(userId: string, welcomeContent: string): ProjectRoom {
-  const id = mayaDmRoomId();
+  // Client placeholder only — server creates authoritative generated room ids.
+  const id = uid("dm");
   const timestamp = nowISO();
   const topicId = mayaDmGeneralTopicId(id);
   return {
@@ -241,6 +252,7 @@ export function buildMayaDmRoom(userId: string, welcomeContent: string): Project
     name: MAYA_EMPLOYEE_NAME,
     kind: "dm",
     dmEmployeeId: MAYA_EMPLOYEE_ID,
+    dmOwnerUserId: userId,
     description: `Direct message with ${MAYA_EMPLOYEE_NAME}`,
     brief: MAYA_EMPLOYEE_SYSTEM_PROMPT.trim(),
     humans: [userId],
@@ -393,18 +405,24 @@ export function mergeMayaIntoState<
     };
   }
 
-  if (userId && welcomeContent) {
+  // Do not invent a shared Maya DM in client state. Admins open via ensureMaya / openOrCreateDM.
+  if (userId) {
     next = dedupeMayaDmRooms(next);
-    const existingDm = next.rooms.find(
-      (room) => room.kind === "dm" && room.dmEmployeeId === MAYA_EMPLOYEE_ID,
-    );
-    if (!existingDm) {
-      next = {
-        ...next,
-        rooms: [buildMayaDmRoom(userId, welcomeContent), ...next.rooms],
-      };
-    }
+    // Drop Maya DMs that belong to other users if any leaked into state
+    next = {
+      ...next,
+      rooms: next.rooms.filter(
+        (room) =>
+          !(
+            room.kind === "dm" &&
+            room.dmEmployeeId === MAYA_EMPLOYEE_ID &&
+            room.dmOwnerUserId &&
+            room.dmOwnerUserId !== userId
+          ),
+      ),
+    };
   }
 
+  void welcomeContent;
   return ensureMayaDmTopicsInState(next, userId);
 }

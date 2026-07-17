@@ -31,6 +31,7 @@ create table if not exists public.workspaces (
   workspace_mode text not null default 'real' check (workspace_mode in ('real', 'demo')),
   owner_id uuid not null references auth.users(id) on delete cascade,
   onboarding_complete boolean not null default false,
+  access_version bigint not null default 1,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -40,6 +41,11 @@ create table if not exists public.workspace_members (
   user_id uuid not null references auth.users(id) on delete cascade,
   role text not null default 'member' check (role in ('admin', 'member')),
   status text not null default 'active' check (status in ('active', 'removed')),
+  access_version bigint not null default 1,
+  display_title text,
+  bio text,
+  timezone text,
+  availability_status text,
   joined_at timestamptz not null default now(),
   created_at timestamptz not null default now(),
   primary key (workspace_id, user_id)
@@ -56,6 +62,8 @@ create table if not exists public.workspace_invitations (
   expires_at timestamptz,
   accepted_by uuid references auth.users(id) on delete set null,
   accepted_at timestamptz,
+  access_preset text not null default 'full_member',
+  access_package jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -106,6 +114,10 @@ create table if not exists public.ai_employees (
   default_room_id text,
   is_system_employee boolean not null default false,
   system_employee_key text,
+  employee_kind text not null default 'workspace_employee'
+    check (employee_kind in ('workspace_employee', 'system_manager')),
+  employee_access text not null default 'workspace'
+    check (employee_access in ('workspace', 'department', 'restricted')),
   metadata jsonb not null default '{}'::jsonb,
   last_active_at timestamptz not null default now(),
   created_at timestamptz not null default now(),
@@ -134,6 +146,11 @@ create table if not exists public.rooms (
   name text not null,
   kind text not null default 'room',
   dm_employee_id text,
+  dm_owner_user_id uuid references auth.users(id) on delete cascade,
+  dm_peer_user_id uuid references auth.users(id) on delete cascade,
+  dm_pair_key text,
+  room_visibility text
+    check (room_visibility is null or room_visibility in ('workspace', 'restricted', 'private')),
   description text not null default '',
   brief text not null default '',
   unread integer not null default 0,
@@ -144,10 +161,32 @@ create table if not exists public.rooms (
   updated_at timestamptz not null default now(),
   primary key (workspace_id, id),
   constraint rooms_kind_shape check (
-    (kind = 'dm' and dm_employee_id is not null)
-    or (kind <> 'dm' and dm_employee_id is null)
+    (
+      kind = 'dm'
+      and dm_owner_user_id is not null
+      and (
+        (dm_employee_id is not null and dm_peer_user_id is null and dm_pair_key is null)
+        or (dm_employee_id is null and dm_peer_user_id is not null and dm_pair_key is not null)
+      )
+    )
+    or (
+      kind <> 'dm'
+      and dm_employee_id is null
+      and dm_owner_user_id is null
+      and dm_peer_user_id is null
+      and dm_pair_key is null
+      and room_visibility is not null
+    )
   )
 );
+
+create unique index if not exists rooms_ai_dm_unique
+  on public.rooms (workspace_id, dm_owner_user_id, dm_employee_id)
+  where kind = 'dm' and dm_employee_id is not null;
+
+create unique index if not exists rooms_human_dm_unique
+  on public.rooms (workspace_id, dm_pair_key)
+  where kind = 'dm' and dm_pair_key is not null;
 
 create table if not exists public.room_members (
   workspace_id uuid not null references public.workspaces(id) on delete cascade,
@@ -697,11 +736,103 @@ on public.employee_tools for all
 using (public.is_workspace_member(workspace_id))
 with check (public.is_workspace_member(workspace_id));
 
+create or replace function public.bump_workspace_access_version(target_workspace_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  update public.workspaces
+  set access_version = access_version + 1
+  where id = target_workspace_id;
+end;
+$$;
+
+create or replace function public.bump_member_access_version(
+  target_workspace_id uuid,
+  target_user_id uuid
+)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  update public.workspace_members
+  set access_version = access_version + 1
+  where workspace_id = target_workspace_id
+    and user_id = target_user_id;
+  perform public.bump_workspace_access_version(target_workspace_id);
+end;
+$$;
+
+create or replace function public.can_access_room_row(
+  p_workspace_id uuid,
+  p_room_id text
+)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1
+    from public.rooms r
+    where r.workspace_id = p_workspace_id
+      and r.id = p_room_id
+      and public.is_workspace_member(r.workspace_id)
+      and (
+        (
+          r.kind = 'dm'
+          and (
+            r.dm_owner_user_id = auth.uid()
+            or r.dm_peer_user_id = auth.uid()
+          )
+        )
+        or (
+          r.kind <> 'dm'
+          and coalesce(r.room_visibility, 'workspace') = 'workspace'
+        )
+        or (
+          r.kind <> 'dm'
+          and coalesce(r.room_visibility, 'workspace') in ('restricted', 'private')
+          and exists (
+            select 1
+            from public.room_members rm
+            where rm.workspace_id = r.workspace_id
+              and rm.room_id = r.id
+              and rm.member_type = 'human'
+              and rm.member_id = auth.uid()::text
+          )
+        )
+      )
+  );
+$$;
+
+grant execute on function public.can_access_room_row(uuid, text) to authenticated;
+grant execute on function public.bump_workspace_access_version(uuid) to service_role;
+grant execute on function public.bump_member_access_version(uuid, uuid) to service_role;
+
 drop policy if exists "rooms_all_member" on public.rooms;
-create policy "rooms_all_member"
-on public.rooms for all
-using (public.is_workspace_member(workspace_id))
+drop policy if exists "rooms_select_accessible" on public.rooms;
+drop policy if exists "rooms_insert_member" on public.rooms;
+drop policy if exists "rooms_update_accessible" on public.rooms;
+drop policy if exists "rooms_delete_admin" on public.rooms;
+create policy "rooms_select_accessible"
+on public.rooms for select
+using (public.can_access_room_row(workspace_id, id));
+create policy "rooms_insert_member"
+on public.rooms for insert
 with check (public.is_workspace_member(workspace_id));
+create policy "rooms_update_accessible"
+on public.rooms for update
+using (public.can_access_room_row(workspace_id, id))
+with check (public.can_access_room_row(workspace_id, id));
+create policy "rooms_delete_admin"
+on public.rooms for delete
+using (public.is_workspace_admin(workspace_id));
 
 drop policy if exists "room_members_all_member" on public.room_members;
 create policy "room_members_all_member"
@@ -710,22 +841,61 @@ using (public.is_workspace_member(workspace_id))
 with check (public.is_workspace_member(workspace_id));
 
 drop policy if exists "messages_all_member" on public.messages;
-create policy "messages_all_member"
-on public.messages for all
-using (public.is_workspace_member(workspace_id))
-with check (public.is_workspace_member(workspace_id));
+drop policy if exists "messages_select_accessible" on public.messages;
+drop policy if exists "messages_insert_accessible" on public.messages;
+drop policy if exists "messages_update_accessible" on public.messages;
+drop policy if exists "messages_delete_accessible" on public.messages;
+create policy "messages_select_accessible"
+on public.messages for select
+using (public.can_access_room_row(workspace_id, room_id));
+create policy "messages_insert_accessible"
+on public.messages for insert
+with check (public.can_access_room_row(workspace_id, room_id));
+create policy "messages_update_accessible"
+on public.messages for update
+using (public.can_access_room_row(workspace_id, room_id))
+with check (public.can_access_room_row(workspace_id, room_id));
+create policy "messages_delete_accessible"
+on public.messages for delete
+using (public.can_access_room_row(workspace_id, room_id));
 
 drop policy if exists "tasks_all_member" on public.tasks;
-create policy "tasks_all_member"
-on public.tasks for all
-using (public.is_workspace_member(workspace_id))
-with check (public.is_workspace_member(workspace_id));
+drop policy if exists "tasks_select_accessible" on public.tasks;
+drop policy if exists "tasks_insert_accessible" on public.tasks;
+drop policy if exists "tasks_update_accessible" on public.tasks;
+drop policy if exists "tasks_delete_accessible" on public.tasks;
+create policy "tasks_select_accessible"
+on public.tasks for select
+using (public.can_access_room_row(workspace_id, room_id));
+create policy "tasks_insert_accessible"
+on public.tasks for insert
+with check (public.can_access_room_row(workspace_id, room_id));
+create policy "tasks_update_accessible"
+on public.tasks for update
+using (public.can_access_room_row(workspace_id, room_id))
+with check (public.can_access_room_row(workspace_id, room_id));
+create policy "tasks_delete_accessible"
+on public.tasks for delete
+using (public.can_access_room_row(workspace_id, room_id));
 
 drop policy if exists "memory_entries_all_member" on public.memory_entries;
-create policy "memory_entries_all_member"
-on public.memory_entries for all
-using (public.is_workspace_member(workspace_id))
-with check (public.is_workspace_member(workspace_id));
+drop policy if exists "memory_entries_select_accessible" on public.memory_entries;
+drop policy if exists "memory_entries_insert_accessible" on public.memory_entries;
+drop policy if exists "memory_entries_update_accessible" on public.memory_entries;
+drop policy if exists "memory_entries_delete_accessible" on public.memory_entries;
+create policy "memory_entries_select_accessible"
+on public.memory_entries for select
+using (public.can_access_room_row(workspace_id, room_id));
+create policy "memory_entries_insert_accessible"
+on public.memory_entries for insert
+with check (public.can_access_room_row(workspace_id, room_id));
+create policy "memory_entries_update_accessible"
+on public.memory_entries for update
+using (public.can_access_room_row(workspace_id, room_id))
+with check (public.can_access_room_row(workspace_id, room_id));
+create policy "memory_entries_delete_accessible"
+on public.memory_entries for delete
+using (public.can_access_room_row(workspace_id, room_id));
 
 drop policy if exists "approvals_all_member" on public.approvals;
 create policy "approvals_all_member"
@@ -855,6 +1025,100 @@ on conflict (id) do update set
   description = excluded.description,
   status = excluded.status;
 
+-- Hybrid workforce access tables (private DMs + grants)
+create table if not exists public.ai_employee_user_grants (
+  workspace_id uuid not null references public.workspaces(id) on delete cascade,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  employee_id text not null,
+  access_effect text not null check (access_effect in ('allow', 'deny')),
+  can_dm boolean not null default true,
+  can_assign_work boolean not null default true,
+  can_view_shared_outputs boolean not null default true,
+  granted_by uuid references auth.users(id) on delete set null,
+  granted_at timestamptz not null default now(),
+  primary key (workspace_id, user_id, employee_id),
+  foreign key (workspace_id, employee_id)
+    references public.ai_employees(workspace_id, id)
+    on delete cascade
+);
+
+create table if not exists public.topic_access_overrides (
+  workspace_id uuid not null references public.workspaces(id) on delete cascade,
+  topic_id text not null,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  access text not null default 'denied' check (access = 'denied'),
+  created_at timestamptz not null default now(),
+  primary key (workspace_id, topic_id, user_id)
+);
+
+create table if not exists public.room_user_state (
+  workspace_id uuid not null references public.workspaces(id) on delete cascade,
+  room_id text not null,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  last_read_message_id text,
+  last_read_at timestamptz,
+  muted boolean not null default false,
+  archived boolean not null default false,
+  pinned boolean not null default false,
+  updated_at timestamptz not null default now(),
+  primary key (workspace_id, room_id, user_id),
+  foreign key (workspace_id, room_id)
+    references public.rooms(workspace_id, id)
+    on delete cascade
+);
+
+create table if not exists public.invite_ai_employee_grants (
+  invite_id uuid not null references public.workspace_invitations(id) on delete cascade,
+  employee_id text not null,
+  access_effect text not null default 'allow' check (access_effect in ('allow', 'deny')),
+  can_dm boolean not null default true,
+  can_assign_work boolean not null default true,
+  can_view_shared_outputs boolean not null default true,
+  primary key (invite_id, employee_id)
+);
+
+create table if not exists public.invite_room_grants (
+  invite_id uuid not null references public.workspace_invitations(id) on delete cascade,
+  room_id text not null,
+  primary key (invite_id, room_id)
+);
+
+create table if not exists public.invite_topic_grants (
+  invite_id uuid not null references public.workspace_invitations(id) on delete cascade,
+  topic_id text not null,
+  access text not null default 'denied' check (access = 'denied'),
+  primary key (invite_id, topic_id)
+);
+
+create table if not exists public.access_audit_events (
+  id uuid primary key default gen_random_uuid(),
+  workspace_id uuid not null references public.workspaces(id) on delete cascade,
+  actor_user_id uuid references auth.users(id) on delete set null,
+  event_type text not null,
+  payload jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now()
+);
+
+create table if not exists public.dm_ownership_migration_report (
+  workspace_id uuid not null,
+  room_id text not null,
+  selected_owner uuid,
+  selection_reason text not null,
+  message_count integer not null default 0,
+  fallback_used boolean not null default false,
+  migrated_at timestamptz not null default now(),
+  primary key (workspace_id, room_id)
+);
+
+alter table public.ai_employee_user_grants enable row level security;
+alter table public.topic_access_overrides enable row level security;
+alter table public.room_user_state enable row level security;
+alter table public.invite_ai_employee_grants enable row level security;
+alter table public.invite_room_grants enable row level security;
+alter table public.invite_topic_grants enable row level security;
+alter table public.access_audit_events enable row level security;
+alter table public.dm_ownership_migration_report enable row level security;
+
 -- AdeHQ Brain tables/columns: see migrations
 --   20260716190000_brain_pricing_snapshots.sql
 --   20260716190100_brain_pricing_snapshots_seed.sql
@@ -865,3 +1129,5 @@ on conflict (id) do update set
 --   20260716194000_brain_drop_legacy_ledger_dedupe.sql
 --   20260716195000_brain_catalog_v2_seed.sql
 -- Living eng plan: docs/architecture/adehq-brain.md (CATALOG_VERSION=2)
+-- Private DMs / hybrid access: 20260717120000_private_dms_hybrid_access.sql
+--   20260717130000_access_scoped_memory_tasks.sql

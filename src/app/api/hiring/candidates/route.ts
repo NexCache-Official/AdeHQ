@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { AuthError, requireAuthUser } from "@/lib/supabase/auth-server";
+import { resolveHiringWorkspaceContextForAdmin } from "@/lib/server/hiring-workspace-context";
 import { isSiliconFlowConfigured } from "@/lib/config/features";
 import {
   generateCandidateCopies,
   getCandidatesRuntimeDispatch,
 } from "@/lib/hiring/candidates-llm";
-import { resolveHiringWorkspaceContext } from "@/lib/server/hiring-workspace-context";
 import {
   generateDeterministicCandidates,
 } from "@/lib/hiring/candidate-engine";
@@ -29,6 +29,13 @@ export async function POST(request: NextRequest) {
     const { user, client } = await requireAuthUser(request);
     const body = (await request.json()) as CandidatesBody;
 
+    await resolveHiringWorkspaceContextForAdmin(client, user.id, {
+      workspaceId: body.workspaceId,
+      hiringSessionId: body.hiringSessionId,
+      topicId: body.topicId,
+      mayaRoomId: body.mayaRoomId,
+    });
+
     if (!body.brief?.roleTitle) {
       return NextResponse.json({ error: "brief is required." }, { status: 400 });
     }
@@ -45,7 +52,7 @@ export async function POST(request: NextRequest) {
     if (useDeterministicOnly) {
       copies = undefined;
     } else {
-      const hiringContext = await resolveHiringWorkspaceContext(client, user.id, {
+      const hiringContext = await resolveHiringWorkspaceContextForAdmin(client, user.id, {
         workspaceId: body.workspaceId,
         hiringSessionId: body.hiringSessionId,
         topicId: body.topicId,

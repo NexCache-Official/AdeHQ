@@ -7,6 +7,7 @@ import { Button, Kbd } from "./ui";
 import { useDebugTrace } from "./DebugProvider";
 import { Bug, Plus, Search, UserPlus } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { canManageAiEmployees } from "@/lib/workspace/permissions";
 
 function useBreadcrumb(pathname: string, roomName?: string, isDm?: boolean): string {
   if (pathname === "/") return "Home";
@@ -17,7 +18,7 @@ function useBreadcrumb(pathname: string, roomName?: string, isDm?: boolean): str
     return roomName ? roomName : "Room";
   }
   if (pathname.startsWith("/workforce/")) return "Employee profile";
-  if (pathname === "/workforce") return "AI Workforce";
+  if (pathname === "/workforce") return "Workforce";
   if (pathname === "/tasks") return "Tasks";
   if (pathname === "/memory") return "Memory";
   if (pathname === "/approvals") return "Approvals";
@@ -38,6 +39,8 @@ export function Topbar() {
   const room = roomId ? state.rooms.find((r) => r.id === roomId) : undefined;
   const crumb = useBreadcrumb(pathname, room?.name, room?.kind === "dm");
   const workingCount = state.employees.filter((e) => e.status === "working").length;
+  const myRole = state.workspaceMembers.find((m) => m.userId === state.user?.id)?.role;
+  const canHire = canManageAiEmployees(myRole);
 
   return (
     <header className="z-20 flex h-[60px] shrink-0 items-center gap-3 border-b border-border bg-canvas px-[22px]">
@@ -87,11 +90,13 @@ export function Topbar() {
           <Plus className="h-4 w-4" />
           Create room
         </Button>
-        <Button size="sm" onClick={ui.openHire} className="shadow-glow">
-          <UserPlus className="h-4 w-4" />
-          <span className="hidden sm:inline">Hire AI Employee</span>
-          <span className="sm:hidden">Hire</span>
-        </Button>
+        {canHire && (
+          <Button size="sm" onClick={ui.openHire} className="shadow-glow">
+            <UserPlus className="h-4 w-4" />
+            <span className="hidden sm:inline">Hire AI Employee</span>
+            <span className="sm:hidden">Hire</span>
+          </Button>
+        )}
       </div>
     </header>
   );

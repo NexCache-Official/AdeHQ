@@ -3,21 +3,15 @@ import { buildIntelligencePolicyForHire } from "@/lib/ai/intelligence-policy";
 import { DEFAULT_SILICONFLOW_MODEL } from "@/lib/config/features";
 import {
   MAYA_EMPLOYEE_ID,
-  MAYA_EMPLOYEE_NAME,
-  MAYA_EMPLOYEE_TITLE,
   MAYA_SYSTEM_EMPLOYEE_KEY,
-  greetingFirstNameFromWelcome,
-  isMayaBootstrapWelcome,
-  mayaWelcomeMessage,
 } from "@/lib/hiring/maya";
-import {
-  buildMayaDmRoom,
-  buildMayaEmployee,
-  isMayaEmployee,
-} from "@/lib/maya-employee";
-import { ensureGeneralTopic, backfillOrphanMessagesToGeneralTopic } from "@/lib/server/topic-helpers";
+import { buildMayaEmployee, isMayaEmployee } from "@/lib/maya-employee";
+import { AuthError } from "@/lib/supabase/auth-server";
+import { ensurePrivateAiDm } from "@/lib/server/ensure-private-dm";
+import { getWorkspaceMemberRole } from "@/lib/server/room-access";
+import { canAccessMaya } from "@/lib/workspace/access";
 import type { AIEmployee, ProjectRoom } from "@/lib/types";
-import { nowISO, uid } from "@/lib/utils";
+import { nowISO } from "@/lib/utils";
 
 type DbRow = Record<string, unknown>;
 
@@ -50,6 +44,8 @@ function mayaEmployeeRow(workspaceId: string, timestamp: string): DbRow {
     participation_style: maya.participationStyle ?? "proactive_operator",
     is_system_employee: true,
     system_employee_key: MAYA_SYSTEM_EMPLOYEE_KEY,
+    employee_kind: "system_manager",
+    employee_access: "restricted",
     metadata: maya.metadata ?? {},
     intelligence_policy: buildIntelligencePolicyForHire({
       modelMode: maya.modelMode ?? "balanced",
@@ -85,6 +81,8 @@ export async function ensureMayaForWorkspace(
         communication_style: maya.communicationStyle,
         success_criteria: maya.successCriteria,
         metadata: maya.metadata ?? {},
+        employee_kind: "system_manager",
+        employee_access: "restricted",
         updated_at: nowISO(),
       })
       .eq("workspace_id", workspaceId)
@@ -104,152 +102,50 @@ export async function ensureMayaForWorkspace(
   return buildMayaEmployee(String(inserted.updated_at ?? inserted.created_at ?? timestamp));
 }
 
+/**
+ * Per-admin private Maya DM. Members are rejected.
+ */
 export async function ensureMayaDM(
   client: SupabaseClient,
   workspaceId: string,
   userId: string,
-  firstName?: string,
+  _firstName?: string,
 ): Promise<ProjectRoom> {
+  const role = await getWorkspaceMemberRole(client, workspaceId, userId);
+  if (!role || !canAccessMaya(role)) {
+    throw new AuthError("Only workspace admins can open a Maya DM.", 403);
+  }
+
   await ensureMayaForWorkspace(client, workspaceId);
-
-  const { data: existingRoom, error: roomLookupError } = await client
-    .from("rooms")
-    .select("*")
-    .eq("workspace_id", workspaceId)
-    .eq("kind", "dm")
-    .eq("dm_employee_id", MAYA_EMPLOYEE_ID)
-    .maybeSingle();
-
-  if (roomLookupError) throw roomLookupError;
-
-  const welcome = mayaWelcomeMessage(firstName ?? "there");
-  const timestamp = nowISO();
-
-  if (existingRoom) {
-    const roomId = String(existingRoom.id);
-    await ensureGeneralTopic(client, workspaceId, roomId);
-    await backfillOrphanMessagesToGeneralTopic(client, workspaceId, roomId);
-
-    const { data: members, error: membersError } = await client
-      .from("room_members")
-      .select("*")
-      .eq("workspace_id", workspaceId)
-      .eq("room_id", roomId);
-    if (membersError) throw membersError;
-
-    const hasHuman = (members ?? []).some(
-      (m: DbRow) => m.member_type === "human" && m.member_id === userId,
-    );
-    if (!hasHuman) {
-      const { error: memberError } = await client.from("room_members").upsert(
-        {
-          workspace_id: workspaceId,
-          room_id: roomId,
-          member_type: "human",
-          member_id: userId,
-        },
-        { onConflict: "workspace_id,room_id,member_type,member_id" },
-      );
-      if (memberError) throw memberError;
-    }
-
-    const { data: messages, error: messagesError } = await client
-      .from("messages")
-      .select("id, content, sender_id")
-      .eq("workspace_id", workspaceId)
-      .eq("room_id", roomId)
-      .order("created_at", { ascending: true })
-      .limit(5);
-    if (messagesError) throw messagesError;
-
-    if (!messages?.length) {
-      const generalTopic = await ensureGeneralTopic(client, workspaceId, roomId);
-      const welcomeMessage = {
-        workspace_id: workspaceId,
-        id: uid("msg"),
-        room_id: roomId,
-        topic_id: generalTopic.id,
-        sender_type: "ai",
-        sender_id: MAYA_EMPLOYEE_ID,
-        sender_name: MAYA_EMPLOYEE_NAME,
-        content: welcome,
-        created_at: timestamp,
-      };
-      const { error: welcomeError } = await client.from("messages").insert(welcomeMessage);
-      if (welcomeError) throw welcomeError;
-    } else if (
-      messages.length === 1 &&
-      String(messages[0].sender_id) === MAYA_EMPLOYEE_ID &&
-      isMayaBootstrapWelcome(String(messages[0].content ?? "")) &&
-      greetingFirstNameFromWelcome(String(messages[0].content ?? "")) !== (firstName ?? "there")
-    ) {
-      const { error: welcomeUpdateError } = await client
-        .from("messages")
-        .update({ content: welcome })
-        .eq("workspace_id", workspaceId)
-        .eq("id", messages[0].id);
-      if (welcomeUpdateError) throw welcomeUpdateError;
-    }
-
-    return buildMayaDmRoom(userId, welcome);
-  }
-
-  const room = buildMayaDmRoom(userId, welcome);
-  const { error: roomError } = await client.from("rooms").insert({
-    workspace_id: workspaceId,
-    id: room.id,
-    name: room.name,
-    kind: room.kind,
-    dm_employee_id: room.dmEmployeeId,
-    description: room.description,
-    brief: room.brief,
-    unread: 0,
-    accent: room.accent,
-    created_at: room.createdAt,
-    updated_at: room.updatedAt,
+  const maya = buildMayaEmployee();
+  const row = await ensurePrivateAiDm(client, {
+    workspaceId,
+    userId,
+    role,
+    employeeId: MAYA_EMPLOYEE_ID,
+    employeeName: maya.name,
+    accent: maya.accent,
+    brief: maya.instructions,
   });
-  if (roomError) throw roomError;
 
-  const memberRows = [
-    {
-      workspace_id: workspaceId,
-      room_id: room.id,
-      member_type: "human",
-      member_id: userId,
-    },
-    {
-      workspace_id: workspaceId,
-      room_id: room.id,
-      member_type: "ai",
-      member_id: MAYA_EMPLOYEE_ID,
-    },
-  ];
-  const { error: membersError } = await client
-    .from("room_members")
-    .upsert(memberRows, { onConflict: "workspace_id,room_id,member_type,member_id" });
-  if (membersError) throw membersError;
-
-  const generalTopic = await ensureGeneralTopic(client, workspaceId, room.id);
-
-  if (room.messages[0]) {
-    const msg = room.messages[0];
-    const { error: messageError } = await client.from("messages").insert({
-      workspace_id: workspaceId,
-      id: msg.id,
-      room_id: room.id,
-      topic_id: generalTopic.id,
-      sender_type: msg.senderType,
-      sender_id: msg.senderId,
-      sender_name: msg.senderName,
-      content: msg.content,
-      created_at: msg.createdAt,
-    });
-    if (messageError) throw messageError;
-  }
-
-  await backfillOrphanMessagesToGeneralTopic(client, workspaceId, room.id);
-
-  return room;
+  return {
+    id: String(row.id),
+    name: String(row.name),
+    kind: "dm",
+    dmEmployeeId: MAYA_EMPLOYEE_ID,
+    dmOwnerUserId: userId,
+    description: String(row.description ?? ""),
+    brief: String(row.brief ?? ""),
+    humans: [userId],
+    aiEmployees: [MAYA_EMPLOYEE_ID],
+    messages: [],
+    tasks: [],
+    memory: [],
+    unread: Number(row.unread ?? 0),
+    accent: String(row.accent ?? maya.accent),
+    createdAt: String(row.created_at ?? nowISO()),
+    updatedAt: String(row.updated_at ?? nowISO()),
+  };
 }
 
 export async function ensureMayaWorkspaceBundle(
@@ -259,6 +155,30 @@ export async function ensureMayaWorkspaceBundle(
   firstName?: string,
 ): Promise<{ employee: AIEmployee; dmRoom: ProjectRoom }> {
   const employee = await ensureMayaForWorkspace(client, workspaceId);
+  const role = await getWorkspaceMemberRole(client, workspaceId, userId);
+  if (!role || !canAccessMaya(role)) {
+    // Members still get Maya employee row in workspace, but no DM
+    return {
+      employee,
+      dmRoom: {
+        id: "",
+        name: employee.name,
+        kind: "dm",
+        dmEmployeeId: MAYA_EMPLOYEE_ID,
+        description: "",
+        brief: "",
+        humans: [],
+        aiEmployees: [MAYA_EMPLOYEE_ID],
+        messages: [],
+        tasks: [],
+        memory: [],
+        unread: 0,
+        accent: employee.accent,
+        createdAt: nowISO(),
+        updatedAt: nowISO(),
+      },
+    };
+  }
   const dmRoom = await ensureMayaDM(client, workspaceId, userId, firstName);
   return { employee, dmRoom };
 }

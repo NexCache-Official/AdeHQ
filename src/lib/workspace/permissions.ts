@@ -56,8 +56,9 @@ export function canManageMembers(role: string | null | undefined): boolean {
   return isWorkspaceAdmin(role);
 }
 
+/** Hire / terminate / modify AI employees — admin only. */
 export function canManageAiEmployees(role: string | null | undefined): boolean {
-  return WORKSPACE_ROLES.includes(normalizeWorkspaceRole(role));
+  return isWorkspaceAdmin(role);
 }
 
 export function canManageWorkspaceSettings(role: string | null | undefined): boolean {
