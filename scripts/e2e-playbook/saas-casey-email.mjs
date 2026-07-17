@@ -10,8 +10,12 @@ const OUT = "/tmp/adehq-saas-casey-email";
 const SHOTS = path.join(OUT, "screenshots");
 fs.mkdirSync(SHOTS, { recursive: true });
 
-const EMAIL = process.env.E2E_EMAIL || "kushu1824@gmail.com";
-const PASSWORD = process.env.E2E_PASSWORD || "Test1234";
+const EMAIL = process.env.E2E_EMAIL;
+const PASSWORD = process.env.E2E_PASSWORD;
+if (!EMAIL || !PASSWORD) {
+  console.error("E2E_EMAIL / E2E_PASSWORD required");
+  process.exit(1);
+}
 const BASE = process.env.E2E_BASE || "https://app.adehq.com";
 const MAIL_TO = "skumar@nexcache.com";
 const SHELL_MS = 60_000;

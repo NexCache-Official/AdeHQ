@@ -6,12 +6,14 @@ Keep these; extend them instead of reinventing one-off `tmp-*.mjs` files each se
 ## Prerequisites
 
 ```bash
-# from repo root
+# from repo root — credentials are required (no hardcoded defaults in scripts)
 export E2E_EMAIL='…'
 export E2E_PASSWORD='…'
 # optional
 export E2E_BASE_URL='https://app.adehq.com'
 ```
+
+Never commit passwords. Prefer setting `E2E_*` in `.env.local` (gitignored) and exporting them for a session.
 
 Install Playwright browsers once:
 

@@ -4,6 +4,10 @@ import path from "path";
 
 const EMAIL = process.env.E2E_EMAIL;
 const PASSWORD = process.env.E2E_PASSWORD;
+if (!EMAIL || !PASSWORD) {
+  console.error("E2E_EMAIL / E2E_PASSWORD required");
+  process.exit(1);
+}
 const BASE = "https://app.adehq.com";
 const OUT = "/tmp/adehq-accept-topic";
 const SHOTS = path.join(OUT, "screenshots");

@@ -1,0 +1,23 @@
+# Never upload secrets or local-only files via `vercel deploy`
+.env
+.env.*
+.env*.local
+!.env.example
+
+# Local / disposable harnesses
+scripts/tmp-*
+**/tmp-*.mjs
+/tmp/
+
+# Dev / tooling noise
+.node_modules
+.next
+.git
+coverage
+*.log
+.DS_Store
+supabase/.temp
+supabase/.branches
+.cursor
+.claude
+agent-transcripts
