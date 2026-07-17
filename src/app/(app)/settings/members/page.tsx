@@ -191,6 +191,9 @@ export default function SettingsMembersPage() {
                     name={member.name ?? member.email ?? "Member"}
                     size="sm"
                     userId={member.userId}
+                    src={
+                      state.workspaceMembers.find((m) => m.userId === member.userId)?.avatar
+                    }
                   />
                   <div className="min-w-0 flex-1">
                     <div className="truncate text-sm font-medium text-ink">

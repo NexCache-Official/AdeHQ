@@ -159,7 +159,12 @@ type StoreActions = {
   logout: () => Promise<void>;
   clearError: () => void;
   completeOnboarding: () => Promise<void>;
-  updateProfile: (patch: { name?: string; email?: string; workspaceName?: string }) => void;
+  updateProfile: (patch: {
+    name?: string;
+    email?: string;
+    avatar?: string;
+    workspaceName?: string;
+  }) => void;
 
   // employees
   hireEmployee: (employee: AIEmployee) => AIEmployee;
@@ -1213,6 +1218,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
               ...current.user,
               name: patch.name ?? current.user.name,
               email: patch.email ?? current.user.email,
+              avatar: patch.avatar ?? current.user.avatar,
             }
           : current.user;
         const nextWorkspace = patch.workspaceName
@@ -1223,7 +1229,24 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           ...s,
           user: nextUser,
           workspace: nextWorkspace,
+          workspaceMembers: nextUser
+            ? s.workspaceMembers.map((m) =>
+                m.userId === nextUser.id
+                  ? {
+                      ...m,
+                      name: nextUser.name,
+                      email: nextUser.email,
+                      avatar: nextUser.avatar,
+                    }
+                  : m,
+              )
+            : s.workspaceMembers,
         }));
+
+        // Avatar uploads already persist via /api/profile/avatar
+        if (patch.avatar !== undefined && !patch.name && !patch.email && !patch.workspaceName) {
+          return;
+        }
 
         runRemote(async (workspaceId) => {
           if (nextUser) await persistProfile(nextUser.id, nextUser);

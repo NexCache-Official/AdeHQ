@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { effectiveEmployeeStatus } from "@/lib/maya-employee";
 import { AIEmployee, EmployeeStatus } from "@/lib/types";
 import { cn, avatarGradient, initials } from "@/lib/utils";
@@ -60,27 +61,43 @@ export function HumanAvatar({
   size = "md",
   accent,
   userId,
+  src,
   className,
 }: {
   name: string;
   size?: keyof typeof SIZES;
   accent?: string;
-  /** When set, picks a deterministic accent from the palette. */
+  /** When set, picks a deterministic accent from the palette (fallback tile). */
   userId?: string;
+  /** Persisted profile photo URL from Supabase storage. */
+  src?: string | null;
   className?: string;
 }) {
   const s = SIZES[size];
   const resolved = accent ?? (userId ? avatarAccentForId(userId).background : "#3B4C6B");
+  const [imgFailed, setImgFailed] = useState(false);
+  const showImg = Boolean(src) && !imgFailed;
+
   return (
     <div
       className={cn(
-        "flex shrink-0 items-center justify-center font-bold text-white",
+        "relative flex shrink-0 items-center justify-center overflow-hidden font-bold text-white",
         s.box,
         className,
       )}
-      style={{ backgroundImage: avatarGradient(resolved) }}
+      style={showImg ? undefined : { backgroundImage: avatarGradient(resolved) }}
     >
-      {initials(name)}
+      {showImg ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={src!}
+          alt={name}
+          className="h-full w-full object-cover"
+          onError={() => setImgFailed(true)}
+        />
+      ) : (
+        initials(name)
+      )}
     </div>
   );
 }

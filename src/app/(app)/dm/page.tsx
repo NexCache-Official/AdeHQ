@@ -84,6 +84,8 @@ export default function DirectMessagesPage() {
                     <HumanAvatar
                       name={peer.name ?? peer.email ?? "Member"}
                       size="md"
+                      userId={peer.userId}
+                      src={peer.avatar}
                       accent={accent.background}
                       className="!h-[42px] !w-[42px] !rounded-[13px]"
                     />

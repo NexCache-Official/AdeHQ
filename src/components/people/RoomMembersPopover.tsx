@@ -17,7 +17,7 @@ export function ParticipantAvatarStack({
   className,
   onClick,
 }: {
-  humans: Array<{ id: string; name: string }>;
+  humans: Array<{ id: string; name: string; avatar?: string }>;
   employees: AIEmployee[];
   max?: number;
   size?: "xs" | "sm";
@@ -25,8 +25,14 @@ export function ParticipantAvatarStack({
   onClick?: () => void;
 }) {
   const items = useMemo(() => {
-    const out: Array<{ id: string; kind: "human" | "ai"; name: string; employee?: AIEmployee }> = [];
-    for (const h of humans) out.push({ id: h.id, kind: "human", name: h.name });
+    const out: Array<{
+      id: string;
+      kind: "human" | "ai";
+      name: string;
+      avatar?: string;
+      employee?: AIEmployee;
+    }> = [];
+    for (const h of humans) out.push({ id: h.id, kind: "human", name: h.name, avatar: h.avatar });
     for (const e of employees) out.push({ id: e.id, kind: "ai", name: e.name, employee: e });
     return out;
   }, [humans, employees]);
@@ -44,7 +50,7 @@ export function ParticipantAvatarStack({
             style={{ zIndex: visible.length - index }}
           >
             {item.kind === "human" ? (
-              <HumanAvatar name={item.name} size={size} />
+              <HumanAvatar name={item.name} size={size} userId={item.id} src={item.avatar} />
             ) : item.employee ? (
               <EmployeeAvatar employee={item.employee} size={size} showStatus={false} />
             ) : null}
@@ -100,6 +106,7 @@ export function RoomMembersPopover({
           id,
           name: member?.name ?? (id === currentUserId ? "You" : "Teammate"),
           email: member?.email,
+          avatar: member?.avatar,
           role: id === room.humans[0] ? "Owner" : "Member",
         };
       }),
@@ -144,7 +151,12 @@ export function RoomMembersPopover({
                     key={human.id}
                     className="flex items-center gap-3 rounded-xl border border-border bg-muted/30 px-2.5 py-2"
                   >
-                    <HumanAvatar name={human.name} size="sm" />
+                    <HumanAvatar
+                      name={human.name}
+                      size="sm"
+                      userId={human.id}
+                      src={human.avatar}
+                    />
                     <div className="min-w-0 flex-1">
                       <div className="text-sm font-medium text-ink">{human.name}</div>
                       <div className="text-[11px] text-ink-3">{human.role}</div>

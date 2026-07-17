@@ -5,8 +5,8 @@ import { useStore } from "@/lib/demo-store";
 import { PageHeader } from "@/components/Page";
 import { PlatformAdminLink } from "@/components/admin/PlatformAdminLink";
 import { AccountSecurityCard } from "@/components/settings/AccountSecurityCard";
+import { AvatarEditor } from "@/components/settings/AvatarEditor";
 import { Card, Button } from "@/components/ui";
-import { HumanAvatar } from "@/components/EmployeeAvatar";
 import { Check, UserCircle } from "lucide-react";
 
 export default function SettingsProfilePage() {
@@ -32,18 +32,27 @@ export default function SettingsProfilePage() {
 
       <Card className="p-6">
         <h2 className="mb-4 text-sm font-semibold text-ink">Your profile</h2>
-        <div className="flex items-center gap-4">
-          <HumanAvatar name={name || "User"} size="xl" />
-          <div className="grid flex-1 gap-3 sm:grid-cols-2">
-            <label className="block space-y-1.5">
-              <span className="text-xs font-medium text-ink-3">Name</span>
-              <input className="input-field" value={name} onChange={(e) => setName(e.target.value)} />
-            </label>
-            <label className="block space-y-1.5">
-              <span className="text-xs font-medium text-ink-3">Email</span>
-              <input className="input-field" value={email} onChange={(e) => setEmail(e.target.value)} />
-            </label>
+        {state.user?.id && (
+          <div className="mb-6 border-b border-border pb-6">
+            <AvatarEditor
+              userId={state.user.id}
+              name={name || state.user.name || "User"}
+              avatarUrl={state.user.avatar}
+              onAvatarChange={(url) => {
+                actions.updateProfile({ avatar: url });
+              }}
+            />
           </div>
+        )}
+        <div className="grid gap-3 sm:grid-cols-2">
+          <label className="block space-y-1.5">
+            <span className="text-xs font-medium text-ink-3">Name</span>
+            <input className="input-field" value={name} onChange={(e) => setName(e.target.value)} />
+          </label>
+          <label className="block space-y-1.5">
+            <span className="text-xs font-medium text-ink-3">Email</span>
+            <input className="input-field" value={email} onChange={(e) => setEmail(e.target.value)} />
+          </label>
         </div>
         <div className="mt-4 flex justify-end">
           <Button size="sm" onClick={saveProfile}>

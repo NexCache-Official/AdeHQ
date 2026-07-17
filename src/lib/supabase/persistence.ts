@@ -204,24 +204,45 @@ export async function ensureProfile(
   patch: Partial<HumanUser> = {},
 ): Promise<HumanUser> {
   const profile = fromUser(user, patch);
+  const payload: Record<string, unknown> = {
+    id: profile.id,
+    name: profile.name,
+    email: profile.email,
+    role: profile.role,
+    updated_at: nowISO(),
+  };
+  // Never wipe an existing avatar on routine upsert
+  if (patch.avatar !== undefined) {
+    payload.avatar = patch.avatar;
+  }
+
   const { data, error } = await supabase
     .from("profiles")
-    .upsert(
-      {
-        id: profile.id,
-        name: profile.name,
-        email: profile.email,
-        avatar: profile.avatar ?? null,
-        role: profile.role,
-        updated_at: nowISO(),
-      },
-      { onConflict: "id" },
-    )
+    .upsert(payload, { onConflict: "id" })
     .select("*")
     .single();
 
   if (error) throw error;
-  return profileFromRow(data, user);
+
+  let resolved = profileFromRow(data, user);
+
+  // Persist unique generated avatar into storage when missing
+  if (!resolved.avatar) {
+    try {
+      const headers = await authHeaders();
+      const res = await fetch("/api/profile/avatar", { method: "GET", headers });
+      if (res.ok) {
+        const body = (await res.json()) as { avatarUrl?: string };
+        if (body.avatarUrl) {
+          resolved = { ...resolved, avatar: body.avatarUrl };
+        }
+      }
+    } catch {
+      /* non-fatal */
+    }
+  }
+
+  return resolved;
 }
 
 async function ensureToolCatalogRemote(): Promise<void> {
@@ -879,7 +900,11 @@ async function hydrateWorkspaceMembers(rows: DbRow[]): Promise<WorkspaceMember[]
         userId: row.user_id,
         name: profile?.name,
         email: profile?.email,
+        avatar: profile?.avatar,
         role: normalizeWorkspaceRole(String(row.role)),
+        status: (row.status === "removed" ? "removed" : "active") as
+          | "active"
+          | "removed",
         createdAt: row.created_at ?? nowISO(),
       };
     })

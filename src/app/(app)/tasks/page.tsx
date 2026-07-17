@@ -439,7 +439,14 @@ function AssigneeChip({ task }: { task: Task }) {
     const e = state.employees.find((x) => x.id === task.assigneeId);
     if (e) return <EmployeeAvatar employee={e} size="xs" showStatus={false} />;
   }
-  return <HumanAvatar name={state.user?.name ?? "You"} size="xs" />;
+  return (
+    <HumanAvatar
+      name={state.user?.name ?? "You"}
+      size="xs"
+      userId={state.user?.id}
+      src={state.user?.avatar}
+    />
+  );
 }
 
 function BoardCard({

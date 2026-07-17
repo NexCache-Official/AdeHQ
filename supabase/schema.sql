@@ -18,6 +18,9 @@ create table if not exists public.profiles (
   name text not null,
   email text not null,
   avatar text,
+  avatar_source text
+    check (avatar_source is null or avatar_source in ('generated', 'upload')),
+  avatar_updated_at timestamptz,
   role text not null default 'Founder',
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()

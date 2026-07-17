@@ -102,6 +102,7 @@ export default function WorkforcePage() {
                           size="md"
                           accent={accent.background}
                           userId={member.userId}
+                          src={member.avatar}
                         />
                         <div className="min-w-0 flex-1">
                           <div className="truncate text-sm font-semibold text-ink">

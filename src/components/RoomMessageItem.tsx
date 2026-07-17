@@ -662,7 +662,15 @@ export function RoomMessageItem({
       />
       <div className="w-8 shrink-0">
         {grouped ? null : isHuman ? (
-          <HumanAvatar name={message.senderName} size="sm" />
+          <HumanAvatar
+            name={message.senderName}
+            size="sm"
+            userId={message.senderId}
+            src={
+              state.workspaceMembers.find((m) => m.userId === message.senderId)?.avatar ??
+              (state.user?.id === message.senderId ? state.user.avatar : undefined)
+            }
+          />
         ) : employee ? (
           <EmployeeAvatar employee={employee} size="sm" showStatus={false} />
         ) : (

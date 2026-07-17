@@ -455,6 +455,7 @@ export function TopicPanel({
         id,
         name: member?.name ?? (id === room.humans[0] ? "You" : "Teammate"),
         email: member?.email,
+        avatar: member?.avatar,
       };
     })
     .filter((h) => h.id);
@@ -1148,7 +1149,12 @@ export function TopicPanel({
                       key={human.id}
                       className="flex items-center gap-3 rounded-xl border border-border bg-surface p-2.5"
                     >
-                      <HumanAvatar name={human.name ?? "Teammate"} size="sm" />
+                      <HumanAvatar
+                        name={human.name ?? "Teammate"}
+                        size="sm"
+                        userId={human.id}
+                        src={human.avatar}
+                      />
                       <div>
                         <div className="text-sm font-medium text-ink">{human.name}</div>
                         {human.email && (
@@ -1191,7 +1197,12 @@ export function TopicPanel({
                           key={human.id}
                           className="flex items-center gap-3 rounded-xl border border-border bg-surface p-2.5"
                         >
-                          <HumanAvatar name={human.name ?? "Teammate"} size="sm" />
+                          <HumanAvatar
+                            name={human.name ?? "Teammate"}
+                            size="sm"
+                            userId={human.id}
+                            src={human.avatar}
+                          />
                           <div>
                             <div className="text-sm font-medium text-ink">{human.name}</div>
                           </div>

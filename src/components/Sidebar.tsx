@@ -273,6 +273,8 @@ export function Sidebar() {
                       <HumanAvatar
                         name={peer.name ?? peer.email ?? "Member"}
                         size="xs"
+                        userId={peer.userId}
+                        src={peer.avatar}
                         accent={accent.background}
                       />
                     }
@@ -402,9 +404,12 @@ export function Sidebar() {
           aria-expanded={profileOpen}
           aria-haspopup="menu"
         >
-          <div className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-[9px] bg-gradient-to-br from-[#3B4C6B] to-[#5A6E94] text-xs font-bold text-white">
-            {(state.user?.name ?? "U").slice(0, 2).toUpperCase()}
-          </div>
+          <HumanAvatar
+            name={state.user?.name ?? "You"}
+            userId={state.user?.id}
+            src={state.user?.avatar}
+            size="sm"
+          />
           <div className="min-w-0 flex-1">
             <div className="truncate text-[12.5px] font-semibold text-[var(--rail-ink)]">
               {state.user?.name ?? "You"}

@@ -135,7 +135,12 @@ export function TaskCard({
         {assignee ? (
           <EmployeeAvatar employee={assignee} size="xs" showStatus={false} />
         ) : (
-          <HumanAvatar name={state.user?.name ?? "You"} size="xs" />
+          <HumanAvatar
+            name={state.user?.name ?? "You"}
+            size="xs"
+            userId={state.user?.id}
+            src={state.user?.avatar}
+          />
         )}
         <span className="truncate text-[11px] text-ink-3">
           {assignee?.name ?? state.user?.name ?? "You"}
