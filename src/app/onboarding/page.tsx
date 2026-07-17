@@ -16,7 +16,9 @@ export default function OnboardingPage() {
   const { state, actions, hydrated, userWorkspaces, workspaceTransitioning } = useStore();
   const router = useRouter();
   const emailGate = useConfirmedEmailGate();
-  const [launchPending, setLaunchPending] = useState(false);
+  // Sync read — must not start false or completeOnboarding remounts flash
+  // "Opening workspace…" and wipe OnboardingFlow local plan state.
+  const [launchPending, setLaunchPending] = useState(() => isOnboardingLaunchPending());
 
   const activeSummary = useMemo(
     () => userWorkspaces.find((ws) => ws.id === state.workspace.id) ?? null,
@@ -35,10 +37,6 @@ export default function OnboardingPage() {
       ) ?? null,
     [userWorkspaces, state.workspace.id],
   );
-
-  useEffect(() => {
-    setLaunchPending(isOnboardingLaunchPending());
-  }, []);
 
   useEffect(() => {
     if (isPasswordRecoveryPending()) {
@@ -104,8 +102,9 @@ export default function OnboardingPage() {
     return <LoadingState full label="Switching workspace…" />;
   }
 
-  // Completed HQ: never render the wizard except the intentional Launch handoff frame.
-  if (workspaceIsComplete && !launchPending) {
+  // Completed HQ leaving the wizard — keep a brief handoff, but never unmount the
+  // Launch frame while sessionStorage still says launch is pending.
+  if (workspaceIsComplete && !launchPending && !isOnboardingLaunchPending()) {
     return <LoadingState full label="Opening workspace…" />;
   }
 

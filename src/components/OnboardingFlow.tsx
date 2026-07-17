@@ -20,6 +20,7 @@ import {
   clearOnboardingLaunchPending,
   isOnboardingLaunchPending,
   markOnboardingLaunchPending,
+  readOnboardingContext,
   storeOnboardingContext,
 } from "@/lib/hiring/data";
 import type { OnboardingContext } from "@/lib/hiring/types";
@@ -31,9 +32,20 @@ import {
   WORKFORCE_OUTCOMES,
   type WorkforceOutcomeId,
 } from "@/lib/hiring/onboarding-presets";
+import { resolveMayaDmRoomId } from "@/lib/maya-employee";
 import { OnboardingJourneyNav, type JourneyStep } from "@/components/onboarding/OnboardingJourneyNav";
 import { OnboardingOrgGraph } from "@/components/onboarding/OnboardingOrgGraph";
 import { cn } from "@/lib/utils";
+
+function isWorkforceOutcomeId(value: string | undefined | null): value is WorkforceOutcomeId {
+  return Boolean(value && WORKFORCE_OUTCOMES.some((o) => o.id === value));
+}
+
+type SetupResult = {
+  firstRoomId: string;
+  roomName: string;
+  mayaDmRoomId: string;
+};
 
 const STAGE_LABELS = ["Welcome", "Step 1 of 3", "Step 2 of 3", "Step 3 of 3", "Complete"] as const;
 const JOURNEY_LABELS = ["Welcome", "Pick a focus", "First room", "Meet Maya", "Launch"] as const;
@@ -71,30 +83,81 @@ export function OnboardingFlow({
 }) {
   const { state, actions } = useStore();
   const router = useRouter();
+  const restoreLaunch = useMemo(() => {
+    const ctx = readOnboardingContext();
+    const pending = isOnboardingLaunchPending();
+    if (!pending && !ctx?.setupComplete) return null;
+    return ctx;
+  }, []);
   // If Launch handoff remounts after seal, land on Launch — not Welcome of a finished HQ.
   const [stage, setStage] = useState(() =>
-    state.onboardingComplete && isOnboardingLaunchPending() ? 4 : 0,
+    (state.onboardingComplete || Boolean(restoreLaunch?.setupComplete)) &&
+    isOnboardingLaunchPending()
+      ? 4
+      : 0,
   );
   const [escaping, setEscaping] = useState(false);
   const [cancelling, setCancelling] = useState(false);
-  const [outcomeId, setOutcomeId] = useState<WorkforceOutcomeId | null>(null);
-  /** Optional seed from /workspaces/new — session-only, not shown in the UI. */
-  const [seededFocus, setSeededFocus] = useState<string | undefined>();
-  const [presetId, setPresetId] = useState("");
-  const [customRoomName, setCustomRoomName] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [setupResult, setSetupResult] = useState<{ firstRoomId: string; roomName: string } | null>(
-    null,
+  const [outcomeId, setOutcomeId] = useState<WorkforceOutcomeId | null>(() =>
+    isWorkforceOutcomeId(restoreLaunch?.outcomeId) ? restoreLaunch.outcomeId : null,
   );
+  /** Optional seed from /workspaces/new — session-only, not shown in the UI. */
+  const [seededFocus, setSeededFocus] = useState<string | undefined>(
+    () => restoreLaunch?.goalText,
+  );
+  const [presetId, setPresetId] = useState(() => {
+    if (!restoreLaunch) return "";
+    try {
+      const raw = sessionStorage.getItem(ONBOARDING_ROOM_KEY);
+      if (!raw) return "";
+      const parsed = JSON.parse(raw) as { template?: string };
+      return typeof parsed.template === "string" ? parsed.template : "";
+    } catch {
+      return "";
+    }
+  });
+  const [customRoomName, setCustomRoomName] = useState(() => {
+    if (!restoreLaunch) return "";
+    const fromContext = restoreLaunch.roomName?.trim();
+    if (fromContext) return fromContext;
+    try {
+      const raw = sessionStorage.getItem(ONBOARDING_ROOM_KEY);
+      if (!raw) return "";
+      const parsed = JSON.parse(raw) as { name?: string };
+      return typeof parsed.name === "string" ? parsed.name : "";
+    } catch {
+      return "";
+    }
+  });
+  const [busy, setBusy] = useState(false);
+  const [busyLabel, setBusyLabel] = useState("Opening your workspace…");
+  const [error, setError] = useState<string | null>(null);
+  const [setupResult, setSetupResult] = useState<SetupResult | null>(() => {
+    if (restoreLaunch?.roomId && restoreLaunch.roomName) {
+      return {
+        firstRoomId: restoreLaunch.roomId,
+        roomName: restoreLaunch.roomName,
+        mayaDmRoomId: "",
+      };
+    }
+    return null;
+  });
   const [mayaText, setMayaText] = useState("");
   const [mayaDone, setMayaDone] = useState(false);
   const typedRef = useRef(false);
   const typeIntervalRef = useRef<ReturnType<typeof setInterval>>();
-  const setupInFlightRef = useRef<Promise<{ firstRoomId: string; roomName: string }> | null>(null);
+  const setupInFlightRef = useRef<Promise<SetupResult> | null>(null);
 
   const companyName = state.workspace.name || "My AI Workspace";
   const ownerInitial = (companyName.trim()[0] || "N").toUpperCase();
+  const liveFirstRoom = useMemo(
+    () => state.rooms.find((r) => r.kind === "room") ?? null,
+    [state.rooms],
+  );
+  const liveMayaDmId = useMemo(
+    () => resolveMayaDmRoomId(state.rooms, state.user?.id),
+    [state.rooms, state.user?.id],
+  );
 
   useEffect(() => {
     try {
@@ -117,10 +180,21 @@ export function OnboardingFlow({
     return picked ?? presets[0] ?? (outcomeId ? defaultWorkstreamForOutcome(outcomeId) : null);
   }, [presets, presetId, outcomeId]);
 
-  const roomName = customRoomName.trim() || activePreset?.name || "—";
+  const roomName =
+    customRoomName.trim() ||
+    setupResult?.roomName ||
+    liveFirstRoom?.name ||
+    activePreset?.name ||
+    restoreLaunch?.roomName ||
+    "—";
   const outcomeTitle =
-    WORKFORCE_OUTCOMES.find((o) => o.id === outcomeId)?.title ?? "Not set";
-  const hireName = activePreset?.suggestedHires[0] ?? "First hire";
+    WORKFORCE_OUTCOMES.find((o) => o.id === outcomeId)?.title ||
+    restoreLaunch?.outcomeTitle ||
+    "Not set";
+  const hireName =
+    activePreset?.suggestedHires[0] ||
+    restoreLaunch?.suggestedHires?.[0] ||
+    "First hire";
 
   const progressPct = (stage / 4) * 100;
 
@@ -187,9 +261,47 @@ export function OnboardingFlow({
     sessionStorage.setItem(ONBOARDING_CONTEXT_KEY, JSON.stringify(context));
   };
 
-  const ensureWorkspaceSetup = async () => {
-    if (setupResult) return setupResult;
+  // Keep plan in sessionStorage as the user progresses so Launch remounts
+  // (after onboarding_complete seals) still show focus / room / hire names.
+  useEffect(() => {
+    if (!outcomeId || !activePreset) return;
+    persistDrafts(setupResult?.firstRoomId, setupResult?.roomName || roomName);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- persistDrafts closes over latest plan fields
+  }, [outcomeId, activePreset, roomName, setupResult?.firstRoomId, setupResult?.roomName]);
+
+  const ensureWorkspaceSetup = async (): Promise<SetupResult> => {
+    if (setupResult?.firstRoomId && setupResult.roomName) {
+      const mayaDmRoomId = setupResult.mayaDmRoomId || liveMayaDmId;
+      if (mayaDmRoomId && mayaDmRoomId !== setupResult.mayaDmRoomId) {
+        const patched = { ...setupResult, mayaDmRoomId };
+        setSetupResult(patched);
+        return patched;
+      }
+      return { ...setupResult, mayaDmRoomId };
+    }
     if (setupInFlightRef.current) return setupInFlightRef.current;
+
+    // Remount / recovery: room already exists — don't require local plan state.
+    if (liveFirstRoom && state.workspace.id) {
+      const resolved: SetupResult = {
+        firstRoomId: liveFirstRoom.id,
+        roomName: liveFirstRoom.name,
+        mayaDmRoomId: liveMayaDmId,
+      };
+      setSetupResult(resolved);
+      if (outcomeId && activePreset) {
+        persistDrafts(resolved.firstRoomId, resolved.roomName);
+      } else if (restoreLaunch) {
+        storeOnboardingContext({
+          ...restoreLaunch,
+          roomId: resolved.firstRoomId,
+          roomName: resolved.roomName,
+          setupComplete: true,
+        });
+      }
+      return resolved;
+    }
+
     if (!activePreset || !outcomeId) {
       throw new Error("Complete the earlier steps before continuing.");
     }
@@ -198,12 +310,16 @@ export function OnboardingFlow({
       const result = await actions.setupOnboardingWorkspace({
         workspaceName: companyName,
         room: {
-          name: roomName,
+          name: roomName === "—" ? activePreset.name : roomName,
           accent: activePreset.accent,
-          description: `${roomName} — your first AI workstream`,
+          description: `${roomName === "—" ? activePreset.name : roomName} — your first AI workstream`,
         },
       });
-      const resolved = { firstRoomId: result.firstRoomId, roomName: result.roomName };
+      const resolved: SetupResult = {
+        firstRoomId: result.firstRoomId,
+        roomName: result.roomName,
+        mayaDmRoomId: result.mayaDmRoomId || liveMayaDmId,
+      };
       persistDrafts(result.firstRoomId, result.roomName);
       setSetupResult(resolved);
       return resolved;
@@ -217,16 +333,25 @@ export function OnboardingFlow({
     }
   };
 
-  const finishAndLeave = async (destination: string) => {
+  const finishAndLeave = async (
+    destination: "__first_room__" | "__maya_dm__" | string,
+    label = "Opening your workspace…",
+  ) => {
+    setBusyLabel(label);
     setBusy(true);
     setError(null);
     try {
       const result = await ensureWorkspaceSetup();
       // Seal + persist before navigation so AppShell cannot bounce back to /onboarding.
+      markOnboardingLaunchPending();
       await actions.completeOnboarding();
-      clearOnboardingLaunchPending();
       const target =
-        destination === "__first_room__" ? `/rooms/${result.firstRoomId}` : destination;
+        destination === "__first_room__"
+          ? `/rooms/${result.firstRoomId}`
+          : destination === "__maya_dm__"
+            ? `/rooms/${result.mayaDmRoomId || liveMayaDmId}`
+            : destination;
+      clearOnboardingLaunchPending();
       router.replace(target);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not finish setup.");
@@ -234,15 +359,16 @@ export function OnboardingFlow({
     }
   };
 
-  const skipToWorkspace = () => finishAndLeave("__first_room__");
+  const skipToWorkspace = () => finishAndLeave("__first_room__", "Opening your workspace…");
 
   const continueFromMaya = async () => {
+    setBusyLabel("Finishing setup…");
     setBusy(true);
     setError(null);
     try {
       await ensureWorkspaceSetup();
       // Mark Launch handoff BEFORE persisting complete, so /onboarding does not
-      // redirect away while this tab still needs to show step 5.
+      // redirect away / remount and wipe the plan while this tab still needs step 5.
       markOnboardingLaunchPending();
       // Workspace + first room exist — onboarding is done even if they hire later.
       await actions.completeOnboarding();
@@ -254,9 +380,9 @@ export function OnboardingFlow({
     }
   };
 
-  const openMayaHiringJourney = () => finishAndLeave("/hire?onboarding=1");
+  const openMayaHiringJourney = () => finishAndLeave("__maya_dm__", "Opening Maya…");
 
-  const goToWorkspaceFromLaunch = () => finishAndLeave("__first_room__");
+  const goToWorkspaceFromLaunch = () => finishAndLeave("__first_room__", "Opening your workspace…");
 
   const goStage = (n: number) => setStage(n);
   const next = () => setStage((s) => Math.min(4, s + 1));
@@ -265,12 +391,14 @@ export function OnboardingFlow({
   const canContinue = stage === 1 ? outcomeId !== null : stage === 2 ? Boolean(roomName.trim() && roomName !== "—") : true;
 
   const journeySteps: JourneyStep[] = useMemo(() => {
+    const focusLabel = outcomeTitle !== "Not set" ? outcomeTitle : "—";
+    const roomLabel = roomName !== "—" ? roomName : "—";
     const values = [
       companyName,
-      outcomeTitle,
-      outcomeId ? roomName : "—",
-      outcomeId ? "AI Workforce Manager" : "—",
-      outcomeId ? hireName : "—",
+      focusLabel,
+      roomLabel,
+      roomLabel !== "—" || focusLabel !== "—" ? "AI Workforce Manager" : "—",
+      hireName,
     ];
     return JOURNEY_LABELS.map((label, i) => {
       const status = i < stage ? "done" : i === stage ? "current" : "todo";
@@ -278,10 +406,10 @@ export function OnboardingFlow({
         label,
         value: values[i] ?? "—",
         status,
-        onGo: i < stage ? () => goStage(i) : undefined,
+        onGo: i < stage && stage < 4 ? () => goStage(i) : undefined,
       };
     });
-  }, [companyName, outcomeTitle, outcomeId, roomName, hireName, stage]);
+  }, [companyName, outcomeTitle, roomName, hireName, stage]);
 
   const hasPlan = Boolean(outcomeId && activePreset);
 
@@ -679,10 +807,24 @@ export function OnboardingFlow({
                     <span className="text-accent">.</span>
                   </h1>
                   <p className="obd-fade-up mb-[22px] max-w-[50ch] text-[15.5px] leading-relaxed text-ink-2">
-                    {companyName} is wired around{" "}
-                    <strong className="font-semibold text-ink">{outcomeTitle}</strong>. Maya is waiting
-                    in <strong className="font-semibold text-ink">{roomName}</strong> to help you hire
-                    your {hireName}.
+                    {companyName}
+                    {outcomeTitle !== "Not set" ? (
+                      <>
+                        {" "}
+                        is wired around{" "}
+                        <strong className="font-semibold text-ink">{outcomeTitle}</strong>
+                      </>
+                    ) : null}
+                    {roomName !== "—" ? (
+                      <>
+                        . Your first room is{" "}
+                        <strong className="font-semibold text-ink">{roomName}</strong>
+                      </>
+                    ) : (
+                      "."
+                    )}
+                    {" "}
+                    Maya is ready to help you hire your {hireName}.
                   </p>
                   <div className="obd-fade-up flex w-full max-w-[520px] overflow-hidden rounded-2xl border border-border bg-surface text-left shadow-[0_12px_30px_-14px_rgba(40,34,24,0.22)]">
                     <div className="flex w-[52px] shrink-0 flex-col items-center gap-3.5 bg-[var(--rail)] py-3.5">
@@ -801,7 +943,7 @@ export function OnboardingFlow({
       {busy && (
         <div className="absolute inset-0 z-50 flex animate-[obdFadeIn_0.3s_ease] flex-col items-center justify-center gap-[22px] bg-gradient-to-br from-[#191512] to-[#2B2119] text-white">
           <div className="h-[46px] w-[46px] animate-spin rounded-full border-[3px] border-white/15 border-t-[var(--accent)]" />
-          <span className="text-[15px] font-semibold">Opening your workspace…</span>
+          <span className="text-[15px] font-semibold">{busyLabel}</span>
         </div>
       )}
     </div>
