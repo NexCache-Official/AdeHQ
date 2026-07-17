@@ -3,13 +3,12 @@
 import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { AuthModeTabs, AuthShell, AuthStatusChip } from "@/components/AuthShell";
+import { AuthModeTabs, AuthShell } from "@/components/AuthShell";
 import { Button } from "@/components/ui";
 import { useStore } from "@/lib/demo-store";
-import { ResendConfirmation } from "@/components/auth/ResendConfirmation";
+import { ConfirmEmailPanel } from "@/components/auth/ConfirmEmailPanel";
 import { safeAuthNextPath } from "@/lib/auth/safe-next";
 import { ENABLE_DEMO_MODE } from "@/lib/config/features";
-import { getSiteUrl } from "@/lib/site-url";
 import { ArrowRight, Check, Eye, EyeOff, Sparkles } from "lucide-react";
 
 function getPasswordStrength(password: string) {
@@ -109,6 +108,17 @@ function SignupForm() {
     }
   };
 
+  if (confirmationSent) {
+    return (
+      <AuthShell scene="verify">
+        <ConfirmEmailPanel
+          email={confirmationEmail}
+          changeEmailHref={nextPath ? `/signup?next=${encodeURIComponent(nextPath)}` : "/signup"}
+        />
+      </AuthShell>
+    );
+  }
+
   return (
     <AuthShell scene="signup">
       <AuthModeTabs mode="signup" nextPath={nextPath} />
@@ -126,40 +136,7 @@ function SignupForm() {
         </div>
       )}
 
-      {confirmationSent ? (
-        <div className="mt-2">
-          <AuthStatusChip label="Status · activation link sent" tone="green" />
-          <h2 className="text-[22px] font-semibold leading-tight tracking-[-0.03em] text-ink">
-            Check your inbox
-            <span className="text-accent">.</span>
-          </h2>
-          <p className="mt-2 text-[14.5px] leading-relaxed text-ink-2">
-            If an account can be created or still needs confirmation, we sent a link to{" "}
-            <span className="font-semibold text-ink">{confirmationEmail}</span>. Click it to continue.
-          </p>
-          <div className="mt-5 rounded-[18px] border border-emerald-200 bg-emerald-50 px-4 py-3.5 text-xs leading-relaxed text-emerald-900">
-            <p className="font-mono text-[10.5px] uppercase tracking-[0.08em] text-emerald-800/80">
-              Inbox checklist
-            </p>
-            <p className="mt-2">
-              From AdeHQ (<span className="font-mono">noreply@adehq.com</span>). Opens on{" "}
-              <span className="font-medium">{getSiteUrl().replace(/^https?:\/\//, "")}</span> at{" "}
-              <span className="font-mono">/auth/callback</span>.
-            </p>
-          </div>
-          <Link
-            href="/login"
-            className="mt-5 inline-flex h-11 w-full items-center justify-center rounded-xl bg-accent px-5 text-sm font-semibold text-white transition hover:bg-accent-d"
-          >
-            Already confirmed? Enter workspace
-          </Link>
-          <div className="mt-5 border-t border-border pt-4">
-            <p className="mb-3 text-xs text-ink-3">Link expired or didn&apos;t arrive?</p>
-            <ResendConfirmation email={confirmationEmail} showEmailInput={false} />
-          </div>
-        </div>
-      ) : (
-        <>
+      <>
           <form
             className="space-y-3.5"
             onSubmit={(e) => {
@@ -296,8 +273,7 @@ function SignupForm() {
               Sign in
             </Link>
           </p>
-        </>
-      )}
+      </>
     </AuthShell>
   );
 }
