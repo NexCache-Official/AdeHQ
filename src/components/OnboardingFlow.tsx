@@ -36,7 +36,7 @@ import { OnboardingOrgGraph } from "@/components/onboarding/OnboardingOrgGraph";
 import { cn } from "@/lib/utils";
 
 const STAGE_LABELS = ["Welcome", "Step 1 of 3", "Step 2 of 3", "Step 3 of 3", "Complete"] as const;
-const JOURNEY_LABELS = ["Welcome", "Define the work", "First room", "Meet Maya", "Launch"] as const;
+const JOURNEY_LABELS = ["Welcome", "Pick a focus", "First room", "Meet Maya", "Launch"] as const;
 
 const CONFETTI_COLORS = ["var(--accent)", "#5FA0FF", "#22D3EE", "#1BA672", "#ffffff", "#9A6BCB"];
 
@@ -78,8 +78,8 @@ export function OnboardingFlow({
   const [escaping, setEscaping] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [outcomeId, setOutcomeId] = useState<WorkforceOutcomeId | null>(null);
-  const [goalText, setGoalText] = useState("");
-  const [domainText, setDomainText] = useState("");
+  /** Optional seed from /workspaces/new — session-only, not shown in the UI. */
+  const [seededFocus, setSeededFocus] = useState<string | undefined>();
   const [presetId, setPresetId] = useState("");
   const [customRoomName, setCustomRoomName] = useState("");
   const [busy, setBusy] = useState(false);
@@ -100,7 +100,7 @@ export function OnboardingFlow({
     try {
       const focus = sessionStorage.getItem(NEW_WORKSPACE_FOCUS_KEY);
       if (focus?.trim()) {
-        setGoalText(focus.trim());
+        setSeededFocus(focus.trim());
         sessionStorage.removeItem(NEW_WORKSPACE_FOCUS_KEY);
       }
     } catch {
@@ -165,10 +165,9 @@ export function OnboardingFlow({
     if (!outcomeId || !activePreset) return;
     const effectiveRoomName = resolvedRoomName ?? roomName;
     const context: OnboardingContext = {
-      goalText: goalText.trim() || undefined,
+      goalText: seededFocus,
       outcomeId,
       outcomeTitle,
-      domainText: domainText.trim() || undefined,
       roomName: effectiveRoomName,
       roomId,
       suggestedTopics: activePreset.topics,
@@ -461,17 +460,17 @@ export function OnboardingFlow({
               </div>
             )}
 
-            {/* Stage 1 — Define the work */}
+            {/* Stage 1 — Pick a focus (drives room recommendations in the next step) */}
             {stage === 1 && (
               <div className="flex flex-col gap-[26px]">
                 <div>
                   <h1 className="mb-2.5 text-[32px] font-bold leading-[1.1] tracking-[-0.025em]">
-                    What should your AI workforce move forward
+                    What should your AI workforce focus on
                     <span className="text-accent">?</span>
                   </h1>
                   <p className="max-w-[58ch] text-[15px] leading-relaxed text-ink-2">
-                    Pick the outcome you care about most. Maya will use it to recommend your first
-                    room — and who to hire into it.
+                    This picks which rooms and first-hire suggestions we show next. You only open
+                    one room in the following step — you can change or add more later.
                   </p>
                 </div>
                 <div className="grid grid-cols-2 gap-3.5">
@@ -515,30 +514,6 @@ export function OnboardingFlow({
                     );
                   })}
                 </div>
-                <label className="flex flex-col gap-2">
-                  <span className="text-[13px] font-medium text-ink-2">
-                    What are you trying to move forward?
-                  </span>
-                  <textarea
-                    className="input-field min-h-[88px] resize-none rounded-xl py-3.5"
-                    placeholder="e.g. Launch our B2B SaaS product and understand where we can win"
-                    value={goalText}
-                    onChange={(e) => setGoalText(e.target.value)}
-                    rows={3}
-                  />
-                </label>
-                <label className="flex flex-col gap-2">
-                  <span className="text-[13px] font-medium text-ink-2">
-                    Business or domain context{" "}
-                    <span className="text-ink-3">(optional)</span>
-                  </span>
-                  <input
-                    className="input-field rounded-xl py-3.5"
-                    placeholder="e.g. NexCache Limited — developer tools for caching"
-                    value={domainText}
-                    onChange={(e) => setDomainText(e.target.value)}
-                  />
-                </label>
               </div>
             )}
 
@@ -551,8 +526,8 @@ export function OnboardingFlow({
                     <span className="text-accent">.</span>
                   </h1>
                   <p className="max-w-[58ch] text-[15px] leading-relaxed text-ink-2">
-                    Rooms are where humans and AI employees share a desk. Start with one focused
-                    work area — you can add more later.
+                    Based on <span className="font-medium text-ink">{outcomeTitle}</span>, here are
+                    rooms that fit. Pick one to open — humans and AI employees will share that desk.
                   </p>
                 </div>
                 <div className="flex flex-col gap-3.5">

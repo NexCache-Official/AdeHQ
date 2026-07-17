@@ -216,9 +216,11 @@ export type OnboardingRoomDraft = {
 };
 
 export type OnboardingContext = {
+  /** Optional focus seed from /workspaces/new — sessionStorage only, not persisted to DB. */
   goalText?: string;
   outcomeId: string;
   outcomeTitle: string;
+  /** @deprecated Unused — kept optional for older sessionStorage payloads. */
   domainText?: string;
   roomName: string;
   roomId?: string;
