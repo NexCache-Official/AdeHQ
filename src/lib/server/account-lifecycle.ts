@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { purgeWorkspaceInbox } from "@/lib/server/purge-workspace-inbox";
 
 export class AccountLifecycleError extends Error {
   code: string;
@@ -124,6 +125,22 @@ async function deleteWorkspaceRow(
   workspaceId: string,
   userId: string,
 ): Promise<{ deletedWorkspaceId: string; remainingWorkspaceIds: string[] }> {
+  try {
+    await purgeWorkspaceInbox(serviceClient, workspaceId);
+  } catch (error) {
+    const message =
+      error && typeof error === "object" && "message" in error
+        ? String((error as { message?: unknown }).message ?? "")
+        : error instanceof Error
+          ? error.message
+          : "";
+    throw new AccountLifecycleError(
+      "workspace_inbox_purge_failed",
+      message || "Could not clear workspace inbox data before delete.",
+      500,
+    );
+  }
+
   const { error } = await serviceClient.from("workspaces").delete().eq("id", workspaceId);
   if (error) {
     throw new AccountLifecycleError(
@@ -234,6 +251,23 @@ export async function purgeUserAccount(
 
   if (ctx.ownedWorkspaces.length > 0 && options.deleteOwnedWorkspaces) {
     for (const ws of ctx.ownedWorkspaces) {
+      try {
+        await purgeWorkspaceInbox(serviceClient, ws.id);
+      } catch (error) {
+        const message =
+          error && typeof error === "object" && "message" in error
+            ? String((error as { message?: unknown }).message ?? "")
+            : error instanceof Error
+              ? error.message
+              : "";
+        throw new AccountLifecycleError(
+          "workspace_inbox_purge_failed",
+          message || `Could not clear inbox data for "${ws.name}".`,
+          500,
+          { workspaceId: ws.id },
+        );
+      }
+
       const { error } = await serviceClient.from("workspaces").delete().eq("id", ws.id);
       if (error) {
         throw new AccountLifecycleError(

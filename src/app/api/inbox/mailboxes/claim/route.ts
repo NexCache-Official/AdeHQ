@@ -45,7 +45,8 @@ export async function POST(request: NextRequest) {
     const local = validation.value;
     const domain = getInboxDomain();
 
-    // Advisory pre-check against tombstones (DB constraint is authoritative).
+    // Advisory pre-check — live mailboxes/aliases are authoritative via unique indexes.
+    // Reservations are only a soft hold (no longer tombstones after workspace delete).
     const reserved = await secret
       .from("mailbox_address_reservations")
       .select("domain")
@@ -54,7 +55,7 @@ export async function POST(request: NextRequest) {
       .maybeSingle();
     if (reserved.data) {
       return NextResponse.json(
-        { error: "That address was previously used and can't be reclaimed." },
+        { error: "That address is temporarily reserved. Try another." },
         { status: 409 },
       );
     }

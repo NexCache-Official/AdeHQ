@@ -223,8 +223,9 @@ export function AccountDangerZone({
                 <h3 className="text-sm font-semibold text-slate-900">Delete workspace</h3>
                 <p className="mt-1 text-sm text-slate-600">
                   Removes <span className="font-medium">{workspaceName}</span> and all data — rooms,
-                  messages, AI employees, tasks, memory, approvals, work logs, and usage history.
-                  Your AdeHQ account stays active; you&apos;ll set up a new workspace.
+                  messages, AI employees, inbox mail (and frees the workspace email address),
+                  tasks, memory, approvals, work logs, and usage history. Your AdeHQ account stays
+                  active; you&apos;ll set up a new workspace.
                 </p>
                 <label className="mt-3 block space-y-1.5">
                   <span className="text-xs font-medium text-slate-500">

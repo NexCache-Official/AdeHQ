@@ -19,6 +19,7 @@ Slice 0 transport proof remains under `src/lib/inbox-transport-proof/` — do no
 - Consent audit: `mailbox.assistance_consent`
 - `canonical_local_part` is **immutable** after claim
 - One **primary** mailbox at launch; every thread/message has `mailbox_id`
+- **Workspace / account delete** purges mailbox + inbox rows and **releases** the address for reuse (no tombstone reservations). See `purgeWorkspaceInbox` + migration `20260718010000_release_mailbox_on_workspace_delete`.
 
 ## Permissions
 
