@@ -25,7 +25,7 @@ export function SidebarWorkHoursMeter() {
     <Link
       href="/settings/usage"
       className="block rounded-[11px] border border-[var(--rail-border)] bg-[var(--rail-fill)] px-2.5 py-2 transition-colors hover:bg-[var(--rail-hover)]"
-      title="Week resets Mon 00:00 UTC · also resets at month end"
+      title="Hired AI employees only · Maya is free · week resets Mon 00:00 UTC"
     >
       <div className="flex min-w-0 items-center justify-between gap-2 text-[10.5px] text-[var(--rail-ink-2)]">
         <span className="min-w-0 truncate font-medium text-[var(--rail-ink)]">AI Work Hours</span>

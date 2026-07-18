@@ -28,7 +28,7 @@ export default function SettingsUsagePage() {
     <>
       <PageHeader
         title="Usage"
-        subtitle="One pooled total for your plan. Breakdowns below are that same total, not extra hours. Maya (guide) is listed separately. Week resets Mon 00:00 UTC · also resets at month end."
+        subtitle="Plan hours cover hired AI employees only. Maya (workforce guide + hiring) is free and never counts toward this total. Week resets Mon 00:00 UTC · also resets at month end."
         icon={<Gauge className="h-5 w-5" />}
       />
 
@@ -40,7 +40,7 @@ export default function SettingsUsagePage() {
         <>
           <Card className="mb-4 p-6">
             <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-3">
-              Plan usage this period (the only total that counts)
+              Plan usage this period (hired employees)
             </p>
             <p className="mt-1 text-2xl font-semibold tabular-nums text-ink">
               {formatHrs(periodTotal)} AI Work Hours
@@ -50,11 +50,12 @@ export default function SettingsUsagePage() {
               {data?.capacity.unlimited
                 ? "unlimited"
                 : `${(data?.capacity.allowance ?? 0).toFixed(2)}`}{" "}
-              pooled workspace hours used — do not add breakdown rows together.
+              pooled workspace hours used — Maya is excluded from this meter.
             </p>
             {guideHours > 0 && (
               <p className="mt-2 text-xs text-ink-3">
-                Includes {formatHrs(guideHours)} hrs from Maya / guide activity (not listed below).
+                Maya / guide activity this period ≈ {formatHrs(guideHours)} hrs equivalent
+                (free — not charged to your plan).
               </p>
             )}
           </Card>
@@ -149,12 +150,12 @@ export default function SettingsUsagePage() {
                 </div>
                 {guideHours > 0 && (
                   <div className="flex items-center justify-between text-ink-3">
-                    <span className="text-sm">Maya / guide</span>
-                    <span className="text-sm tabular-nums">{formatHrs(guideHours)} hrs</span>
+                    <span className="text-sm">Maya / guide (free, not in plan)</span>
+                    <span className="text-sm tabular-nums">{formatHrs(guideHours)} hrs eq.</span>
                   </div>
                 )}
                 <div className="flex items-center justify-between">
-                  <span className="text-sm font-semibold text-ink">Period total</span>
+                  <span className="text-sm font-semibold text-ink">Plan total (hired)</span>
                   <span className="text-sm font-semibold tabular-nums text-ink">
                     {formatHrs(periodTotal)} hrs
                   </span>

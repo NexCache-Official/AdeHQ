@@ -3,6 +3,7 @@ import { intelligenceModeFromModelMode } from "@/lib/ai/intelligence-policy";
 import { resolveRouteIdForModel } from "@/lib/brain/catalog";
 import { recordBrainUsage } from "@/lib/brain/metering/record-brain-usage";
 import type { AiWorkUnit } from "@/lib/supabase/ai-work-units";
+import { isMayaBillableExempt } from "./maya-exempt";
 import type { CostSourceType } from "./types";
 
 /** Known steward/classifier work types — unbilled but still recorded (D3). */
@@ -60,6 +61,16 @@ function intelligenceModeFromMeta(meta: Record<string, unknown>): string | null 
 }
 
 function resolveBillable(workUnit: AiWorkUnit, meta: Record<string, unknown>): boolean {
+  // Maya + hiring journey never burn customer AI Work Hours (platform COGS only).
+  if (
+    isMayaBillableExempt({
+      employeeId: workUnit.employeeId,
+      workType: workUnit.workType,
+    })
+  ) {
+    return false;
+  }
+
   const explicit = boolFromMeta(meta, "billableToWorkspace");
   if (explicit !== undefined) return explicit;
 

@@ -5,6 +5,9 @@ import {
   intelligenceModeFromModelMode,
   type IntelligenceMode,
 } from "@/lib/ai/intelligence-policy";
+import { isMayaBillableExempt, isMayaEmployeeId } from "@/lib/billing/costing/maya-exempt";
+import { workHoursFromCost } from "@/lib/billing/costing/work-hours";
+import { MAYA_EMPLOYEE_ID, MAYA_SYSTEM_EMPLOYEE_KEY } from "@/lib/hiring/maya";
 import { formatWorkTypeLabel } from "@/lib/work-hours/labels";
 import { floorDisplayHours, floorDisplayLeafHours, floorDisplayTree } from "./round-display";
 import { getWorkspaceCapacity, type WorkspaceCapacity } from "./periods";
@@ -36,10 +39,14 @@ export type EmployeeWorkTypeBreakdown = {
 export type WorkspaceUsageSummary = {
   capacity: WorkspaceCapacity;
   weekStart: string;
+  /** Billable hired-employee hours only (Maya is free and excluded). */
   totalWorkHours: number;
   /** Hired-employee hours only (excludes Maya / guide). */
   teamWorkHours: number;
-  /** Maya / guide hours included in the period total but not the hire list. */
+  /**
+   * Maya / guide COGS expressed as Work Hours for transparency.
+   * Not charged against the plan allowance.
+   */
   guideWorkHours: number;
   byEmployee: UsageBreakdownRow[];
   byWorkType: UsageBreakdownRow[];
@@ -204,15 +211,19 @@ export async function summarizeWorkspaceUsage(
   const employees = employeeRows;
 
   const nameById = new Map(employees.map((e) => [String(e.id), String(e.name)]));
-  const isMaya = (e: {
+  const isMayaRow = (e: {
+    id: string;
     system_employee_key?: string | null;
     is_system_employee?: boolean | null;
     name: string;
   }) =>
+    isMayaEmployeeId(e.id) ||
+    e.system_employee_key === MAYA_SYSTEM_EMPLOYEE_KEY ||
     e.system_employee_key === "maya" ||
     (Boolean(e.is_system_employee) && /maya/i.test(String(e.name)));
-  const mayaIds = new Set(employees.filter(isMaya).map((e) => String(e.id)));
-  const hiredEmployeeIds = employees.filter((e) => !isMaya(e)).map((e) => String(e.id));
+  const mayaIds = new Set(employees.filter(isMayaRow).map((e) => String(e.id)));
+  mayaIds.add(MAYA_EMPLOYEE_ID);
+  const hiredEmployeeIds = employees.filter((e) => !isMayaRow(e)).map((e) => String(e.id));
 
   const employeeDefaultById = new Map<string, string>();
   for (const e of employees) {
@@ -238,22 +249,37 @@ export async function summarizeWorkspaceUsage(
   }
 
   let totalWorkHours = 0;
+  let guideWorkHoursRaw = 0;
   let totalCostUsd = 0;
   let totalTokens = 0;
   let failedRunWasteUsd = 0;
 
   for (const row of rows) {
-    const workHours = Number(row.work_hours_charged ?? 0);
+    const chargedHours = Number(row.work_hours_charged ?? 0);
     const costUsd = Number(row.actual_cost_usd ?? row.estimated_cost_usd ?? 0);
     totalTokens += Number(row.total_tokens ?? 0);
 
     if (row.status === "failed") failedRunWasteUsd += costUsd;
-    if (row.billable_to_workspace === false) continue;
-    if (!Number.isFinite(workHours) || workHours <= 0) continue;
 
     const employeeId = row.employee_id ? String(row.employee_id) : "unassigned";
     const workType = row.work_type?.trim() || "other";
+    const mayaExempt =
+      mayaIds.has(employeeId) ||
+      isMayaBillableExempt({ employeeId, workType });
+
+    // Maya COGS as WH-equivalent for Settings transparency (never plan-billed).
+    if (mayaExempt && costUsd > 0) {
+      const guideHours =
+        chargedHours > 0 ? chargedHours : workHoursFromCost(costUsd);
+      if (guideHours > 0) guideWorkHoursRaw += guideHours;
+    }
+
+    if (row.billable_to_workspace === false) continue;
+    if (mayaExempt) continue;
+    if (!Number.isFinite(chargedHours) || chargedHours <= 0) continue;
+
     const intelligenceKey = resolveIntelligenceKey(row, employeeDefaultById);
+    const workHours = chargedHours;
 
     totalWorkHours += workHours;
     totalCostUsd += costUsd;
@@ -261,8 +287,6 @@ export async function summarizeWorkspaceUsage(
     bump(workTypeAgg, workType, workHours, costUsd);
     bump(providerAgg, row.provider_route ?? row.provider_name ?? "unknown", workHours, costUsd);
     if (row.model_id) bump(modelAgg, row.model_id, workHours, costUsd);
-
-    if (mayaIds.has(employeeId)) continue;
 
     bump(employeeAgg, employeeId, workHours, costUsd);
     const byIntel = matrix.get(employeeId) ?? new Map<string, Map<string, number>>();
@@ -354,11 +378,8 @@ export async function summarizeWorkspaceUsage(
   }
 
   const teamWorkHoursRaw = [...employeeAgg.values()].reduce((sum, row) => sum + row.workHours, 0);
-  const guideWorkHoursRaw = Math.max(0, totalWorkHours - teamWorkHoursRaw);
-  // Floor the period total from raw ledger hours first — leaf-first flooring can
-  // zero many sub-cent shards and leave the rail meter stuck at 0.00.
-  // If the ledger select returns no billable rows but the period counter moved
-  // (writes succeeded), prefer the period total so Usage cannot stay at 0.00.
+  // Plan total = hired billable only. Prefer ledger; fall back to period counter
+  // when writes succeeded but the lean select returned empty.
   const totalDisplay = floorDisplayHours(
     totalWorkHours > 0 ? totalWorkHours : Math.max(totalWorkHours, capacity.used),
   );
@@ -367,16 +388,12 @@ export async function summarizeWorkspaceUsage(
     floorDisplayHours(
       teamWorkHoursRaw > 0
         ? teamWorkHoursRaw
-        : // Ledger empty but period moved — attribute the fallback to hire team
-          totalWorkHours <= 0 && totalDisplay > 0
+        : totalWorkHours <= 0 && totalDisplay > 0
           ? totalDisplay
           : teamWorkHoursRaw,
     ),
   );
-  const guideDisplay = Math.max(
-    0,
-    Math.round((totalDisplay - teamDisplay) * 100) / 100,
-  );
+  const guideDisplay = floorDisplayHours(guideWorkHoursRaw);
 
   const byEmployee = toRows(employeeAgg, employeeLabel).map((row) => ({
     ...row,

@@ -31,6 +31,7 @@ Runnable tooling for AdeHQ. Prefer **npm scripts** from the repo root (`package.
 | Model pricing sync | `npm run sync:model-pricing` |
 | Activate live env merge | `npm run env:activate-live` (**writes `.env.local` — never commit**) |
 | Roles smoke | `node scripts/smoke-workspace-roles.mjs` |
+| Refund Maya WH from open periods | `node scripts/correct-maya-work-hours-period.mjs` (`--dry-run` first) |
 
 ## Categories
 

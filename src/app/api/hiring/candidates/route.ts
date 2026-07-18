@@ -1,5 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { AuthError, requireAuthUser } from "@/lib/supabase/auth-server";
+import { createSupabaseSecretClient } from "@/lib/supabase/server";
+import {
+  consumeRateLimit,
+  rateLimitResponse,
+} from "@/lib/security/rate-limit";
 import { resolveHiringWorkspaceContextForAdmin } from "@/lib/server/hiring-workspace-context";
 import { isSiliconFlowConfigured } from "@/lib/config/features";
 import {
@@ -29,12 +34,29 @@ export async function POST(request: NextRequest) {
     const { user, client } = await requireAuthUser(request);
     const body = (await request.json()) as CandidatesBody;
 
-    await resolveHiringWorkspaceContextForAdmin(client, user.id, {
+    const hiringContext = await resolveHiringWorkspaceContextForAdmin(client, user.id, {
       workspaceId: body.workspaceId,
       hiringSessionId: body.hiringSessionId,
       topicId: body.topicId,
       mayaRoomId: body.mayaRoomId,
     });
+
+    const mayaHiringLimit = await consumeRateLimit(createSupabaseSecretClient(), {
+      bucket: "maya.hiring.user",
+      key: `${hiringContext.workspaceId}:${user.id}`,
+      limit: 30,
+      windowMs: 60 * 60_000,
+    });
+    if (!mayaHiringLimit.allowed) {
+      console.warn("[AdeHQ maya] candidates rate limited", {
+        workspaceId: hiringContext.workspaceId,
+        userId: user.id,
+      });
+      return rateLimitResponse(
+        mayaHiringLimit,
+        "Maya needs a short break from hiring — try again in a little while.",
+      );
+    }
 
     if (!body.brief?.roleTitle) {
       return NextResponse.json({ error: "brief is required." }, { status: 400 });
@@ -52,13 +74,6 @@ export async function POST(request: NextRequest) {
     if (useDeterministicOnly) {
       copies = undefined;
     } else {
-      const hiringContext = await resolveHiringWorkspaceContextForAdmin(client, user.id, {
-        workspaceId: body.workspaceId,
-        hiringSessionId: body.hiringSessionId,
-        topicId: body.topicId,
-        mayaRoomId: body.mayaRoomId,
-      });
-
       copies = await generateCandidateCopies(body.brief, {
         client,
         userId: user.id,

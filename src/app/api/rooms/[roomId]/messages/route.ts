@@ -830,6 +830,32 @@ export async function POST(
       }
     }
 
+    // Maya Direct Chat (non-hiring) — free-tier spam guard; hired employees unchanged.
+    if (
+      isMayaDm &&
+      !isHiringTopic(topic) &&
+      decisions.length > 0 &&
+      !stopDetection.isStop
+    ) {
+      const mayaDmLimit = await consumeRateLimit(createSupabaseSecretClient(), {
+        bucket: "maya.dm.user",
+        key: `${workspaceId}:${user.id}`,
+        limit: 20,
+        windowMs: 60 * 60_000,
+      });
+      if (!mayaDmLimit.allowed) {
+        console.warn("[AdeHQ maya] dm rate limited", {
+          workspaceId,
+          userId: user.id,
+          remaining: mayaDmLimit.remaining,
+        });
+        return rateLimitResponse(
+          mayaDmLimit,
+          "Maya needs a short break — try again in a little while.",
+        );
+      }
+    }
+
     if (!stewardExecutionUsed) {
       const legacyQueued = await queueAgentRuns(client, {
         workspaceId,

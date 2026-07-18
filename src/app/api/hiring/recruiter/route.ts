@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { AuthError, requireAuthUser } from "@/lib/supabase/auth-server";
+import { createSupabaseSecretClient } from "@/lib/supabase/server";
+import {
+  consumeRateLimit,
+  rateLimitResponse,
+} from "@/lib/security/rate-limit";
 import { isSiliconFlowConfigured } from "@/lib/config/features";
 import { briefSchema } from "@/lib/hiring/brief-schema";
 import {
@@ -417,12 +422,29 @@ export async function POST(request: NextRequest) {
     const body = (await request.json()) as RecruiterBody;
 
     // Gate every recruiter turn — including deterministic paths without LLM.
-    await resolveHiringWorkspaceContextForAdmin(client, user.id, {
+    const hiringContext = await resolveHiringWorkspaceContextForAdmin(client, user.id, {
       workspaceId: body.workspaceId,
       hiringSessionId: body.hiringSessionId,
       topicId: body.topicId,
       mayaRoomId: body.mayaRoomId,
     });
+
+    const mayaHiringLimit = await consumeRateLimit(createSupabaseSecretClient(), {
+      bucket: "maya.hiring.user",
+      key: `${hiringContext.workspaceId}:${user.id}`,
+      limit: 30,
+      windowMs: 60 * 60_000,
+    });
+    if (!mayaHiringLimit.allowed) {
+      console.warn("[AdeHQ maya] hiring rate limited", {
+        workspaceId: hiringContext.workspaceId,
+        userId: user.id,
+      });
+      return rateLimitResponse(
+        mayaHiringLimit,
+        "Maya needs a short break from hiring chat — try again in a little while.",
+      );
+    }
 
     const { conversation, departmentId, roleKey, action } = normalizeBody(body);
 

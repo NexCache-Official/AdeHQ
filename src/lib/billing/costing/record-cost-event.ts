@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { applyCostToPeriod } from "@/lib/billing/usage/periods";
+import { isMayaBillableExempt } from "./maya-exempt";
 import type { CostEventInput, CostLedgerEntry } from "./types";
 import { getWorkHourUsdRate, workHoursFromCost } from "./work-hours";
 
@@ -38,9 +39,14 @@ export async function recordCostEvent(
   input: CostEventInput,
 ): Promise<CostLedgerEntry | null> {
   const { actual, estimated } = resolveCostUsd(input);
-  const billableToWorkspace =
-    input.billableToWorkspace ?? !(input.platformOverhead ?? false);
-  const platformOverhead = input.platformOverhead ?? false;
+  const mayaExempt = isMayaBillableExempt({
+    employeeId: input.employeeId,
+    workType: input.workType ?? input.sourceType,
+  });
+  const billableToWorkspace = mayaExempt
+    ? false
+    : (input.billableToWorkspace ?? !(input.platformOverhead ?? false));
+  const platformOverhead = mayaExempt ? true : (input.platformOverhead ?? false);
 
   const rate = getWorkHourUsdRate();
   // Bill Work Hours only for workspace-billable events using the best-known cost.

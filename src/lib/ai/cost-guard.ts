@@ -315,6 +315,12 @@ async function recordCommercialUsageFromFinalizedRun(
   // Shared key so a work-unit complete with metadata.usageId cannot double-charge (defect E).
   const idempotencyKey = `usage_event:${params.usageId}:llm`;
 
+  const { isMayaBillableExempt } = await import("@/lib/billing/costing/maya-exempt");
+  const billableToWorkspace = !isMayaBillableExempt({
+    employeeId,
+    workType: "employee_reply",
+  });
+
   const entry = await recordBrainUsage({
     client: params.client,
     workspaceId: params.workspaceId,
@@ -333,7 +339,8 @@ async function recordCommercialUsageFromFinalizedRun(
       // Do not trust caller actualCostUsd — often our own estimate (defect B).
     },
     status: "succeeded",
-    billableToWorkspace: true,
+    billableToWorkspace,
+    platformOverhead: !billableToWorkspace,
     workType: "employee_reply",
     capability: "reasoning",
     providerCalled: true,
