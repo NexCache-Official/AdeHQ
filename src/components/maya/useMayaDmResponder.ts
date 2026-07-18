@@ -250,6 +250,14 @@ export function useMayaDmResponder({
           return;
         }
 
+        // Production: Maya's Direct Chat is answered by the agent-run brain.
+        // Keep this scripted path for demo / offline only — otherwise we double-reply.
+        if (suppressGenericReplies) {
+          setEmployeePickerRoster([]);
+          setPendingProposal(null);
+          return;
+        }
+
         const reply = buildMayaIntentReply(intent, trimmed, {
           firstName,
           employees: state.employees,
@@ -279,10 +287,6 @@ export function useMayaDmResponder({
 
         setEmployeePickerRoster([]);
         setPendingProposal(null);
-        // No artifact means this intent has nothing beyond the scripted text —
-        // when a real AI employee is also answering, let that be the one reply
-        // instead of landing this canned one alongside it.
-        if (suppressGenericReplies && !artifacts) return;
         await runLifecycleReply(reply, artifacts);
       } finally {
         sendGuardRef.current.end();

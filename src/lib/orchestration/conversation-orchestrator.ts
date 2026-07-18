@@ -5,6 +5,7 @@ import {
   pickGreetingEmployee,
 } from "@/lib/server/room-governance";
 import { isHelpRequest } from "@/lib/server/ambient-collaboration";
+import { isMayaEmployee } from "@/lib/maya-employee";
 import { extractMentionsInOrder } from "@/lib/utils";
 import { filterOrchestrationEmployees } from "./collaboration-permissions";
 import { rankEmployeesForMessage, topEmployeesForMessage } from "./employee-relevance";
@@ -209,8 +210,33 @@ export function orchestrateConversationDeterministic(
     input.topicEmployees.length ? input.topicEmployees : input.roomEmployees,
   );
 
-  if (input.isMayaDm || input.isMayaHiringSession) {
-    return emptyPlan("silent_note", "Maya DM — specialized client flow handles responses.");
+  // Hiring topics keep the specialized client recruiter UI (brief, shortlist, cards).
+  if (input.isMayaHiringSession) {
+    return emptyPlan(
+      "silent_note",
+      "Maya hiring session — specialized client flow handles responses.",
+    );
+  }
+
+  // Maya's Direct Chat uses the same agent-run brain as other employees (text-only
+  // workforce/guide scope). She is filtered out of room orchestration elsewhere.
+  if (input.isMayaDm) {
+    if (!text || SILENT_NOTE_PATTERNS.some((p) => p.test(text))) {
+      return emptyPlan("silent_note", "Personal note — no AI reply.", 0.92);
+    }
+    const pool = input.topicEmployees.length ? input.topicEmployees : input.roomEmployees;
+    const maya =
+      (input.dmEmployeeId ? pool.find((e) => e.id === input.dmEmployeeId) : undefined) ??
+      pool.find((e) => isMayaEmployee(e));
+    if (!maya) {
+      return emptyPlan("silent_note", "Maya DM has no workforce manager to reply.", 0.85);
+    }
+    return planWithEmployees(
+      "direct_reply",
+      "Maya DM — AI Workforce Manager replies.",
+      [maya],
+      { confidence: 0.96, workLogRequired: false },
+    );
   }
 
   if (input.isDm) {

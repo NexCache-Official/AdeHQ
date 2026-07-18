@@ -190,7 +190,23 @@ export async function POST(
       respondersLoaded,
     );
 
-    const orchestrationEmployees = filterOrchestrationEmployees(respondersCtx.employees);
+    const dmEmployeeForPool = respondersCtx.room.dmEmployeeId
+      ? respondersCtx.employees.find((e) => e.id === respondersCtx.room.dmEmployeeId)
+      : respondersCtx.employees.length === 1
+        ? respondersCtx.employees[0]
+        : undefined;
+    const isMayaDmForPool = Boolean(dmEmployeeForPool && isMayaEmployee(dmEmployeeForPool));
+    const isMayaHiringForPool = isMayaDmForPool && isHiringTopic(topic);
+    // Maya is excluded from room orchestration, but she must stay in the pool for
+    // her own Direct Chat so agent runs can be queued (hiring topics stay client-side).
+    const orchestrationEmployees = (() => {
+      const filtered = filterOrchestrationEmployees(respondersCtx.employees);
+      if (isMayaDmForPool && dmEmployeeForPool && !isMayaHiringForPool) {
+        if (filtered.some((e) => e.id === dmEmployeeForPool.id)) return filtered;
+        return [dmEmployeeForPool, ...filtered];
+      }
+      return filtered;
+    })();
     const mentioned = parseEmployeeMentions(trimmed, respondersCtx.employees, mentionsJson);
     const nameRefs = resolveParticipantReferences(trimmed, orchestrationEmployees, {
       excludeEmployeeIds: mentioned.map((employee) => employee.id),

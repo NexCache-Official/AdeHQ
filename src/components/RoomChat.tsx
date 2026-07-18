@@ -655,9 +655,9 @@ export function RoomChat({
     firstName: state.user?.name?.split(" ")[0],
     onCreateHiringTopic: coordinator?.handleCreateHiringTopic,
     onContinueHiringHere: coordinator?.handleContinueHiringHere,
-    // The real Maya AI employee also replies via the normal agent-run pipeline
-    // once a real backend is wired up — don't let this scripted responder's
-    // plain-text fallback double up with it (see hook doc for what still runs).
+    // Production: Maya Direct Chat is answered by the agent-run brain. Keep the
+    // scripted hire/improve UI branches; suppress canned guide replies so we
+    // don't double-bubble with the real LLM response.
     suppressGenericReplies: useServerApi,
   });
 

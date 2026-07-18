@@ -11,12 +11,12 @@ export type MayaDmIntent =
 
 const WORKSPACE_GUIDE_PATTERNS = [
   /how (does|do|is|are|can).*(adehq|workforce|workspace|this (app|platform)|things work)/i,
-  /what (is|are|does).*(adehq|workforce|maya do|this platform)/i,
+  /what (is|are|does|can).*(adehq|workforce|maya|this platform)/i,
   /explain.*(workforce|adehq|workspace|how (this|things) work)/i,
   /how (can|do) i (use|navigate|find|manage)/i,
   /where (is|are|do i find|can i)/i,
   /tell me about (adehq|the workforce|maya)/i,
-  /what can (you|maya) do(?!.*hire)/i,
+  /what can (you|maya|adehq) do(?!.*hire)/i,
   /help me understand (adehq|the workspace|workforce)/i,
 ];
 

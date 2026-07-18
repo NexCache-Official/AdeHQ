@@ -197,7 +197,21 @@ export async function runTopicBurstOrchestration(
       params.workspaceId,
       params.roomId,
     );
-    const orchestrationEmployees = filterOrchestrationEmployees(respondersCtx.employees);
+    const dmEmployeeForPool = respondersCtx.room.dmEmployeeId
+      ? respondersCtx.employees.find((e) => e.id === respondersCtx.room.dmEmployeeId)
+      : respondersCtx.employees.length === 1
+        ? respondersCtx.employees[0]
+        : undefined;
+    const isMayaDmForPool = Boolean(dmEmployeeForPool && isMayaEmployee(dmEmployeeForPool));
+    const isMayaHiringForPool = isMayaDmForPool && isHiringTopic(params.topic);
+    const orchestrationEmployees = (() => {
+      const filtered = filterOrchestrationEmployees(respondersCtx.employees);
+      if (isMayaDmForPool && dmEmployeeForPool && !isMayaHiringForPool) {
+        if (filtered.some((e) => e.id === dmEmployeeForPool.id)) return filtered;
+        return [dmEmployeeForPool, ...filtered];
+      }
+      return filtered;
+    })();
     const mentionsJson: never[] = [];
     const mentioned = parseEmployeeMentions(
       burst.combinedText,

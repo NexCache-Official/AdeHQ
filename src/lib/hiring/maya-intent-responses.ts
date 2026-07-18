@@ -53,13 +53,14 @@ const ORGANIZE_PATTERNS = [
 
 const EXPLAIN_PATTERNS = [
   /how (does|do|is|are|can).*(adehq|workforce|workspace|this (app|platform)|things work)/i,
-  /what (is|are|does).*(adehq|workforce|maya do|this platform)/i,
+  /what (is|are|does|can).*(adehq|workforce|maya|this platform)/i,
   /explain.*(workforce|adehq|workspace|how (this|things) work)/i,
   /\bwalk me through\b/i,
   /\bhow adehq works\b/i,
   /\bwhat should i do first\b/i,
   /\bwhat should i do next\b/i,
-  /\bwhat can (you|maya) do\b/i,
+  /\bwhat can (you|maya|adehq) do\b/i,
+  /\btell me (about|what) adehq\b/i,
 ];
 
 const SMALL_TALK_PATTERNS = [
