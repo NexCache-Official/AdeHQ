@@ -115,12 +115,22 @@ export default function SettingsBillingPage() {
   }, [load, myRole]);
 
   // After Revolut redirect, poll until webhook activates the plan (or timeout).
+  // Every exit path re-fetches via load() directly (not just router.replace, which is
+  // a shallow client nav and won't by itself refresh already-mounted page state).
   useEffect(() => {
     if (checkoutResult !== "success" || !canViewBilling(myRole)) return;
     let cancelled = false;
     let attempts = 0;
     setConfirmingPayment(true);
     setNotice(null);
+
+    const finish = async (message: string) => {
+      setConfirmingPayment(false);
+      setNotice(message);
+      await actions.refreshWorkspace().catch(() => undefined);
+      await load();
+      router.replace("/settings/billing");
+    };
 
     const poll = async () => {
       try {
@@ -133,10 +143,9 @@ export default function SettingsBillingPage() {
             body.subscriptionStatus === "active" ||
             (body.currentPlanSlug && body.currentPlanSlug !== "free")
           ) {
-            setConfirmingPayment(false);
-            setNotice("Payment confirmed. Your plan and weekly AI Work Hours are updated.");
-            await actions.refreshWorkspace().catch(() => undefined);
-            router.replace("/settings/billing");
+            if (!cancelled) {
+              await finish("Payment confirmed. Your plan and weekly AI Work Hours are updated.");
+            }
             return;
           }
         }
@@ -145,12 +154,12 @@ export default function SettingsBillingPage() {
       }
       attempts += 1;
       if (cancelled) return;
-      if (attempts >= 20) {
-        setConfirmingPayment(false);
-        setNotice(
+      if (attempts >= 30) {
+        // One last direct refetch before giving up — the webhook may have landed
+        // just after our last poll attempt.
+        await finish(
           "Payment received — plan activation can take a moment. Refresh this page if it has not updated yet.",
         );
-        router.replace("/settings/billing");
         return;
       }
       window.setTimeout(() => {
@@ -162,7 +171,7 @@ export default function SettingsBillingPage() {
     return () => {
       cancelled = true;
     };
-  }, [actions, checkoutResult, myRole, router, workspaceId]);
+  }, [actions, checkoutResult, load, myRole, router, workspaceId]);
 
   const startCheckout = async (planSlug: string) => {
     setBusyPlan(planSlug);

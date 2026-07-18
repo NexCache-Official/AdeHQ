@@ -195,6 +195,34 @@ async function applyProviderSubscriptionState(
 }
 
 /**
+ * Reconcile a workspace's pending/inactive subscription directly against Revolut.
+ * Self-heals activation when the Revolut webhook was never received (e.g. webhook
+ * not registered on the Business dashboard yet) by re-checking on the next billing
+ * page load / poll instead of relying solely on the webhook push.
+ */
+export async function reconcileWorkspacePendingSubscription(
+  client: SupabaseClient,
+  workspaceId: string,
+): Promise<boolean> {
+  const { data: sub } = await client
+    .from("billing_subscriptions")
+    .select("id, external_subscription_id, service_access_status")
+    .eq("workspace_id", workspaceId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (!sub?.external_subscription_id) return false;
+  if (sub.service_access_status === "active") return false;
+
+  try {
+    return await applyProviderSubscriptionState(client, String(sub.external_subscription_id));
+  } catch (err) {
+    console.error("[revolut.reconcile.pending]", err);
+    return false;
+  }
+}
+
+/**
  * Handle a verified Revolut webhook. State-based and idempotent.
  */
 export async function handleRevolutWebhook(

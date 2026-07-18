@@ -78,8 +78,11 @@ export async function syncPriceToRevolut(
     let revolutVariationId = price.revolut_variation_id as string | null;
 
     if (!revolutPlanId || !revolutVariationId) {
+      const cadenceLabel = price.cadence === "annual" ? "Annual" : "Monthly";
       const created = await createRevolutSubscriptionPlan({
-        name: `${version.public_name} ${String(price.cadence)} (${providerRef})`,
+        // Customer-facing name shown on the Revolut hosted checkout page — keep it
+        // clean; the internal provider_ref still travels as external_reference.
+        name: `AdeHQ ${version.public_name} — ${cadenceLabel}`,
         providerRef,
         currency: String(price.currency),
         cadence: price.cadence as "monthly" | "annual",

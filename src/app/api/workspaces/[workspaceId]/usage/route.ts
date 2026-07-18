@@ -4,6 +4,7 @@ import { createSupabaseSecretClient } from "@/lib/supabase/server";
 import { summarizeWorkspaceUsage } from "@/lib/billing/usage/summary";
 import { floorDisplayHours } from "@/lib/billing/usage/round-display";
 import { canViewUsage } from "@/lib/workspace/permissions";
+import { reconcileWorkspacePendingSubscription } from "@/lib/billing/revolut/webhooks";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -21,6 +22,11 @@ export async function GET(
     }
 
     const service = createSupabaseSecretClient();
+    try {
+      await reconcileWorkspacePendingSubscription(service, params.workspaceId);
+    } catch (err) {
+      console.error("[AdeHQ usage GET] reconcile failed", err);
+    }
 
     // Probe the same sources summarize uses — if these disagree with the
     // summary, the secret client is not actually bypassing RLS / reading

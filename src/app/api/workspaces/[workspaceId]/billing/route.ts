@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { AuthError, requireAuthUser, requireWorkspaceMembership } from "@/lib/supabase/auth-server";
 import { createSupabaseSecretClient } from "@/lib/supabase/server";
 import { getWorkspaceBillingSummary } from "@/lib/billing/subscription";
+import { reconcileWorkspacePendingSubscription } from "@/lib/billing/revolut/webhooks";
 import {
   canApplyPromoCode,
   canChangePlan,
@@ -24,6 +25,13 @@ export async function GET(
     }
 
     const service = createSupabaseSecretClient();
+    // Self-heal: activate from Revolut's authoritative state if the webhook hasn't
+    // landed yet, so the UI doesn't get stuck waiting on webhook delivery alone.
+    try {
+      await reconcileWorkspacePendingSubscription(service, params.workspaceId);
+    } catch (err) {
+      console.error("[AdeHQ billing GET] reconcile failed", err);
+    }
     const summary = await getWorkspaceBillingSummary(service, params.workspaceId);
 
     return NextResponse.json({
