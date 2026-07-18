@@ -191,17 +191,22 @@ export default function AdminPlansPage() {
     setConfirmText("");
   };
 
-  const priceChanged =
+  const priceChanged = Boolean(
     editing &&
-    form &&
-    (form.monthly_price_cents !== editing.monthly_price_cents ||
-      form.annual_price_cents !== editing.annual_price_cents ||
-      form.weekly_work_hours !== editing.weekly_work_hours);
+      form &&
+      (Number(form.monthly_price_cents) !== Number(editing.monthly_price_cents) ||
+        Number(form.annual_price_cents) !== Number(editing.annual_price_cents) ||
+        Number(form.weekly_work_hours) !== Number(editing.weekly_work_hours)),
+  );
+  const confirmOk = !priceChanged || confirmText.trim().toLowerCase() === "publish";
 
   const save = async () => {
-    if (!editing || !form) return;
-    if (priceChanged && confirmText.trim().toLowerCase() !== "publish") {
-      setSaveError('Type "publish" to confirm a live price or Work Hours change.');
+    if (!editing || !form) {
+      setSaveError("Editor is not ready — close and reopen the plan.");
+      return;
+    }
+    if (!confirmOk) {
+      setSaveError('Type "publish" in the confirmation box below, then click Save again.');
       return;
     }
     setSaving(true);
@@ -210,7 +215,8 @@ export default function AdminPlansPage() {
 
     let entitlements: Record<string, unknown>;
     try {
-      const parsed = form.entitlements_json.trim() ? JSON.parse(form.entitlements_json) : {};
+      const raw = form.entitlements_json.trim();
+      const parsed = raw ? JSON.parse(raw) : {};
       if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
         throw new Error("Entitlements must be a JSON object.");
       }
@@ -227,11 +233,11 @@ export default function AdminPlansPage() {
 
     const updates = {
       display_name: form.display_name,
-      monthly_price_cents: form.monthly_price_cents,
-      annual_price_cents: form.annual_price_cents,
-      trial_days: form.trial_days,
+      monthly_price_cents: Number(form.monthly_price_cents) || 0,
+      annual_price_cents: Number(form.annual_price_cents) || 0,
+      trial_days: Number(form.trial_days) || 0,
       is_active: form.is_active,
-      weekly_work_hours: form.weekly_work_hours,
+      weekly_work_hours: Number(form.weekly_work_hours) || 0,
       human_members_unlimited: form.human_members_unlimited,
       ai_employees_unlimited: form.ai_employees_unlimited,
       max_ai_employees: form.max_ai_employees,
@@ -251,7 +257,7 @@ export default function AdminPlansPage() {
       team_features_enabled: form.team_features_enabled,
       admin_controls_enabled: form.admin_controls_enabled,
       priority_support: form.priority_support,
-      allowed_intelligence_tiers: form.allowed_intelligence_tiers,
+      allowed_intelligence_tiers: form.allowed_intelligence_tiers ?? [],
       entitlements,
     };
 
@@ -259,22 +265,31 @@ export default function AdminPlansPage() {
       const headers = await authHeaders();
       const res = await fetch("/api/admin/plans", {
         method: "PUT",
-        headers,
+        headers: {
+          ...headers,
+          "Content-Type": "application/json",
+        },
         body: JSON.stringify({
           planSlug: editing.plan_slug,
           updates,
           reason: "admin_plans_publish_live",
         }),
       });
-      const body = await res.json();
-      if (!res.ok) throw new Error(body?.error ?? `Save failed (${res.status}).`);
+      const body = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        notes?: string[];
+        ok?: boolean;
+      };
+      if (!res.ok) {
+        throw new Error(body?.error ?? `Save failed (${res.status}).`);
+      }
       setPublishNotes(
         Array.isArray(body.notes) && body.notes.length
           ? body.notes
           : ["Published live to customer surfaces."],
       );
       await refresh();
-      setTimeout(() => closeEditor(), 1600);
+      setTimeout(() => closeEditor(), 1800);
     } catch (err) {
       setSaveError(err instanceof Error ? err.message : "Save failed.");
     } finally {
@@ -668,13 +683,6 @@ export default function AdminPlansPage() {
                 />
               </Section>
 
-              {priceChanged && (
-                <Field label='Type "publish" to confirm live price / WH change'>
-                  <TextInput value={confirmText} onChange={setConfirmText} />
-                </Field>
-              )}
-
-              {saveError && <p className="text-sm text-danger">{saveError}</p>}
               {publishNotes && (
                 <ul className="space-y-1 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-800">
                   {publishNotes.map((n) => (
@@ -683,13 +691,44 @@ export default function AdminPlansPage() {
                 </ul>
               )}
             </div>
-            <div className="flex justify-end gap-2 border-t border-border-2 px-6 py-4">
-              <Button variant="outline" onClick={closeEditor} disabled={saving}>
-                Cancel
-              </Button>
-              <Button onClick={save} disabled={saving}>
-                {saving ? "Publishing…" : "Save & publish live"}
-              </Button>
+            <div className="space-y-3 border-t border-border-2 px-6 py-4">
+              {priceChanged ? (
+                <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5">
+                  <p className="text-xs font-medium text-amber-900">
+                    Price or Work Hours changed — type <span className="font-mono">publish</span>{" "}
+                    to confirm, then save.
+                  </p>
+                  <input
+                    type="text"
+                    value={confirmText}
+                    onChange={(e) => {
+                      setConfirmText(e.target.value);
+                      if (saveError) setSaveError(null);
+                    }}
+                    placeholder='Type "publish"'
+                    autoComplete="off"
+                    className="mt-2 h-10 w-full rounded-xl border border-amber-300 bg-white px-3 text-sm text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/40"
+                  />
+                </div>
+              ) : null}
+              {saveError ? <p className="text-sm text-danger">{saveError}</p> : null}
+              <div className="flex justify-end gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={closeEditor}
+                  disabled={saving}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="button"
+                  onClick={() => void save()}
+                  disabled={saving || (priceChanged && !confirmOk)}
+                >
+                  {saving ? "Publishing…" : "Save & publish live"}
+                </Button>
+              </div>
             </div>
           </>
         )}
