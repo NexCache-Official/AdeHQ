@@ -5,12 +5,14 @@ import { canChangePlan } from "@/lib/workspace/permissions";
 import { scheduleDowngrade } from "@/lib/billing/commerce/lifecycle";
 import { startCheckout } from "@/lib/billing/checkout";
 import type { BillingCadence, PlanCode } from "@/lib/billing/commerce/types";
+import { isValidPlanSlug } from "@/lib/billing/commerce/types";
 import { getPublishedPrice } from "@/lib/billing/commerce/catalog";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const TIER: Record<string, number> = {
+/** Known tier ranks; custom plans fall back to published monthly price for ordering. */
+const KNOWN_TIER: Record<string, number> = {
   free: 0,
   pro: 1,
   team: 2,
@@ -21,6 +23,7 @@ const TIER: Record<string, number> = {
 /**
  * Upgrade → start Revolut subscription checkout for the higher plan.
  * Downgrade → schedule at next billing renewal (WH at next usage boundary).
+ * Accepts any published paid plan slug (including custom Plans-hub codes).
  */
 export async function POST(
   request: NextRequest,
@@ -41,7 +44,7 @@ export async function POST(
     };
     const target = (body.planSlug ?? "").toLowerCase() as PlanCode;
     const cadence = (body.interval ?? "monthly") as BillingCadence;
-    if (!TIER[target] && target !== "free") {
+    if (!target || (!isValidPlanSlug(target) && target !== "free")) {
       return NextResponse.json({ error: "Invalid plan." }, { status: 400 });
     }
 
@@ -55,22 +58,45 @@ export async function POST(
       .maybeSingle();
 
     const current = String(sub?.plan_slug ?? "free").toLowerCase();
-    const currentTier = TIER[current] ?? 0;
-    const targetTier = TIER[target] ?? 0;
+
+    const [currentPrice, targetPrice] = await Promise.all([
+      current === "free"
+        ? Promise.resolve(null)
+        : getPublishedPrice(service, current, cadence),
+      target === "free"
+        ? Promise.resolve(null)
+        : getPublishedPrice(service, target, cadence),
+    ]);
+
+    const rank = (slug: string, amountMinor: number | null) => {
+      if (slug in KNOWN_TIER) return KNOWN_TIER[slug]! * 1_000_000;
+      // Custom plans: order by list price so upgrades/downgrades still make sense.
+      return 100_000 + Math.max(0, amountMinor ?? 0);
+    };
+
+    const currentTier = rank(current, currentPrice?.amountMinor ?? 0);
+    const targetTier = rank(target, targetPrice?.amountMinor ?? 0);
 
     if (target === "free" || targetTier < currentTier) {
+      if (target === "free") {
+        return NextResponse.json(
+          {
+            error:
+              "To move to Free, cancel your subscription (access continues until paid-through).",
+          },
+          { status: 400 },
+        );
+      }
+      if (!targetPrice) {
+        return NextResponse.json({ error: "Target plan is not available." }, { status: 400 });
+      }
       await scheduleDowngrade(service, {
         workspaceId: params.workspaceId,
-        targetPlanCode: target === "free" ? "pro" : target, // free via cancel path
+        targetPlanCode: target,
         cadence: (sub?.billing_cadence as BillingCadence) ?? cadence,
         actorUserId: user.id,
         reason: body.reason?.trim() || "Customer requested downgrade",
       });
-      if (target === "free") {
-        return NextResponse.json({
-          error: "To move to Free, cancel your subscription (access continues until paid-through).",
-        }, { status: 400 });
-      }
       return NextResponse.json({
         mode: "downgrade_scheduled",
         message:
@@ -78,13 +104,11 @@ export async function POST(
       });
     }
 
-    if (targetTier === currentTier) {
+    if (target === current || targetTier === currentTier) {
       return NextResponse.json({ error: "Already on this plan tier." }, { status: 400 });
     }
 
-    // Upgrade: require published price then checkout
-    const price = await getPublishedPrice(service, target, cadence);
-    if (!price) {
+    if (!targetPrice) {
       return NextResponse.json({ error: "Target plan is not available." }, { status: 400 });
     }
 

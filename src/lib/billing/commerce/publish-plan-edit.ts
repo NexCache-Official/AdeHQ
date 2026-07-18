@@ -2,7 +2,11 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { writeAuditLog } from "@/lib/admin/audit";
 import { writeCommerceAudit } from "@/lib/billing/commerce/rbac";
 import { PLAN_ENTITLEMENT_MATRIX_V1 } from "@/lib/billing/commerce/entitlement-matrix";
-import type { PlanCode, PlanEntitlements } from "@/lib/billing/commerce/types";
+import {
+  isKnownPlanCode,
+  isValidPlanSlug,
+  type PlanEntitlements,
+} from "@/lib/billing/commerce/types";
 import { syncPriceToRevolut } from "@/lib/billing/revolut/provider-sync";
 import type { NextRequest } from "next/server";
 
@@ -42,16 +46,12 @@ export type PlanPublishResult = {
   notes: string[];
 };
 
-function isPlanCode(slug: string): slug is PlanCode {
-  return ["free", "pro", "team", "business", "enterprise"].includes(slug);
-}
-
 function entitlementsFromConfig(
   slug: string,
   merged: Record<string, unknown>,
 ): PlanEntitlements {
   const base =
-    isPlanCode(slug) && slug !== "enterprise"
+    isKnownPlanCode(slug) && slug !== "enterprise"
       ? { ...PLAN_ENTITLEMENT_MATRIX_V1[slug] }
       : {
           weeklyWh: Number(merged.weekly_work_hours ?? 0),
@@ -69,8 +69,12 @@ function entitlementsFromConfig(
           memoryRetentionDays: 90,
           artifactStorageBytes: Number(merged.max_storage_bytes ?? 1_073_741_824),
           usageDashboardLevel: "team" as const,
-          adminControlsLevel: merged.admin_controls_enabled ? ("advanced" as const) : ("basic" as const),
-          supportLevel: merged.priority_support ? ("priority" as const) : ("standard" as const),
+          adminControlsLevel: merged.admin_controls_enabled
+            ? ("advanced" as const)
+            : ("basic" as const),
+          supportLevel: merged.priority_support
+            ? ("priority" as const)
+            : ("standard" as const),
           intelligencePolicy: "balanced" as const,
           humanMembersUnlimited: Boolean(merged.human_members_unlimited ?? true),
           aiEmployeesUnlimited: Boolean(merged.ai_employees_unlimited ?? true),
@@ -99,6 +103,49 @@ function entitlementsFromConfig(
   };
 }
 
+/** Ensure billing_plans row exists for any valid slug (create or reuse). */
+export async function ensureBillingPlanIdentity(
+  client: SupabaseClient,
+  planSlug: string,
+  displayName: string,
+): Promise<{ id: string; code: string }> {
+  if (!isValidPlanSlug(planSlug)) {
+    throw new Error(
+      "Invalid plan slug. Use 2–32 chars: lowercase letter, then letters/digits/underscore.",
+    );
+  }
+
+  const { data: existing, error: readErr } = await client
+    .from("billing_plans")
+    .select("id, code")
+    .eq("code", planSlug)
+    .maybeSingle();
+  if (readErr) throw readErr;
+  if (existing) return { id: String(existing.id), code: String(existing.code) };
+
+  const { data: maxSort } = await client
+    .from("billing_plans")
+    .select("sort_order")
+    .order("sort_order", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const sortOrder = Number(maxSort?.sort_order ?? 0) + 10;
+
+  const { data: created, error: insertErr } = await client
+    .from("billing_plans")
+    .insert({
+      code: planSlug,
+      internal_name: displayName || planSlug,
+      status: "active",
+      sort_order: sortOrder,
+      updated_at: new Date().toISOString(),
+    })
+    .select("id, code")
+    .single();
+  if (insertErr) throw insertErr;
+  return { id: String(created.id), code: String(created.code) };
+}
+
 /**
  * Dual-write plan edits so customer surfaces update immediately:
  * 1) platform_plan_configs (entitlements / MRR / settings)
@@ -115,8 +162,13 @@ export async function publishPlanEdit(
     request?: NextRequest;
   },
 ): Promise<PlanPublishResult> {
-  const planSlug = input.planSlug.trim();
+  const planSlug = input.planSlug.trim().toLowerCase();
   if (!planSlug) throw new Error("planSlug is required.");
+  if (!isValidPlanSlug(planSlug)) {
+    throw new Error(
+      "Invalid plan slug. Use 2–32 chars: lowercase letter, then letters/digits/underscore.",
+    );
+  }
 
   const { data: before, error: readError } = await client
     .from("platform_plan_configs")
@@ -160,183 +212,165 @@ export async function publishPlanEdit(
   const priceIds: string[] = [];
   const revolutSync: PlanPublishResult["revolutSync"] = [];
 
-  if (!isPlanCode(planSlug)) {
-    notes.push("Skipped versioned catalog (slug not in billing_plans codes).");
-    return {
-      ok: true,
-      plan: after as Record<string, unknown>,
-      planVersionId,
-      priceIds,
-      revolutSync,
-      notes,
-    };
-  }
-
   // Versioned catalog + Revolut sync are best-effort after entitlements are saved.
-  // Never fail the whole publish if catalog write/sync breaks — settings/MRR already updated.
   try {
-    const { data: billingPlan, error: planErr } = await client
-      .from("billing_plans")
-      .select("id, code")
-      .eq("code", planSlug)
+    const billingPlan = await ensureBillingPlanIdentity(
+      client,
+      planSlug,
+      String(after.display_name ?? planSlug),
+    );
+
+    const { data: latestVersion } = await client
+      .from("billing_plan_versions")
+      .select("id, version, eyebrow, description, feature_bullets, visibility")
+      .eq("plan_id", billingPlan.id)
+      .order("version", { ascending: false })
+      .limit(1)
       .maybeSingle();
-    if (planErr) throw planErr;
 
-    if (!billingPlan) {
-      notes.push("No billing_plans row — catalog version not created.");
-    } else {
-      const { data: latestVersion } = await client
-        .from("billing_plan_versions")
-        .select("id, version, eyebrow, description, feature_bullets, visibility")
-        .eq("plan_id", billingPlan.id)
-        .order("version", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
-      // Snapshot prior Revolut mappings before retiring rows.
-      const { data: oldPrices } = latestVersion?.id
-        ? await client
-            .from("billing_prices")
-            .select(
-              "cadence, currency, amount_minor, revolut_plan_id, revolut_variation_id, provider_ref",
-            )
-            .eq("plan_version_id", latestVersion.id)
-        : { data: [] as Array<Record<string, unknown>> };
-
-      const nextVersion = Number(latestVersion?.version ?? 0) + 1;
-      const publicName = String(after.display_name ?? planSlug);
-      const weeklyWh = Number(after.weekly_work_hours ?? 0);
-      const entitlements = entitlementsFromConfig(
-        planSlug,
-        after as Record<string, unknown>,
-      );
-      const visibility =
-        planSlug === "enterprise"
-          ? "enterprise_contract"
-          : after.is_active === false
-            ? "invite_only"
-            : (latestVersion?.visibility ?? "public");
-
-      if (latestVersion?.id) {
-        await client
-          .from("billing_plan_versions")
-          .update({ status: "retired", updated_at: new Date().toISOString() })
-          .eq("plan_id", billingPlan.id)
-          .eq("status", "published");
-
-        await client
+    // Snapshot prior Revolut mappings before retiring rows.
+    const { data: oldPrices } = latestVersion?.id
+      ? await client
           .from("billing_prices")
-          .update({
-            status: "retired",
-            sync_status: "retired",
-            updated_at: new Date().toISOString(),
-          })
+          .select(
+            "cadence, currency, amount_minor, revolut_plan_id, revolut_variation_id, provider_ref",
+          )
           .eq("plan_version_id", latestVersion.id)
-          .eq("status", "active");
-      }
+      : { data: [] as Array<Record<string, unknown>> };
 
-      const { data: newVersion, error: versionErr } = await client
+    const nextVersion = Number(latestVersion?.version ?? 0) + 1;
+    const publicName = String(after.display_name ?? planSlug);
+    const weeklyWh = Number(after.weekly_work_hours ?? 0);
+    const entitlements = entitlementsFromConfig(
+      planSlug,
+      after as Record<string, unknown>,
+    );
+    const visibility =
+      planSlug === "enterprise"
+        ? "enterprise_contract"
+        : after.is_active === false
+          ? "invite_only"
+          : (latestVersion?.visibility ?? "public");
+
+    if (latestVersion?.id) {
+      await client
         .from("billing_plan_versions")
-        .insert({
-          plan_id: billingPlan.id,
-          version: nextVersion,
-          public_name: publicName,
-          eyebrow: latestVersion?.eyebrow ?? "",
-          description: latestVersion?.description ?? "",
-          feature_bullets: Array.isArray(latestVersion?.feature_bullets)
-            ? latestVersion.feature_bullets
-            : [],
-          weekly_included_wh: weeklyWh,
-          entitlements,
-          visibility,
-          status: "published",
-          published_at: new Date().toISOString(),
-          created_by: input.adminUserId,
-          approved_by: input.adminUserId,
-          migration_policy: "migrate_at_renewal",
+        .update({ status: "retired", updated_at: new Date().toISOString() })
+        .eq("plan_id", billingPlan.id)
+        .eq("status", "published");
+
+      await client
+        .from("billing_prices")
+        .update({
+          status: "retired",
+          sync_status: "retired",
+          updated_at: new Date().toISOString(),
         })
-        .select("id, version")
-        .single();
-      if (versionErr) throw versionErr;
-      planVersionId = newVersion.id;
-
-      const oldByCadence = new Map(
-        (oldPrices ?? []).map((p) => [`${p.currency}:${p.cadence}`, p]),
-      );
-
-      const monthlyCents = Number(after.monthly_price_cents ?? 0);
-      const annualCents = Number(after.annual_price_cents ?? 0);
-      const currency = "USD";
-
-      for (const cadence of ["monthly", "annual"] as const) {
-        const amount = cadence === "monthly" ? monthlyCents : annualCents;
-        const prev = oldByCadence.get(`${currency}:${cadence}`);
-        const amountUnchanged =
-          Boolean(prev) && Number(prev?.amount_minor) === amount && amount >= 0;
-
-        const { data: priceRow, error: priceErr } = await client
-          .from("billing_prices")
-          .insert({
-            plan_version_id: newVersion.id,
-            currency,
-            cadence,
-            amount_minor: amount,
-            status: "active",
-            sync_status: "published",
-            revolut_plan_id: amountUnchanged ? prev?.revolut_plan_id ?? null : null,
-            revolut_variation_id: amountUnchanged
-              ? prev?.revolut_variation_id ?? null
-              : null,
-            provider_ref: amountUnchanged ? prev?.provider_ref ?? null : null,
-            verified_at:
-              amountUnchanged || amount === 0 ? new Date().toISOString() : null,
-          })
-          .select("id, amount_minor")
-          .single();
-        if (priceErr) throw priceErr;
-        priceIds.push(priceRow.id);
-
-        const needsSync =
-          amount > 0 && (!amountUnchanged || !prev?.revolut_variation_id);
-        if (needsSync) {
-          try {
-            const sync = await syncPriceToRevolut(client, priceRow.id);
-            revolutSync.push({
-              priceId: priceRow.id,
-              ok: sync.ok,
-              error: sync.error,
-            });
-            await client
-              .from("billing_prices")
-              .update({
-                status: "active",
-                sync_status: "published",
-                verified_at: sync.ok ? new Date().toISOString() : null,
-              })
-              .eq("id", priceRow.id);
-            if (!sync.ok) {
-              notes.push(
-                `${cadence} Revolut sync pending/failed — list price is live; checkout needs sync (${sync.error ?? "unknown"}).`,
-              );
-            }
-          } catch (err) {
-            revolutSync.push({
-              priceId: priceRow.id,
-              ok: false,
-              error: err instanceof Error ? err.message : "sync failed",
-            });
-            await client
-              .from("billing_prices")
-              .update({ status: "active", sync_status: "published" })
-              .eq("id", priceRow.id);
-          }
-        } else {
-          revolutSync.push({ priceId: priceRow.id, ok: true });
-        }
-      }
-
-      notes.push(`Published catalog version v${nextVersion}.`);
+        .eq("plan_version_id", latestVersion.id)
+        .eq("status", "active");
     }
+
+    const { data: newVersion, error: versionErr } = await client
+      .from("billing_plan_versions")
+      .insert({
+        plan_id: billingPlan.id,
+        version: nextVersion,
+        public_name: publicName,
+        eyebrow: latestVersion?.eyebrow ?? "",
+        description: latestVersion?.description ?? "",
+        feature_bullets: Array.isArray(latestVersion?.feature_bullets)
+          ? latestVersion.feature_bullets
+          : [],
+        weekly_included_wh: weeklyWh,
+        entitlements,
+        visibility,
+        status: "published",
+        published_at: new Date().toISOString(),
+        created_by: input.adminUserId,
+        approved_by: input.adminUserId,
+        migration_policy: "migrate_at_renewal",
+      })
+      .select("id, version")
+      .single();
+    if (versionErr) throw versionErr;
+    planVersionId = newVersion.id;
+
+    const oldByCadence = new Map(
+      (oldPrices ?? []).map((p) => [`${p.currency}:${p.cadence}`, p]),
+    );
+
+    const monthlyCents = Number(after.monthly_price_cents ?? 0);
+    const annualCents = Number(after.annual_price_cents ?? 0);
+    const currency = "USD";
+
+    for (const cadence of ["monthly", "annual"] as const) {
+      const amount = cadence === "monthly" ? monthlyCents : annualCents;
+      const prev = oldByCadence.get(`${currency}:${cadence}`);
+      const amountUnchanged =
+        Boolean(prev) && Number(prev?.amount_minor) === amount && amount >= 0;
+
+      const { data: priceRow, error: priceErr } = await client
+        .from("billing_prices")
+        .insert({
+          plan_version_id: newVersion.id,
+          currency,
+          cadence,
+          amount_minor: amount,
+          status: "active",
+          sync_status: "published",
+          revolut_plan_id: amountUnchanged ? prev?.revolut_plan_id ?? null : null,
+          revolut_variation_id: amountUnchanged
+            ? prev?.revolut_variation_id ?? null
+            : null,
+          provider_ref: amountUnchanged ? prev?.provider_ref ?? null : null,
+          verified_at:
+            amountUnchanged || amount === 0 ? new Date().toISOString() : null,
+        })
+        .select("id, amount_minor")
+        .single();
+      if (priceErr) throw priceErr;
+      priceIds.push(priceRow.id);
+
+      const needsSync =
+        amount > 0 && (!amountUnchanged || !prev?.revolut_variation_id);
+      if (needsSync) {
+        try {
+          const sync = await syncPriceToRevolut(client, priceRow.id);
+          revolutSync.push({
+            priceId: priceRow.id,
+            ok: sync.ok,
+            error: sync.error,
+          });
+          await client
+            .from("billing_prices")
+            .update({
+              status: "active",
+              sync_status: "published",
+              verified_at: sync.ok ? new Date().toISOString() : null,
+            })
+            .eq("id", priceRow.id);
+          if (!sync.ok) {
+            notes.push(
+              `${cadence} Revolut sync pending/failed — list price is live; checkout needs sync (${sync.error ?? "unknown"}).`,
+            );
+          }
+        } catch (err) {
+          revolutSync.push({
+            priceId: priceRow.id,
+            ok: false,
+            error: err instanceof Error ? err.message : "sync failed",
+          });
+          await client
+            .from("billing_prices")
+            .update({ status: "active", sync_status: "published" })
+            .eq("id", priceRow.id);
+        }
+      } else {
+        revolutSync.push({ priceId: priceRow.id, ok: true });
+      }
+    }
+
+    notes.push(`Published catalog version v${nextVersion}.`);
 
     await writeCommerceAudit(client, {
       actorUserId: input.adminUserId,

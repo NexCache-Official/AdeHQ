@@ -1,6 +1,11 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getPublishedPrice } from "@/lib/billing/commerce/catalog";
-import { REFUND_POLICY_COPY, type BillingCadence, type PlanCode } from "@/lib/billing/commerce/types";
+import {
+  REFUND_POLICY_COPY,
+  isValidPlanSlug,
+  type BillingCadence,
+  type PlanCode,
+} from "@/lib/billing/commerce/types";
 import { getRevolutConfig, getRevolutCurrency } from "@/lib/billing/revolut/client";
 import { isRevolutConfigured } from "@/lib/billing/revolut/create-checkout";
 import { createOrGetRevolutCustomer } from "@/lib/billing/revolut/customers";
@@ -37,7 +42,7 @@ export async function startCheckout(
   params: StartCheckoutParams,
 ): Promise<StartCheckoutResult> {
   const planCode = params.planSlug.toLowerCase() as PlanCode;
-  if (planCode === "free" || planCode === "enterprise") {
+  if (!isValidPlanSlug(planCode) || planCode === "free" || planCode === "enterprise") {
     throw new Error(`Plan is not available for self-serve checkout: ${params.planSlug}`);
   }
 

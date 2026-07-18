@@ -19,7 +19,10 @@ type VersionRow = {
   visibility: string;
   status: string;
   plan_id: string;
-  billing_plans: { code: string } | { code: string }[] | null;
+  billing_plans:
+    | { code: string; sort_order?: number }
+    | { code: string; sort_order?: number }[]
+    | null;
 };
 
 type PriceRow = {
@@ -38,6 +41,12 @@ function planCodeFromJoin(plans: VersionRow["billing_plans"]): PlanCode {
   return (row?.code ?? "free") as PlanCode;
 }
 
+function sortOrderFromJoin(plans: VersionRow["billing_plans"]): number {
+  const row = Array.isArray(plans) ? plans[0] : plans;
+  const n = Number(row?.sort_order);
+  return Number.isFinite(n) ? n : 999;
+}
+
 /** Published + provider-verified (or free) prices selectable for checkout/pricing page. */
 export async function listPublishedPublicCatalog(
   client: SupabaseClient,
@@ -46,7 +55,7 @@ export async function listPublishedPublicCatalog(
   const { data: versions, error } = await client
     .from("billing_plan_versions")
     .select(
-      "id, version, public_name, eyebrow, description, weekly_included_wh, entitlements, visibility, status, plan_id, billing_plans(code)",
+      "id, version, public_name, eyebrow, description, weekly_included_wh, entitlements, visibility, status, plan_id, billing_plans(code, sort_order)",
     )
     .eq("status", "published")
     .eq("visibility", "public");
@@ -101,10 +110,17 @@ export async function listPublishedPublicCatalog(
     });
   }
 
-  const order: PlanCode[] = ["free", "pro", "team", "business", "enterprise"];
+  const sortByCode = new Map<string, number>();
+  for (const version of (versions ?? []) as VersionRow[]) {
+    const code = planCodeFromJoin(version.billing_plans);
+    if (!sortByCode.has(code)) {
+      sortByCode.set(code, sortOrderFromJoin(version.billing_plans));
+    }
+  }
   out.sort(
     (a, b) =>
-      order.indexOf(a.planCode) - order.indexOf(b.planCode) ||
+      (sortByCode.get(a.planCode) ?? 999) - (sortByCode.get(b.planCode) ?? 999) ||
+      a.planCode.localeCompare(b.planCode) ||
       (a.cadence === "monthly" ? 0 : 1) - (b.cadence === "monthly" ? 0 : 1),
   );
   return out;

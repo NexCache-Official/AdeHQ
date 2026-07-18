@@ -1,6 +1,28 @@
 /** Versioned commerce domain types — see docs/billing/*.md */
 
-export type PlanCode = "free" | "pro" | "team" | "business" | "enterprise";
+/** Seeded / matrix plans. Custom Plans-hub slugs are also valid PlanCodes. */
+export type KnownPlanCode = "free" | "pro" | "team" | "business" | "enterprise";
+
+/** Any published commerce plan slug (`^[a-z][a-z0-9_]{1,31}$`). */
+export type PlanCode = string;
+
+export const KNOWN_PLAN_CODES: KnownPlanCode[] = [
+  "free",
+  "pro",
+  "team",
+  "business",
+  "enterprise",
+];
+
+export function isKnownPlanCode(slug: string): slug is KnownPlanCode {
+  return (KNOWN_PLAN_CODES as string[]).includes(slug);
+}
+
+/** Plans hub / billing_plans.code slug format. */
+export function isValidPlanSlug(slug: string): boolean {
+  return /^[a-z][a-z0-9_]{1,31}$/.test(slug);
+}
+
 export type BillingCadence = "monthly" | "annual";
 
 export type ProviderSubscriptionStatus =

@@ -10,8 +10,10 @@ import {
   AdminPageHeader,
   useAdminData,
 } from "@/components/admin/common";
-import { ListChecks, Pencil, RefreshCw, Sparkles } from "lucide-react";
+import { ListChecks, Pencil, Plus, RefreshCw, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
+
+const PLAN_SLUG_RE = /^[a-z][a-z0-9_]{1,31}$/;
 
 const INTELLIGENCE_TIERS = [
   "cheap",
@@ -105,6 +107,20 @@ export default function AdminPlansPage() {
   const [confirmText, setConfirmText] = useState("");
   const [syncingSlug, setSyncingSlug] = useState<string | null>(null);
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
+  const [createForm, setCreateForm] = useState({
+    planSlug: "",
+    displayName: "",
+    duplicateFrom: "pro",
+    monthlyPriceUsd: 0,
+    annualPriceUsd: 0,
+    weeklyWorkHours: 125,
+    isActive: true,
+    confirmText: "",
+  });
+  const [createSaving, setCreateSaving] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
+  const [createNotes, setCreateNotes] = useState<string[] | null>(null);
 
   const syncPlanToRevolut = async (plan: PlanRow) => {
     const ids = plan.priceIdsNeedingSync ?? [];
@@ -189,6 +205,104 @@ export default function AdminPlansPage() {
     setEditing(null);
     setForm(null);
     setConfirmText("");
+  };
+
+  const openCreate = () => {
+    const defaultFrom = (data?.plans ?? []).some((p) => p.plan_slug === "pro")
+      ? "pro"
+      : (data?.plans?.[0]?.plan_slug ?? "free");
+    const source = (data?.plans ?? []).find((p) => p.plan_slug === defaultFrom);
+    setCreating(true);
+    setCreateError(null);
+    setCreateNotes(null);
+    setCreateForm({
+      planSlug: "",
+      displayName: "",
+      duplicateFrom: defaultFrom,
+      monthlyPriceUsd: source ? Math.round(source.monthly_price_cents / 100) : 0,
+      annualPriceUsd: source ? Math.round(source.annual_price_cents / 100) : 0,
+      weeklyWorkHours: source?.weekly_work_hours ?? 125,
+      isActive: true,
+      confirmText: "",
+    });
+  };
+
+  const closeCreate = () => {
+    setCreating(false);
+    setCreateError(null);
+    setCreateNotes(null);
+  };
+
+  const createAndPublish = async () => {
+    const slug = createForm.planSlug.trim().toLowerCase();
+    const name = createForm.displayName.trim();
+    if (!slug || !name) {
+      setCreateError("Slug and display name are required.");
+      return;
+    }
+    if (!PLAN_SLUG_RE.test(slug)) {
+      setCreateError(
+        "Invalid slug. Use 2–32 chars: start with a letter, then lowercase letters, digits, or underscore.",
+      );
+      return;
+    }
+    const paid =
+      createForm.monthlyPriceUsd > 0 || createForm.annualPriceUsd > 0;
+    if (paid && createForm.confirmText.trim().toLowerCase() !== "publish") {
+      setCreateError('Type "publish" to confirm Create & publish live.');
+      return;
+    }
+
+    setCreateSaving(true);
+    setCreateError(null);
+    setCreateNotes(null);
+    try {
+      const headers = await authHeaders();
+      const res = await fetch("/api/admin/plans", {
+        method: "POST",
+        headers: {
+          ...headers,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          planSlug: slug,
+          displayName: name,
+          duplicateFrom: createForm.duplicateFrom || undefined,
+          monthlyPriceCents: Math.round(createForm.monthlyPriceUsd * 100),
+          annualPriceCents: Math.round(createForm.annualPriceUsd * 100),
+          weeklyWorkHours: Number(createForm.weeklyWorkHours) || 0,
+          isActive: createForm.isActive,
+          reason: "admin_plans_create_publish",
+        }),
+      });
+      const body = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        notes?: string[];
+        revolutSynced?: boolean;
+      };
+      if (!res.ok && !body.notes) {
+        throw new Error(body?.error ?? `Create failed (${res.status}).`);
+      }
+      if (body.error && !body.notes) {
+        throw new Error(body.error);
+      }
+      setCreateNotes(
+        Array.isArray(body.notes) && body.notes.length
+          ? body.notes
+          : ["Plan created and published live."],
+      );
+      setSyncMessage(
+        body.revolutSynced === false
+          ? `${name}: published for marketing — Revolut sync still needed for checkout.`
+          : `${name}: created and published (marketing + Revolut).`,
+      );
+      await refresh();
+      setTimeout(() => closeCreate(), 1600);
+    } catch (err) {
+      setCreateError(err instanceof Error ? err.message : "Create failed.");
+    } finally {
+      setCreateSaving(false);
+    }
   };
 
   const priceChanged = Boolean(
@@ -316,6 +430,13 @@ export default function AdminPlansPage() {
         title="Plans"
         subtitle="Edit list prices, Work Hours, and entitlements. Save & publish updates marketing, checkout, and settings immediately. Existing paid subscribers keep their current price until renewal."
         icon={<ListChecks className="h-5 w-5" />}
+        actions={
+          tab === "catalog" ? (
+            <Button size="sm" onClick={openCreate}>
+              <Plus className="h-3.5 w-3.5" /> New plan
+            </Button>
+          ) : null
+        }
       />
 
       <div className="mb-5 flex flex-wrap gap-1 rounded-xl border border-border bg-surface p-1">
@@ -384,6 +505,11 @@ export default function AdminPlansPage() {
 
       {tab === "catalog" && (
         <AdminAsync loading={loading} error={error}>
+          <div className="mb-4 flex justify-end sm:hidden">
+            <Button size="sm" onClick={openCreate}>
+              <Plus className="h-3.5 w-3.5" /> New plan
+            </Button>
+          </div>
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
             {plans.map((plan) => {
               const isEnterprise = plan.plan_slug === "enterprise";
@@ -478,6 +604,130 @@ export default function AdminPlansPage() {
           </div>
         </AdminAsync>
       )}
+
+      <Modal open={creating} onClose={closeCreate} size="md">
+        <>
+          <ModalHeader
+            title="New plan"
+            subtitle="Duplicate entitlements, set price & Work Hours, then publish marketing + Revolut in one step."
+            onClose={closeCreate}
+            icon={<Plus className="h-5 w-5" />}
+          />
+          <div className="space-y-4 px-6 py-5">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Field label="Slug (code)">
+                <TextInput
+                  value={createForm.planSlug}
+                  onChange={(v) =>
+                    setCreateForm({
+                      ...createForm,
+                      planSlug: v.toLowerCase().replace(/[^a-z0-9_]/g, ""),
+                    })
+                  }
+                />
+              </Field>
+              <Field label="Display name">
+                <TextInput
+                  value={createForm.displayName}
+                  onChange={(v) => setCreateForm({ ...createForm, displayName: v })}
+                />
+              </Field>
+              <Field label="Duplicate entitlements from">
+                <select
+                  className="h-10 w-full rounded-xl border border-border bg-surface px-3 text-sm text-ink"
+                  value={createForm.duplicateFrom}
+                  onChange={(e) => {
+                    const slug = e.target.value;
+                    const source = plans.find((p) => p.plan_slug === slug);
+                    setCreateForm({
+                      ...createForm,
+                      duplicateFrom: slug,
+                      monthlyPriceUsd: source
+                        ? Math.round(source.monthly_price_cents / 100)
+                        : createForm.monthlyPriceUsd,
+                      annualPriceUsd: source
+                        ? Math.round(source.annual_price_cents / 100)
+                        : createForm.annualPriceUsd,
+                      weeklyWorkHours: source?.weekly_work_hours ?? createForm.weeklyWorkHours,
+                    });
+                  }}
+                >
+                  {plans.map((p) => (
+                    <option key={p.plan_slug} value={p.plan_slug}>
+                      {p.display_name} ({p.plan_slug})
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="Weekly AI Work Hours (0 = unlimited)">
+                <NumberInput
+                  value={createForm.weeklyWorkHours}
+                  onChange={(v) => setCreateForm({ ...createForm, weeklyWorkHours: v })}
+                />
+              </Field>
+              <Field label="Monthly price (USD)">
+                <NumberInput
+                  value={createForm.monthlyPriceUsd}
+                  onChange={(v) => setCreateForm({ ...createForm, monthlyPriceUsd: v })}
+                />
+              </Field>
+              <Field label="Annual price (USD)">
+                <NumberInput
+                  value={createForm.annualPriceUsd}
+                  onChange={(v) => setCreateForm({ ...createForm, annualPriceUsd: v })}
+                />
+              </Field>
+            </div>
+            <ToggleRow
+              label="Marketing live (active)"
+              checked={createForm.isActive}
+              onChange={(v) => setCreateForm({ ...createForm, isActive: v })}
+            />
+            {createForm.monthlyPriceUsd > 0 || createForm.annualPriceUsd > 0 ? (
+              <div className="rounded-xl border border-amber-200 bg-amber-50/80 px-3 py-2.5">
+                <p className="text-xs font-medium text-amber-900">
+                  Type <span className="font-mono">publish</span> to create & publish live
+                  (marketing + Revolut sync).
+                </p>
+                <input
+                  type="text"
+                  value={createForm.confirmText}
+                  onChange={(e) =>
+                    setCreateForm({ ...createForm, confirmText: e.target.value })
+                  }
+                  placeholder='Type "publish"'
+                  autoComplete="off"
+                  className="mt-2 h-10 w-full rounded-xl border border-amber-300 bg-white px-3 text-sm text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/40"
+                />
+              </div>
+            ) : null}
+            {createNotes ? (
+              <ul className="space-y-1 rounded-xl border border-emerald-200 bg-emerald-50/70 px-3 py-2 text-xs text-emerald-900">
+                {createNotes.map((n) => (
+                  <li key={n}>• {n}</li>
+                ))}
+              </ul>
+            ) : null}
+            {createError ? <p className="text-sm text-danger">{createError}</p> : null}
+            <div className="flex justify-end gap-2">
+              <Button type="button" variant="outline" onClick={closeCreate} disabled={createSaving}>
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                onClick={() => void createAndPublish()}
+                disabled={
+                  createSaving ||
+                  ((createForm.monthlyPriceUsd > 0 || createForm.annualPriceUsd > 0) &&
+                    createForm.confirmText.trim().toLowerCase() !== "publish")
+                }
+              >
+                {createSaving ? "Publishing…" : "Create & publish live"}
+              </Button>
+            </div>
+          </div>
+        </>
+      </Modal>
 
       <Modal open={Boolean(editing)} onClose={closeEditor} size="lg">
         {editing && form && (

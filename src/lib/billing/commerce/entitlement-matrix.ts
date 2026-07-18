@@ -1,8 +1,8 @@
-import type { PlanCode, PlanEntitlements } from "./types";
+import type { KnownPlanCode, PlanEntitlements } from "./types";
 
 /** Locked Plan Entitlement Matrix V1 — docs/billing/plan-entitlement-matrix-v1.md */
 export const PLAN_ENTITLEMENT_MATRIX_V1: Record<
-  Exclude<PlanCode, "enterprise">,
+  Exclude<KnownPlanCode, "enterprise">,
   PlanEntitlements
 > = {
   free: {

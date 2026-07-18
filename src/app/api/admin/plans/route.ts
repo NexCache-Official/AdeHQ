@@ -2,8 +2,12 @@ import { NextResponse } from "next/server";
 import { adminRoute } from "@/lib/admin/api-route";
 import { assertPlatformAdminCanWrite } from "@/lib/admin/require-platform-admin";
 import { writeAuditLog } from "@/lib/admin/audit";
-import { publishPlanEdit } from "@/lib/billing/commerce/publish-plan-edit";
+import {
+  ensureBillingPlanIdentity,
+  publishPlanEdit,
+} from "@/lib/billing/commerce/publish-plan-edit";
 import { getPricingPageCatalog } from "@/lib/billing/commerce/catalog";
+import { isValidPlanSlug } from "@/lib/billing/commerce/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -138,13 +142,19 @@ export const PUT = adminRoute(async (request, { admin, serviceClient }) => {
   }
 });
 
+/**
+ * Create a new plan (optionally duplicated from an existing one) and publish
+ * marketing + Revolut catalog in one action.
+ */
 export const POST = adminRoute(async (request, { admin, serviceClient }) => {
   assertPlatformAdminCanWrite(admin);
 
   const body = await request.json().catch(() => null);
-  const planSlug = typeof body?.planSlug === "string" ? body.planSlug.trim() : "";
+  const planSlug =
+    typeof body?.planSlug === "string" ? body.planSlug.trim().toLowerCase() : "";
   const displayName = typeof body?.displayName === "string" ? body.displayName.trim() : "";
-  const sourceSlug = typeof body?.duplicateFrom === "string" ? body.duplicateFrom.trim() : "";
+  const sourceSlug =
+    typeof body?.duplicateFrom === "string" ? body.duplicateFrom.trim().toLowerCase() : "";
 
   if (!planSlug || !displayName) {
     return NextResponse.json(
@@ -152,11 +162,43 @@ export const POST = adminRoute(async (request, { admin, serviceClient }) => {
       { status: 400 },
     );
   }
+  if (!isValidPlanSlug(planSlug)) {
+    return NextResponse.json(
+      {
+        error:
+          "Invalid plan slug. Use 2–32 chars: start with a letter, then lowercase letters, digits, or underscore.",
+      },
+      { status: 400 },
+    );
+  }
+
+  const { data: collision } = await serviceClient
+    .from("platform_plan_configs")
+    .select("plan_slug")
+    .eq("plan_slug", planSlug)
+    .maybeSingle();
+  if (collision) {
+    return NextResponse.json({ error: `Plan slug already exists: ${planSlug}` }, { status: 409 });
+  }
 
   let seed: Record<string, unknown> = {
     plan_slug: planSlug,
     display_name: displayName,
-    is_active: false,
+    monthly_price_cents: 0,
+    annual_price_cents: 0,
+    trial_days: 0,
+    weekly_work_hours: 10,
+    is_active: true,
+    human_members_unlimited: true,
+    ai_employees_unlimited: true,
+    browser_research_enabled: true,
+    gateway_search_enabled: true,
+    custom_ai_employees_enabled: true,
+    team_features_enabled: true,
+    admin_controls_enabled: false,
+    priority_support: false,
+    allowed_intelligence_tiers: ["cheap", "balanced"],
+    entitlements: {},
   };
 
   if (sourceSlug) {
@@ -169,8 +211,30 @@ export const POST = adminRoute(async (request, { admin, serviceClient }) => {
     if (!source) {
       return NextResponse.json({ error: `Unknown source plan: ${sourceSlug}` }, { status: 404 });
     }
-    const { plan_slug: _s, id: _i, created_at: _c, updated_at: _u, ...rest } = source;
-    seed = { ...rest, plan_slug: planSlug, display_name: displayName, is_active: false };
+    const { plan_slug: _s, id: _i, created_at: _c, updated_at: _u, ...rest } = source as Record<
+      string,
+      unknown
+    > & { plan_slug?: string; id?: string; created_at?: string; updated_at?: string };
+    seed = {
+      ...rest,
+      plan_slug: planSlug,
+      display_name: displayName,
+      is_active: true,
+    };
+  }
+
+  // Optional create-form overrides (applied before publish so dual-write sees them).
+  if (typeof body?.monthlyPriceCents === "number") {
+    seed.monthly_price_cents = Math.max(0, Math.round(body.monthlyPriceCents));
+  }
+  if (typeof body?.annualPriceCents === "number") {
+    seed.annual_price_cents = Math.max(0, Math.round(body.annualPriceCents));
+  }
+  if (typeof body?.weeklyWorkHours === "number") {
+    seed.weekly_work_hours = Math.max(0, body.weeklyWorkHours);
+  }
+  if (typeof body?.isActive === "boolean") {
+    seed.is_active = body.isActive;
   }
 
   const { data, error } = await serviceClient
@@ -180,15 +244,59 @@ export const POST = adminRoute(async (request, { admin, serviceClient }) => {
     .single();
   if (error) throw error;
 
+  await ensureBillingPlanIdentity(serviceClient, planSlug, displayName);
+
   await writeAuditLog(serviceClient, {
     adminUserId: admin.userId,
     action: "plan_config_created",
     targetType: "platform_plan_config",
     targetId: planSlug,
     after: data,
-    reason: typeof body?.reason === "string" ? body.reason : undefined,
+    reason: typeof body?.reason === "string" ? body.reason : "admin_plans_create_publish",
     request,
   });
 
-  return NextResponse.json({ ok: true, plan: data });
+  // Publish immediately: versioned catalog + best-effort Revolut sync.
+  const publishUpdates: Record<string, unknown> = {
+    display_name: displayName,
+    monthly_price_cents: Number(data.monthly_price_cents ?? 0),
+    annual_price_cents: Number(data.annual_price_cents ?? 0),
+    weekly_work_hours: Number(data.weekly_work_hours ?? 0),
+    is_active: Boolean(data.is_active),
+  };
+
+  try {
+    const result = await publishPlanEdit(serviceClient, {
+      planSlug,
+      updates: publishUpdates,
+      adminUserId: admin.userId,
+      reason: typeof body?.reason === "string" ? body.reason : "admin_plans_create_publish",
+      request,
+    });
+    const revolutSynced = result.revolutSync.every((r) => r.ok);
+    return NextResponse.json({
+      ok: true,
+      plan: result.plan,
+      planVersionId: result.planVersionId,
+      priceIds: result.priceIds,
+      revolutSync: result.revolutSync,
+      revolutSynced,
+      notes: result.notes,
+    });
+  } catch (publishError) {
+    const message =
+      publishError instanceof Error ? publishError.message : "Created but publish failed.";
+    return NextResponse.json(
+      {
+        ok: true,
+        plan: data,
+        revolutSynced: false,
+        notes: [
+          "Plan config created.",
+          `Publish step failed (${message}). Open Edit & publish to retry marketing/Revolut sync.`,
+        ],
+      },
+      { status: 201 },
+    );
+  }
 });
