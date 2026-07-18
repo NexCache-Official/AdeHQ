@@ -26,7 +26,7 @@ export async function buildWorkHoursBudgetPrompt(
     const videoAffordable = remaining >= VIDEO_ESTIMATED_WH;
     const resetsHint = capacity.resetsAt
       ? `Period resets around ${capacity.resetsAt}.`
-      : "Period resets on the workspace usage schedule (typically Mon 00:00 UTC).";
+      : "Period resets on the workspace's rolling usage clock.";
 
     const lines = [
       "WORK HOURS BUDGET (ground truth for this period — use this before expensive media):",

@@ -37,6 +37,7 @@ export async function POST(
       planSlug?: string;
       interval?: BillingCadence;
       reason?: string;
+      promoCode?: string;
     };
     const target = (body.planSlug ?? "").toLowerCase() as PlanCode;
     const cadence = (body.interval ?? "monthly") as BillingCadence;
@@ -93,6 +94,7 @@ export async function POST(
       planSlug: target,
       interval: cadence,
       customerEmail: user.email,
+      promoCode: body.promoCode?.trim() || null,
     });
 
     return NextResponse.json({

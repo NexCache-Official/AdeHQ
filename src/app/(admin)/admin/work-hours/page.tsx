@@ -121,7 +121,7 @@ export default function AdminWorkHoursPage() {
                   <AdminMetricCard
                     label="Legacy fallback"
                     value={formatCount(clock.workspacesLegacyFallback)}
-                    hint="no anchor yet (Mon UTC fallback)"
+                    hint="no anchor yet (legacy weekly fallback)"
                   />
                   <AdminMetricCard
                     label="Open periods"

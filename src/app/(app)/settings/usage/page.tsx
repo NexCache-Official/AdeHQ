@@ -27,7 +27,7 @@ export default function SettingsUsagePage() {
     <>
       <PageHeader
         title="Usage"
-        subtitle="Plan hours cover hired AI employees only. Maya (workforce guide + hiring) is free and never counts toward this total. Week resets Mon 00:00 UTC · also resets at month end."
+        subtitle="Plan hours cover hired AI employees only. Maya (workforce guide + hiring) is free and never counts toward this total."
         icon={<Gauge className="h-5 w-5" />}
       />
 

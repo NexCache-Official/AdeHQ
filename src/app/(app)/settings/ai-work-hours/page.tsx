@@ -19,7 +19,7 @@ type AutonomyDefaults = {
 
 function formatResetDate(iso: string): string {
   const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return "next Monday";
+  if (Number.isNaN(date.getTime())) return "soon";
   return date.toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" });
 }
 
@@ -103,7 +103,7 @@ export default function SettingsWorkHoursPage() {
     <>
       <PageHeader
         title="AI Work Hours"
-        subtitle="Pooled workspace AI capacity. Week resets Mon 00:00 UTC · also resets at month end. Human messaging is always unlimited."
+        subtitle="Pooled workspace AI capacity on a rolling 7-day usage clock. Human messaging is always unlimited."
         icon={<Timer className="h-5 w-5" />}
       />
 
@@ -130,7 +130,7 @@ export default function SettingsWorkHoursPage() {
               </div>
               <div className="text-right text-sm text-ink-3">
                 <p className="capitalize">{cap?.planSlug ?? "free"} plan</p>
-                <p>Resets {cap ? formatResetDate(cap.resetsAt) : "next Monday 00:00 UTC"}</p>
+                <p>Resets {cap ? formatResetDate(cap.resetsAt) : "soon"}</p>
               </div>
             </div>
 

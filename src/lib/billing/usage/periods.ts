@@ -420,7 +420,7 @@ export type CapacityCheck = {
 };
 
 const AI_PAUSED_MESSAGE =
-  "This workspace has used its AI Work Hours for this period, so AI employees are paused. Human messaging still works — they resume when the period resets (Mon 00:00 UTC, or month end), or upgrade for more capacity.";
+  "This workspace has used its AI Work Hours for this period, so AI employees are paused. Human messaging still works — they resume when the usage period resets, or upgrade for more capacity.";
 
 /**
  * Enforcement gate for user-visible AI work. Blocks when period Work Hours are exhausted.

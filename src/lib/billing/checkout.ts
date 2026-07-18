@@ -220,35 +220,55 @@ export async function startCheckout(
   // Pre-create local subscription row in pending state
   const { data: existingSub } = await client
     .from("billing_subscriptions")
-    .select("id")
+    .select("id, service_access_status")
     .eq("workspace_id", params.workspaceId)
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
 
-  const pendingPayload = {
+  // Never downgrade an already-paying workspace's access while a *new* checkout
+  // attempt is merely starting — access must only change once the new
+  // subscription actually confirms (see activateFromRevolutSubscription).
+  // Without this guard, re-clicking "Upgrade" (or a slow/abandoned Revolut
+  // checkout) flipped an active Pro subscription to service_access_status
+  // "free" / status "trialing" instantly, which is what stuck the UI on Free.
+  const existingHasPaidAccess = ["active", "grace", "scheduled_to_end", "read_only"].includes(
+    String(existingSub?.service_access_status ?? ""),
+  );
+
+  const pendingPayload: Record<string, unknown> = {
     workspace_id: params.workspaceId,
     billing_customer_id: billingCustomer?.id ?? null,
-    plan_slug: planCode,
-    plan_version_id: price.planVersionId,
-    price_id: price.priceId,
     checkout_snapshot_id: snapshot.id,
-    billing_cadence: cadence,
     currency,
     provider: "revolut",
     external_subscription_id: subscription.id,
     provider_status: subscription.state,
-    service_access_status: "free",
-    status: "trialing",
     legacy_manual_renew: false,
     metadata: { intentId, checkoutMode: "revolut_subscription" },
     updated_at: new Date().toISOString(),
   };
+  if (!existingHasPaidAccess) {
+    pendingPayload.plan_slug = planCode;
+    pendingPayload.plan_version_id = price.planVersionId;
+    pendingPayload.price_id = price.priceId;
+    pendingPayload.billing_cadence = cadence;
+    pendingPayload.service_access_status = "free";
+    pendingPayload.status = "trialing";
+  }
 
   if (existingSub) {
     await client.from("billing_subscriptions").update(pendingPayload).eq("id", existingSub.id);
   } else {
-    await client.from("billing_subscriptions").insert(pendingPayload);
+    await client.from("billing_subscriptions").insert({
+      ...pendingPayload,
+      plan_slug: planCode,
+      plan_version_id: price.planVersionId,
+      price_id: price.priceId,
+      billing_cadence: cadence,
+      service_access_status: "free",
+      status: "trialing",
+    });
   }
 
   await client

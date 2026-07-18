@@ -173,26 +173,35 @@ export default function SettingsBillingPage() {
     };
   }, [actions, checkoutResult, load, myRole, router, workspaceId]);
 
+  // Tier-aware: upgrades start Revolut checkout immediately; downgrades are
+  // scheduled for the next renewal (money) / usage boundary (Work Hours) via
+  // /billing/change-plan instead of firing a checkout for a lower-price plan.
   const startCheckout = async (planSlug: string) => {
     setBusyPlan(planSlug);
     setNotice(null);
     setError(null);
     try {
       const headers = await authHeaders();
-      const res = await fetch(`/api/workspaces/${workspaceId}/billing/checkout`, {
+      const res = await fetch(`/api/workspaces/${workspaceId}/billing/change-plan`, {
         method: "POST",
         headers,
         body: JSON.stringify({ planSlug, interval, promoCode: promo || undefined }),
       });
       const body = await res.json();
-      if (!res.ok) throw new Error(body?.error ?? "Checkout failed.");
+      if (!res.ok) throw new Error(body?.error ?? "Plan change failed.");
       if (body.checkoutUrl) {
         window.location.href = body.checkoutUrl;
         return;
       }
+      if (body.mode === "downgrade_scheduled") {
+        setNotice(body.message ?? "Downgrade scheduled at your next renewal.");
+        await load();
+        return;
+      }
       setNotice(body.message ?? "Your upgrade request has been recorded.");
+      await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Checkout failed.");
+      setError(err instanceof Error ? err.message : "Plan change failed.");
     } finally {
       setBusyPlan(null);
     }
