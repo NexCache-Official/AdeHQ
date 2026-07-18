@@ -19,6 +19,8 @@ export function AdminCostOverTimeChart({
     );
   }
 
+  const hasHired = series.some((d) => d.hiredCostUsd > 0);
+  const hasMaya = series.some((d) => d.mayaCostUsd > 0);
   const max = Math.max(...series.map((d) => Math.max(d.costUsd, d.mayaCostUsd + d.hiredCostUsd)), 0.0001);
   const width = 640;
   const height = 160;
@@ -43,33 +45,41 @@ export function AdminCostOverTimeChart({
                 {d.day}: total {d.costUsd.toFixed(4)} · hired {d.hiredCostUsd.toFixed(4)} · maya{" "}
                 {d.mayaCostUsd.toFixed(4)}
               </title>
-              <rect
-                x={x}
-                y={baseY - hiredH}
-                width={barW}
-                height={Math.max(hiredH, 0)}
-                className="fill-accent/70"
-                rx={2}
-              />
-              <rect
-                x={x}
-                y={baseY - hiredH - mayaH}
-                width={barW}
-                height={Math.max(mayaH, 0)}
-                className="fill-sky-500/70"
-                rx={2}
-              />
+              {hiredH > 0 ? (
+                <rect
+                  x={x}
+                  y={baseY - hiredH}
+                  width={barW}
+                  height={Math.max(hiredH, 0)}
+                  className="fill-accent/70"
+                  rx={2}
+                />
+              ) : null}
+              {mayaH > 0 ? (
+                <rect
+                  x={x}
+                  y={baseY - hiredH - mayaH}
+                  width={barW}
+                  height={Math.max(mayaH, 0)}
+                  className="fill-sky-500/70"
+                  rx={2}
+                />
+              ) : null}
             </g>
           );
         })}
       </svg>
       <div className="mt-2 flex flex-wrap items-center gap-4 text-[11px] text-ink-3">
-        <span className="inline-flex items-center gap-1.5">
-          <span className="h-2 w-2 rounded-sm bg-accent/70" /> Hired
-        </span>
-        <span className="inline-flex items-center gap-1.5">
-          <span className="h-2 w-2 rounded-sm bg-sky-500/70" /> Maya
-        </span>
+        {hasHired ? (
+          <span className="inline-flex items-center gap-1.5">
+            <span className="h-2 w-2 rounded-sm bg-accent/70" /> Hired
+          </span>
+        ) : null}
+        {hasMaya ? (
+          <span className="inline-flex items-center gap-1.5">
+            <span className="h-2 w-2 rounded-sm bg-sky-500/70" /> Maya
+          </span>
+        ) : null}
         <span className="ml-auto tabular-nums">
           {series[0]?.day} → {series[series.length - 1]?.day}
         </span>

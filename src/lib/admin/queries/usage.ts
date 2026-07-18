@@ -137,14 +137,30 @@ export function parseCohort(raw: string | null): UsageCohort {
   return "all";
 }
 
-function isMayaEvent(e: UsageEvent): boolean {
-  return e.employee_id === MAYA_EMPLOYEE_ID;
+function isMayaEvent(
+  e: UsageEvent,
+  resolveEmployee?: (workspaceId: string, employeeId: string | null) => EmployeeLookup | null,
+): boolean {
+  if (e.employee_id === MAYA_EMPLOYEE_ID) return true;
+  if (!resolveEmployee) return false;
+  const emp = resolveEmployee(e.workspace_id, e.employee_id);
+  return Boolean(
+    emp &&
+      (emp.id === MAYA_EMPLOYEE_ID ||
+        emp.system_employee_key === MAYA_SYSTEM_EMPLOYEE_KEY ||
+        emp.system_employee_key === "maya"),
+  );
 }
 
-function eventMatchesCohort(e: UsageEvent, cohort: UsageCohort): boolean {
+function eventMatchesCohort(
+  e: UsageEvent,
+  cohort: UsageCohort,
+  resolveEmployee?: (workspaceId: string, employeeId: string | null) => EmployeeLookup | null,
+): boolean {
   if (cohort === "all") return true;
-  if (cohort === "maya") return isMayaEvent(e);
-  return !isMayaEvent(e);
+  const maya = isMayaEvent(e, resolveEmployee);
+  if (cohort === "maya") return maya;
+  return !maya;
 }
 
 function emptyBreakdownAgg() {
@@ -263,9 +279,11 @@ export async function getUsageSummary(
           e.system_employee_key === "maya"),
     );
 
-  const mayaEvents = events.filter(isMayaEvent);
-  const hiredEvents = events.filter((e) => !isMayaEvent(e));
-  const filteredEvents = events.filter((e) => eventMatchesCohort(e, cohort));
+  const mayaEvents = events.filter((e) => isMayaEvent(e, resolveEmployee));
+  const hiredEvents = events.filter((e) => !isMayaEvent(e, resolveEmployee));
+  const filteredEvents = events.filter((e) =>
+    eventMatchesCohort(e, cohort, resolveEmployee),
+  );
 
   // Hiring journey COGS often lands on work units / cost ledger without emp-maya on usage events.
   const hiringCostRows = costLedger.filter((r) => isMayaHiringWorkType(r.work_type));
@@ -278,7 +296,8 @@ export async function getUsageSummary(
   const mayaDirectCost = sumBy(mayaEvents, effectiveCostUsd);
   const mayaCostUsd = Math.round((mayaDirectCost + hiringCostUsd) * 10000) / 10000;
   const hiredCostUsd = Math.round(sumBy(hiredEvents, effectiveCostUsd) * 10000) / 10000;
-  const allCostUsd = Math.round(sumBy(events, effectiveCostUsd) * 10000) / 10000;
+  // Prefer hired+maya so hiring-ledger COGS (often missing from usage events) is included.
+  const allCostUsd = Math.round((hiredCostUsd + mayaCostUsd) * 10000) / 10000;
 
   // Cohort-scoped event set for totals (Maya adds hiring ledger events as synthetic).
   type ScopedRow = UsageEvent & { work_type?: string | null; synthetic?: boolean };
@@ -428,7 +447,7 @@ export async function getUsageSummary(
     breakdown = breakdown.sort((a, b) => a.key.localeCompare(b.key));
   }
 
-  // Day series for charts — always dual maya/hired for the full range.
+  // Day series for charts — scoped to the selected cohort.
   const dayMap = new Map<string, UsageDayPoint>();
   const ensureDay = (day: string) => {
     const entry = dayMap.get(day) ?? {
@@ -442,30 +461,38 @@ export async function getUsageSummary(
     return entry;
   };
   for (const e of events) {
+    if (!eventMatchesCohort(e, cohort, resolveEmployee)) continue;
     const day = (e.created_at ?? "").slice(0, 10);
     if (!day) continue;
     const entry = ensureDay(day);
     const cost = effectiveCostUsd(e);
     entry.costUsd += cost;
     entry.eventCount += 1;
-    if (isMayaEvent(e)) entry.mayaCostUsd += cost;
+    if (isMayaEvent(e, resolveEmployee)) entry.mayaCostUsd += cost;
     else entry.hiredCostUsd += cost;
   }
-  for (const row of hiringCostRows) {
-    const day = String(row.created_at ?? "").slice(0, 10);
-    if (!day) continue;
-    const entry = ensureDay(day);
-    const cost = Number(row.actual_cost_usd ?? row.estimated_cost_usd ?? 0);
-    entry.mayaCostUsd += cost;
-    entry.costUsd += cost;
+  // Hiring journey COGS is Maya-only; never include on Hired view.
+  if (cohort !== "hired") {
+    for (const row of hiringCostRows) {
+      const day = String(row.created_at ?? "").slice(0, 10);
+      if (!day) continue;
+      const entry = ensureDay(day);
+      const cost = Number(row.actual_cost_usd ?? row.estimated_cost_usd ?? 0);
+      entry.mayaCostUsd += cost;
+      entry.costUsd += cost;
+    }
   }
   const daySeries = [...dayMap.values()]
-    .map((d) => ({
-      ...d,
-      costUsd: Math.round(d.costUsd * 10000) / 10000,
-      mayaCostUsd: Math.round(d.mayaCostUsd * 10000) / 10000,
-      hiredCostUsd: Math.round(d.hiredCostUsd * 10000) / 10000,
-    }))
+    .map((d) => {
+      const mayaCostUsd = cohort === "hired" ? 0 : Math.round(d.mayaCostUsd * 10000) / 10000;
+      const hiredCostUsd = cohort === "maya" ? 0 : Math.round(d.hiredCostUsd * 10000) / 10000;
+      return {
+        ...d,
+        mayaCostUsd,
+        hiredCostUsd,
+        costUsd: Math.round((mayaCostUsd + hiredCostUsd) * 10000) / 10000,
+      };
+    })
     .sort((a, b) => a.day.localeCompare(b.day));
 
   // Maya panel

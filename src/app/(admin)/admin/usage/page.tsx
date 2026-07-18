@@ -154,27 +154,47 @@ export default function AdminUsagePage() {
       <AdminAsync loading={loading} error={error}>
         {data && (
           <div className="space-y-6">
-            <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
-              <AdminMetricCard
-                label="Total (all)"
-                value={formatUsd(data.cohortTotals.allCostUsd)}
-                hint={`${formatCount(data.cohortTotals.allEvents)} events`}
-              />
-              <AdminMetricCard
-                label="Hired COGS"
-                value={formatUsd(data.cohortTotals.hiredCostUsd)}
-                hint={`${formatCount(data.cohortTotals.hiredEvents)} events · billable WH`}
-              />
-              <AdminMetricCard
-                label="Maya COGS"
-                value={formatUsd(data.cohortTotals.mayaCostUsd)}
-                hint={`${formatCount(data.cohortTotals.mayaEvents)} events · free for customers`}
-              />
-            </div>
+            {cohort === "all" ? (
+              <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
+                <AdminMetricCard
+                  label="Total (all)"
+                  value={formatUsd(data.cohortTotals.allCostUsd)}
+                  hint={`${formatCount(data.cohortTotals.allEvents)} events`}
+                />
+                <AdminMetricCard
+                  label="Hired COGS"
+                  value={formatUsd(data.cohortTotals.hiredCostUsd)}
+                  hint={`${formatCount(data.cohortTotals.hiredEvents)} events · billable WH`}
+                />
+                <AdminMetricCard
+                  label="Maya COGS"
+                  value={formatUsd(data.cohortTotals.mayaCostUsd)}
+                  hint={`${formatCount(data.cohortTotals.mayaEvents)} events · free for customers`}
+                />
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
+                <AdminMetricCard
+                  label={cohort === "hired" ? "Hired COGS" : "Maya COGS"}
+                  value={formatUsd(data.totals.costUsd)}
+                  hint={
+                    cohort === "hired"
+                      ? `${formatCount(data.totals.eventCount)} events · billable WH`
+                      : `${formatCount(data.totals.eventCount)} events · free for customers`
+                  }
+                />
+              </div>
+            )}
 
             <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-6">
               <AdminMetricCard
-                label={cohort === "all" ? "Filtered cost" : `${cohort} cost`}
+                label={
+                  cohort === "all"
+                    ? "Filtered cost"
+                    : cohort === "hired"
+                      ? "Hired cost"
+                      : "Maya cost"
+                }
                 value={formatUsd(data.totals.costUsd)}
               />
               <AdminMetricCard label="Events" value={formatCount(data.totals.eventCount)} />
@@ -202,7 +222,11 @@ export default function AdminUsagePage() {
               <Card className="p-5 lg:col-span-3">
                 <h2 className="mb-1 text-sm font-semibold text-ink">Cost over time</h2>
                 <p className="mb-3 text-xs text-ink-3">
-                  Stacked hired vs Maya platform spend for the selected range.
+                  {cohort === "all"
+                    ? "Stacked hired vs Maya platform spend for the selected range."
+                    : cohort === "hired"
+                      ? "Hired-employee platform spend only (Maya excluded)."
+                      : "Maya platform spend only (hired employees excluded)."}
                 </p>
                 <AdminCostOverTimeChart series={data.daySeries} />
               </Card>
