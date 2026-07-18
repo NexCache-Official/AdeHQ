@@ -10,7 +10,7 @@ import {
   AdminPageHeader,
   useAdminData,
 } from "@/components/admin/common";
-import { ListChecks, Pencil, Sparkles } from "lucide-react";
+import { ListChecks, Pencil, RefreshCw, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const INTELLIGENCE_TIERS = [
@@ -53,6 +53,7 @@ type PlanRow = {
   catalogVersion?: number | null;
   revolutReady?: boolean;
   syncStatuses?: string[];
+  priceIdsNeedingSync?: string[];
 };
 
 type EditableState = {
@@ -102,6 +103,54 @@ export default function AdminPlansPage() {
   const [saveError, setSaveError] = useState<string | null>(null);
   const [publishNotes, setPublishNotes] = useState<string[] | null>(null);
   const [confirmText, setConfirmText] = useState("");
+  const [syncingSlug, setSyncingSlug] = useState<string | null>(null);
+  const [syncMessage, setSyncMessage] = useState<string | null>(null);
+
+  const syncPlanToRevolut = async (plan: PlanRow) => {
+    const ids = plan.priceIdsNeedingSync ?? [];
+    if (ids.length === 0) {
+      setSyncMessage(`${plan.display_name} is already checkout-ready.`);
+      return;
+    }
+    setSyncingSlug(plan.plan_slug);
+    setSyncMessage(null);
+    const results: string[] = [];
+    try {
+      for (const priceId of ids) {
+        const res = await fetch("/api/admin/commerce", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...(await authHeaders()) },
+          body: JSON.stringify({
+            action: "sync_price",
+            priceId,
+            reason: `Plans hub sync for ${plan.plan_slug}`,
+          }),
+        });
+        const json = (await res.json().catch(() => ({}))) as {
+          ok?: boolean;
+          error?: string;
+        };
+        if (!res.ok || json.ok === false) {
+          results.push(json.error ?? `Failed for ${priceId.slice(0, 8)}`);
+        } else {
+          results.push("ok");
+        }
+      }
+      const failed = results.filter((r) => r !== "ok");
+      if (failed.length === 0) {
+        setSyncMessage(`${plan.display_name}: Revolut sync succeeded — checkout ready.`);
+      } else {
+        setSyncMessage(
+          `${plan.display_name}: sync issues — ${failed.join("; ")}. Marketing prices stay live; paid checkout needs a successful sync.`,
+        );
+      }
+      await refresh();
+    } catch (err) {
+      setSyncMessage(err instanceof Error ? err.message : "Revolut sync failed.");
+    } finally {
+      setSyncingSlug(null);
+    }
+  };
 
   const openEditor = (plan: PlanRow) => {
     setEditing(plan);
@@ -270,6 +319,10 @@ export default function AdminPlansPage() {
         ))}
       </div>
 
+      {syncMessage ? (
+        <Card className="mb-4 p-3 text-sm text-ink-2">{syncMessage}</Card>
+      ) : null}
+
       {tab === "promos" && (
         <Card className="p-6">
           <h2 className="text-sm font-semibold text-ink">Promo codes</h2>
@@ -364,18 +417,46 @@ export default function AdminPlansPage() {
                     </li>
                     <li>
                       Catalog v{plan.catalogVersion ?? "—"} ·{" "}
-                      {plan.revolutReady ? "Checkout ready" : "Needs Revolut sync"}
+                      {plan.revolutReady ? (
+                        <span className="text-emerald-700">Checkout ready</span>
+                      ) : (
+                        <span className="text-amber-700">
+                          Marketing live · checkout needs Revolut sync
+                        </span>
+                      )}
                     </li>
                   </ul>
 
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    className="mt-4 w-full"
-                    onClick={() => openEditor(plan)}
-                  >
-                    <Pencil className="h-3.5 w-3.5" /> Edit & publish
-                  </Button>
+                  <div className="mt-4 flex flex-col gap-2">
+                    {!plan.revolutReady &&
+                    (plan.priceIdsNeedingSync?.length ?? 0) > 0 ? (
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        className="w-full"
+                        disabled={syncingSlug === plan.plan_slug}
+                        onClick={() => void syncPlanToRevolut(plan)}
+                      >
+                        <RefreshCw
+                          className={cn(
+                            "h-3.5 w-3.5",
+                            syncingSlug === plan.plan_slug && "animate-spin",
+                          )}
+                        />
+                        {syncingSlug === plan.plan_slug
+                          ? "Syncing…"
+                          : "Sync to Revolut"}
+                      </Button>
+                    ) : null}
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      className="w-full"
+                      onClick={() => openEditor(plan)}
+                    >
+                      <Pencil className="h-3.5 w-3.5" /> Edit & publish
+                    </Button>
+                  </div>
                 </Card>
               );
             })}

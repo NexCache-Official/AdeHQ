@@ -62,19 +62,26 @@ export const GET = adminRoute(async (_request, { serviceClient }) => {
 
   const liveBySlug = new Map<
     string,
-    { version: number; syncStatuses: string[]; hasRevolut: boolean }
+    {
+      version: number;
+      syncStatuses: string[];
+      hasRevolut: boolean;
+      priceIdsNeedingSync: string[];
+    }
   >();
   for (const version of versionsRes.data ?? []) {
     const plans = version.billing_plans as { code: string } | { code: string }[] | null;
     const code = Array.isArray(plans) ? plans[0]?.code : plans?.code;
     if (!code || liveBySlug.has(code)) continue;
     const prices = pricesByVersion.get(version.id) ?? [];
+    const priceIdsNeedingSync = prices
+      .filter((p) => Number(p.amount_minor) > 0 && !p.revolut_variation_id)
+      .map((p) => String(p.id));
     liveBySlug.set(code, {
       version: version.version,
       syncStatuses: prices.map((p) => String(p.sync_status)),
-      hasRevolut: prices.every(
-        (p) => Number(p.amount_minor) === 0 || Boolean(p.revolut_variation_id),
-      ),
+      hasRevolut: priceIdsNeedingSync.length === 0,
+      priceIdsNeedingSync,
     });
   }
 
@@ -85,6 +92,7 @@ export const GET = adminRoute(async (_request, { serviceClient }) => {
       catalogVersion: live?.version ?? null,
       revolutReady: live?.hasRevolut ?? plan.plan_slug === "free",
       syncStatuses: live?.syncStatuses ?? [],
+      priceIdsNeedingSync: live?.priceIdsNeedingSync ?? [],
     };
   });
 
