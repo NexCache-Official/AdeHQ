@@ -1,5 +1,4 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { getCurrentUsagePeriodRange } from "@/lib/ai/work-hours/periods";
 import { displayWorkHours } from "@/lib/billing/costing/work-hours";
 import {
   AGGREGATION_ROW_LIMIT,
@@ -47,7 +46,6 @@ export async function getOverviewSummary(
   range: AdminRange,
 ): Promise<OverviewSummary> {
   const since = rangeStart(range);
-  const period = getCurrentUsagePeriodRange(new Date());
 
   const [
     signupsToday,
@@ -88,8 +86,7 @@ export async function getOverviewSummary(
     client
       .from("ai_cost_ledger_entries")
       .select("work_hours_charged, billable_to_workspace")
-      .gte("created_at", period.startIso)
-      .lt("created_at", period.endExclusiveIso)
+      .gte("created_at", since)
       .limit(AGGREGATION_ROW_LIMIT),
     client
       .from("platform_admin_audit_logs")

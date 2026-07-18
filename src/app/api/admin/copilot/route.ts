@@ -63,10 +63,15 @@ function answerFromQuestion(
   }
 
   if (q.includes("work hour") || q.includes("work-hour")) {
+    const commercialHrs = insights.workHours.commercial?.totalWorkHours ?? 0;
+    const shadowHrs =
+      insights.workHours.shadow?.workHours ?? insights.workHours.totals?.workHours ?? 0;
+    const shadowMins =
+      insights.workHours.shadow?.workMinutes ?? insights.workHours.totals?.workMinutes ?? 0;
     return {
-      summary: `${insights.workHours.totals.workHours.toFixed(1)} Work Hours used in range (${insights.workHours.totals.workMinutes.toFixed(0)} minutes).`,
+      summary: `${commercialHrs.toFixed(1)} billable commercial WH in range; ${shadowHrs.toFixed(1)} shadow WH (${shadowMins.toFixed(0)} minutes, measurement-only).`,
       metrics,
-      suggestions: ["See /admin/work-hours for calibration and breakdown"],
+      suggestions: ["See /admin/work-hours for 168h usage clock and shadow calibration"],
     };
   }
 
