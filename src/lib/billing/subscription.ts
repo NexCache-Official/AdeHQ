@@ -87,7 +87,7 @@ export async function getWorkspaceBillingSummary(
     client
       .from("billing_subscriptions")
       .select(
-        "status, current_period_end, cancel_at_period_end, metadata, created_at, billing_cadence, provider_status, service_access_status, service_access_ends_at, legacy_manual_renew",
+        "plan_slug, status, current_period_end, cancel_at_period_end, metadata, created_at, billing_cadence, provider_status, service_access_status, service_access_ends_at, legacy_manual_renew",
       )
       .eq("workspace_id", workspaceId)
       .order("created_at", { ascending: false })
@@ -133,15 +133,34 @@ export async function getWorkspaceBillingSummary(
   try {
     const commercial = await resolveWorkspaceCommercial(client, workspaceId);
     pricingCatalog = await getPricingPageCatalog(client);
+    // Prefer the raw subscription row for access status — the commerce resolver
+    // defaults to "free" when the join fails, which is what made Billing show
+    // "Pro · access: free" with a 10 WH meter after checkout.
+    const rawAccess = subscription?.service_access_status
+      ? String(subscription.service_access_status)
+      : commercial.serviceAccess;
+    const rawProvider = subscription?.provider_status
+      ? String(subscription.provider_status)
+      : commercial.providerStatus;
     commerce = {
-      serviceAccessStatus: commercial.serviceAccess,
-      providerStatus: commercial.providerStatus,
-      serviceAccessEndsAt: commercial.subscription?.serviceAccessEndsAt ?? null,
+      serviceAccessStatus: rawAccess,
+      providerStatus: rawProvider,
+      serviceAccessEndsAt:
+        subscription?.service_access_ends_at
+          ? String(subscription.service_access_ends_at)
+          : (commercial.subscription?.serviceAccessEndsAt ?? null),
       usageAnchorAt: commercial.usageAnchorAt ? String(commercial.usageAnchorAt) : null,
       usagePeriodKey: commercial.usagePeriod.periodKey,
-      availableWh: commercial.wallets.unlimited ? null : commercial.wallets.availableWh,
+      availableWh: commercial.wallets.unlimited
+        ? null
+        : Math.max(
+            Number(commercial.wallets.availableWh ?? 0),
+            capacity.unlimited ? 0 : capacity.allowance - capacity.used,
+          ),
       refundPolicy: REFUND_POLICY_COPY,
-      legacyManualRenew: Boolean(commercial.subscription?.legacyManualRenew),
+      legacyManualRenew: Boolean(
+        subscription?.legacy_manual_renew ?? commercial.subscription?.legacyManualRenew,
+      ),
       pricingCatalog,
     };
   } catch {
@@ -170,23 +189,62 @@ export async function getWorkspaceBillingSummary(
     };
   });
 
+  // Effective plan: never let a free resolve beat workspace/subscription Pro.
+  const tier: Record<string, number> = { free: 0, pro: 1, team: 2, business: 3, enterprise: 4 };
+  const pickHigher = (a: string, b: string) =>
+    (tier[a] ?? 0) >= (tier[b] ?? 0) ? a : b;
+  const subGrants =
+    subscription?.service_access_status === "active" ||
+    subscription?.service_access_status === "grace" ||
+    subscription?.service_access_status === "scheduled_to_end" ||
+    subscription?.service_access_status === "read_only";
+  let currentPlanSlug = pickHigher(resolved.planSlug, capacity.planSlug);
+  if (subGrants && subscription?.plan_slug) {
+    currentPlanSlug = pickHigher(currentPlanSlug, String(subscription.plan_slug));
+  }
+  const currentCard = planCards.find((p) => p.planSlug === currentPlanSlug);
+  const planDisplayName =
+    currentCard?.displayName ??
+    (currentPlanSlug === resolved.planSlug
+      ? resolved.config.displayName
+      : currentPlanSlug.charAt(0).toUpperCase() + currentPlanSlug.slice(1));
+
+  // Floor displayed allowance to the plan card WH (admin Plans hub) so Pro
+  // always shows 125 here even if a stale period row still says 10.
+  const planWhFloor = currentCard?.unlimitedWorkHours
+    ? null
+    : Number(currentCard?.weeklyWorkHours ?? 0);
+  const allowance = capacity.unlimited
+    ? null
+    : Math.max(capacity.allowance, planWhFloor && planWhFloor > 0 ? planWhFloor : 0);
+  const used = capacity.used;
+  const remaining =
+    capacity.unlimited || allowance == null
+      ? null
+      : Math.round((allowance - used) * 100) / 100;
+
   return {
-    currentPlanSlug: resolved.planSlug,
-    planDisplayName: resolved.config.displayName,
+    currentPlanSlug,
+    planDisplayName,
     planSource: resolved.source,
-    subscriptionStatus: resolved.subscriptionStatus,
+    subscriptionStatus:
+      (subscription?.status as typeof resolved.subscriptionStatus) ??
+      resolved.subscriptionStatus,
     renewalDate: subscription?.current_period_end ? String(subscription.current_period_end) : null,
     billingInterval,
     cancelAtPeriodEnd: Boolean(subscription?.cancel_at_period_end),
     freePlanStartedAt: resolved.freePlanStartedAt,
     currentPlanStartedAt: resolved.currentPlanStartedAt,
     capacity: {
-      allowance: capacity.unlimited ? null : capacity.allowance,
-      used: capacity.used,
-      remaining: capacity.unlimited ? null : capacity.remaining,
-      unlimited: capacity.unlimited,
+      allowance,
+      used,
+      remaining,
+      unlimited: capacity.unlimited || Boolean(currentCard?.unlimitedWorkHours),
       resetsAt: capacity.resetsAt,
-      warningLevel: capacity.warningLevel,
+      warningLevel:
+        allowance != null && remaining != null && remaining <= 0
+          ? "exhausted"
+          : capacity.warningLevel,
     },
     plans: planCards,
     invoices,

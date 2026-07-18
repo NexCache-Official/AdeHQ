@@ -88,25 +88,70 @@ async function sumActivePromoWorkHours(
   }
 }
 
+const PLAN_TIER: Record<string, number> = {
+  free: 0,
+  pro: 1,
+  team: 2,
+  business: 3,
+  enterprise: 4,
+};
+
+function higherPlanSlug(a: string, b: string): string {
+  const left = (a || "free").toLowerCase();
+  const right = (b || "free").toLowerCase();
+  return (PLAN_TIER[left] ?? 0) >= (PLAN_TIER[right] ?? 0) ? left : right;
+}
+
 /**
  * Compute the weekly AI Work Hours allowance for a workspace:
  * base plan (or override) + active work-hour credit grants + active promo extras.
+ *
+ * Always floors against `workspaces.plan_slug` + `platform_plan_configs` so a
+ * checkout-pending subscription row cannot pin Pro workspaces to Free's 10 WH.
  */
 export async function getWorkspaceAllowance(
   client: SupabaseClient,
   workspaceId: string,
 ): Promise<{ planSlug: string; allowance: number; unlimited: boolean }> {
   const plan = await resolveWorkspacePlan(client, workspaceId);
-  if (plan.unlimitedWorkHours) {
-    return { planSlug: plan.planSlug, allowance: UNLIMITED_ALLOWANCE, unlimited: true };
+
+  const { data: workspace } = await client
+    .from("workspaces")
+    .select("plan_slug, plan")
+    .eq("id", workspaceId)
+    .maybeSingle();
+  const workspaceSlug = String(workspace?.plan_slug ?? workspace?.plan ?? "free").toLowerCase();
+  const planSlug = higherPlanSlug(plan.planSlug, workspaceSlug);
+
+  // Prefer platform_plan_configs for the effective slug (admin Plans hub source of truth).
+  const { data: configRow } = await client
+    .from("platform_plan_configs")
+    .select("weekly_work_hours, entitlements")
+    .eq("plan_slug", planSlug)
+    .maybeSingle();
+  const configUnlimited =
+    (configRow?.entitlements as { unlimited_work_hours?: boolean } | null)
+      ?.unlimited_work_hours === true ||
+    (planSlug === plan.planSlug && plan.unlimitedWorkHours);
+  const configWh = Number(configRow?.weekly_work_hours ?? 0);
+  const baseWh =
+    planSlug === plan.planSlug
+      ? Math.max(plan.weeklyWorkHoursBase, configWh)
+      : configWh > 0
+        ? configWh
+        : plan.weeklyWorkHoursBase;
+
+  if (configUnlimited) {
+    return { planSlug, allowance: UNLIMITED_ALLOWANCE, unlimited: true };
   }
+
   const [credits, promoExtras] = await Promise.all([
     sumActiveCreditGrants(client, workspaceId),
     sumActivePromoWorkHours(client, workspaceId),
   ]);
   return {
-    planSlug: plan.planSlug,
-    allowance: plan.weeklyWorkHoursBase + credits + promoExtras,
+    planSlug,
+    allowance: Math.max(0, baseWh) + credits + promoExtras,
     unlimited: false,
   };
 }
@@ -471,17 +516,18 @@ export async function getWorkspaceCapacity(
     getWorkspaceAllowance(client, workspaceId),
   ]);
 
-  // Live plan is the source of truth for allowance / plan label. Period rows can
-  // lag after checkout (stale Free periods left "active") and must not pin the UI
-  // to 10 WH while the workspace is already Pro.
+  // Live plan + open period: take the higher allowance so a stale Free period
+  // or a lagging resolve cannot pin a Pro workspace to 10 WH.
   const unlimited = resolved.unlimited || period.unlimited;
   const allowance = unlimited
     ? UNLIMITED_ALLOWANCE
     : Math.max(resolved.allowance, period.allowance);
   const used = period.used;
+  // Remaining may go negative when usage exceeds the allowance — display must
+  // still show the true used total (enforcement uses warningLevel / remaining <= 0).
   const remaining = unlimited
     ? UNLIMITED_ALLOWANCE
-    : Math.max(0, Math.round((allowance - used) * 10000) / 10000);
+    : Math.round((allowance - used) * 10000) / 10000;
 
   let warningLevel: WorkspaceCapacity["warningLevel"] = "ok";
   if (!unlimited) {
@@ -491,21 +537,7 @@ export async function getWorkspaceCapacity(
     }
   }
 
-  // Never let a stale "free" resolve mask a paid period row (or vice versa).
-  // Prefer the higher commercial tier between live resolve and the open period.
-  const PLAN_TIER: Record<string, number> = {
-    free: 0,
-    pro: 1,
-    team: 2,
-    business: 3,
-    enterprise: 4,
-  };
-  const resolvedSlug = (resolved.planSlug || "free").toLowerCase();
-  const periodSlug = (period.planSlug || "free").toLowerCase();
-  const planSlug =
-    (PLAN_TIER[resolvedSlug] ?? 0) >= (PLAN_TIER[periodSlug] ?? 0)
-      ? resolvedSlug
-      : periodSlug;
+  const planSlug = higherPlanSlug(resolved.planSlug, period.planSlug);
 
   return {
     allowance,

@@ -349,7 +349,9 @@ export default function SettingsBillingPage() {
                     AI Work Hours
                   </p>
                   <p className="mt-1 text-2xl font-semibold tabular-nums text-ink">
-                    {cap?.unlimited ? "Unlimited" : `${(cap?.remaining ?? 0).toFixed(1)} left`}
+                    {cap?.unlimited
+                      ? "Unlimited"
+                      : `${Math.max(0, cap?.remaining ?? 0).toFixed(1)} left`}
                   </p>
                   <p className="text-sm text-ink-3">Resets {formatDate(cap?.resetsAt ?? null)}</p>
                 </div>
@@ -415,6 +417,9 @@ export default function SettingsBillingPage() {
                 <Progress value={pct} />
                 <p className="mt-1 text-xs text-ink-3">
                   {cap.used.toFixed(1)} of {cap.allowance?.toFixed(0)} Work Hours used this period
+                  {(cap.remaining ?? 0) < 0
+                    ? ` · ${Math.abs(cap.remaining ?? 0).toFixed(1)} over plan`
+                    : ""}
                 </p>
               </div>
             )}
