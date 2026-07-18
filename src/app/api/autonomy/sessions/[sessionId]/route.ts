@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { AuthError, requireAuthUser, requireWorkspaceMembership } from "@/lib/supabase/auth-server";
+import { preloadPlatformFlags } from "@/lib/admin/platform-flags";
 import {
   createRuntimeBrain,
   driveSession,
@@ -17,6 +18,7 @@ export async function GET(
 ) {
   try {
     const { user, client } = await requireAuthUser(request);
+    await preloadPlatformFlags(client);
 
     let session = await getSession(client, params.sessionId);
     if (!session) {

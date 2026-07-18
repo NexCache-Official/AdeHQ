@@ -10,6 +10,11 @@ import { loadIntegrationEmployee } from "@/lib/integrations/load-employee";
 import { ensureDefaultEmployeeToolGrants } from "@/lib/integrations/permissions";
 import { listGrantedToolUsage } from "@/lib/integrations/prompt";
 import type { IntegrationEmployee } from "@/lib/integrations/types";
+import {
+  isAutonomyInfrastructureError,
+  serializeUnknownError,
+  toUserFacingAutonomyError,
+} from "@/lib/server/message-errors";
 import { nowISO, uid } from "@/lib/utils";
 import {
   appendStep,
@@ -88,13 +93,14 @@ async function finalize(
   status: "completed" | "failed" | "stopped",
   report: string,
   seq: number,
+  options?: { postToRoom?: boolean },
 ): Promise<IterationOutcome> {
   await appendStep(client, {
     workspaceId: session.workspaceId,
     sessionId: session.id,
     seq,
     kind: status === "failed" ? "error" : "report",
-    title: status === "completed" ? "Objective complete" : status === "stopped" ? "Stopped" : "Blocked",
+    title: status === "completed" ? "Objective complete" : status === "stopped" ? "Stopped" : "Couldn't finish",
     detail: report,
     metadata: { iteration: session.stepsUsed },
   });
@@ -104,7 +110,9 @@ async function finalize(
     completedAt: nowISO(),
   });
   await maybeCompleteTask(client, session, status);
-  await postReportToRoom(client, session, report, status);
+  if (options?.postToRoom !== false) {
+    await postReportToRoom(client, session, report, status);
+  }
   return { status, shouldContinue: false };
 }
 
@@ -137,8 +145,12 @@ async function postReportToRoom(
     .eq("workspace_id", session.workspaceId)
     .eq("id", session.employeeId)
     .maybeSingle();
+  // Failed runs stay in the session panel / debug — don't spam the room with
+  // red error banners (especially infrastructure messages).
+  if (status === "failed") return;
+
   const prefix =
-    status === "completed" ? "✅ Autopilot complete" : status === "stopped" ? "⏹ Autopilot stopped" : "⚠️ Autopilot blocked";
+    status === "completed" ? "Autopilot complete" : "Autopilot stopped";
   const content = `**${prefix}**\n\n${report}`;
   await client
     .from("messages")
@@ -226,8 +238,15 @@ export async function runSessionIteration(
   try {
     decision = await brain(ctx);
   } catch (error) {
-    const message = error instanceof Error ? error.message : "The model call failed.";
-    return finalize(client, session, "failed", `Autopilot hit an error: ${message}`, seq);
+    console.warn("[AdeHQ autonomy] brain failed", {
+      sessionId: session.id,
+      error: serializeUnknownError(error),
+    });
+    const friendly = toUserFacingAutonomyError(error);
+    // Infra/config failures: keep details out of the room; session panel shows calm copy.
+    return finalize(client, session, "failed", friendly, seq, {
+      postToRoom: !isAutonomyInfrastructureError(error),
+    });
   }
 
   // Record the thought (and the plan on the first iteration).

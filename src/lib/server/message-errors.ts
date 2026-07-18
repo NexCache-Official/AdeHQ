@@ -36,6 +36,50 @@ export function serializeUnknownError(error: unknown): string {
   return String(error ?? "Unknown error");
 }
 
+/**
+ * Map autonomy / Runtime V2 failures to calm user copy.
+ * Keep env flag names and stack details in server logs only.
+ */
+export function toUserFacingAutonomyError(error: unknown): string {
+  const internal = serializeUnknownError(error).toLowerCase();
+
+  if (
+    internal.includes("runtime v2 is disabled") ||
+    internal.includes("ai_runtime_v2") ||
+    internal.includes("runtimedisabled") ||
+    internal.includes("unsupported ai_runtime_v2_mode")
+  ) {
+    return "Autopilot isn't available right now. Try again in a moment, or ask in chat instead.";
+  }
+
+  if (internal.includes("timeout") || internal.includes("timed out") || internal.includes("abort")) {
+    return "Autopilot took too long and stopped. You can try again with a smaller objective.";
+  }
+
+  if (internal.includes("rate limit") || internal.includes("429") || internal.includes("too many")) {
+    return "Autopilot is busy right now — try again in a moment.";
+  }
+
+  if (internal.includes("budget") || internal.includes("cost")) {
+    return "Autopilot hit its budget for this run.";
+  }
+
+  return "Autopilot couldn't finish this run. You can try again or continue in chat.";
+}
+
+/** True when the failure is infrastructure / config — don't dump it into the room transcript. */
+export function isAutonomyInfrastructureError(error: unknown): boolean {
+  const internal = serializeUnknownError(error).toLowerCase();
+  return (
+    internal.includes("runtime v2 is disabled") ||
+    internal.includes("ai_runtime_v2") ||
+    internal.includes("runtimedisabled") ||
+    internal.includes("unsupported ai_runtime_v2_mode") ||
+    internal.includes("not configured") ||
+    internal.includes("missing env")
+  );
+}
+
 /** Map internal tool failures to employee-safe chat copy (no schema/API leakage). */
 export function toUserFacingToolError(error: unknown): string {
   const internal = serializeUnknownError(error).toLowerCase();

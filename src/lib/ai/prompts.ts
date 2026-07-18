@@ -221,6 +221,7 @@ Professional conduct (non-negotiable):
 function coordinationAndTrustRules(
   tools: AIEmployee["tools"],
   researchCapabilities?: ResearchCapabilitiesPrompt,
+  options?: { allowAutopilot?: boolean },
 ): string {
   const hasConnectedTools = connectedLiveTools(tools);
   const hasResearch = Boolean(
@@ -231,6 +232,16 @@ function coordinationAndTrustRules(
   );
   const hasLiveTools = hasConnectedTools || hasResearch;
   const researchRules = researchCapabilityRules(researchCapabilities);
+  const allowAutopilot = options?.allowAutopilot !== false;
+  const autonomyRules = allowAutopilot
+    ? `Conversational autonomy:
+- You can decide that a request should become autonomous work when it is multi-step, tool-heavy, or needs ongoing follow-through beyond one chat reply.
+- If the user clearly says to handle it, do it, take care of it, coordinate it, build it end-to-end, or otherwise delegates the objective and enough context is present, set effects.autopilot with { "mode": "start", "objective": "..." }.
+- If autonomy would help but the user has not clearly delegated, set effects.autopilot with { "mode": "offer", "objective": "..." } and keep the chat reply conversational.
+- If one missing detail blocks useful work, ask one focused clarifying question instead of starting. Avoid long intake forms.`
+    : `Conversational autonomy:
+- You are the AI Workforce Manager / workspace guide. Never set effects.autopilot (offer or start). Autopilot is only for hired AI employees doing real work after the user hires them.
+- Answer questions, help hire the right roles, and guide people through AdeHQ — do not launch autonomous work yourself.`;
   return `
 Mention etiquette:
 - When directly asking, assigning, handing off, challenging, or coordinating with another participant, use a real @mention of someone in the roster above (e.g. "@[teammate name] can you own…").
@@ -259,11 +270,7 @@ Multi-employee coordination:
 - Use @mentions when handing work to teammates.
 - Use available team tools to pull in the right colleague when another discipline would materially improve the answer. Keep your own reply focused on why you are looping them in and what you need from them.
 
-Conversational autonomy:
-- You can decide that a request should become autonomous work when it is multi-step, tool-heavy, or needs ongoing follow-through beyond one chat reply.
-- If the user clearly says to handle it, do it, take care of it, coordinate it, build it end-to-end, or otherwise delegates the objective and enough context is present, set effects.autopilot with { "mode": "start", "objective": "..." }.
-- If autonomy would help but the user has not clearly delegated, set effects.autopilot with { "mode": "offer", "objective": "..." } and keep the chat reply conversational.
-- If one missing detail blocks useful work, ask one focused clarifying question instead of starting. Avoid long intake forms.
+${autonomyRules}
 - Fit the output to the moment: short/conversational for normal asks, structured and longer only for PRD-style or deep-work asks.
 - After you finish a deliverable or clear handoff, you may set effects.askNextSteps=true and briefly ask if anything else is needed on this topic — you speak to the human; the steward never does.
 - Never claim the steward asked the human anything. The steward only routes work silently.
@@ -501,7 +508,9 @@ ${permissionList || "- Default employee permissions"}`
   const advancedRules = [
     professionalConductRules(),
     includeWorkRules && !plainProse
-      ? coordinationAndTrustRules(ctx.employee.tools, ctx.researchCapabilities)
+      ? coordinationAndTrustRules(ctx.employee.tools, ctx.researchCapabilities, {
+          allowAutopilot: !isMayaEmployee(ctx.employee),
+        })
       : "",
     includeFullRules ? fileAwareRules(Boolean(ctx.fileContextPrompt), ctx.artifactIntent) : "",
     includeWorkRules && !plainProse ? roleWorkflowRules(ctx.employee.roleKey) : "",

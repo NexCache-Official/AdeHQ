@@ -21,6 +21,7 @@ import { CrmInlineCard } from "@/components/crm/CrmInlineCard";
 import { ToolResultInlineCard } from "@/components/integrations/ToolResultInlineCard";
 import { AutonomousLauncher } from "@/components/autonomy/AutonomousLauncher";
 import { AutonomousSessionChip } from "@/components/autonomy/AutonomousSessionChip";
+import { isMayaEmployee, isWorkAssignableEmployee } from "@/lib/maya-employee";
 import { CompactSourcesRow } from "@/components/search/CompactSourcesRow";
 import { resolveWebSources } from "@/lib/message-artifacts/resolve-source-artifacts";
 import {
@@ -620,8 +621,15 @@ export function RoomMessageItem({
   const toolResultArtifacts = message.artifacts?.filter((a) => a.type === "tool_result") ?? [];
   const workModeArtifacts = message.artifacts?.filter((a) => a.type === "work_mode") ?? [];
   const sessionArtifacts = message.artifacts?.filter((a) => a.type === "autonomous_session") ?? [];
+  // Maya never runs Autopilot — hide stale offer chips from older replies too.
   const autopilotOfferArtifacts =
-    message.artifacts?.filter((a) => a.type === "autopilot_offer") ?? [];
+    message.artifacts?.filter((a) => {
+      if (a.type !== "autopilot_offer") return false;
+      const offerEmployeeId = a.meta?.autopilotEmployeeId ?? message.senderId;
+      if (message.senderType === "ai" && isMayaEmployee({ id: message.senderId })) return false;
+      if (offerEmployeeId && isMayaEmployee({ id: offerEmployeeId })) return false;
+      return true;
+    }) ?? [];
   const otherArtifacts = (message.artifacts ?? []).filter(
     (
       a,
@@ -1011,7 +1019,9 @@ export function RoomMessageItem({
         open={autopilotOffer !== null}
         onClose={() => setAutopilotOffer(null)}
         workspaceId={state.workspace.id}
-        employees={roomEmployees.length ? roomEmployees : state.employees}
+        employees={(roomEmployees.length ? roomEmployees : state.employees).filter(
+          isWorkAssignableEmployee,
+        )}
         defaultObjective={autopilotOffer?.objective ?? ""}
         defaultEmployeeId={autopilotOffer?.employeeId}
         roomId={messageRoomId}

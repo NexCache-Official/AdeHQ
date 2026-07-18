@@ -51,6 +51,8 @@ import {
   TOOL_BACKED_WORK_LOG_ACTIONS,
 } from "@/lib/integrations/reconcile-claimed-actions";
 import { handleAutopilotEffect, resolveAutopilotEmployee } from "@/lib/server/autopilot-effect";
+import { isMayaEmployee } from "@/lib/maya-employee";
+import { MAYA_EMPLOYEE_ID } from "@/lib/hiring/maya";
 import type { ToolCallEffectItem } from "@/lib/types";
 import { randomUUID } from "node:crypto";
 import { extractMentions, nowISO, uid } from "@/lib/utils";
@@ -1220,25 +1222,33 @@ export async function persistEmployeeEffects(
     }
   }
 
-  // Conversational autopilot — the employee decided this is multi-step work and
-  // either offered to run it or started it (when the user said "just handle it").
-  if (effect.autopilot?.objective && roomId && topicId) {
+  // Conversational autopilot — hired employees only (Maya never offers/runs it).
+  if (
+    effect.autopilot?.objective &&
+    roomId &&
+    topicId &&
+    !isMayaEmployee(employee)
+  ) {
     try {
       const runner =
         effect.autopilot.employeeName
           ? await resolveAutopilotEmployee(client, workspaceId, roomId, effect.autopilot.employeeName, employee.id)
           : { id: employee.id, name: employee.name };
-      const chip = await handleAutopilotEffect(client, {
-        workspaceId,
-        roomId,
-        topicId,
-        objective: effect.autopilot.objective,
-        mode: effect.autopilot.mode,
-        runnerId: runner.id,
-        runnerName: runner.name,
-        createdByUserId: undefined,
-      });
-      if (chip) artifacts.push(chip);
+      if (runner.id === MAYA_EMPLOYEE_ID) {
+        // Never launch Autopilot as Maya even if the model named her.
+      } else {
+        const chip = await handleAutopilotEffect(client, {
+          workspaceId,
+          roomId,
+          topicId,
+          objective: effect.autopilot.objective,
+          mode: effect.autopilot.mode,
+          runnerId: runner.id,
+          runnerName: runner.name,
+          createdByUserId: undefined,
+        });
+        if (chip) artifacts.push(chip);
+      }
     } catch (error) {
       console.warn("[AdeHQ room-messages] autopilot effect failed", error);
     }

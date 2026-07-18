@@ -1,3 +1,4 @@
+import { isMayaEmployee } from "@/lib/maya-employee";
 import type { AIEmployee, EmployeeResponseEffect } from "@/lib/types";
 
 export function enforceEmployeePermissions(
@@ -16,7 +17,8 @@ export function enforceEmployeePermissions(
     // Tool calls pass through — the Tool Execution Core enforces the
     // capability grant + approval gates per call at execution time.
     toolCalls: effect.toolCalls ? [...effect.toolCalls] : undefined,
-    autopilot: effect.autopilot,
+    // Maya guides hiring — she never runs or offers Autopilot herself.
+    autopilot: isMayaEmployee(employee) ? undefined : effect.autopilot,
     statusChange: effect.statusChange,
     handoffTo: effect.handoffTo,
     currentTask: effect.currentTask,

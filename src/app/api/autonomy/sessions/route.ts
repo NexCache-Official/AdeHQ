@@ -15,6 +15,8 @@ import {
   listSteps,
 } from "@/lib/autonomy";
 import { loadWorkspaceAiSettings } from "@/lib/supabase/ai-runtime";
+import { MAYA_EMPLOYEE_ID } from "@/lib/hiring/maya";
+import { preloadPlatformFlags } from "@/lib/admin/platform-flags";
 import type { WorkspaceMemberRole } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -54,9 +56,17 @@ export async function POST(request: NextRequest) {
       await assertCanAccessRoom(client, body.workspaceId, body.roomId, user.id, role);
     }
 
+    await preloadPlatformFlags(client);
+
     const employee = await loadIntegrationEmployee(client, body.workspaceId, body.employeeId);
     if (!employee) {
       return NextResponse.json({ error: "Employee not found in workspace." }, { status: 404 });
+    }
+    if (employee.id === MAYA_EMPLOYEE_ID) {
+      return NextResponse.json(
+        { error: "Autopilot is for hired AI employees — Maya guides hiring instead." },
+        { status: 400 },
+      );
     }
 
     const settings = await loadWorkspaceAiSettings(client, body.workspaceId);

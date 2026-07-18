@@ -1217,7 +1217,9 @@ export default function RoomDetailPage() {
         open={autopilot !== null}
         onClose={() => setAutopilot(null)}
         workspaceId={state.workspace.id}
-        employees={state.employees.filter((e) => room.aiEmployees.includes(e.id))}
+        employees={roomAssignableEmployees(
+          state.employees.filter((e) => room.aiEmployees.includes(e.id)),
+        )}
         defaultObjective={autopilot?.objective ?? ""}
         defaultEmployeeId={autopilot?.employeeId}
         roomId={roomId}
