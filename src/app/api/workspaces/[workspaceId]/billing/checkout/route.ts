@@ -44,6 +44,8 @@ export async function POST(
       return NextResponse.json({ error: error.message }, { status: error.status });
     }
     console.error("[AdeHQ checkout POST]", error);
-    return NextResponse.json({ error: "Unable to start checkout." }, { status: 500 });
+    const message =
+      error instanceof Error && error.message ? error.message : "Unable to start checkout.";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

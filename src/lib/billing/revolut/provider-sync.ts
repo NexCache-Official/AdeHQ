@@ -95,10 +95,10 @@ export async function syncPriceToRevolut(
 
     const verified = await retrieveRevolutSubscriptionPlan(revolutPlanId);
     const variation = verified.variations?.find((v) => v.id === revolutVariationId);
-    const item = variation?.phases?.[0]?.subscription_items?.[0];
-    if (item?.amount != null && Number(item.amount) !== Number(price.amount_minor)) {
+    const phase = variation?.phases?.[0];
+    if (phase?.amount != null && Number(phase.amount) !== Number(price.amount_minor)) {
       throw new Error(
-        `Provider amount mismatch: expected ${price.amount_minor}, got ${item.amount}`,
+        `Provider amount mismatch: expected ${price.amount_minor}, got ${phase.amount}`,
       );
     }
 

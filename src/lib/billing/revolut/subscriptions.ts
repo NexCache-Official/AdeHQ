@@ -29,7 +29,8 @@ export async function createRevolutSubscription(input: {
   const config = getRevolutConfig();
   if (!config) throw new Error("Revolut is not configured.");
 
-  return revolutFetch<RevolutSubscription>(config, "/1.0/subscriptions", {
+  // Base URL already includes /api — path is /subscriptions (no version segment).
+  return revolutFetch<RevolutSubscription>(config, "/subscriptions", {
     method: "POST",
     headers: { "Idempotency-Key": input.idempotencyKey },
     body: JSON.stringify({
@@ -37,7 +38,6 @@ export async function createRevolutSubscription(input: {
       customer_id: input.customerId,
       external_reference: input.externalReference,
       setup_order_redirect_url: input.setupOrderRedirectUrl,
-      trial_duration: "P0D",
     }),
   });
 }
@@ -49,7 +49,7 @@ export async function retrieveRevolutSubscription(
   if (!config) throw new Error("Revolut is not configured.");
   return revolutFetch<RevolutSubscription>(
     config,
-    `/1.0/subscriptions/${encodeURIComponent(subscriptionId)}`,
+    `/subscriptions/${encodeURIComponent(subscriptionId)}`,
   );
 }
 
@@ -61,7 +61,7 @@ export async function cancelRevolutSubscription(
   if (!config) throw new Error("Revolut is not configured.");
   return revolutFetch<RevolutSubscription>(
     config,
-    `/1.0/subscriptions/${encodeURIComponent(subscriptionId)}/cancel`,
+    `/subscriptions/${encodeURIComponent(subscriptionId)}/cancel`,
     { method: "POST" },
   );
 }
@@ -74,7 +74,7 @@ export async function updateRevolutSubscription(
   if (!config) throw new Error("Revolut is not configured.");
   return revolutFetch<RevolutSubscription>(
     config,
-    `/1.0/subscriptions/${encodeURIComponent(subscriptionId)}`,
+    `/subscriptions/${encodeURIComponent(subscriptionId)}`,
     { method: "PATCH", body: JSON.stringify(body) },
   );
 }
