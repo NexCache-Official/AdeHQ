@@ -126,6 +126,25 @@ function rowToPeriod(row: Record<string, unknown>, unlimited: boolean): Workspac
   };
 }
 
+/** Retire every active usage period except `keepPeriodId` (mid-upgrade hygiene). */
+async function retireOtherActivePeriods(
+  client: SupabaseClient,
+  workspaceId: string,
+  keepPeriodId: string,
+): Promise<void> {
+  const now = new Date().toISOString();
+  await client
+    .from("workspace_usage_periods")
+    .update({
+      status: "closed",
+      period_status: "closed",
+      updated_at: now,
+    })
+    .eq("workspace_id", workspaceId)
+    .neq("id", keepPeriodId)
+    .eq("status", "active");
+}
+
 /** Get or lazily create the current usage period.
  * Prefers activation-anchored 168h commerce clock when usage_anchor_at is set;
  * falls back to legacy Monday-UTC week for workspaces not yet migrated.
@@ -163,13 +182,25 @@ export async function getOrCreateCurrentPeriod(
         const effectiveAllowance = unlimited
           ? UNLIMITED_ALLOWANCE
           : Math.max(allowance, baseAllowance + promo + lots);
-        // Keep legacy allowance column roughly aligned for consumers
-        if (Math.abs(Number(row.ai_work_hours_allowance) - effectiveAllowance) > 0.0001) {
+        // Keep legacy allowance column + plan slug aligned with the live resolved plan.
+        // Also bump base_wh_granted on upgrade so mid-period Pro activations aren't stuck
+        // reading a Free-period row that somehow got selected earlier.
+        const needsSync =
+          Math.abs(Number(row.ai_work_hours_allowance) - effectiveAllowance) > 0.0001 ||
+          String(row.plan_slug) !== planSlug ||
+          (!unlimited && Number(row.base_wh_granted ?? 0) < allowance);
+        if (needsSync) {
           await client
             .from("workspace_usage_periods")
             .update({
               ai_work_hours_allowance: effectiveAllowance,
+              base_wh_granted: unlimited
+                ? Number(row.base_wh_granted ?? 0)
+                : Math.max(Number(row.base_wh_granted ?? 0), allowance),
               plan_slug: planSlug,
+              status: "active",
+              period_status: "active",
+              updated_at: new Date().toISOString(),
             })
             .eq("id", grant.periodId);
           const refreshed = await client
@@ -177,25 +208,84 @@ export async function getOrCreateCurrentPeriod(
             .select("*")
             .eq("id", grant.periodId)
             .single();
+          await retireOtherActivePeriods(client, workspaceId, grant.periodId).catch(() => undefined);
           if (refreshed.data) return rowToPeriod(refreshed.data, unlimited);
         }
-        return rowToPeriod(row, unlimited);
+        await retireOtherActivePeriods(client, workspaceId, grant.periodId).catch(() => undefined);
+        return rowToPeriod(
+          {
+            ...row,
+            plan_slug: planSlug,
+            ai_work_hours_allowance: effectiveAllowance,
+          },
+          unlimited,
+        );
       }
     } catch (err) {
       console.error("[usage.periods] commerce clock failed; falling back", err);
+      // Last resort while still on the commerce clock: prefer the newest overlapping
+      // active period for this workspace rather than the legacy Monday-UTC Free row.
+      try {
+        const { planSlug, allowance, unlimited } = await getWorkspaceAllowance(
+          client,
+          workspaceId,
+        );
+        const nowIso = new Date().toISOString();
+        const { data: overlapping } = await client
+          .from("workspace_usage_periods")
+          .select("*")
+          .eq("workspace_id", workspaceId)
+          .eq("status", "active")
+          .lte("period_start", nowIso)
+          .gt("period_end", nowIso)
+          .order("period_start", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (overlapping) {
+          const effectiveAllowance = unlimited
+            ? UNLIMITED_ALLOWANCE
+            : Math.max(allowance, Number(overlapping.ai_work_hours_allowance ?? 0));
+          if (
+            String(overlapping.plan_slug) !== planSlug ||
+            Math.abs(Number(overlapping.ai_work_hours_allowance) - effectiveAllowance) > 0.0001
+          ) {
+            await client
+              .from("workspace_usage_periods")
+              .update({
+                plan_slug: planSlug,
+                ai_work_hours_allowance: effectiveAllowance,
+                updated_at: new Date().toISOString(),
+              })
+              .eq("id", overlapping.id);
+          }
+          await retireOtherActivePeriods(client, workspaceId, String(overlapping.id)).catch(
+            () => undefined,
+          );
+          return rowToPeriod(
+            {
+              ...overlapping,
+              plan_slug: planSlug,
+              ai_work_hours_allowance: effectiveAllowance,
+            },
+            unlimited,
+          );
+        }
+      } catch (fallbackErr) {
+        console.error("[usage.periods] commerce overlap fallback failed", fallbackErr);
+      }
     }
   }
 
   const { startIso, endExclusiveIso } = getCurrentUsagePeriodRange(new Date());
   const { planSlug, allowance, unlimited } = await getWorkspaceAllowance(client, workspaceId);
 
-  // Prefer exact match, then a range scan — some PostgREST/timestamptz
-  // round-trips disagree on `.000Z` vs `+00:00` equality and would otherwise
-  // invent a fresh zeroed period while the real counter sits unread.
+  // Prefer exact match on *active* rows only — closed Free periods from before an
+  // upgrade must never be revived (that was pinning meters at 10 WH after Pro checkout).
   let existing = await client
     .from("workspace_usage_periods")
     .select("*")
     .eq("workspace_id", workspaceId)
+    .eq("status", "active")
     .eq("period_start", startIso)
     .eq("period_end", endExclusiveIso)
     .maybeSingle();
@@ -206,6 +296,7 @@ export async function getOrCreateCurrentPeriod(
       .from("workspace_usage_periods")
       .select("*")
       .eq("workspace_id", workspaceId)
+      .eq("status", "active")
       .gte("period_start", startIso)
       .lte("period_start", startIso)
       .order("created_at", { ascending: false })
@@ -215,22 +306,19 @@ export async function getOrCreateCurrentPeriod(
     if (ranged.data) existing = ranged;
   }
   if (!existing.data) {
+    const nowIso = new Date().toISOString();
     const active = await client
       .from("workspace_usage_periods")
       .select("*")
       .eq("workspace_id", workspaceId)
       .eq("status", "active")
+      .lte("period_start", nowIso)
+      .gt("period_end", nowIso)
       .order("period_start", { ascending: false })
       .limit(1)
       .maybeSingle();
     if (active.error) throw active.error;
-    if (active.data) {
-      const rowStart = String(active.data.period_start ?? "");
-      const rowEnd = String(active.data.period_end ?? "");
-      if (rowStart.startsWith(startIso.slice(0, 10)) && rowEnd.startsWith(endExclusiveIso.slice(0, 10))) {
-        existing = active;
-      }
-    }
+    if (active.data) existing = active;
   }
 
   if (existing.data) {
@@ -378,26 +466,40 @@ export async function getWorkspaceCapacity(
   client: SupabaseClient,
   workspaceId: string,
 ): Promise<WorkspaceCapacity> {
-  const period = await getOrCreateCurrentPeriod(client, workspaceId);
-  const remaining = period.unlimited ? UNLIMITED_ALLOWANCE : period.remaining;
+  const [period, resolved] = await Promise.all([
+    getOrCreateCurrentPeriod(client, workspaceId),
+    getWorkspaceAllowance(client, workspaceId),
+  ]);
+
+  // Live plan is the source of truth for allowance / plan label. Period rows can
+  // lag after checkout (stale Free periods left "active") and must not pin the UI
+  // to 10 WH while the workspace is already Pro.
+  const unlimited = resolved.unlimited || period.unlimited;
+  const allowance = unlimited
+    ? UNLIMITED_ALLOWANCE
+    : Math.max(resolved.allowance, period.allowance);
+  const used = period.used;
+  const remaining = unlimited
+    ? UNLIMITED_ALLOWANCE
+    : Math.max(0, Math.round((allowance - used) * 10000) / 10000);
 
   let warningLevel: WorkspaceCapacity["warningLevel"] = "ok";
-  if (!period.unlimited) {
+  if (!unlimited) {
     if (remaining <= 0) warningLevel = "exhausted";
-    else if (period.allowance > 0 && remaining <= period.allowance * LOW_WARNING_FRACTION) {
+    else if (allowance > 0 && remaining <= allowance * LOW_WARNING_FRACTION) {
       warningLevel = "low";
     }
   }
 
   return {
-    allowance: period.allowance,
-    used: period.used,
+    allowance,
+    used,
     remaining,
-    unlimited: period.unlimited,
+    unlimited,
     warningLevel,
     periodStart: period.periodStart,
     periodEnd: period.periodEnd,
-    planSlug: period.planSlug,
+    planSlug: resolved.planSlug || period.planSlug,
     resetsAt: period.periodEnd,
   };
 }

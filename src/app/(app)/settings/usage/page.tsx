@@ -22,7 +22,6 @@ export default function SettingsUsagePage() {
   const periodTotal = data?.totalWorkHours ?? 0;
   const teamTotal =
     data?.teamWorkHours ?? rows.reduce((s, r) => s + r.workHours, 0);
-  const guideHours = data?.guideWorkHours ?? Math.max(0, periodTotal - teamTotal);
 
   return (
     <>
@@ -52,12 +51,6 @@ export default function SettingsUsagePage() {
                 : `${(data?.capacity.allowance ?? 0).toFixed(2)}`}{" "}
               pooled workspace hours used — Maya is excluded from this meter.
             </p>
-            {guideHours > 0 && (
-              <p className="mt-2 text-xs text-ink-3">
-                Maya / guide activity this period ≈ {formatHrs(guideHours)} hrs equivalent
-                (free — not charged to your plan).
-              </p>
-            )}
           </Card>
 
           <Card className="p-6">
@@ -148,12 +141,6 @@ export default function SettingsUsagePage() {
                     {formatHrs(teamTotal)} hrs
                   </span>
                 </div>
-                {guideHours > 0 && (
-                  <div className="flex items-center justify-between text-ink-3">
-                    <span className="text-sm">Maya / guide (free, not in plan)</span>
-                    <span className="text-sm tabular-nums">{formatHrs(guideHours)} hrs eq.</span>
-                  </div>
-                )}
                 <div className="flex items-center justify-between">
                   <span className="text-sm font-semibold text-ink">Plan total (hired)</span>
                   <span className="text-sm font-semibold tabular-nums text-ink">

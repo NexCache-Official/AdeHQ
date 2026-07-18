@@ -101,16 +101,56 @@ export async function ensureCurrentUsagePeriodGrant(
 
   const { data: existing } = await client
     .from("workspace_usage_periods")
-    .select("id, base_wh_granted")
+    .select("id, base_wh_granted, ai_work_hours_allowance, plan_slug")
     .eq("workspace_id", workspaceId)
     .eq("period_key", periodKey)
     .maybeSingle();
 
   if (existing?.id) {
+    // Mid-period upgrade: bump the open period so the UI doesn't keep showing
+    // Free's 10 WH after a Pro checkout lands.
+    const nextBase = unlimited ? Number(existing.base_wh_granted ?? 0) : baseWhGranted;
+    const needsBump =
+      String(existing.plan_slug ?? "") !== planSlug ||
+      (!unlimited &&
+        (Number(existing.base_wh_granted ?? 0) < nextBase ||
+          Number(existing.ai_work_hours_allowance ?? 0) < nextBase));
+    if (needsBump && !skippedBaseGrant) {
+      await client
+        .from("workspace_usage_periods")
+        .update({
+          plan_slug: planSlug,
+          plan_version_id: planVersionId,
+          base_wh_granted: Math.max(Number(existing.base_wh_granted ?? 0), nextBase),
+          ai_work_hours_allowance: Math.max(
+            Number(existing.ai_work_hours_allowance ?? 0),
+            nextBase,
+          ),
+          status: "active",
+          period_status: "active",
+          entitlement_snapshot: version?.entitlements ?? {},
+          updated_at: now.toISOString(),
+        })
+        .eq("id", existing.id);
+
+      const delta =
+        nextBase - Math.max(Number(existing.base_wh_granted ?? 0), 0);
+      if (delta > 0) {
+        await appendLedgerEntry(client, {
+          workspaceId,
+          entryType: "upgrade_allowance_adjustment",
+          amountWh: delta,
+          usagePeriodId: String(existing.id),
+          idempotencyKey: `period-upgrade:${workspaceId}:${periodKey}:${planVersionId ?? planSlug}`,
+          metadata: { periodKey, planVersionId, from: existing.base_wh_granted, to: nextBase },
+        }).catch(() => undefined);
+      }
+    }
+
     return {
       periodId: String(existing.id),
       periodKey,
-      baseWhGranted: Number(existing.base_wh_granted ?? 0),
+      baseWhGranted: Math.max(Number(existing.base_wh_granted ?? 0), nextBase),
       skippedBaseGrant,
     };
   }

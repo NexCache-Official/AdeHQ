@@ -247,7 +247,18 @@ export async function activateFromRevolutSubscription(
   }
 
   try {
-    await ensureCurrentUsagePeriodGrant(client, input.workspaceId);
+    const grant = await ensureCurrentUsagePeriodGrant(client, input.workspaceId);
+    // Close any leftover Free / prior-period rows so meters cannot latch onto them.
+    await client
+      .from("workspace_usage_periods")
+      .update({
+        status: "closed",
+        period_status: "closed",
+        updated_at: new Date().toISOString(),
+      })
+      .eq("workspace_id", input.workspaceId)
+      .neq("id", grant.periodId)
+      .eq("status", "active");
   } catch (err) {
     console.error("[activate] usage period grant failed", err);
   }
