@@ -26,6 +26,9 @@ type BillingResponse = {
     webhookSecret: boolean;
     environment: string;
     currency: string;
+    keyKind?: string;
+    baseUrl?: string;
+    apiVersion?: string;
     webhookPath: string;
   };
   metrics: {
@@ -310,6 +313,9 @@ export default function AdminBillingPage() {
                   <li>
                     Merchant API key:{" "}
                     <span className="font-medium">{data.readiness.merchantApiKey ? "set" : "missing"}</span>
+                    {data.readiness.keyKind ? (
+                      <span className="text-ink-3"> · kind {data.readiness.keyKind}</span>
+                    ) : null}
                   </li>
                   <li>
                     Webhook secret:{" "}
@@ -321,6 +327,17 @@ export default function AdminBillingPage() {
                   <li>
                     Currency: <span className="font-medium">{data.readiness.currency}</span>
                   </li>
+                  {data.readiness.baseUrl ? (
+                    <li className="sm:col-span-2">
+                      API host:{" "}
+                      <code className="rounded bg-surface-2 px-1.5 py-0.5 text-xs">
+                        {data.readiness.baseUrl}
+                      </code>
+                      {data.readiness.apiVersion ? (
+                        <span className="text-ink-3"> · v{data.readiness.apiVersion}</span>
+                      ) : null}
+                    </li>
+                  ) : null}
                   <li className="sm:col-span-2">
                     Webhook:{" "}
                     <code className="rounded bg-surface-2 px-1.5 py-0.5 text-xs">

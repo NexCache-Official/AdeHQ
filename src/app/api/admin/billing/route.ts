@@ -203,6 +203,9 @@ export const GET = adminRoute(async (_request, ctx) => {
       webhookSecret: revolut.webhookVerified,
       environment: revolut.environment,
       currency: revolut.currency,
+      keyKind: revolut.keyKind,
+      baseUrl: revolut.baseUrl,
+      apiVersion: revolut.apiVersion,
       webhookPath: "/api/billing/revolut/webhook",
     },
     metrics: {
