@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { adminRoute } from "@/lib/admin/api-route";
 import { assertPlatformAdminCanWrite } from "@/lib/admin/require-platform-admin";
 import { writeAuditLog } from "@/lib/admin/audit";
+import { publishPlanEdit } from "@/lib/billing/commerce/publish-plan-edit";
+import { getPricingPageCatalog } from "@/lib/billing/commerce/catalog";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -34,12 +36,62 @@ const EDITABLE_FIELDS = [
 ] as const;
 
 export const GET = adminRoute(async (_request, { serviceClient }) => {
-  const { data, error } = await serviceClient
-    .from("platform_plan_configs")
-    .select("*")
-    .order("monthly_price_cents");
+  const [{ data, error }, catalog, versionsRes, pricesRes] = await Promise.all([
+    serviceClient.from("platform_plan_configs").select("*").order("monthly_price_cents"),
+    getPricingPageCatalog(serviceClient).catch(() => []),
+    serviceClient
+      .from("billing_plan_versions")
+      .select("id, plan_id, version, public_name, status, published_at, billing_plans(code)")
+      .eq("status", "published")
+      .order("version", { ascending: false }),
+    serviceClient
+      .from("billing_prices")
+      .select(
+        "id, plan_version_id, cadence, amount_minor, sync_status, status, revolut_variation_id",
+      )
+      .eq("status", "active"),
+  ]);
   if (error) throw error;
-  return NextResponse.json({ plans: data ?? [] });
+
+  const pricesByVersion = new Map<string, typeof pricesRes.data>();
+  for (const price of pricesRes.data ?? []) {
+    const list = pricesByVersion.get(price.plan_version_id) ?? [];
+    list.push(price);
+    pricesByVersion.set(price.plan_version_id, list);
+  }
+
+  const liveBySlug = new Map<
+    string,
+    { version: number; syncStatuses: string[]; hasRevolut: boolean }
+  >();
+  for (const version of versionsRes.data ?? []) {
+    const plans = version.billing_plans as { code: string } | { code: string }[] | null;
+    const code = Array.isArray(plans) ? plans[0]?.code : plans?.code;
+    if (!code || liveBySlug.has(code)) continue;
+    const prices = pricesByVersion.get(version.id) ?? [];
+    liveBySlug.set(code, {
+      version: version.version,
+      syncStatuses: prices.map((p) => String(p.sync_status)),
+      hasRevolut: prices.every(
+        (p) => Number(p.amount_minor) === 0 || Boolean(p.revolut_variation_id),
+      ),
+    });
+  }
+
+  const plans = (data ?? []).map((plan) => {
+    const live = liveBySlug.get(plan.plan_slug);
+    return {
+      ...plan,
+      catalogVersion: live?.version ?? null,
+      revolutReady: live?.hasRevolut ?? plan.plan_slug === "free",
+      syncStatuses: live?.syncStatuses ?? [],
+    };
+  });
+
+  return NextResponse.json({
+    plans,
+    pricingPreview: catalog,
+  });
 });
 
 export const PUT = adminRoute(async (request, { admin, serviceClient }) => {
@@ -62,36 +114,20 @@ export const PUT = adminRoute(async (request, { admin, serviceClient }) => {
     return NextResponse.json({ error: "No editable fields provided." }, { status: 400 });
   }
 
-  const { data: before, error: readError } = await serviceClient
-    .from("platform_plan_configs")
-    .select("*")
-    .eq("plan_slug", planSlug)
-    .maybeSingle();
-  if (readError) throw readError;
-  if (!before) {
-    return NextResponse.json({ error: `Unknown plan: ${planSlug}` }, { status: 404 });
+  try {
+    const result = await publishPlanEdit(serviceClient, {
+      planSlug,
+      updates,
+      adminUserId: admin.userId,
+      reason: typeof body?.reason === "string" ? body.reason : undefined,
+      request,
+    });
+    return NextResponse.json(result);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Publish failed.";
+    const status = message.startsWith("Unknown plan") ? 404 : 400;
+    return NextResponse.json({ error: message }, { status });
   }
-
-  const { data: after, error: updateError } = await serviceClient
-    .from("platform_plan_configs")
-    .update(updates)
-    .eq("plan_slug", planSlug)
-    .select("*")
-    .single();
-  if (updateError) throw updateError;
-
-  await writeAuditLog(serviceClient, {
-    adminUserId: admin.userId,
-    action: "plan_config_updated",
-    targetType: "platform_plan_config",
-    targetId: planSlug,
-    before,
-    after,
-    reason: typeof body?.reason === "string" ? body.reason : undefined,
-    request,
-  });
-
-  return NextResponse.json({ ok: true, plan: after });
 });
 
 export const POST = adminRoute(async (request, { admin, serviceClient }) => {

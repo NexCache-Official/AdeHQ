@@ -24,6 +24,9 @@ export async function GET() {
             weeklyWorkHours: plan.weeklyIncludedWh,
             unlimitedWorkHours: plan.entitlements.unlimited_work_hours === true,
             entitlements: plan.entitlements,
+            // Flat cents for older clients + nested commerce shape for new ones.
+            monthlyPriceCents: plan.monthly?.amountMinor ?? 0,
+            annualPriceCents: plan.annual?.amountMinor ?? 0,
             monthly: plan.monthly,
             annual: plan.annual,
           })),

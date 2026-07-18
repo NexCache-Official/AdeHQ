@@ -55,6 +55,8 @@ export async function listPublishedPublicCatalog(
   const versionIds = (versions ?? []).map((v) => v.id);
   if (versionIds.length === 0) return [];
 
+  // Active prices are listable for marketing immediately after publish.
+  // Checkout still requires revolut_variation_id for paid plans (enforced elsewhere).
   const { data: prices, error: priceError } = await client
     .from("billing_prices")
     .select(
@@ -63,7 +65,12 @@ export async function listPublishedPublicCatalog(
     .in("plan_version_id", versionIds)
     .eq("currency", currency)
     .eq("status", "active")
-    .eq("sync_status", "published");
+    .in("sync_status", [
+      "published",
+      "provider_synced",
+      "provider_sync_pending",
+      "validation_passed",
+    ]);
   if (priceError) throw priceError;
 
   const byVersion = new Map((versions as VersionRow[]).map((v) => [v.id, v]));

@@ -64,7 +64,8 @@ export async function GET(request: NextRequest) {
       audits: audits.data ?? [],
       pricingPreview: pricing,
       notes: {
-        noEditLive: true,
+        noEditLive: false,
+        editPlansAt: "/admin/plans",
         refundPolicy:
           "Payments are non-refundable except where required by applicable law or expressly stated in the subscription terms.",
       },

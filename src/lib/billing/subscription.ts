@@ -123,9 +123,10 @@ export async function getWorkspaceBillingSummary(
       }));
 
   let commerce: WorkspaceBillingSummary["commerce"];
+  let pricingCatalog: Awaited<ReturnType<typeof getPricingPageCatalog>> = [];
   try {
     const commercial = await resolveWorkspaceCommercial(client, workspaceId);
-    const pricingCatalog = await getPricingPageCatalog(client);
+    pricingCatalog = await getPricingPageCatalog(client);
     commerce = {
       serviceAccessStatus: commercial.serviceAccess,
       providerStatus: commercial.providerStatus,
@@ -139,7 +140,29 @@ export async function getWorkspaceBillingSummary(
     };
   } catch {
     commerce = undefined;
+    try {
+      pricingCatalog = await getPricingPageCatalog(client);
+    } catch {
+      pricingCatalog = [];
+    }
   }
+
+  // Prefer live published catalog prices for upgrade cards when available.
+  const catalogBySlug = new Map(pricingCatalog.map((p) => [p.planCode, p]));
+  const planCards = plans.map((config) => {
+    const card = toCard(config);
+    const live = catalogBySlug.get(config.planSlug as never);
+    if (!live) return card;
+    return {
+      ...card,
+      displayName: live.publicName || card.displayName,
+      monthlyPriceCents: live.monthly?.amountMinor ?? card.monthlyPriceCents,
+      annualPriceCents: live.annual?.amountMinor ?? card.annualPriceCents,
+      weeklyWorkHours: live.weeklyIncludedWh ?? card.weeklyWorkHours,
+      unlimitedWorkHours:
+        live.entitlements.unlimited_work_hours === true || card.unlimitedWorkHours,
+    };
+  });
 
   return {
     currentPlanSlug: resolved.planSlug,
@@ -159,7 +182,7 @@ export async function getWorkspaceBillingSummary(
       resetsAt: capacity.resetsAt,
       warningLevel: capacity.warningLevel,
     },
-    plans: plans.map(toCard),
+    plans: planCards,
     invoices,
     commerce,
   };

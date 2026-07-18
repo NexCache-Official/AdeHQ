@@ -157,7 +157,7 @@ export default function AdminCommercePage() {
     <div className="space-y-6">
       <AdminPageHeader
         title="Commerce"
-        subtitle="Versioned catalog, provider sync, subscription inspector. No edit-live for published terms."
+        subtitle="Ops: provider sync, subscription inspector, and audit. Edit live prices in Plans."
         icon={<Layers className="h-5 w-5" />}
         actions={
           <Button variant="secondary" onClick={() => refresh()} disabled={loading}>

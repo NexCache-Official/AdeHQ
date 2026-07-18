@@ -23,9 +23,68 @@ type PublicPlan = {
   };
 };
 
-function titleize(value: string | null): string {
+function titleize(value: string | null | undefined): string {
   if (!value) return "—";
   return value.replace(/[_-]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+/** Normalize both legacy flat cents and commerce nested amountMinor shapes. */
+function normalizePlans(raw: unknown[]): PublicPlan[] {
+  return raw.map((row) => {
+    const p = row as Record<string, unknown>;
+    const monthly = p.monthly as { amountMinor?: number } | null | undefined;
+    const annual = p.annual as { amountMinor?: number } | null | undefined;
+    const entitlements = (p.entitlements ?? {}) as Record<string, unknown>;
+
+    const monthlyPriceCents =
+      typeof monthly?.amountMinor === "number"
+        ? monthly.amountMinor
+        : Number(p.monthlyPriceCents ?? 0);
+    const annualPriceCents =
+      typeof annual?.amountMinor === "number"
+        ? annual.amountMinor
+        : Number(p.annualPriceCents ?? 0);
+
+    const support =
+      typeof entitlements.support_tier === "string"
+        ? entitlements.support_tier
+        : typeof entitlements.supportLevel === "string"
+          ? entitlements.supportLevel
+          : null;
+    const intelligence =
+      typeof entitlements.intelligence_tier === "string"
+        ? entitlements.intelligence_tier
+        : typeof entitlements.intelligencePolicy === "string"
+          ? entitlements.intelligencePolicy
+          : null;
+
+    return {
+      planSlug: String(p.planSlug ?? p.planCode ?? ""),
+      displayName: String(p.displayName ?? p.publicName ?? "Plan"),
+      monthlyPriceCents,
+      annualPriceCents,
+      weeklyWorkHours: Number(p.weeklyWorkHours ?? p.weeklyIncludedWh ?? 0),
+      unlimitedWorkHours: Boolean(
+        p.unlimitedWorkHours ?? entitlements.unlimited_work_hours === true,
+      ),
+      entitlements: {
+        intelligence_tier: intelligence,
+        web_search:
+          typeof entitlements.web_search === "string"
+            ? entitlements.web_search
+            : entitlements.searchEnabled === true
+              ? "enabled"
+              : null,
+        browser_research:
+          typeof entitlements.browser_research === "string"
+            ? entitlements.browser_research
+            : entitlements.browserEnabled === true
+              ? "enabled"
+              : null,
+        support_tier: support,
+      },
+    };
+  }).filter((p) => p.planSlug);
 }
 
 export default function PricingPage() {
@@ -37,15 +96,13 @@ export default function PricingPage() {
   useEffect(() => {
     void fetch("/api/public/plans")
       .then((res) => res.json())
-      .then((body) => setPlans(body.plans ?? []))
+      .then((body) => setPlans(normalizePlans(body.plans ?? [])))
       .catch(() => setPlans([]));
     void supabase.auth.getSession().then(({ data }) => setLoggedIn(Boolean(data.session)));
   }, []);
 
   const choosePlan = (planSlug: string) => {
     const query = `plan=${planSlug}&interval=${interval}`;
-    // Logged-in users route to workspace billing (role-based checkout gating happens there);
-    // logged-out users route to signup carrying the selected plan.
     if (loggedIn) router.push(`/settings/billing?${query}`);
     else router.push(`/signup?${query}`);
   };
@@ -79,13 +136,18 @@ export default function PricingPage() {
           const isEnterprise = plan.planSlug === "enterprise";
           const isFree = plan.planSlug === "free";
           const priceCents = interval === "annual" ? plan.annualPriceCents : plan.monthlyPriceCents;
+          const priceLabel = Number.isFinite(priceCents)
+            ? `$${(priceCents / 100).toFixed(0)}`
+            : "$0";
           return (
             <Card key={plan.planSlug} className="flex flex-col p-5">
               <h3 className="text-lg font-semibold text-ink">{plan.displayName}</h3>
               <p className="mt-2 text-2xl font-semibold tabular-nums text-ink">
-                {isEnterprise ? "Custom" : isFree ? "$0" : `$${(priceCents / 100).toFixed(0)}`}
+                {isEnterprise ? "Custom" : isFree ? "$0" : priceLabel}
                 {!isEnterprise && !isFree && (
-                  <span className="text-sm font-normal text-ink-3">/{interval === "annual" ? "yr" : "mo"}</span>
+                  <span className="text-sm font-normal text-ink-3">
+                    /{interval === "annual" ? "yr" : "mo"}
+                  </span>
                 )}
               </p>
               <ul className="mt-4 flex-1 space-y-2 text-sm text-ink-2">
@@ -93,10 +155,20 @@ export default function PricingPage() {
                   <Check className="h-3.5 w-3.5 shrink-0 text-accent" />
                   {plan.unlimitedWorkHours ? "Custom" : `${plan.weeklyWorkHours}`} AI Work Hours/wk
                 </li>
-                <li className="flex items-center gap-2"><Check className="h-3.5 w-3.5 shrink-0 text-accent" /> Unlimited human members</li>
-                <li className="flex items-center gap-2"><Check className="h-3.5 w-3.5 shrink-0 text-accent" /> Unlimited AI employees</li>
-                <li className="flex items-center gap-2"><Check className="h-3.5 w-3.5 shrink-0 text-accent" /> {titleize(plan.entitlements.intelligence_tier)} intelligence</li>
-                <li className="flex items-center gap-2"><Check className="h-3.5 w-3.5 shrink-0 text-accent" /> {titleize(plan.entitlements.support_tier)} support</li>
+                <li className="flex items-center gap-2">
+                  <Check className="h-3.5 w-3.5 shrink-0 text-accent" /> Unlimited human members
+                </li>
+                <li className="flex items-center gap-2">
+                  <Check className="h-3.5 w-3.5 shrink-0 text-accent" /> Unlimited AI employees
+                </li>
+                <li className="flex items-center gap-2">
+                  <Check className="h-3.5 w-3.5 shrink-0 text-accent" />{" "}
+                  {titleize(plan.entitlements.intelligence_tier)} intelligence
+                </li>
+                <li className="flex items-center gap-2">
+                  <Check className="h-3.5 w-3.5 shrink-0 text-accent" />{" "}
+                  {titleize(plan.entitlements.support_tier)} support
+                </li>
               </ul>
               <Button
                 className="mt-5 w-full"
@@ -104,7 +176,11 @@ export default function PricingPage() {
                 onClick={() => (isEnterprise ? undefined : choosePlan(plan.planSlug))}
                 disabled={isEnterprise}
               >
-                {isEnterprise ? "Contact sales" : isFree ? "Start free" : `Choose ${plan.displayName}`}
+                {isEnterprise
+                  ? "Contact sales"
+                  : isFree
+                    ? "Start free"
+                    : `Choose ${plan.displayName}`}
               </Button>
             </Card>
           );

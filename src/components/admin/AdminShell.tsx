@@ -32,6 +32,7 @@ import {
   Siren,
   Ticket,
   ToggleLeft,
+  TrendingUp,
   Users,
   Wrench,
 } from "lucide-react";
@@ -92,10 +93,11 @@ const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
   {
     title: "Commercial",
     items: [
-      { href: "/admin/commerce", label: "Commerce", icon: Layers },
-      { href: "/admin/plans", label: "Plans (legacy)", icon: ListChecks },
-      { href: "/admin/promo-codes", label: "Promo Codes", icon: Ticket },
+      { href: "/admin/plans", label: "Plans", icon: ListChecks },
+      { href: "/admin/economics", label: "Economics", icon: TrendingUp },
       { href: "/admin/billing", label: "Billing", icon: CreditCard },
+      { href: "/admin/commerce", label: "Commerce ops", icon: Layers },
+      { href: "/admin/promo-codes", label: "Promo Codes", icon: Ticket },
     ],
   },
   {

@@ -78,6 +78,86 @@ export function AdminCostOverTimeChart({
   );
 }
 
+/** Revenue vs COGS dual bars for admin Economics. */
+export function AdminRevenueCogsChart({
+  series,
+  className,
+}: {
+  series: Array<{ day: string; revenueUsd: number; cogsUsd: number }>;
+  className?: string;
+}) {
+  if (!series.length) {
+    return (
+      <div className={cn("flex h-40 items-center justify-center text-sm text-ink-3", className)}>
+        No daily economics in this range.
+      </div>
+    );
+  }
+
+  const max = Math.max(...series.map((d) => Math.max(d.revenueUsd, d.cogsUsd)), 0.0001);
+  const width = 640;
+  const height = 160;
+  const padX = 28;
+  const padY = 16;
+  const innerW = width - padX * 2;
+  const innerH = height - padY * 2;
+  const gap = Math.min(8, innerW / series.length / 4);
+  const pairW = Math.max(6, innerW / series.length - gap);
+  const barW = Math.max(2, pairW / 2 - 1);
+
+  return (
+    <div className={cn("w-full", className)}>
+      <svg
+        viewBox={`0 0 ${width} ${height}`}
+        className="h-40 w-full"
+        role="img"
+        aria-label="Revenue vs COGS over time"
+      >
+        {series.map((d, i) => {
+          const x = padX + i * (pairW + gap);
+          const revH = (d.revenueUsd / max) * innerH;
+          const cogsH = (d.cogsUsd / max) * innerH;
+          const baseY = padY + innerH;
+          return (
+            <g key={d.day}>
+              <title>
+                {d.day}: revenue ${d.revenueUsd.toFixed(2)} · COGS ${d.cogsUsd.toFixed(4)}
+              </title>
+              <rect
+                x={x}
+                y={baseY - revH}
+                width={barW}
+                height={Math.max(revH, 0)}
+                className="fill-emerald-600/70"
+                rx={2}
+              />
+              <rect
+                x={x + barW + 1}
+                y={baseY - cogsH}
+                width={barW}
+                height={Math.max(cogsH, 0)}
+                className="fill-rose-500/70"
+                rx={2}
+              />
+            </g>
+          );
+        })}
+      </svg>
+      <div className="mt-2 flex flex-wrap items-center gap-4 text-[11px] text-ink-3">
+        <span className="inline-flex items-center gap-1.5">
+          <span className="h-2 w-2 rounded-sm bg-emerald-600/70" /> Revenue
+        </span>
+        <span className="inline-flex items-center gap-1.5">
+          <span className="h-2 w-2 rounded-sm bg-rose-500/70" /> COGS
+        </span>
+        <span className="ml-auto tabular-nums">
+          {series[0]?.day} → {series[series.length - 1]?.day}
+        </span>
+      </div>
+    </div>
+  );
+}
+
 export function AdminHorizontalBars({
   rows,
   className,

@@ -2,11 +2,14 @@ import { NextResponse } from "next/server";
 import { adminRoute } from "@/lib/admin/api-route";
 import { requirePlatformPermission } from "@/lib/admin/require-platform-admin";
 import { getRevolutStatus } from "@/lib/billing/revolut/client";
+import { listPublishedPublicCatalog } from "@/lib/billing/commerce/catalog";
+import {
+  computeMrrCents,
+  sumPaidInvoiceCents,
+} from "@/lib/admin/queries/economics";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-const PAID_STATUSES = new Set(["active", "trialing", "past_due", "comped", "manual", "enterprise"]);
 
 type SubRow = {
   id: string;
@@ -37,8 +40,19 @@ export const GET = adminRoute(async (_request, ctx) => {
 
   const now = Date.now();
   const in30d = now + 30 * 24 * 60 * 60 * 1000;
+  const since30d = new Date(now - 30 * 24 * 60 * 60 * 1000).toISOString();
 
-  const [subsRes, invoicesRes, eventsRes, grantsRes, plansRes, workspacesRes] = await Promise.all([
+  const [
+    subsRes,
+    invoicesDisplayRes,
+    eventsRes,
+    grantsRes,
+    plansRes,
+    workspacesRes,
+    invoice30d,
+    invoiceAll,
+    catalog,
+  ] = await Promise.all([
     ctx.serviceClient
       .from("billing_subscriptions")
       .select(
@@ -65,49 +79,54 @@ export const GET = adminRoute(async (_request, ctx) => {
       .from("platform_plan_configs")
       .select("plan_slug, display_name, monthly_price_cents, annual_price_cents, is_active"),
     ctx.serviceClient.from("workspaces").select("id, name, plan_slug").limit(500),
+    sumPaidInvoiceCents(ctx.serviceClient, since30d),
+    sumPaidInvoiceCents(ctx.serviceClient),
+    listPublishedPublicCatalog(ctx.serviceClient, "USD").catch(() => []),
   ]);
 
-  for (const res of [subsRes, invoicesRes, eventsRes, grantsRes, plansRes, workspacesRes]) {
+  for (const res of [subsRes, invoicesDisplayRes, eventsRes, grantsRes, plansRes, workspacesRes]) {
     if (res.error) throw res.error;
   }
 
   const revolut = getRevolutStatus();
   const currency = revolut.currency;
   const plans = plansRes.data ?? [];
-  const planBySlug = new Map(plans.map((p) => [String(p.plan_slug), p]));
+  const planBySlug = new Map(
+    plans.map((p) => [
+      String(p.plan_slug),
+      {
+        plan_slug: String(p.plan_slug),
+        display_name: p.display_name != null ? String(p.display_name) : null,
+        monthly_price_cents:
+          p.monthly_price_cents != null ? Number(p.monthly_price_cents) : null,
+        annual_price_cents:
+          p.annual_price_cents != null ? Number(p.annual_price_cents) : null,
+      },
+    ]),
+  );
   const workspaceName = new Map(
     (workspacesRes.data ?? []).map((w) => [String(w.id), String(w.name ?? "Workspace")]),
   );
 
-  const subscriptions = (subsRes.data ?? []) as SubRow[];
-
-  // Latest subscription per workspace
-  const latestByWorkspace = new Map<string, SubRow>();
-  for (const sub of subscriptions) {
-    if (!latestByWorkspace.has(sub.workspace_id)) {
-      latestByWorkspace.set(sub.workspace_id, sub);
+  const commerceMonthly = new Map<string, number>();
+  for (const price of catalog) {
+    if (price.cadence === "monthly" && price.amountMinor > 0) {
+      commerceMonthly.set(price.planCode, price.amountMinor);
     }
   }
+
+  const subscriptions = (subsRes.data ?? []) as SubRow[];
+  const { mrrCents, latestByWorkspace } = computeMrrCents({
+    subscriptions,
+    planBySlug,
+    commerceMonthlyCentsByPlan: commerceMonthly,
+  });
   const latestSubs = [...latestByWorkspace.values()];
 
   const statusBreakdown: Record<string, number> = {};
   for (const sub of latestSubs) {
     const key = sub.status || "unknown";
     statusBreakdown[key] = (statusBreakdown[key] ?? 0) + 1;
-  }
-
-  let mrrCents = 0;
-  for (const sub of latestSubs) {
-    if (!PAID_STATUSES.has(sub.status)) continue;
-    if (sub.status === "cancelled" || sub.status === "expired") continue;
-    const plan = planBySlug.get(sub.plan_slug);
-    if (!plan) continue;
-    const interval = String(sub.metadata?.interval ?? "monthly");
-    const monthly =
-      interval === "annual"
-        ? Math.round(Number(plan.annual_price_cents ?? 0) / 12)
-        : Number(plan.monthly_price_cents ?? 0);
-    if (Number.isFinite(monthly) && monthly > 0) mrrCents += monthly;
   }
 
   const activePaidWorkspaces = latestSubs.filter((s) =>
@@ -138,7 +157,7 @@ export const GET = adminRoute(async (_request, ctx) => {
     .sort((a, b) => String(a.renewsAt).localeCompare(String(b.renewsAt)))
     .slice(0, 20);
 
-  const invoices = (invoicesRes.data ?? []).map((inv) => ({
+  const invoices = (invoicesDisplayRes.data ?? []).map((inv) => ({
     id: String(inv.id),
     workspaceId: String(inv.workspace_id),
     workspaceName: workspaceName.get(String(inv.workspace_id)) ?? "Workspace",
@@ -148,12 +167,6 @@ export const GET = adminRoute(async (_request, ctx) => {
     createdAt: String(inv.created_at),
     hasExternalPayment: Boolean(inv.external_payment_id),
   }));
-
-  const paidInvoices = invoices.filter((i) => i.status === "paid");
-  const revenue30dCents = paidInvoices
-    .filter((i) => Date.parse(i.createdAt) >= now - 30 * 24 * 60 * 60 * 1000)
-    .reduce((sum, i) => sum + i.amountCents, 0);
-  const revenueAllTimeCents = paidInvoices.reduce((sum, i) => sum + i.amountCents, 0);
 
   const subscriptionRows = latestSubs.slice(0, 50).map((s) => ({
     id: s.id,
@@ -197,14 +210,14 @@ export const GET = adminRoute(async (_request, ctx) => {
       arrCents: mrrCents * 12,
       mrrLabel: moneyLabel(mrrCents, currency),
       arrLabel: moneyLabel(mrrCents * 12, currency),
-      revenue30dCents,
-      revenue30dLabel: moneyLabel(revenue30dCents, currency),
-      revenueAllTimeCents,
-      revenueAllTimeLabel: moneyLabel(revenueAllTimeCents, currency),
+      revenue30dCents: invoice30d.totalCents,
+      revenue30dLabel: moneyLabel(invoice30d.totalCents, currency),
+      revenueAllTimeCents: invoiceAll.totalCents,
+      revenueAllTimeLabel: moneyLabel(invoiceAll.totalCents, currency),
       activePaidWorkspaces,
       cancelledWorkspaces,
       cancelAtPeriodEnd,
-      paidInvoiceCount: paidInvoices.length,
+      paidInvoiceCount: invoiceAll.count,
     },
     statusBreakdown,
     upcomingRenewals,
