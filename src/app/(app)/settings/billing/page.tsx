@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useStore } from "@/lib/demo-store";
 import { authHeaders } from "@/lib/api/auth-client";
@@ -96,7 +96,10 @@ export default function SettingsBillingPage() {
     setError(null);
     try {
       const headers = await authHeaders();
-      const res = await fetch(`/api/workspaces/${workspaceId}/billing`, { headers });
+      const res = await fetch(`/api/workspaces/${workspaceId}/billing`, {
+        headers,
+        cache: "no-store",
+      });
       const body = await res.json();
       if (!res.ok) throw new Error(body?.error ?? "Failed to load billing.");
       setSummary(body as BillingSummary);
@@ -113,6 +116,21 @@ export default function SettingsBillingPage() {
     if (canViewBilling(myRole)) void load();
     else setLoading(false);
   }, [load, myRole]);
+
+  // Sidebar reads workspaces.plan_slug (often already Pro after checkout) while this
+  // page historically could keep a stale Free API payload. If they disagree, refetch once.
+  const workspacePlanSlug = String(
+    state.workspace.planSlug ?? state.workspace.plan ?? "free",
+  ).toLowerCase();
+  const resyncedRef = useRef(false);
+  useEffect(() => {
+    if (!summary || !canViewBilling(myRole) || resyncedRef.current) return;
+    const apiSlug = String(summary.currentPlanSlug ?? "free").toLowerCase();
+    if (apiSlug === "free" && workspacePlanSlug !== "free") {
+      resyncedRef.current = true;
+      void load();
+    }
+  }, [summary, workspacePlanSlug, myRole, load]);
 
   // After Revolut redirect, poll until webhook activates the plan (or timeout).
   // Every exit path re-fetches via load() directly (not just router.replace, which is
@@ -135,7 +153,10 @@ export default function SettingsBillingPage() {
     const poll = async () => {
       try {
         const headers = await authHeaders();
-        const res = await fetch(`/api/workspaces/${workspaceId}/billing`, { headers });
+        const res = await fetch(`/api/workspaces/${workspaceId}/billing`, {
+          headers,
+          cache: "no-store",
+        });
         const body = (await res.json()) as BillingSummary;
         if (!cancelled && res.ok) {
           setSummary(body);
@@ -245,10 +266,28 @@ export default function SettingsBillingPage() {
     );
   }
 
+  const PLAN_TIER: Record<string, number> = {
+    free: 0,
+    pro: 1,
+    team: 2,
+    business: 3,
+    enterprise: 4,
+  };
+  const apiPlanSlug = String(summary?.currentPlanSlug ?? "free").toLowerCase();
+  // Prefer the higher tier between API resolve and the live workspace row so a
+  // briefly stale billing payload cannot flash Free after Pro checkout.
+  const effectivePlanSlug =
+    (PLAN_TIER[apiPlanSlug] ?? 0) >= (PLAN_TIER[workspacePlanSlug] ?? 0)
+      ? apiPlanSlug
+      : workspacePlanSlug;
   const cap = summary?.capacity;
   const pct =
     cap && !cap.unlimited && cap.allowance ? Math.min(100, (cap.used / cap.allowance) * 100) : 0;
-  const isFree = !summary?.currentPlanSlug || summary.currentPlanSlug === "free";
+  const isFree = effectivePlanSlug === "free";
+  const currentPlanDisplayName =
+    !isFree && apiPlanSlug === "free"
+      ? effectivePlanSlug.charAt(0).toUpperCase() + effectivePlanSlug.slice(1)
+      : (summary?.planDisplayName ?? effectivePlanSlug);
 
   return (
     <>
@@ -287,7 +326,7 @@ export default function SettingsBillingPage() {
                     Current plan
                   </p>
                   <p className="mt-1 text-3xl font-semibold tracking-tight text-ink">
-                    {summary.planDisplayName ?? summary.currentPlanSlug}
+                    {currentPlanDisplayName}
                   </p>
                   <p className="mt-1 text-sm text-ink-3">
                     {summary.subscriptionStatus
@@ -402,10 +441,12 @@ export default function SettingsBillingPage() {
 
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {summary.plans.map((plan) => {
-                const isCurrent = plan.planSlug === summary.currentPlanSlug;
+                const isCurrent = plan.planSlug === effectivePlanSlug;
                 const priceCents =
                   interval === "annual" ? plan.annualPriceCents : plan.monthlyPriceCents;
                 const isEnterprise = plan.planSlug === "enterprise";
+                const isDowngrade =
+                  (PLAN_TIER[plan.planSlug] ?? 0) < (PLAN_TIER[effectivePlanSlug] ?? 0);
                 return (
                   <Card
                     key={plan.planSlug}
@@ -450,7 +491,11 @@ export default function SettingsBillingPage() {
                         onClick={() => startCheckout(plan.planSlug)}
                         disabled={busyPlan === plan.planSlug}
                       >
-                        {busyPlan === plan.planSlug ? "Starting…" : "Upgrade"}
+                        {busyPlan === plan.planSlug
+                          ? "Starting…"
+                          : isDowngrade
+                            ? "Schedule downgrade"
+                            : "Upgrade"}
                       </Button>
                     )}
                     {isEnterprise && (

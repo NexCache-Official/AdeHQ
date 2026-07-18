@@ -491,6 +491,22 @@ export async function getWorkspaceCapacity(
     }
   }
 
+  // Never let a stale "free" resolve mask a paid period row (or vice versa).
+  // Prefer the higher commercial tier between live resolve and the open period.
+  const PLAN_TIER: Record<string, number> = {
+    free: 0,
+    pro: 1,
+    team: 2,
+    business: 3,
+    enterprise: 4,
+  };
+  const resolvedSlug = (resolved.planSlug || "free").toLowerCase();
+  const periodSlug = (period.planSlug || "free").toLowerCase();
+  const planSlug =
+    (PLAN_TIER[resolvedSlug] ?? 0) >= (PLAN_TIER[periodSlug] ?? 0)
+      ? resolvedSlug
+      : periodSlug;
+
   return {
     allowance,
     used,
@@ -499,7 +515,7 @@ export async function getWorkspaceCapacity(
     warningLevel,
     periodStart: period.periodStart,
     periodEnd: period.periodEnd,
-    planSlug: resolved.planSlug || period.planSlug,
+    planSlug,
     resetsAt: period.periodEnd,
   };
 }

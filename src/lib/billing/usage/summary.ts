@@ -1,5 +1,4 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { getCurrentUsagePeriodRange } from "@/lib/ai/work-hours/periods";
 import {
   INTELLIGENCE_MODE_LABELS,
   intelligenceModeFromModelMode,
@@ -112,8 +111,9 @@ function resolveIntelligenceKey(
 }
 
 /**
- * Aggregate the current period's billable cost ledger for a workspace
- * (Mon 00:00 UTC week, clipped by calendar month).
+ * Aggregate the current period's billable cost ledger for a workspace.
+ * Ledger window follows the same activation-anchored usage period as capacity
+ * (not the legacy Monday-UTC week).
  * `includeCost` controls whether raw USD figures are populated (admin only);
  * customer surfaces should pass false and read Work Hours.
  */
@@ -123,13 +123,17 @@ export async function summarizeWorkspaceUsage(
   options: { includeCost?: boolean } = {},
 ): Promise<WorkspaceUsageSummary> {
   const includeCost = options.includeCost ?? false;
-  const { weekStart, startIso, endExclusiveIso } = getCurrentUsagePeriodRange(new Date());
+
+  // Capacity first so the ledger window matches the open commerce period.
+  const capacity = await getWorkspaceCapacity(client, workspaceId);
+  const startIso = capacity.periodStart;
+  const endExclusiveIso = capacity.periodEnd;
+  const weekStart = startIso.slice(0, 10);
 
   // Lean projection only — selecting `metadata` jsonb has returned empty
   // `data: []` with count>0 for some SaaS workspaces (payload/serialize),
   // which blanked hire breakdowns while the period counter still moved.
-  const [capacity, ledgerRes, employeesRes] = await Promise.all([
-    getWorkspaceCapacity(client, workspaceId),
+  const [ledgerRes, employeesRes] = await Promise.all([
     client
       .from("ai_cost_ledger_entries")
       .select(

@@ -111,6 +111,12 @@ export async function getWorkspaceBillingSummary(
         ? "monthly"
         : null;
 
+  if (invoicesRes.error) {
+    console.error("[AdeHQ billing] invoices query failed", {
+      workspaceId,
+      error: invoicesRes.error,
+    });
+  }
   const invoices: BillingInvoiceRow[] = invoicesRes.error
     ? []
     : (invoicesRes.data ?? []).map((row) => ({

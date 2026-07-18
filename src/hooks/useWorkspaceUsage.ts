@@ -54,7 +54,10 @@ export function useWorkspaceUsage(workspaceId: string | null) {
     setError(null);
     try {
       const headers = await authHeaders();
-      const res = await fetch(`/api/workspaces/${workspaceId}/usage`, { headers });
+      const res = await fetch(`/api/workspaces/${workspaceId}/usage`, {
+        headers,
+        cache: "no-store",
+      });
       const body = await res.json();
       if (!res.ok) throw new Error(body?.error ?? "Failed to load usage.");
       setData(body as WorkspaceUsageResponse);

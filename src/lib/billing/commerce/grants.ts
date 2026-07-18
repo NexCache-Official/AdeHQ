@@ -91,12 +91,35 @@ export async function ensureCurrentUsagePeriodGrant(
     version?.planCode ??
     String(workspace.plan_slug ?? workspace.plan ?? "free").toLowerCase();
 
-  const unlimited = version?.entitlements.unlimited_work_hours === true;
+  // When plan_version_id is missing, still honor platform_plan_configs WH for the
+  // workspace slug (Pro=125) instead of hardcoding Free's 10.
+  let configWh: number | null = null;
+  let configUnlimited = false;
+  if (!version) {
+    const { data: planConfig } = await client
+      .from("platform_plan_configs")
+      .select("weekly_work_hours, entitlements")
+      .eq("plan_slug", planSlug)
+      .maybeSingle();
+    if (planConfig) {
+      configUnlimited =
+        (planConfig.entitlements as { unlimited_work_hours?: boolean } | null)
+          ?.unlimited_work_hours === true;
+      configWh = Number(planConfig.weekly_work_hours ?? 0);
+    }
+  }
+
+  const unlimited =
+    version?.entitlements.unlimited_work_hours === true || configUnlimited;
   const freeIneligible =
     (workspace.usage_clock_kind === "free" || serviceAccess === "free") &&
     workspace.free_wh_eligible === false;
 
-  let baseWhGranted = unlimited ? 0 : (version?.weeklyIncludedWh ?? 10);
+  let baseWhGranted = unlimited
+    ? 0
+    : (version?.weeklyIncludedWh ??
+      (configWh != null && configWh > 0 ? configWh : null) ??
+      (planSlug === "free" ? 10 : 0));
   if (freeIneligible || skippedBaseGrant) baseWhGranted = 0;
 
   const { data: existing } = await client

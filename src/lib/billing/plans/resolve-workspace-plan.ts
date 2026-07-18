@@ -122,16 +122,20 @@ export async function resolveWorkspacePlan(
   const serviceAccess = subscription
     ? String((subscription as { service_access_status?: string }).service_access_status ?? "")
     : "";
+  // Commerce source of truth: service_access_status. A checkout-pending row is often
+  // status=trialing with service_access=free — that must NOT override workspaces.plan_slug
+  // or knock a paid workspace back to Free in Settings while the sidebar still says Pro.
   const serviceAccessGrantsPlan =
     serviceAccess === "active" ||
     serviceAccess === "grace" ||
     serviceAccess === "scheduled_to_end" ||
     serviceAccess === "read_only";
+  const legacyStatusGrantsPlan =
+    !serviceAccess &&
+    subscriptionStatus != null &&
+    ACTIVE_SUBSCRIPTION_STATUSES.includes(subscriptionStatus);
   const subscriptionActive =
-    subscription != null &&
-    ((subscriptionStatus != null &&
-      ACTIVE_SUBSCRIPTION_STATUSES.includes(subscriptionStatus)) ||
-      serviceAccessGrantsPlan);
+    subscription != null && (serviceAccessGrantsPlan || legacyStatusGrantsPlan);
 
   const workspacePlanSlug =
     (workspaceRes.data?.plan_slug as string | null) ??
@@ -147,6 +151,8 @@ export async function resolveWorkspacePlan(
     planSlug = String(subscription.plan_slug);
     source = "subscription";
   } else if (workspacePlanSlug) {
+    // Prefer the workspace row when the latest subscription is only a pending
+    // checkout (trialing + free access) — keeps Settings in sync with the rail.
     planSlug = workspacePlanSlug;
     source = "workspace";
   } else {

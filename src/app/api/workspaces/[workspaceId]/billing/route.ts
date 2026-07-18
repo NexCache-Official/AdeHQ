@@ -34,15 +34,22 @@ export async function GET(
     }
     const summary = await getWorkspaceBillingSummary(service, params.workspaceId);
 
-    return NextResponse.json({
-      ...summary,
-      permissions: {
-        canViewBilling: canViewBilling(role),
-        canStartCheckout: canStartCheckout(role),
-        canApplyPromoCode: canApplyPromoCode(role),
-        canChangePlan: canChangePlan(role),
+    return NextResponse.json(
+      {
+        ...summary,
+        permissions: {
+          canViewBilling: canViewBilling(role),
+          canStartCheckout: canStartCheckout(role),
+          canApplyPromoCode: canApplyPromoCode(role),
+          canChangePlan: canChangePlan(role),
+        },
       },
-    });
+      {
+        headers: {
+          "Cache-Control": "no-store, max-age=0",
+        },
+      },
+    );
   } catch (error) {
     if (error instanceof AuthError) {
       return NextResponse.json({ error: error.message }, { status: error.status });

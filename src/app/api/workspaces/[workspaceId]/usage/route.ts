@@ -28,19 +28,23 @@ export async function GET(
       console.error("[AdeHQ usage GET] reconcile failed", err);
     }
 
-    // Probe the same sources summarize uses — if these disagree with the
-    // summary, the secret client is not actually bypassing RLS / reading
-    // the commercial tables for this workspace.
-    const { startIso, endExclusiveIso } = await import("@/lib/ai/work-hours/periods").then((m) =>
-      m.getCurrentUsagePeriodRange(new Date()),
-    );
+    const summary = await summarizeWorkspaceUsage(service, params.workspaceId, {
+      includeCost: false,
+    });
+
+    // Probe against the same commerce period capacity uses (not legacy Monday UTC).
+    const startIso = summary.capacity.periodStart;
+    const endExclusiveIso = summary.capacity.periodEnd;
     const [periodProbe, ledgerProbe] = await Promise.all([
       service
         .from("workspace_usage_periods")
-        .select("id, ai_work_hours_used, period_start, period_end")
+        .select("id, ai_work_hours_used, period_start, period_end, plan_slug, ai_work_hours_allowance")
         .eq("workspace_id", params.workspaceId)
-        .eq("period_start", startIso)
-        .eq("period_end", endExclusiveIso)
+        .eq("status", "active")
+        .lte("period_start", new Date().toISOString())
+        .gt("period_end", new Date().toISOString())
+        .order("period_start", { ascending: false })
+        .limit(1)
         .maybeSingle(),
       service
         .from("ai_cost_ledger_entries")
@@ -55,19 +59,7 @@ export async function GET(
         periodError: periodProbe.error,
         ledgerError: ledgerProbe.error,
       });
-    } else {
-      console.info("[AdeHQ usage GET] probe", {
-        workspaceId: params.workspaceId,
-        periodUsed: periodProbe.data?.ai_work_hours_used ?? null,
-        ledgerCount: ledgerProbe.count ?? 0,
-        startIso,
-        endExclusiveIso,
-      });
     }
-
-    const summary = await summarizeWorkspaceUsage(service, params.workspaceId, {
-      includeCost: false,
-    });
 
     // Summary already floors leaves and rolls parents up — pass through one shared total.
     // Prefer period counter when summarize somehow returns 0 despite probe usage.
@@ -146,7 +138,11 @@ export async function GET(
       };
     }
 
-    return NextResponse.json(body);
+    return NextResponse.json(body, {
+      headers: {
+        "Cache-Control": "no-store, max-age=0",
+      },
+    });
   } catch (error) {
     if (error instanceof AuthError) {
       return NextResponse.json({ error: error.message }, { status: error.status });
