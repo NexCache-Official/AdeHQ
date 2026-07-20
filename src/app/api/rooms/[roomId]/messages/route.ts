@@ -752,8 +752,9 @@ export async function POST(
           buildStewardResponders,
           leaseReadySteps,
         } = await import("@/lib/brain/steward/execute");
+        const stewardClient = createSupabaseSecretClient();
         const accessibleIds = orchestrationEmployees.map((e) => e.id);
-        const started = await startStewardExecution(client, {
+        const started = await startStewardExecution(stewardClient, {
           workspaceId,
           initiatedByUserId: user.id,
           roomId: params.roomId,
@@ -789,7 +790,7 @@ export async function POST(
             stewardExecutionUsed = true;
             stewardApprovalHint = `${started.progress.leadEmployeeName ?? "An employee"} proposes a collaboration using up to ${started.plan.estimatedWhMax.toFixed(1)} Work Hours. Approve to continue.`;
           } else if (started.readySteps.length) {
-            await leaseReadySteps(client, {
+            await leaseReadySteps(stewardClient, {
               workspaceId,
               brainRunId: started.brainRunId,
               plan: started.plan,
