@@ -18,6 +18,7 @@ Runnable tooling for AdeHQ. Prefer **npm scripts** from the repo root (`package.
 | Steward shadow | `npm run test:brain:steward-shadow` (PR-19 plan-only golden scenarios) |
 | Steward execution | `npm run test:brain:steward-execution` (PR-19 leases/findings/receipts/DAG) |
 | Brain voice | `npm run test:brain:voice` (PR-18 STT/TTS routes, policy, metering) |
+| Realtime Brain Calls | `npm run test:brain:voice:live-benchmark` (PR-18.1 routing, Groq minimum billing, chunking, PCM transport) |
 | Brain gauntlet | `npm run test:brain:gauntlet` (release + reliability + steward shadow + brain + access) |
 | Brain Step shadow | `npm run test:brain:step-shadow` (live SF: Qwen3-8B vs Step-3.5-Flash) |
 | Brain Step harness | `npm run test:brain:step-harness` (larger agreement + WH cost report) |

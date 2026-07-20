@@ -38,6 +38,14 @@ export type ProcessEmployeeOptions = {
   skipCostGuard?: boolean;
   /** Human who initiated the response — stamps Brain reliability envelope. */
   initiatedByUserId?: string;
+  /** Preserve the normal Brain while adapting only the spoken presentation. */
+  voiceCall?: boolean;
+  onReplyDelta?: (delta: string) => void;
+  abortSignal?: AbortSignal;
+  onActivity?: (
+    activity: "thinking" | "searching" | "using_tool" | "speaking",
+    detail?: string,
+  ) => void;
 };
 
 export async function processEmployeeResponse(
@@ -124,11 +132,26 @@ export async function processEmployeeResponse(
     ? await loadAttachmentFileIds(client, ctx.workspaceId, options.triggerMessageId)
     : [];
   const artifactIntent = detectArtifactIntent(content);
+  options.onActivity?.("thinking");
   const fileContextBundle = await retrieveFileContext(client, ctx.workspaceId, topicId, {
     userMessage: content,
     priorityFileIds: attachmentFileIds,
   });
   let fileContextPrompt = buildFileContextPrompt(fileContextBundle);
+  if (options.voiceCall) {
+    fileContextPrompt = [
+      fileContextPrompt,
+      [
+        "CALL PRESENTATION POLICY (presentation only; all normal permissions, tools, memory, and routing still apply):",
+        "Respond conversationally and lead with the answer.",
+        "Prefer one to three spoken sentences. Avoid markdown, tables, citation identifiers, and raw URLs.",
+        "Say when you are searching or using a tool. Ask before delivering a long spoken explanation.",
+        "Put detailed structure and sources in the durable conversation instead of reading them aloud.",
+      ].join("\n"),
+    ]
+      .filter(Boolean)
+      .join("\n\n");
+  }
   const usedFileContext = fileContextBundle.chunks.length > 0;
 
   if (
@@ -139,6 +162,7 @@ export async function processEmployeeResponse(
     })
   ) {
     try {
+      options.onActivity?.("using_tool", "Analyzing attached visuals");
       const vision = await executeVisionUnderstanding({
         client,
         workspaceId: ctx.workspaceId,
@@ -390,7 +414,20 @@ export async function processEmployeeResponse(
     failed,
     errorMessage,
     usedRuntime,
-  } = await dispatchEmployeeDirectResponse(routeInput, routeOptions);
+  } = await dispatchEmployeeDirectResponse(
+    routeInput,
+    routeOptions,
+    options.onReplyDelta
+      ? {
+          onReplyDelta: options.onReplyDelta,
+          abortSignal: options.abortSignal,
+        }
+      : undefined,
+  );
+  if ((response.effect.toolCalls?.length ?? 0) > 0) {
+    options.onActivity?.("using_tool", "Using workspace tools");
+  }
+  options.onActivity?.("speaking");
 
   await recordEmployeeReplyShadowResult({
     client,

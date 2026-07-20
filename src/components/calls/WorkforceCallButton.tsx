@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { WORKFORCE_CALLS_ENABLED } from "@/lib/config/features";
+import { LIVE_BRAIN_CALLS_ENABLED } from "@/lib/config/features";
 import { Button } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import { Phone } from "lucide-react";
@@ -26,7 +26,7 @@ export function WorkforceCallButton({
   iconOnly = false,
 }: WorkforceCallButtonProps) {
   const router = useRouter();
-  const href = WORKFORCE_CALLS_ENABLED
+  const href = LIVE_BRAIN_CALLS_ENABLED
     ? roomId
       ? `/calls?room=${roomId}`
       : "/calls"
@@ -40,8 +40,8 @@ export function WorkforceCallButton({
           "flex h-[34px] w-[34px] items-center justify-center rounded-[10px] border border-border bg-surface text-ink-2 transition-colors hover:bg-muted",
           className,
         )}
-        aria-label={WORKFORCE_CALLS_ENABLED ? "Start call" : "Workforce calls — coming soon"}
-        title={WORKFORCE_CALLS_ENABLED ? "Start call" : "Workforce calls — coming soon"}
+        aria-label={LIVE_BRAIN_CALLS_ENABLED ? "Start call" : "Brain calls — coming soon"}
+        title={LIVE_BRAIN_CALLS_ENABLED ? "Start call" : "Brain calls — coming soon"}
       >
         <Phone className="h-[15px] w-[15px]" strokeWidth={1.9} />
       </Link>
@@ -54,10 +54,10 @@ export function WorkforceCallButton({
       variant={variant}
       className={className}
       onClick={() => router.push(href)}
-      title={WORKFORCE_CALLS_ENABLED ? undefined : "Workforce calls — coming soon"}
+      title={LIVE_BRAIN_CALLS_ENABLED ? undefined : "Brain calls — coming soon"}
     >
       <Phone className="h-4 w-4" />
-      {showLabel && (WORKFORCE_CALLS_ENABLED ? "Call" : "Call — soon")}
+      {showLabel && (LIVE_BRAIN_CALLS_ENABLED ? "Call" : "Call — soon")}
     </Button>
   );
 }

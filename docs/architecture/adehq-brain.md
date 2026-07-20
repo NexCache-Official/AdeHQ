@@ -446,3 +446,40 @@ Cursor plan index: `.cursor/plans/adehq_brain_roadmap_7879533e.plan.md` (points 
 - No CoT transfer between models; no member-facing model names; no eval routes in production scoring.
 - Historical usage never rewritten; new snapshots apply forward only.
 - Audit store minimized by default (hashes + refs, not content).
+
+## PR-18.1 — Realtime Brain Calls V1
+
+Calls use the existing employee Brain rather than a separate voice agent:
+
+```text
+AudioWorklet + browser VAD
+→ one finalized utterance
+→ Speech Router (Groq Whisper Turbo by default)
+→ private employee DM Brain stream
+→ speech-aware sentence chunker
+→ Speech Router (SiliconFlow CosyVoice by default)
+→ ordered playback
+```
+
+- Standard calls are **turn-based near-real-time**. Groq is batch utterance STT,
+  so the UI shows listening activity and final text after a pause; it never
+  invents word-by-word partial captions.
+- Groq usage applies the ten-second minimum to every request. Calls send exactly
+  one request per completed utterance.
+- `live_streaming` is a separate adapter mode reserved for a true streaming STT
+  provider. Groq remains a final retry route there.
+- Call sessions and finalized turns are durable in Supabase. Audio frames,
+  listening activity, and provider streams are transient. Raw audio is stored
+  only after explicit recording consent.
+- V1 accepts only `human_ai_dm`, while the schema includes room/topic conversation
+  types for later multi-party calling.
+- The transport is abstracted behind `CallTransport`; V1 uses Vercel Function
+  WebSockets with reconnect tokens and external state.
+- STT, Brain, and TTS settle independently. Failed and interrupted provider work
+  records actual incurred cost; goodwill waivers are separate ledger entries.
+- Echo cancellation, noise suppression, sustained-speech barge-in, playback
+  ducking, and post-playback suppression prevent employees from hearing themselves.
+
+Flags: `ADEHQ_LIVE_CALLS_V1=1`,
+`NEXT_PUBLIC_ADEHQ_LIVE_CALLS_V1=1`, and
+`ADEHQ_LIVE_CALLS_ROLLOUT=internal|allowlisted_workspaces|all_entitled_workspaces`.

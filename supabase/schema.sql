@@ -307,11 +307,29 @@ create table if not exists public.calls (
   workspace_id uuid not null references public.workspaces(id) on delete cascade,
   id text not null,
   room_id text not null,
+  conversation_type text not null default 'human_ai_dm'
+    check (conversation_type in ('human_ai_dm','room','topic')),
+  conversation_id text not null,
+  initiator_user_id uuid references auth.users(id) on delete set null,
+  primary_employee_id text,
+  participant_ids jsonb not null default '[]'::jsonb,
+  permission_version integer not null default 1,
+  stt_mode text not null default 'fast_turn'
+    check (stt_mode in ('fast_turn','live_streaming')),
+  voice_route_policy text not null default 'standard',
+  session_state text not null default 'ended'
+    check (session_state in ('connecting','active','reconnecting','ending','ended','failed')),
   title text not null,
   status text not null,
   participants jsonb not null default '[]'::jsonb,
   transcript jsonb not null default '[]'::jsonb,
   action_items jsonb not null default '[]'::jsonb,
+  estimated_wh numeric(14,6) not null default 0,
+  settled_wh numeric(14,6) not null default 0,
+  last_activity_at timestamptz not null default now(),
+  reconnect_expires_at timestamptz,
+  recording_consent_at timestamptz,
+  metadata jsonb not null default '{}'::jsonb,
   started_at timestamptz not null default now(),
   ended_at timestamptz,
   updated_at timestamptz not null default now(),
@@ -441,6 +459,89 @@ create table if not exists public.call_transcripts (
     references public.calls(workspace_id, id)
     on delete cascade
 );
+
+create table if not exists public.call_turns (
+  workspace_id uuid not null references public.workspaces(id) on delete cascade,
+  id text not null,
+  call_id text not null,
+  sequence integer not null check (sequence >= 0),
+  idempotency_key text not null,
+  state text not null default 'listening'
+    check (state in (
+      'listening','transcribing','thinking','using_tools','synthesizing',
+      'speaking','interrupted','completed','failed'
+    )),
+  human_transcript text not null default '',
+  employee_transcript text not null default '',
+  spoken_text text not null default '',
+  unspoken_text text not null default '',
+  interrupted boolean not null default false,
+  interrupted_at_character integer,
+  stt_route_id text,
+  tts_route_id text,
+  agent_run_id text,
+  brain_run_id uuid,
+  stt_wh numeric(14,6) not null default 0,
+  brain_wh numeric(14,6) not null default 0,
+  tts_wh numeric(14,6) not null default 0,
+  estimated_wh numeric(14,6) not null default 0,
+  reserved_wh numeric(14,6) not null default 0,
+  settled_wh numeric(14,6) not null default 0,
+  human_started_at timestamptz,
+  human_ended_at timestamptz,
+  first_transcript_at timestamptz,
+  brain_started_at timestamptz,
+  first_text_token_at timestamptz,
+  first_audio_at timestamptz,
+  completed_at timestamptz,
+  metadata jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  primary key (workspace_id, id),
+  unique (workspace_id, call_id, sequence),
+  unique (workspace_id, idempotency_key),
+  foreign key (workspace_id, call_id)
+    references public.calls(workspace_id, id) on delete cascade
+);
+
+create table if not exists public.call_usage_settlements (
+  id uuid primary key default gen_random_uuid(),
+  workspace_id uuid not null references public.workspaces(id) on delete cascade,
+  call_id text not null,
+  turn_id text not null,
+  component text not null check (component in ('stt','brain','tts')),
+  idempotency_key text not null,
+  route_id text,
+  estimated_wh numeric(14,6) not null default 0,
+  reserved_wh numeric(14,6) not null default 0,
+  actual_wh numeric(14,6) not null default 0,
+  customer_charged_wh numeric(14,6) not null default 0,
+  outcome text not null check (outcome in (
+    'success','partial','failed_provider_billed','failed_unbilled','cancelled'
+  )),
+  metadata jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  settled_at timestamptz not null default now(),
+  unique (workspace_id, idempotency_key),
+  foreign key (workspace_id, call_id)
+    references public.calls(workspace_id, id) on delete cascade,
+  foreign key (workspace_id, turn_id)
+    references public.call_turns(workspace_id, id) on delete cascade
+);
+
+create index if not exists idx_calls_workspace_state_activity
+  on public.calls(workspace_id, session_state, last_activity_at desc);
+create index if not exists idx_calls_initiator_active
+  on public.calls(workspace_id, initiator_user_id, session_state);
+create index if not exists idx_call_turns_call_sequence
+  on public.call_turns(workspace_id, call_id, sequence);
+create index if not exists idx_call_usage_turn
+  on public.call_usage_settlements(workspace_id, turn_id, component);
+
+revoke insert, update, delete on public.calls from anon, authenticated;
+revoke insert, update, delete on public.call_transcripts from anon, authenticated;
+revoke insert, update, delete on public.call_turns from anon, authenticated;
+revoke insert, update, delete on public.call_usage_settlements from anon, authenticated;
 
 create index if not exists idx_workspace_members_user
   on public.workspace_members(user_id);
@@ -595,6 +696,8 @@ alter table public.approvals enable row level security;
 alter table public.work_log_events enable row level security;
 alter table public.calls enable row level security;
 alter table public.call_transcripts enable row level security;
+alter table public.call_turns enable row level security;
+alter table public.call_usage_settlements enable row level security;
 alter table public.model_provider_configs enable row level security;
 alter table public.workspace_ai_settings enable row level security;
 alter table public.ai_usage_events enable row level security;
@@ -913,16 +1016,50 @@ using (public.is_workspace_member(workspace_id))
 with check (public.is_workspace_member(workspace_id));
 
 drop policy if exists "calls_all_member" on public.calls;
-create policy "calls_all_member"
-on public.calls for all
-using (public.is_workspace_member(workspace_id))
-with check (public.is_workspace_member(workspace_id));
+drop policy if exists "calls_scoped_member" on public.calls;
+drop policy if exists "calls_scoped_member_select" on public.calls;
+create policy "calls_scoped_member_select"
+on public.calls for select
+using (public.can_access_room_row(workspace_id, room_id));
 
 drop policy if exists "call_transcripts_all_member" on public.call_transcripts;
-create policy "call_transcripts_all_member"
-on public.call_transcripts for all
-using (public.is_workspace_member(workspace_id))
-with check (public.is_workspace_member(workspace_id));
+drop policy if exists "call_transcripts_scoped_member" on public.call_transcripts;
+drop policy if exists "call_transcripts_scoped_member_select" on public.call_transcripts;
+create policy "call_transcripts_scoped_member_select"
+on public.call_transcripts for select
+using (
+  exists (
+    select 1 from public.calls c
+    where c.workspace_id = call_transcripts.workspace_id
+      and c.id = call_transcripts.call_id
+      and public.can_access_room_row(c.workspace_id, c.room_id)
+  )
+);
+
+drop policy if exists "call_turns_scoped_member" on public.call_turns;
+drop policy if exists "call_turns_scoped_member_select" on public.call_turns;
+create policy "call_turns_scoped_member_select"
+on public.call_turns for select
+using (
+  exists (
+    select 1 from public.calls c
+    where c.workspace_id = call_turns.workspace_id
+      and c.id = call_turns.call_id
+      and public.can_access_room_row(c.workspace_id, c.room_id)
+  )
+);
+
+drop policy if exists "call_usage_scoped_member" on public.call_usage_settlements;
+create policy "call_usage_scoped_member"
+on public.call_usage_settlements for select
+using (
+  exists (
+    select 1 from public.calls c
+    where c.workspace_id = call_usage_settlements.workspace_id
+      and c.id = call_usage_settlements.call_id
+      and public.can_access_room_row(c.workspace_id, c.room_id)
+  )
+);
 
 drop policy if exists "model_provider_configs_admin" on public.model_provider_configs;
 create policy "model_provider_configs_admin"

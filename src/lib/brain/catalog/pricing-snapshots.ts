@@ -18,6 +18,8 @@ export type BrainPricingSnapshot = {
   perImage: number | null;
   perVideo: number | null;
   perThousandUtf8Bytes: number | null;
+  /** Character-priced speech routes (for example direct xAI TTS). */
+  perThousandCharacters?: number | null;
   perSearchRequest: number | null;
   perBrowserSecond: number | null;
   perAudioSecond: number | null;
@@ -115,6 +117,18 @@ function ttsSnap(id: string, routeId: string, perThousandUtf8Bytes: number): Bra
   };
 }
 
+function ttsCharacterSnap(
+  id: string,
+  routeId: string,
+  perThousandCharacters: number,
+): BrainPricingSnapshot {
+  return {
+    ...ttsSnap(id, routeId, 0),
+    perThousandUtf8Bytes: null,
+    perThousandCharacters,
+  };
+}
+
 function sttSnap(id: string, routeId: string, perAudioSecond: number): BrainPricingSnapshot {
   return {
     id,
@@ -205,10 +219,21 @@ export const SEEDED_PRICING_SNAPSHOTS: BrainPricingSnapshot[] = [
   ttsSnap("ps_tts_cosyvoice2_2026-07-16", "route_tts_cosyvoice2", 0.00715),
   ttsSnap("ps_tts_indextts2_2026-07-16", "route_tts_indextts2", 0.00715),
   ttsSnap("ps_tts_fish_speech_2026-07-16", "route_tts_fish_speech", 0.015),
+  ttsCharacterSnap("ps_call_tts_xai_2026-07-20", "route_call_tts_xai", 0.015),
   // STT — provisional per-second rates pending live reconciliation
   sttSnap("ps_stt_fast_2026-07-17", "route_stt_fast", 0.00006),
   sttSnap("ps_stt_accurate_2026-07-17", "route_stt_accurate", 0.00012),
   sttSnap("ps_stt_diarized_2026-07-17", "route_stt_diarized", 0.00015),
+  sttSnap(
+    "ps_call_stt_groq_turbo_2026-07-20",
+    "route_call_stt_groq_turbo",
+    0.04 / 3600,
+  ),
+  sttSnap(
+    "ps_call_stt_groq_accurate_2026-07-20",
+    "route_call_stt_groq_accurate",
+    0.111 / 3600,
+  ),
 
   // Evaluation
   tokenSnap("ps_eval_kimi_k27_2026-07-16", "route_eval_kimi_k27_code", 0.8592, 3.8, 0.1799),
@@ -260,6 +285,7 @@ export function costUsdFromSnapshot(
     imageCount?: number;
     videoCount?: number;
     ttsUtf8Bytes?: number;
+    ttsCharacters?: number;
     searchRequests?: number;
     browserSessionSeconds?: number;
     audioSeconds?: number;
@@ -287,6 +313,9 @@ export function costUsdFromSnapshot(
   }
   if (snapshot.perThousandUtf8Bytes != null && (usage.ttsUtf8Bytes ?? 0) > 0) {
     usd += ((usage.ttsUtf8Bytes ?? 0) / 1000) * snapshot.perThousandUtf8Bytes;
+  }
+  if (snapshot.perThousandCharacters != null && (usage.ttsCharacters ?? 0) > 0) {
+    usd += ((usage.ttsCharacters ?? 0) / 1000) * snapshot.perThousandCharacters;
   }
   if (snapshot.perSearchRequest != null && (usage.searchRequests ?? 0) > 0) {
     usd += snapshot.perSearchRequest * (usage.searchRequests ?? 0);

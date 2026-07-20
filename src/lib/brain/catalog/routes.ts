@@ -17,6 +17,8 @@ export type BrainRouteEnvironment =
 
 export type BrainProvider =
   | "siliconflow"
+  | "groq"
+  | "xai"
   | "vercel_gateway"
   | "tavily"
   | "perplexity"
@@ -32,7 +34,13 @@ export type CapabilityRoute = {
   id: string;
   capability: BrainCapability;
   provider: BrainProvider;
-  providerRoute: "siliconflow_direct" | "vercel_gateway" | "mock" | null;
+  providerRoute:
+    | "siliconflow_direct"
+    | "groq_direct"
+    | "xai_direct"
+    | "vercel_gateway"
+    | "mock"
+    | null;
   model: string;
   gatewayProviderSlug?: string | null;
   unitType: CapabilityUnitType;
@@ -425,6 +433,19 @@ export const BRAIN_ROUTES: CapabilityRoute[] = [
     label: "Create premium voiceover",
     notes: "PR-18 premium multilingual — gated by workspace premiumVoicesAllowed.",
   },
+  {
+    id: "route_call_tts_xai",
+    capability: "text_to_speech",
+    provider: "xai",
+    providerRoute: "xai_direct",
+    model: "xai-tts",
+    unitType: "utf8_bytes",
+    environment: "fallback",
+    enabled: true,
+    label: "Premium voice",
+    fallbackForRouteId: "route_tts_cosyvoice2",
+    notes: "PR-18.1 premium/fallback TTS. Direct xAI endpoint; never Gateway TTS.",
+  },
 
   // ─── Evaluation — never auto-scored ──────────────────────────────
   {
@@ -540,6 +561,32 @@ export const BRAIN_ROUTES: CapabilityRoute[] = [
     enabled: true,
     label: "Meeting transcription",
     notes: "Diarization V1: segment scaffolding + speaker labels when provider supports; shadow until benchmark gate.",
+  },
+  {
+    id: "route_call_stt_groq_turbo",
+    capability: "speech_to_text",
+    provider: "groq",
+    providerRoute: "groq_direct",
+    model: "whisper-large-v3-turbo",
+    unitType: "audio_seconds",
+    environment: "production",
+    enabled: true,
+    label: "Fast call transcription",
+    fallbackRouteIds: ["route_call_stt_groq_accurate", "route_stt_fast"],
+    notes: "PR-18.1 batch utterance STT. Ten-second minimum billed per request; never expose fake partials.",
+  },
+  {
+    id: "route_call_stt_groq_accurate",
+    capability: "speech_to_text",
+    provider: "groq",
+    providerRoute: "groq_direct",
+    model: "whisper-large-v3",
+    unitType: "audio_seconds",
+    environment: "fallback",
+    enabled: true,
+    label: "Accurate call transcription",
+    fallbackForRouteId: "route_call_stt_groq_turbo",
+    notes: "Selective retry for low-confidence, noisy, accented, or terminology-heavy utterances.",
   },
 ];
 

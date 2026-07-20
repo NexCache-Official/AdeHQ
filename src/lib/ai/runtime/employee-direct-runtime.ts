@@ -36,6 +36,10 @@ import {
 } from "@/lib/ai/intelligence-policy";
 import { resolveBrainAwareModelMode } from "@/lib/brain/resolve-auto-run";
 import { recordRouteOutcome } from "@/lib/ai/runtime/route-health";
+import { streamSiliconFlowText } from "@/lib/ai/siliconflow-call";
+import { estimateCost, resolveModel } from "@/lib/ai/model-catalog";
+import { sanitizeReplyForChat } from "@/lib/ai/normalize-model-response";
+import { isEmployeeReplyStreamingEnabled } from "@/lib/config/features";
 
 export type EmployeeDirectRuntimeDispatch = "old" | "shadow" | "legacy-guarded" | "runtime-on";
 
@@ -59,6 +63,11 @@ export type EmployeeDirectRuntimeTestHooks = {
   onRuntimeFallback?: (info: { error: string; workUnitFailed: boolean }) => void;
   onRuntimeSuccess?: (info: { workUnitId?: string }) => void;
   onLegacyRoute?: () => void;
+};
+
+export type EmployeeDirectReplyStreaming = {
+  onReplyDelta: (delta: string) => void;
+  abortSignal?: AbortSignal;
 };
 
 let employeeDirectRuntimeTestHooks: EmployeeDirectRuntimeTestHooks | null = null;
@@ -315,14 +324,97 @@ async function callLegacyEmployeeRoute(
   };
 }
 
+async function streamEmployeeDirectResponse(
+  input: EmployeeDirectRouteInput,
+  options: EmployeeDirectRouteOptions,
+  streaming: EmployeeDirectReplyStreaming,
+): Promise<EmployeeDirectRouteResult> {
+  const modelMode = resolveDirectEmployeeModelMode(
+    (options.modelMode ?? input.employee.modelMode) as ModelMode | undefined,
+    input.employee.roleKey,
+  );
+  const capability = inferEmployeeReplyCapability({
+    userMessage: input.message,
+    artifactIntent: input.artifactIntent,
+    isGreetingRun: options.isGreetingRun,
+    conversationMode: options.conversationMode,
+  });
+  if (!["quick_reply", "structured_chat"].includes(capability)) {
+    throw new Error("This call turn requires the structured Brain path.");
+  }
+  const { maxOutputTokens, temperature, timeoutMs } = resolveRouteGenerationParams(
+    input.message,
+    options,
+  );
+  const { system, prompt } = buildEmployeePrompts(input, {
+    ...options,
+    plainProse: true,
+  });
+  const model = resolveModel(input.employee.provider, modelMode, input.employee.model);
+  const started = Date.now();
+  const result = await streamSiliconFlowText(
+    system,
+    prompt,
+    model,
+    maxOutputTokens,
+    timeoutMs,
+    temperature,
+    streaming.onReplyDelta,
+    streaming.abortSignal,
+  );
+  const reply = sanitizeReplyForChat(result.text);
+  if (!reply) throw new Error("Streaming produced an empty employee response.");
+  const inputTokens = result.inputTokens ?? 0;
+  const outputTokens = result.outputTokens ?? 0;
+  return {
+    response: {
+      employeeId: input.employee.id,
+      employeeName: input.employee.name,
+      reply,
+      effect: { workLog: [], tasks: [], memory: [], approvals: [] },
+    },
+    aiMode: "siliconflow-stream",
+    metrics: {
+      model: result.model,
+      inputTokens,
+      outputTokens,
+      fallbackUsed: false,
+      estimatedCostUsd: estimateCost(result.model, inputTokens, outputTokens),
+      durationMs: Date.now() - started,
+    },
+    usedRuntime: false,
+    runtimeFallback: false,
+  };
+}
+
 /**
  * Dispatch direct employee respond: runtime-on with fallback, shadow/legacy-guarded/old → legacy path.
  */
 export async function dispatchEmployeeDirectResponse(
   input: EmployeeDirectRouteInput,
   options: EmployeeDirectRouteOptions = {},
+  streaming?: EmployeeDirectReplyStreaming,
 ): Promise<EmployeeDirectRouteResult> {
   const dispatch = getEmployeeDirectRuntimeDispatch();
+
+  if (
+    streaming &&
+    isEmployeeReplyStreamingEnabled() &&
+    input.employee.provider.toLowerCase() === "siliconflow"
+  ) {
+    try {
+      return await streamEmployeeDirectResponse(input, options, streaming);
+    } catch (error) {
+      if (
+        streaming.abortSignal?.aborted ||
+        (error instanceof Error && error.name === "AbortError")
+      ) {
+        throw error;
+      }
+      // Structured Brain fallback preserves tools/effects when plain streaming
+      // is not safe for this turn.
+    }
+  }
 
   if (dispatch === "runtime-on") {
     try {

@@ -6,6 +6,10 @@ export const ENABLE_DEMO_MODE =
 export const WORKFORCE_CALLS_ENABLED =
   process.env.NEXT_PUBLIC_WORKFORCE_CALLS_ENABLED === "true";
 
+/** PR-18.1 Realtime Brain Calls. Public flag reveals UI only; server rechecks. */
+export const LIVE_BRAIN_CALLS_ENABLED =
+  process.env.NEXT_PUBLIC_ADEHQ_LIVE_CALLS_V1 === "1";
+
 /**
  * Layered employee intelligence pipeline. Enabled by default; set
  * INTELLIGENCE_V1_ENABLED=false to fall back to the legacy research path.
