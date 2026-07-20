@@ -775,6 +775,10 @@ export async function POST(
             dmEmployeeId: respondersCtx.room.dmEmployeeId,
             isPrivateDm: isEmployeeDm,
             legacyMode: conversationPlan.mode,
+            artifactIntent:
+              artifactIntent?.type === "image" || artifactIntent?.type === "video"
+                ? artifactIntent
+                : undefined,
           },
         });
 
@@ -805,7 +809,6 @@ export async function POST(
                 orchestrationId,
                 attachmentFileIds: priorityFileIds,
                 contextFileIds,
-                artifactIntent: artifactIntent ?? undefined,
                 ...researchSignals,
                 ...workStopSignals,
                 ...shadowMeta,

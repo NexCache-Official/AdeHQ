@@ -244,8 +244,15 @@ export function buildStewardResponders(input: {
   return input.readySteps.flatMap((step) => {
     const employee = byId.get(step.employeeId);
     if (!employee) return [];
-    const isSynthesis = step.capability === "synthesis";
-    const isInternal = !isSynthesis;
+    const isTerminal =
+      step.capability === "synthesis" ||
+      step.capability === "image" ||
+      step.capability === "video";
+    const isInternal = !isTerminal;
+    const artifactIntent =
+      input.plan.artifactIntent?.type === step.capability
+        ? input.plan.artifactIntent
+        : undefined;
 
     const objectivePrompt = [
       `You are contributing to a coordinated workforce task led by ${leadName}.`,
@@ -253,7 +260,9 @@ export function buildStewardResponders(input: {
       `Expected output: ${step.expectedOutput}`,
       isInternal
         ? "Produce a concise structured finding for the lead. Do not give a final user-facing answer — the lead will synthesize."
-        : "Synthesize one coherent final answer for the user using the shared findings. Include concise collaborator attribution.",
+        : artifactIntent
+          ? `Complete exactly one ${artifactIntent.type} artifact for the user using the shared findings. Do not only describe or promise the artifact—use the available artifact tool.`
+          : "Synthesize one coherent final answer for the user using the shared findings. Include concise collaborator attribution.",
       input.findingsBoard ? `\n${input.findingsBoard}` : "",
     ]
       .filter(Boolean)
@@ -262,11 +271,11 @@ export function buildStewardResponders(input: {
     return [
       {
         employee,
-        reason: isSynthesis ? ("collaboration_lead" as const) : ("collaboration_collaborator" as const),
+        reason: isTerminal ? ("collaboration_lead" as const) : ("collaboration_collaborator" as const),
         runMetadata: {
           collaborationId: input.collaborationId,
           conversationMode: "lead_collaborator",
-          collaborationRole: isSynthesis ? "lead" : "collaborator",
+          collaborationRole: isTerminal ? "lead" : "collaborator",
           collaborationStatus: "active",
           rootTriggerMessageId: input.rootTriggerMessageId,
           stewardBrainRunId: input.brainRunId,
@@ -274,6 +283,7 @@ export function buildStewardResponders(input: {
           stewardCapability: step.capability,
           stewardInternalStep: isInternal,
           stewardObjectivePrompt: objectivePrompt,
+          artifactIntent,
           leadEmployeeId: input.plan.leadEmployeeId,
           leadEmployeeName: leadName,
           participants: input.plan.steps.map((s) => ({
@@ -376,7 +386,10 @@ export async function advanceStewardAfterStep(
     buildInitialProgress(input.brainRunId, plan, nameById);
 
   const stepMeta = plan.steps.find((s) => s.stepId === input.stepId);
-  const isSynthesis = stepMeta?.capability === "synthesis";
+  const isTerminal =
+    stepMeta?.capability === "synthesis" ||
+    stepMeta?.capability === "image" ||
+    stepMeta?.capability === "video";
 
   if (input.failed) {
   await client
@@ -415,12 +428,22 @@ export async function advanceStewardAfterStep(
     }
     await saveProgress(client, input.brainRunId, progress);
 
-    const wave = readySteps(plan, completed, failed).filter((s) => s.capability === "synthesis");
+    const wave = readySteps(plan, completed, failed).filter(
+      (s) =>
+        s.capability === "synthesis" ||
+        s.capability === "image" ||
+        s.capability === "video",
+    );
     if (!wave.length) {
-      // Try synthesis with whatever findings exist
-      const synth = plan.steps.find((s) => s.capability === "synthesis");
-      if (synth && !completed.has(synth.stepId) && !failed.has(synth.stepId)) {
-        wave.push(synth);
+      // Try the terminal delivery step with whatever findings exist.
+      const terminal = plan.steps.find(
+        (s) =>
+          s.capability === "synthesis" ||
+          s.capability === "image" ||
+          s.capability === "video",
+      );
+      if (terminal && !completed.has(terminal.stepId) && !failed.has(terminal.stepId)) {
+        wave.push(terminal);
       }
     }
 
@@ -471,7 +494,7 @@ export async function advanceStewardAfterStep(
     return { nextResponders: [], progress, receipt: null, finished: false };
   }
 
-  if (!isSynthesis) {
+  if (!isTerminal) {
     await publishSharedFinding(client, {
       workspaceId: input.workspaceId,
       brainRunId: input.brainRunId,
@@ -501,7 +524,7 @@ export async function advanceStewardAfterStep(
     .eq("id", input.brainRunId);
   await saveProgress(client, input.brainRunId, progress);
 
-  if (isSynthesis) {
+  if (isTerminal) {
     await finishBrainRun(client, input.brainRunId, "completed", progress.actualWh);
     const receipt = buildCollaborationReceipt(plan, progress, nameById);
     progress = { ...progress, status: "completed" };

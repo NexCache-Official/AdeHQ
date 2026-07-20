@@ -8,6 +8,7 @@ import type {
   CollaborationTriggerDecision,
   MultiAgentPolicy,
 } from "./types";
+import type { SavedArtifactType } from "@/lib/types";
 
 export type BuildCollaborationPlanInput = {
   message: string;
@@ -23,6 +24,11 @@ export type BuildCollaborationPlanInput = {
   policy?: MultiAgentPolicy;
   /** Available capabilities for this workspace/run. */
   permittedCapabilities?: string[];
+  /** Explicit artifact request detected at the human-message boundary. */
+  artifactIntent?: {
+    type: SavedArtifactType;
+    instruction?: string;
+  };
 };
 
 function pickMode(
@@ -144,8 +150,53 @@ export function buildCollaborationPlan(input: BuildCollaborationPlanInput): {
   const mode = pickMode(trigger, collaborators.length, policy.reviewEnabled);
   const shareScope = input.isPrivateDm ? "private" : "room";
   const steps: CollaborationPlanStep[] = [];
+  const mediaCapability =
+    input.artifactIntent?.type === "image" || input.artifactIntent?.type === "video"
+      ? input.artifactIntent.type
+      : null;
 
-  if (mode === "parallel_research") {
+  if (mediaCapability && collaborators[0]) {
+    const ideator = collaborators[0];
+    steps.push(
+      step(
+        "s_ideate",
+        `Develop a strong creative direction and production brief for: ${objective}`,
+        "reasoning",
+        ideator.id,
+        [],
+        "Concise creative direction, composition, style, and constraints",
+        0.7,
+        shareScope,
+      ),
+    );
+    const reviewer = policy.reviewEnabled ? collaborators[1] : undefined;
+    if (reviewer) {
+      steps.push(
+        step(
+          "s_review",
+          "Review the creative direction for clarity, quality, safety, and fidelity to the request",
+          "review",
+          reviewer.id,
+          ["s_ideate"],
+          "Actionable production notes",
+          0.5,
+          shareScope,
+        ),
+      );
+    }
+    steps.push(
+      step(
+        "s_create",
+        `${mediaCapability === "video" ? "Create the requested five-second video" : "Create the requested image"} using the shared creative findings`,
+        mediaCapability,
+        lead.id,
+        [reviewer ? "s_review" : "s_ideate"],
+        `${mediaCapability === "video" ? "Video" : "Image"} artifact and concise user-facing delivery`,
+        mediaCapability === "video" ? 1.2 : 0.9,
+        shareScope,
+      ),
+    );
+  } else if (mode === "parallel_research") {
     const researchIds: string[] = [];
     collaborators.slice(0, 2).forEach((c, i) => {
       const id = `s_research_${i + 1}`;
@@ -317,13 +368,17 @@ export function buildCollaborationPlan(input: BuildCollaborationPlanInput): {
   const capped = steps.slice(0, policy.maxSteps);
   const estimatedWhMin = capped.reduce((s, x) => s + x.estimatedWh, 0) * 0.7;
   const estimatedWhMax = capped.reduce((s, x) => s + x.estimatedWh, 0) * 1.15;
-  const approvalRequired = estimatedWhMax > policy.autoWhLimit;
+  // Media tools enforce their own cost/approval policy. In particular,
+  // video.create is always approval-gated at the tool boundary (29 WH).
+  const approvalRequired =
+    mediaCapability === null && estimatedWhMax > policy.autoWhLimit;
 
   const plan: CollaborationPlan = {
     objective,
     leadEmployeeId: lead.id,
-    mode: capped.length <= 1 ? "single_employee" : mode,
+    mode: capped.length <= 1 ? "single_employee" : mediaCapability ? "delegated" : mode,
     steps: capped,
+    artifactIntent: mediaCapability ? input.artifactIntent : undefined,
     maxCollaborators: Math.min(policy.maxEmployees, 1 + collaborators.length),
     maxSteps: policy.maxSteps,
     estimatedWhMin: Number(estimatedWhMin.toFixed(2)),

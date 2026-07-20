@@ -2,6 +2,8 @@
  * PR-19 Multi-agent Steward — typed collaboration plan (shadow + future execute).
  */
 
+import type { SavedArtifactType } from "@/lib/types";
+
 export type CollaborationMode =
   | "single_employee"
   | "delegated"
@@ -39,6 +41,10 @@ export type CollaborationPlan = {
   leadEmployeeId: string;
   mode: CollaborationMode;
   steps: CollaborationPlanStep[];
+  artifactIntent?: {
+    type: SavedArtifactType;
+    instruction?: string;
+  };
   maxCollaborators: number;
   maxSteps: number;
   estimatedWhMin: number;

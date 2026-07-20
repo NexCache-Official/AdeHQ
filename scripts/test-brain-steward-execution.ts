@@ -16,6 +16,7 @@ import {
   formatReceiptSummary,
   formatStewardFailureMessage,
   formatFindingsBoard,
+  buildStewardResponders,
 } from "../src/lib/brain/steward";
 import type { SharedFinding } from "../src/lib/brain/steward";
 import type { CollaborationPlan } from "../src/lib/brain/steward";
@@ -123,6 +124,63 @@ const expensive = buildCollaborationPlan({
 check(
   "expensive collab may require approval",
   Boolean(expensive.plan?.approvalRequired),
+);
+
+const mediaPlan = buildCollaborationPlan({
+  message: "@Alex and @Priya create a polished launch image together",
+  candidates: roster,
+  accessibleEmployeeIds: accessible,
+  preferredEmployeeIds: [alex.id, priya.id],
+  artifactIntent: { type: "image" },
+});
+const mediaTerminal = mediaPlan.plan?.steps.find((s) => s.capability === "image");
+check("image collaboration has one terminal image step", Boolean(mediaTerminal));
+check(
+  "image collaboration has exactly one media step",
+  mediaPlan.plan?.steps.filter((s) => s.capability === "image").length === 1,
+);
+if (mediaPlan.plan && mediaTerminal) {
+  const internal = buildStewardResponders({
+    plan: mediaPlan.plan,
+    readySteps: mediaPlan.plan.steps.filter((s) => s.dependsOn.length === 0),
+    employees: roster as any,
+    brainRunId: "brun_media",
+    collaborationId: "collab_media",
+    rootTriggerMessageId: "msg_media",
+  });
+  check(
+    "internal media collaborators never receive artifact intent",
+    internal.every((r) => !r.runMetadata?.artifactIntent),
+  );
+  const terminal = buildStewardResponders({
+    plan: mediaPlan.plan,
+    readySteps: [mediaTerminal],
+    employees: roster as any,
+    brainRunId: "brun_media",
+    collaborationId: "collab_media",
+    rootTriggerMessageId: "msg_media",
+  });
+  check(
+    "only terminal employee receives image intent",
+    terminal.length === 1 &&
+      (terminal[0].runMetadata?.artifactIntent as { type?: string } | undefined)?.type === "image",
+  );
+}
+
+const videoPlan = buildCollaborationPlan({
+  message: "@Alex and @Priya plan and create a five-second launch video together",
+  candidates: roster,
+  accessibleEmployeeIds: accessible,
+  preferredEmployeeIds: [alex.id, priya.id],
+  artifactIntent: { type: "video" },
+});
+check(
+  "video collaboration delegates exactly one terminal video step",
+  videoPlan.plan?.steps.filter((s) => s.capability === "video").length === 1,
+);
+check(
+  "video uses tool-layer approval instead of deadlocking Steward",
+  videoPlan.plan?.approvalRequired === false,
 );
 
 // Acyclic validation
