@@ -8,6 +8,7 @@ import { EmployeeAvatar } from "@/components/EmployeeAvatar";
 import { Button, Modal, ModalHeader } from "@/components/ui";
 import { EmptyState, LoadingState } from "@/components/States";
 import { useStore } from "@/lib/demo-store";
+import { isMayaEmployee } from "@/lib/maya-employee";
 import { isDirectMessage } from "@/lib/rooms";
 import type { AIEmployee, ProjectRoom } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -23,18 +24,22 @@ function RealtimeCallsInner() {
   const [premium, setPremium] = useState(false);
   const [active, setActive] = useState<SelectedCall | null>(null);
 
-  const dmRooms = state.rooms.filter(
-    (room) =>
-      isDirectMessage(room) &&
-      Boolean(room.dmEmployeeId) &&
-      (room.status ?? "active") !== "archived",
-  );
+  // Maya is the workspace guide — calls are only for hired AI employees.
+  const dmRooms = state.rooms.filter((room) => {
+    if (!isDirectMessage(room) || !room.dmEmployeeId) return false;
+    if ((room.status ?? "active") === "archived") return false;
+    const employee = state.employees.find(
+      (candidate) => candidate.id === room.dmEmployeeId,
+    );
+    return Boolean(employee && !isMayaEmployee(employee));
+  });
   const selectedRoom =
     dmRooms.find((room) => room.id === selectedRoomId) ?? dmRooms[0] ?? null;
   const selectedEmployee = selectedRoom?.dmEmployeeId
     ? state.employees.find((employee) => employee.id === selectedRoom.dmEmployeeId) ?? null
     : null;
 
+  const callableRoomIds = dmRooms.map((room) => room.id).join(",");
   useEffect(() => {
     const roomId = params.get("room");
     if (!roomId) return;
@@ -42,8 +47,9 @@ function RealtimeCallsInner() {
     if (!room) return;
     setSelectedRoomId(room.id);
     setSetupOpen(true);
+    // dmRooms is rebuilt each render; key off the stable callable id list instead.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [params]);
+  }, [params, callableRoomIds]);
 
   if (active) {
     return (

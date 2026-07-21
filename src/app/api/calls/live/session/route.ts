@@ -15,6 +15,7 @@ import {
   resolveLiveCallEntitlements,
   setCallSessionState,
 } from "@/lib/brain/voice";
+import { isMayaEmployee } from "@/lib/maya-employee";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -57,6 +58,28 @@ export async function POST(request: NextRequest) {
       role,
       employeeId,
     );
+    const { data: employeeRow, error: employeeError } = await client
+      .from("ai_employees")
+      .select("id, system_employee_key")
+      .eq("workspace_id", workspaceId)
+      .eq("id", employeeId)
+      .maybeSingle();
+    if (employeeError) throw employeeError;
+    if (
+      !employeeRow ||
+      isMayaEmployee({
+        id: String(employeeRow.id),
+        systemEmployeeKey:
+          typeof employeeRow.system_employee_key === "string"
+            ? employeeRow.system_employee_key
+            : null,
+      })
+    ) {
+      return NextResponse.json(
+        { error: "Maya is not available for calls. Choose a hired AI employee." },
+        { status: 422 },
+      );
+    }
     const { data: room, error: roomError } = await client
       .from("rooms")
       .select("kind, dm_employee_id, name")

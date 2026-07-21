@@ -986,7 +986,9 @@ export default function RoomDetailPage() {
           <Button variant="ghost" size="sm" onClick={() => setNewTopicOpen(true)}>
             <Plus className="h-4 w-4" /> New topic
           </Button>
-          <WorkforceCallButton roomId={roomId} size="sm" variant="secondary" />
+          {!isMayaDm && (
+            <WorkforceCallButton roomId={roomId} size="sm" variant="secondary" />
+          )}
         </div>
       </div>
 
