@@ -166,6 +166,20 @@ export async function resolveLiveCallEntitlements(
     rollout === "all_entitled_workspaces" ||
     (rollout === "allowlisted_workspaces" && allowlisted.has(workspaceId)) ||
     (rollout === "internal" && internal.has(workspaceId));
+  // Alpha override: allow Pro-like call entitlements while validating providers.
+  const alphaForce =
+    process.env.ADEHQ_LIVE_CALLS_ALPHA === "1" ||
+    process.env.ADEHQ_LIVE_CALLS_ALPHA === "true";
+  if (alphaForce && rolloutEnabled) {
+    return {
+      ...operationallyBound,
+      enabled: true,
+      maxCallDurationMinutes: Math.max(operationallyBound.maxCallDurationMinutes, 30),
+      maxIdleMinutes: Math.max(operationallyBound.maxIdleMinutes, 5),
+      maxTurnWh: Math.max(operationallyBound.maxTurnWh, 5),
+      recordingEnabled: true,
+    };
+  }
   return {
     ...operationallyBound,
     enabled: operationallyBound.enabled && rolloutEnabled,

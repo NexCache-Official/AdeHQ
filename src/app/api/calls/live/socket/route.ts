@@ -5,7 +5,6 @@ import {
   type WebSocketData,
 } from "@vercel/functions";
 import { NextRequest, NextResponse } from "next/server";
-import { requireAuthUser } from "@/lib/supabase/auth-server";
 import { createSupabaseSecretClient } from "@/lib/supabase/server";
 import {
   executeEmployeeCallTurn,
@@ -21,6 +20,12 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
+const RECONNECTABLE_STATES = new Set([
+  "connecting",
+  "active",
+  "reconnecting",
+]);
+
 function rawText(data: WebSocketData): string {
   if (typeof data === "string") return data;
   if (data instanceof ArrayBuffer) return Buffer.from(data).toString("utf8");
@@ -32,41 +37,86 @@ function send(ws: VercelWebSocket, event: ServerCallEvent): void {
   if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(event));
 }
 
+function callDebugEnabled(): boolean {
+  const raw = process.env.ADEHQ_LIVE_CALL_DEBUG?.trim().toLowerCase();
+  return raw === "1" || raw === "true" || raw === "on" || raw === "yes";
+}
+
 export async function GET(request: NextRequest) {
   try {
-    const { user, client } = await requireAuthUser(request);
+    // Browser WebSockets cannot set Authorization headers. Authenticate with the
+    // short-lived HMAC session token issued by the authenticated session POST.
     const token = request.nextUrl.searchParams.get("token");
     if (!token) {
       return NextResponse.json({ error: "Call session token required." }, { status: 401 });
     }
-    const payload = verifyCallSessionToken(token);
-    if (payload.userId !== user.id) {
-      return NextResponse.json({ error: "Call session token does not match user." }, { status: 403 });
+    let payload: ReturnType<typeof verifyCallSessionToken>;
+    try {
+      payload = verifyCallSessionToken(token);
+    } catch (tokenError) {
+      return NextResponse.json(
+        {
+          error:
+            tokenError instanceof Error
+              ? tokenError.message
+              : "Invalid call session token.",
+        },
+        { status: 401 },
+      );
     }
-    const { data: call, error } = await client
+
+    const orchestrationClient = createSupabaseSecretClient();
+    const { data: call, error } = await orchestrationClient
       .from("calls")
       .select(
-        "id, workspace_id, room_id, initiator_user_id, primary_employee_id, stt_mode, voice_route_policy, session_state",
+        "id, workspace_id, room_id, initiator_user_id, primary_employee_id, stt_mode, voice_route_policy, session_state, reconnect_expires_at",
       )
       .eq("workspace_id", payload.workspaceId)
       .eq("id", payload.callId)
       .maybeSingle();
     if (error) throw error;
-    if (!call || String(call.initiator_user_id) !== user.id) {
+    if (!call || String(call.initiator_user_id) !== payload.userId) {
       return NextResponse.json({ error: "Call not found." }, { status: 404 });
     }
-    const entitlements = await resolveLiveCallEntitlements(client, payload.workspaceId);
+    const sessionState = String(call.session_state ?? "");
+    if (!RECONNECTABLE_STATES.has(sessionState)) {
+      return NextResponse.json(
+        { error: "This call is no longer available to reconnect." },
+        { status: 409 },
+      );
+    }
+    if (
+      call.reconnect_expires_at &&
+      new Date(String(call.reconnect_expires_at)).getTime() <= Date.now()
+    ) {
+      return NextResponse.json(
+        { error: "The call reconnect window has expired." },
+        { status: 409 },
+      );
+    }
+    const entitlements = await resolveLiveCallEntitlements(
+      orchestrationClient,
+      payload.workspaceId,
+    );
     if (!entitlements.enabled) {
       return NextResponse.json({ error: "Live calls are not enabled." }, { status: 403 });
     }
-    const orchestrationClient = createSupabaseSecretClient();
 
     return experimental_upgradeWebSocket(async (ws) => {
       const connectionId = randomUUID();
+      const humanUserId = payload.userId;
       const coordinator = new SupabaseCallTransientCoordinator(
         orchestrationClient,
         payload.workspaceId,
       );
+      if (callDebugEnabled()) {
+        console.info("[AdeHQ live-call] socket ready", {
+          callId: payload.callId,
+          workspaceId: payload.workspaceId,
+          connectionId,
+          sessionState,
+        });
+      }
       let frames: Buffer[] = [];
       let frameBytes = 0;
       let sequence = 0;
@@ -175,10 +225,18 @@ export async function GET(request: NextRequest) {
                   .eq("workspace_id", payload.workspaceId)
                   .eq("id", payload.callId)
                   .maybeSingle();
+                if (callDebugEnabled()) {
+                  console.info("[AdeHQ live-call] turn start", {
+                    callId: payload.callId,
+                    sequence: turnSequence,
+                    durationSeconds: event.durationSeconds,
+                    bytes: utterance.byteLength,
+                  });
+                }
                 await executeEmployeeCallTurn({
                   client: orchestrationClient,
                   workspaceId: payload.workspaceId,
-                  humanUserId: user.id,
+                  humanUserId,
                   employeeId: String(call.primary_employee_id),
                   roomId: String(call.room_id),
                   callSessionId: payload.callId,
@@ -191,10 +249,43 @@ export async function GET(request: NextRequest) {
                     entitlements,
                   },
                   saveRecording: Boolean(recordingState?.recording_consent_at),
-                  emit: (outgoing) => send(ws, outgoing),
+                  emit: (outgoing) => {
+                    if (
+                      callDebugEnabled() &&
+                      (outgoing.type === "transcript.final" ||
+                        outgoing.type === "state.changed" ||
+                        outgoing.type === "error")
+                    ) {
+                      console.info("[AdeHQ live-call] emit", {
+                        callId: payload.callId,
+                        sequence: turnSequence,
+                        type: outgoing.type,
+                        ...(outgoing.type === "transcript.final"
+                          ? { text: outgoing.text, source: outgoing.source }
+                          : {}),
+                        ...(outgoing.type === "state.changed"
+                          ? { turn: outgoing.turn, activity: outgoing.activity }
+                          : {}),
+                        ...(outgoing.type === "error"
+                          ? { code: outgoing.code, message: outgoing.message }
+                          : {}),
+                      });
+                    }
+                    send(ws, outgoing);
+                  },
                   signal: turnAbort.signal,
                 });
               } catch (turnError) {
+                if (callDebugEnabled()) {
+                  console.warn("[AdeHQ live-call] turn failed", {
+                    callId: payload.callId,
+                    sequence: turnSequence,
+                    error:
+                      turnError instanceof Error
+                        ? turnError.message
+                        : String(turnError),
+                  });
+                }
                 send(ws, {
                   type: "error",
                   code:
@@ -271,9 +362,13 @@ export async function GET(request: NextRequest) {
       });
     }, { maxPayload: 256 * 1024 });
   } catch (error) {
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Could not open call transport." },
-      { status: 401 },
-    );
+    const message =
+      error instanceof Error ? error.message : "Could not open call transport.";
+    const status = /not found|expired|no longer available/i.test(message)
+      ? 409
+      : /enabled|entitled|forbidden/i.test(message)
+        ? 403
+        : 500;
+    return NextResponse.json({ error: message }, { status });
   }
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { authHeaders } from "@/lib/api/auth-client";
 
 export type LiveCallActivity =
   | "connecting"
@@ -51,6 +52,22 @@ function base64ToBytes(value: string): Uint8Array {
     bytes[index] = binary.charCodeAt(index);
   }
   return bytes;
+}
+
+function callClientDebugEnabled(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    if (window.localStorage.getItem("adehq_live_call_debug") === "1") return true;
+  } catch {
+    /* ignore */
+  }
+  return new URLSearchParams(window.location.search).get("debug") === "1";
+}
+
+function debugCall(...args: unknown[]) {
+  if (callClientDebugEnabled()) {
+    console.info("[AdeHQ live-call]", ...args);
+  }
 }
 
 export function useRealtimeBrainCall() {
@@ -228,6 +245,7 @@ export function useRealtimeBrainCall() {
 
   function handleServerEvent(event: Record<string, unknown>) {
     const type = String(event.type ?? "");
+    debugCall("event", type, event);
     if (type === "session.ready") {
       socketReadyRef.current = true;
       reconnectDelayRef.current = 1000;
@@ -249,10 +267,22 @@ export function useRealtimeBrainCall() {
         ].includes(next)
       ) {
         setActivity(next as LiveCallActivity);
+      } else if (turn === "interrupted") {
+        setActivity("listening");
+      }
+      return;
+    }
+    if (type === "employee.audio.end") {
+      if (!playbackActiveRef.current && !playbackQueueRef.current.length) {
+        setActivity("listening");
       }
       return;
     }
     if (type === "transcript.final") {
+      debugCall("transcript.final", {
+        text: event.text,
+        source: event.source,
+      });
       setTranscript((current) => [
         ...current,
         {
@@ -319,8 +349,26 @@ export function useRealtimeBrainCall() {
   function openSocket(path: string) {
     const url = new URL(path, window.location.origin);
     url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
+    debugCall("opening socket", url.pathname);
     const socket = new WebSocket(url);
     socketRef.current = socket;
+    const openTimeout = setTimeout(() => {
+      if (socket.readyState !== WebSocket.OPEN) {
+        debugCall("socket open timeout");
+        socket.close();
+        setActivity("failed");
+        setError("Could not connect the call transport. Retry the call.");
+      }
+    }, 12_000);
+    socket.addEventListener("open", () => {
+      clearTimeout(openTimeout);
+      debugCall("socket open");
+    });
+    socket.addEventListener("error", () => {
+      clearTimeout(openTimeout);
+      debugCall("socket error");
+      setError("Call transport failed to connect.");
+    });
     socket.addEventListener("message", (message) => {
       try {
         handleServerEvent(JSON.parse(String(message.data)) as Record<string, unknown>);
@@ -329,17 +377,37 @@ export function useRealtimeBrainCall() {
       }
     });
     socket.addEventListener("close", () => {
+      clearTimeout(openTimeout);
       socketReadyRef.current = false;
       socketRef.current = null;
       if (intentionalCloseRef.current) return;
       setActivity("reconnecting");
       const reconnectPath = transportUrlRef.current;
       if (!reconnectPath) return;
+      if (reconnectDelayRef.current > 16_000) {
+        setActivity("failed");
+        setError("Could not reconnect the call. End and start a new call.");
+        return;
+      }
       reconnectTimerRef.current = setTimeout(() => {
         openSocket(reconnectPath);
         reconnectDelayRef.current = Math.min(reconnectDelayRef.current * 2, 30_000);
       }, reconnectDelayRef.current);
     });
+  }
+
+  async function endSessionQuietly() {
+    if (!callIdRef.current || !workspaceRef.current) return;
+    try {
+      const headers = await authHeaders(workspaceRef.current);
+      await fetch("/api/calls/live/session", {
+        method: "PATCH",
+        headers,
+        body: JSON.stringify({ callId: callIdRef.current, action: "end" }),
+      });
+    } catch {
+      /* ignore cleanup failures */
+    }
   }
 
   async function start(input: StartInput) {
@@ -363,12 +431,15 @@ export function useRealtimeBrainCall() {
         },
       });
       streamRef.current = stream;
+      const headers = await authHeaders(input.workspaceId);
+      debugCall("creating session", {
+        conversationId: input.conversationId,
+        employeeId: input.employeeId,
+        voice: input.voice,
+      });
       const response = await fetch("/api/calls/live/session", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-adehq-workspace-id": input.workspaceId,
-        },
+        headers,
         body: JSON.stringify({
           conversationType: "human_ai_dm",
           conversationId: input.conversationId,
@@ -384,6 +455,10 @@ export function useRealtimeBrainCall() {
       transportUrlRef.current = data.transportUrl;
       bargeInEnabledRef.current = data.bargeInEnabled !== false;
       setRecordingAvailable(Boolean(data.entitlements?.recordingEnabled));
+      debugCall("session created", {
+        callId: data.callId,
+        recordingEnabled: data.entitlements?.recordingEnabled,
+      });
 
       const context = new AudioContext({ latencyHint: "interactive" });
       contextRef.current = context;
@@ -410,10 +485,13 @@ export function useRealtimeBrainCall() {
       socketReadyRef.current = false;
       streamRef.current?.getTracks().forEach((track) => track.stop());
       await contextRef.current?.close().catch(() => undefined);
+      await endSessionQuietly();
+      callIdRef.current = null;
       setActivity("failed");
       const message =
         startError instanceof Error ? startError.message : "Could not start call.";
       setError(message);
+      debugCall("start failed", message);
       throw startError;
     }
   }
@@ -429,16 +507,8 @@ export function useRealtimeBrainCall() {
     sourceRef.current?.disconnect();
     streamRef.current?.getTracks().forEach((track) => track.stop());
     await contextRef.current?.close();
-    if (callIdRef.current && workspaceRef.current) {
-      await fetch("/api/calls/live/session", {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          "x-adehq-workspace-id": workspaceRef.current,
-        },
-        body: JSON.stringify({ callId: callIdRef.current, action: "end" }),
-      }).catch(() => undefined);
-    }
+    await endSessionQuietly();
+    callIdRef.current = null;
     setActivity("ended");
   }
 
@@ -464,12 +534,10 @@ export function useRealtimeBrainCall() {
   async function setSaveRecording(next: boolean) {
     if (!recordingAvailable || !callIdRef.current || !workspaceRef.current) return;
     try {
+      const headers = await authHeaders(workspaceRef.current);
       const response = await fetch("/api/calls/live/session", {
         method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          "x-adehq-workspace-id": workspaceRef.current,
-        },
+        headers,
         body: JSON.stringify({
           callId: callIdRef.current,
           action: "recording_consent",
@@ -499,12 +567,15 @@ export function useRealtimeBrainCall() {
     return () => {
       intentionalCloseRef.current = true;
       if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
+      send({ type: "end_call" });
       socketRef.current?.close();
       workletRef.current?.disconnect();
       sourceRef.current?.disconnect();
       streamRef.current?.getTracks().forEach((track) => track.stop());
       void contextRef.current?.close();
+      void endSessionQuietly();
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return {

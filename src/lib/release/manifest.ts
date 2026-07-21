@@ -32,7 +32,7 @@ export type ReleaseManifest = {
 };
 
 export const RELEASE_MANIFEST: ReleaseManifest = {
-  releaseId: "baseline-pr19-steward-live",
+  releaseId: "baseline-pr181-live-calls-alpha",
   appVersion: "20.1.5",
   catalogVersion: 7,
   requiredMigrationVersion: "20260717192753",
@@ -51,13 +51,13 @@ export const RELEASE_MANIFEST: ReleaseManifest = {
     visionV1: true,
     imageV1: true,
     videoV1: true,
-    voiceV1: false,
+    voiceV1: true,
     stewardV1: true,
   },
   notes: [
     "PR-19 Steward collaborative execution is live; ADEHQ_BRAIN_STEWARD_V1 remains the production kill switch.",
     "PR-19 media collaboration routes ideation/review findings to exactly one terminal image or video creator.",
-    "Voice remains gated with ADEHQ_BRAIN_VOICE_V1=0 until a production STT provider is configured.",
+    "PR-18.1 Realtime Brain Calls alpha: ADEHQ_LIVE_CALLS_V1=1 with Groq STT + SiliconFlow/xAI TTS.",
     "Billing: Revolut-only; plan terms migration 20260717192753.",
     "Production human QA requires /api/build-info to match this manifest.",
   ],
