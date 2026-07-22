@@ -38,8 +38,13 @@ import {
   inferDepartmentId,
   isEngineeringBrief,
 } from "@/lib/hiring/recruiter-brain";
-import { generateSuggestionChips, isAssistantVoiceChip } from "@/lib/hiring/suggestion-chips";
+import {
+  generateSuggestionChips,
+  inferQuestionTopicFromRecruiterMessage,
+  isAssistantVoiceChip,
+} from "@/lib/hiring/suggestion-chips";
 import { resolveRecruiterSuggestionChips } from "@/lib/hiring/resolve-suggestion-chips";
+import { personalizeRecruiterQuestion } from "@/lib/hiring/question-personalizer";
 import { normalizeRecruiterAnswer } from "@/lib/hiring/normalize-recruiter-answer";
 import {
   generateRecruiterResponse,
@@ -358,6 +363,67 @@ function buildResponse(input: {
   };
 }
 
+// These slots never got a role-specific template — they used one hardcoded
+// question for every role. They're now category-aware by default (see
+// role-question-style.ts), and get a further cheap, real-LLM reflavor here so
+// Maya sounds like she actually understands the role instead of a survey bot.
+const PERSONALIZABLE_QUESTION_SLOTS = new Set([
+  "quality_preference",
+  "seniority",
+  "communication_style",
+  "tools",
+  "approval_rules",
+]);
+
+/**
+ * Keep the rule-based (no full-LLM) path cheap and instant for the fields
+ * that already have role-specific templates, and spend one tiny cheap-model
+ * call only on the handful of previously-generic questions — with an
+ * immediate fallback to the deterministic message on any failure/timeout.
+ */
+async function personalizeRuleBasedTurn(
+  response: ReturnType<typeof buildResponse>,
+  input: { roleKey?: string | null },
+): Promise<ReturnType<typeof buildResponse>> {
+  const message = response.message ?? "";
+  if (!/\?\s*$/.test(message)) return response;
+
+  const topic = inferQuestionTopicFromRecruiterMessage(message);
+  if (!topic || !PERSONALIZABLE_QUESTION_SLOTS.has(topic)) return response;
+
+  const role = getRoleByKey(input.roleKey ?? undefined);
+  const roleTitle = response.brief.roleTitle || role?.title || "";
+  if (!roleTitle) return response;
+
+  const personalized = await personalizeRecruiterQuestion({
+    roleTitle,
+    departmentLabel: role?.departmentLabel || response.brief.department || "General",
+    businessFocus: response.brief.businessFocus,
+    slot: topic,
+    fallbackMessage: message,
+    fallbackChips: response.suggestionChips.map((chip) => chip.label),
+  });
+  if (!personalized) return response;
+
+  const suggestionChips = sanitizeSuggestionChips(
+    personalized.chips.map((label) => ({
+      id: "",
+      label,
+      value: label,
+      intent: "answer_question" as const,
+    })),
+  );
+  if (suggestionChips.length < 2) return response;
+
+  return {
+    ...response,
+    message: personalized.message,
+    recruiterMessage: personalized.message,
+    suggestionChips,
+    chips: suggestionChips.map((chip) => chip.label),
+  };
+}
+
 async function finalizeRecruiterResponse(
   response: ReturnType<typeof buildResponse>,
   input: {
@@ -488,21 +554,22 @@ export async function POST(request: NextRequest) {
         : baseBrief;
 
     if (!useRecruiterLlm(body, conversation, action)) {
+      const ruleBasedResponse = await personalizeRuleBasedTurn(
+        buildResponse({
+          body,
+          brief: refinedBrief,
+          conversation,
+          message:
+            action === "draft_now"
+              ? "I have enough to draft a strong job brief. You can review it now, or keep refining the role."
+              : undefined,
+          usedFallback: true,
+          forceCanReview: action === "draft_now",
+        }),
+        { roleKey },
+      );
       return NextResponse.json(
-        await finalizeRecruiterResponse(
-          buildResponse({
-            body,
-            brief: refinedBrief,
-            conversation,
-            message:
-              action === "draft_now"
-                ? "I have enough to draft a strong job brief. You can review it now, or keep refining the role."
-                : undefined,
-            usedFallback: true,
-            forceCanReview: action === "draft_now",
-          }),
-          { conversation, roleKey },
-        ),
+        await finalizeRecruiterResponse(ruleBasedResponse, { conversation, roleKey }),
       );
     }
 

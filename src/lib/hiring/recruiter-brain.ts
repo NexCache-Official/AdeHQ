@@ -16,6 +16,11 @@ import {
   meaningfulUserTurns,
   toolsOrSkipped,
 } from "./recruiter-readiness-engineering";
+import {
+  approvalRulesQuestion,
+  qualityPreferenceQuestion,
+  resolveRoleQuestionCategory,
+} from "./role-question-style";
 
 export { generateSuggestionChips, inferDepartmentId, isEngineeringBrief, parseRecruiterSuggestionChips, fallbackRecruiterSuggestionChips } from "./suggestion-chips";
 
@@ -226,7 +231,7 @@ export function chooseNextRecruiterQuestion(
     return "What outcomes should this hire drive in the next few months?";
   }
   if (missing.includes("quality_preference")) {
-    return "Should they bias toward moving fast, balanced output, or higher polish before shipping?";
+    return qualityPreferenceQuestion(resolveRoleQuestionCategory(role, currentBrief));
   }
   if (missing.includes("seniority") || missing.includes("autonomy")) {
     if (role?.questionTemplates.seniorityChips?.length) {
@@ -241,7 +246,7 @@ export function chooseNextRecruiterQuestion(
     return "Any tools or systems they should plug into from day one, or should we keep it lightweight for now?";
   }
   if (missing.includes("approval_rules")) {
-    return "Anything they should always run by you first — external messages, spend, publishing, that kind of thing?";
+    return approvalRulesQuestion(resolveRoleQuestionCategory(role, currentBrief));
   }
 
   if (lastAde && lastUser && normalizeQuestion(lastAde) === normalizeQuestion(lastUser)) {

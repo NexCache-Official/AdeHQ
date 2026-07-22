@@ -188,7 +188,11 @@ export function inferQuestionTopicFromRecruiterMessage(text: string): RecruiterQ
   if (/\b(show up|communication|tone|voice|formal|collaborative|async)\b/.test(lower)) {
     return "communication_style";
   }
-  if (/\bmoving fast|balanced output|polish|quality.*speed|bias toward\b/.test(lower)) {
+  if (
+    /\bmoving fast|balanced (output|quality|polish|depth|accuracy|care|consistency|review|thoroughness)|\bpolish(ed)?\b|quality.*speed|bias toward|turnaround|\brigor\b|thoroughness|response times|double-checking|signed off\b/.test(
+      lower,
+    )
+  ) {
     return "quality_preference";
   }
   if (
