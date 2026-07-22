@@ -389,6 +389,58 @@ Web Push remains best-effort and requires an installed Home Screen app on iOS.
 Strict encoded-frame E2EE remains incompatible with server-side AI participation;
 SFU calls are not represented as participant-to-participant E2EE.
 
+## Added: Maya Workforce Studio — team composer, simulation, provisioning (2026-07-22)
+
+Implemented the "Team" hire mode end to end (PR-21A–E): a Company Operating
+Profile, a modular/governed template engine (Software House, SaaS Startup,
+General Ops) with JsonLogic scaling rules, a three-pane Workforce Canvas
+(React Flow) plus a structured Roster editor with mobile/tablet fallback and
+full keyboard/a11y support, an `AuthorityMatrixEditor` covering all 11
+capability domains, "Simulate a Week" (coverage/permission gaps + Work Hours
+forecast with a per-capability breakdown), draft locking + optimistic
+concurrency + autosave conflict recovery + undo/redo, natural-language
+"Ask Maya" blueprint edits with reviewable diffs, canonical-hash approval
+freezing, and an idempotent/checkpointed/compensable bulk-hire provisioning
+saga that ends in a First Mission (welcome messages, outcome tasks, Team
+Charter + Role Scorecard artifacts). Full design: [`docs/architecture/workforce-studio.md`](../architecture/workforce-studio.md).
+
+**Bug found + fixed during PR-21E hardening — NL-edit "outcome" requests
+silently dropped.** The combined NL-edit schema (`summary` +
+`addOutcomes`/`addSeats`/`removeSeatIds`/`updateSeats` in one `generateObject`
+call) reliably failed a clear, in-scope instruction like *"Add an outcome:
+ship weekly releases with less than 3 days lead time"* — SiliconFlow's
+structured-output path would narrate "added the outcome" in `summary` while
+leaving `addOutcomes: []` and instead writing a no-op `updateSeats` entry
+(setting a random seat's seniority to its own current value). Reproduced 100%
+across ~15 consecutive runs; ruled out timeout/token-budget causes
+(`finishReason: "stop"`, near-zero reasoning tokens every time) and iterated
+through schema field reordering, removing a `.default()` on a nested enum,
+`.describe()` annotations, and a stronger model tier — none of which fully
+resolved it. Root-caused to field competition in one large schema, not prompt
+wording: added a cheap keyword-only dispatch (`looksOutcomeOnly`, no LLM call)
+that routes unambiguous outcome-only instructions to a dedicated minimal
+schema (`nlOutcomeOnlySchema` — just `summary` + `addOutcomes`) instead of the
+combined one. Verified 3/3 clean full-suite runs after the fix (0 flaky
+failures) via `npm run test:workforce-studio:promptfoo`. Also fixed along the
+way: the internal LLM race timeout was a hardcoded 12s against real observed
+SiliconFlow structured-output latency of 15–45s+ (silently declining nearly
+every request); raised to the catalog's `"strong"`-tier budget (60s), the API
+route's `maxDuration` raised above that, and switched the NL-edit model tier
+from `"balanced"`/`"cheap"` to `"strong"` after confirming the cheaper tier
+was *both* slower and less reliable on this schema in this environment.
+
+**Verified**:
+- `npm run test:workforce-studio:composition` — template structure, JsonLogic
+  rule safety, deterministic composition, canonical hash: all pass.
+- `npm run test:workforce-studio:provisioning` — full lifecycle, forced-failure
+  compensation rollback, retry-after-failure with no duplicate resources, and
+  an explicit 2/5/20-seat matrix against a live Supabase service-role client:
+  all pass.
+- `npm run test:workforce-studio:promptfoo` — 7 golden + adversarial NL-edit
+  scenarios against the real `proposeNlEdit` path via a live SiliconFlow call:
+  7/7 pass, confirmed stable across 3 repeated runs.
+- `tsc --noEmit` clean across the whole project.
+
 ## Log
 
 | 2026-07-10 | Hire AI Employee wizard: typed "I need a leasing agent who can screen tenant applicants, answer prospective tenant questions, and schedule property tours" on Step 1 (Role) | Maya proposes real-estate-relevant role(s), e.g. "Leasing Agent" / "Property Manager", and Job Brief step 4 reflects tenant screening, tour scheduling | Step 2 (Context): Maya suggested generic SaaS-startup roles — "Software Engineer, Executive Assistant, Sales Development Rep" — none matching a leasing/property role. Follow-up quick-reply chips were "Daily operations / Customer support / Data analysis / Process automation," again generic. The live-updating "Draft Job Brief" panel showed title **"AI Employee"**, department **"General business"**, and mission **"Help the team succeed as a ai employee in general business."** — completely generic, dropped all my specifics (leasing, tenants, tours), and contains a grammar bug ("as a ai employee" instead of "an AI employee"). | **Critical / Important** (bug: grammar+data-loss is Important; the vertical-blindness is a Critical product-market gap for a real estate customer) | Role-parsing/classification step likely maps free text against a fixed catalog of SaaS/startup role templates (Software Engineer, SDR, EA, etc.) with no real-estate-specific roles (Leasing Agent, Property Manager, Listing Agent, Transaction Coordinator) and a weak fallback that discards the original input instead of using it verbatim in the mission field | Add a "custom/other" path that keeps the user's literal input verbatim in the mission when no catalog role matches well enough, add real-estate role templates, fix the "a ai employee" grammar bug, and use an article-aware template ("an {role}" not "a {role}") | Open | This is the single most damaging finding so far for the real-estate persona specifically: the CEO in this scenario is being funneled toward hiring a generic "AI Employee" instead of a Leasing Agent, on the platform's flagship "hire a teammate in minutes" flow. First impressions of the hiring wizard (UI, step design, live-updating brief) are excellent — the content generation is the weak link. |

@@ -24,6 +24,9 @@ Runnable tooling for AdeHQ. Prefer **npm scripts** from the repo root (`package.
 | Human call API E2E | `npm run test:calls:e2e` (two humans, idempotency, atomic accept, leases, consent, artifacts, cleanup) |
 | Hiring brief edits | `npm run test:hiring:brief-edit` (Maya must rewrite the job brief, not append chat instructions as bullets) |
 | Hiring role-aware questions | `npm run test:hiring:role-questions` (quality/approval questions must match the role's category, not default to shipping language, and must parse into clean chips) |
+| Workforce Studio composition | `npm run test:workforce-studio:composition` (template manifest structure, JsonLogic scaling rules, deterministic composition, canonical hash) |
+| Workforce Studio provisioning E2E | `npm run test:workforce-studio:provisioning` (needs `.env.local`; live Supabase service-role: full lifecycle, forced-failure compensation, retry-after-failure, 2/5/20-seat matrix) |
+| Workforce Studio NL-edit golden + adversarial | `npm run test:workforce-studio:promptfoo` (needs `SILICONFLOW_API_KEY` in `.env.local`; live SiliconFlow call via custom promptfoo provider — see [`docs/architecture/workforce-studio.md`](../docs/architecture/workforce-studio.md)) |
 | Call browser compatibility | `npm run test:calls:browsers` (Chromium, Firefox, WebKit WebRTC/media/push capability probe; set `CALL_BROWSER_REQUIRE_ALL=1` for release gating) |
 | Brain gauntlet | `npm run test:brain:gauntlet` (release + reliability + steward shadow + brain + access) |
 | Brain Step shadow | `npm run test:brain:step-shadow` (live SF: Qwen3-8B vs Step-3.5-Flash) |

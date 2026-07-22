@@ -1,7 +1,9 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
+import { Users2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   getBrowsableDepartmentGroups,
@@ -108,6 +110,13 @@ export function RoleStepPanel({
           Describe the role. {MAYA_EMPLOYEE_NAME} will ask what&apos;s missing, draft a job brief, and
           shortlist three AI employee candidates.
         </p>
+        <Link
+          href="/hire/team"
+          className="mt-4 inline-flex items-center gap-1.5 rounded-full border border-border bg-surface px-3.5 py-1.5 text-[13px] font-medium text-ink-2 transition hover:border-accent/40 hover:text-accent-d"
+        >
+          <Users2 className="h-3.5 w-3.5" />
+          Hiring more than one? Design a whole team →
+        </Link>
       </div>
 
       <div className="rounded-[18px] border border-border bg-surface p-2 shadow-md">

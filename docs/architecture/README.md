@@ -8,5 +8,7 @@ Living engineering design for systems that are actively evolving in this repo.
 | [`email-system.md`](./email-system.md) | Transactional React Email + Resend |
 | [`intelligence-v2-plan.md`](./intelligence-v2-plan.md) | Intelligence v2 (mostly complete — keep for context) |
 | [`browser-research-known-issues.md`](./browser-research-known-issues.md) | Parked browser-research issues |
+| [`human-hybrid-calls.md`](./human-hybrid-calls.md) | Human + hybrid calling (Cloudflare Realtime SFU) |
+| [`workforce-studio.md`](./workforce-studio.md) | Maya Workforce Studio — team composer, simulation, provisioning |
 
 Inbox transport proof notes: [`../inbox/inbox-transport-proof.md`](../inbox/inbox-transport-proof.md).

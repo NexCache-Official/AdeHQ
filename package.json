@@ -99,7 +99,10 @@
     "test:calls:e2e": "node scripts/test-human-calls-e2e.mjs",
     "test:calls:browsers": "node scripts/test-call-browser-compat.mjs",
     "test:hiring:brief-edit": "tsx scripts/test-brief-edit-instructions.ts",
-    "test:hiring:role-questions": "tsx scripts/test-role-aware-questions.ts"
+    "test:hiring:role-questions": "tsx scripts/test-role-aware-questions.ts",
+    "test:workforce-studio:composition": "tsx scripts/test-workforce-studio-composition.ts",
+    "test:workforce-studio:provisioning": "tsx -r dotenv/config scripts/test-workforce-studio-provisioning.ts dotenv_config_path=.env.local",
+    "test:workforce-studio:promptfoo": "promptfoo eval -c promptfoo/workforce-studio/promptfooconfig.yaml --no-cache"
   },
   "dependencies": {
     "@ai-sdk/gateway": "^4.0.12",
@@ -111,6 +114,8 @@
     "@vercel/analytics": "^2.0.1",
     "@vercel/functions": "^3.7.5",
     "@vercel/speed-insights": "^2.0.0",
+    "@xstate/react": "^6.1.0",
+    "@xyflow/react": "^12.11.2",
     "ai": "^7.0.15",
     "clsx": "^2.1.1",
     "csv-parse": "^7.0.1",
@@ -118,6 +123,7 @@
     "exa-js": "^2.14.0",
     "exceljs": "^4.4.0",
     "framer-motion": "^11.3.19",
+    "json-logic-js": "^2.0.5",
     "jszip": "^3.10.1",
     "lucide-react": "^0.417.0",
     "mammoth": "^1.12.0",
@@ -134,9 +140,11 @@
     "webrtc-adapter": "^9.0.6",
     "ws": "^8.21.1",
     "xlsx": "^0.18.5",
+    "xstate": "^5.32.5",
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@types/json-logic-js": "^2.0.8",
     "@types/node": "^20",
     "@types/react": "^18",
     "@types/react-dom": "^18",
@@ -145,6 +153,7 @@
     "autoprefixer": "^10.4.19",
     "playwright": "^1.49.1",
     "postcss": "^8.4.40",
+    "promptfoo": "^0.121.19",
     "react-email": "^6.6.8",
     "sharp": "^0.35.3",
     "tailwindcss": "^3.4.7",
