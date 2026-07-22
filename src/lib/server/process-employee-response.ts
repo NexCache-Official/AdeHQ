@@ -42,6 +42,8 @@ export type ProcessEmployeeOptions = {
   voiceCall?: boolean;
   onReplyDelta?: (delta: string) => void;
   abortSignal?: AbortSignal;
+  /** Return metered output without writing a room message/effects (for private call sidecars). */
+  persistToRoom?: boolean;
   onActivity?: (
     activity: "thinking" | "searching" | "using_tool" | "speaking",
     detail?: string,
@@ -94,16 +96,21 @@ export async function processEmployeeResponse(
   });
 
   if (instant) {
-    const { aiMessage } = await persistEmployeeEffects(
-      client,
-      ctx.workspaceId,
-      ctx.room.id,
-      ctx.topic.id,
-      employee,
-      instant.reply,
-      { workLog: [], tasks: [], memory: [], approvals: [] },
-      options.triggerMessageId,
-    );
+    const aiMessage =
+      options.persistToRoom === false
+        ? { id: `private:${employee.id}:${Date.now()}` }
+        : (
+            await persistEmployeeEffects(
+              client,
+              ctx.workspaceId,
+              ctx.room.id,
+              ctx.topic.id,
+              employee,
+              instant.reply,
+              { workLog: [], tasks: [], memory: [], approvals: [] },
+              options.triggerMessageId,
+            )
+          ).aiMessage;
 
     await client
       .from("ai_employees")
@@ -259,16 +266,21 @@ export async function processEmployeeResponse(
         },
       };
 
-      const { aiMessage } = await persistEmployeeEffects(
-        client,
-        ctx.workspaceId,
-        ctx.room.id,
-        topicId,
-        employee,
-        blockedReply.reply,
-        blockedReply.effect,
-        options.triggerMessageId,
-      );
+      const aiMessage =
+        options.persistToRoom === false
+          ? { id: `private:${employee.id}:${Date.now()}` }
+          : (
+              await persistEmployeeEffects(
+                client,
+                ctx.workspaceId,
+                ctx.room.id,
+                topicId,
+                employee,
+                blockedReply.reply,
+                blockedReply.effect,
+                options.triggerMessageId,
+              )
+            ).aiMessage;
 
       return { ...blockedReply, aiMessageId: aiMessage.id, aiMode: "blocked" };
     }
@@ -515,21 +527,26 @@ export async function processEmployeeResponse(
     });
   }
 
-  const { aiMessage } = await persistEmployeeEffects(
-    client,
-    ctx.workspaceId,
-    ctx.room.id,
-    topicId,
-    employee,
-    finalReply,
-    mergedEffect,
-    options.triggerMessageId,
-    runId,
-    {
-      fileContext: fileContextBundle,
-      usedFileContext,
-    },
-  );
+  const aiMessage =
+    options.persistToRoom === false
+      ? { id: `private:${employee.id}:${runId ?? Date.now()}` }
+      : (
+          await persistEmployeeEffects(
+            client,
+            ctx.workspaceId,
+            ctx.room.id,
+            topicId,
+            employee,
+            finalReply,
+            mergedEffect,
+            options.triggerMessageId,
+            runId,
+            {
+              fileContext: fileContextBundle,
+              usedFileContext,
+            },
+          )
+        ).aiMessage;
 
   if (isLive && runId && usageId && !options.skipCostGuard) {
     await finalizeAiRun({
@@ -537,7 +554,7 @@ export async function processEmployeeResponse(
       workspaceId: ctx.workspaceId,
       runId,
       usageId,
-      responseMessageId: aiMessage.id,
+      responseMessageId: options.persistToRoom === false ? undefined : aiMessage.id,
       inputTokens: metrics?.inputTokens,
       outputTokens: metrics?.outputTokens,
       cachedTokens: metrics?.cachedTokens,

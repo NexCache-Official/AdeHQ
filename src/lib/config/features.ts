@@ -10,6 +10,10 @@ export const WORKFORCE_CALLS_ENABLED =
 export const LIVE_BRAIN_CALLS_ENABLED =
   process.env.NEXT_PUBLIC_ADEHQ_LIVE_CALLS_V1 === "1";
 
+/** PR-18.2 human/hybrid calling. Server authorization and entitlements still apply. */
+export const HUMAN_CALLS_ENABLED =
+  process.env.NEXT_PUBLIC_ADEHQ_HUMAN_CALLS_V1 === "1";
+
 /**
  * Layered employee intelligence pipeline. Enabled by default; set
  * INTELLIGENCE_V1_ENABLED=false to fall back to the legacy research path.

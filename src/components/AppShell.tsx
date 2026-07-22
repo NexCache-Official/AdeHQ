@@ -21,6 +21,7 @@ import { JUMP_TO_SOURCE_EVENT, type JumpSource } from "@/lib/navigation/jump-to-
 import { crmEntityHref } from "@/lib/crm/client";
 import { isPasswordRecoveryPending } from "@/lib/auth/recovery";
 import { PANE_PRESETS } from "@/lib/layout/pane-prefs";
+import { IncomingCallProvider } from "./calls/IncomingCallProvider";
 
 type ShellUI = {
   openCommand: () => void;
@@ -39,7 +40,9 @@ export function useShellUI() {
 export function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <DebugProvider>
-      <AppShellInner>{children}</AppShellInner>
+      <IncomingCallProvider>
+        <AppShellInner>{children}</AppShellInner>
+      </IncomingCallProvider>
     </DebugProvider>
   );
 }

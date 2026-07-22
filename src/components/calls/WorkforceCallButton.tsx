@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { LIVE_BRAIN_CALLS_ENABLED } from "@/lib/config/features";
+import { HUMAN_CALLS_ENABLED, LIVE_BRAIN_CALLS_ENABLED } from "@/lib/config/features";
 import { Button } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import { Phone } from "lucide-react";
@@ -14,6 +14,7 @@ type WorkforceCallButtonProps = {
   className?: string;
   showLabel?: boolean;
   iconOnly?: boolean;
+  human?: boolean;
 };
 
 /** Routes to live calls when enabled; otherwise opens the coming-soon page. */
@@ -24,11 +25,15 @@ export function WorkforceCallButton({
   className,
   showLabel = true,
   iconOnly = false,
+  human = false,
 }: WorkforceCallButtonProps) {
   const router = useRouter();
-  const href = LIVE_BRAIN_CALLS_ENABLED
+  const enabled = human ? HUMAN_CALLS_ENABLED : LIVE_BRAIN_CALLS_ENABLED;
+  const href = enabled
     ? roomId
-      ? `/calls?room=${roomId}`
+      ? human
+        ? `/calls?humanRoom=${roomId}`
+        : `/calls?room=${roomId}`
       : "/calls"
     : "/calls";
 
@@ -40,8 +45,8 @@ export function WorkforceCallButton({
           "flex h-[34px] w-[34px] items-center justify-center rounded-[10px] border border-border bg-surface text-ink-2 transition-colors hover:bg-muted",
           className,
         )}
-        aria-label={LIVE_BRAIN_CALLS_ENABLED ? "Start call" : "Brain calls — coming soon"}
-        title={LIVE_BRAIN_CALLS_ENABLED ? "Start call" : "Brain calls — coming soon"}
+        aria-label={enabled ? "Start call" : "Calls — coming soon"}
+        title={enabled ? "Start call" : "Calls — coming soon"}
       >
         <Phone className="h-[15px] w-[15px]" strokeWidth={1.9} />
       </Link>
@@ -54,10 +59,10 @@ export function WorkforceCallButton({
       variant={variant}
       className={className}
       onClick={() => router.push(href)}
-      title={LIVE_BRAIN_CALLS_ENABLED ? undefined : "Brain calls — coming soon"}
+      title={enabled ? undefined : "Calls — coming soon"}
     >
       <Phone className="h-4 w-4" />
-      {showLabel && (LIVE_BRAIN_CALLS_ENABLED ? "Call" : "Call — soon")}
+      {showLabel && (enabled ? "Call" : "Call — soon")}
     </Button>
   );
 }

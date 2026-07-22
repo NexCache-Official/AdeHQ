@@ -357,6 +357,38 @@ Traced the full downstream path to confirm no further changes were needed: `queu
 
 **Note**: test data from this and prior verification passes (a few CRM-blocked attempts and "Call Jordan Lee" tasks in the Launch Room) remains in the workspace — clean up via the UI whenever convenient, per existing convention in this file.
 
+## Added: human-to-human and hybrid calling (2026-07-21)
+
+Implemented the canonical human/hybrid call state machine, atomic multi-device
+acceptance, participant leases, in-app and Web Push ringing, Cloudflare Realtime
+SFU media proxy, 1:1 audio/video/screen share, group-huddle API, consented AI
+sidecar/spoken turns, live transcript chunks, Work Graph call artifacts, quality
+telemetry, optional P2P optimization, and TURN/force-relay configuration.
+
+Completion slices also add notification health/test push, 30-day reliability
+aggregates, adaptive video bitrate, hot device switching, all-participant consent,
+silent observer notes, transcript-to-summary/decision/task outcomes, AI-only WH
+receipts, private sidecars that do not publish room messages, push-to-talk, barge-in,
+background delegation, a single-spokesperson expert council, and private recording
+storage with signed downloads, retention cleanup, and owner/admin deletion.
+
+**Verified**:
+- Linked Supabase migration `20260721160000_human_hybrid_calls.sql` applied.
+- Production build and TypeScript compile passed.
+- Static call invariants passed.
+- TypeScript and IDE diagnostics are clean after PR-18.2A-G.
+- Chromium compatibility probe passed. Firefox and WebKit probes are implemented
+  but their Playwright browser binaries were unavailable locally; release gating
+  fails closed with `CALL_BROWSER_REQUIRE_ALL=1`.
+- Live Cloudflare Realtime test created a session, published audio, subscribed to
+  the track, renegotiated, and received an audio echo.
+- Repeatable two-user API E2E passed create, idempotent replay, invitation,
+  one-device-wins acceptance, leases, consent, artifact creation, end, and cleanup.
+
+Web Push remains best-effort and requires an installed Home Screen app on iOS.
+Strict encoded-frame E2EE remains incompatible with server-side AI participation;
+SFU calls are not represented as participant-to-participant E2EE.
+
 ## Log
 
 | 2026-07-10 | Hire AI Employee wizard: typed "I need a leasing agent who can screen tenant applicants, answer prospective tenant questions, and schedule property tours" on Step 1 (Role) | Maya proposes real-estate-relevant role(s), e.g. "Leasing Agent" / "Property Manager", and Job Brief step 4 reflects tenant screening, tour scheduling | Step 2 (Context): Maya suggested generic SaaS-startup roles — "Software Engineer, Executive Assistant, Sales Development Rep" — none matching a leasing/property role. Follow-up quick-reply chips were "Daily operations / Customer support / Data analysis / Process automation," again generic. The live-updating "Draft Job Brief" panel showed title **"AI Employee"**, department **"General business"**, and mission **"Help the team succeed as a ai employee in general business."** — completely generic, dropped all my specifics (leasing, tenants, tours), and contains a grammar bug ("as a ai employee" instead of "an AI employee"). | **Critical / Important** (bug: grammar+data-loss is Important; the vertical-blindness is a Critical product-market gap for a real estate customer) | Role-parsing/classification step likely maps free text against a fixed catalog of SaaS/startup role templates (Software Engineer, SDR, EA, etc.) with no real-estate-specific roles (Leasing Agent, Property Manager, Listing Agent, Transaction Coordinator) and a weak fallback that discards the original input instead of using it verbatim in the mission field | Add a "custom/other" path that keeps the user's literal input verbatim in the mission when no catalog role matches well enough, add real-estate role templates, fix the "a ai employee" grammar bug, and use an article-aware template ("an {role}" not "a {role}") | Open | This is the single most damaging finding so far for the real-estate persona specifically: the CEO in this scenario is being funneled toward hiring a generic "AI Employee" instead of a Leasing Agent, on the platform's flagship "hire a teammate in minutes" flow. First impressions of the hiring wizard (UI, step design, live-updating brief) are excellent — the content generation is the weak link. |

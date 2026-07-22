@@ -1,0 +1,17 @@
+{
+  "name": "AdeHQ",
+  "short_name": "AdeHQ",
+  "description": "Humans and AI employees working together.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#111827",
+  "icons": [
+    {
+      "src": "/brand/adehq-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

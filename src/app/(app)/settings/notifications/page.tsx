@@ -13,6 +13,7 @@ import {
 } from "@/lib/workspace/invitations-client";
 import { roleLabel } from "@/lib/workspace/permissions";
 import { Bell, Building2, ShieldCheck } from "lucide-react";
+import { useCallNotifications } from "@/components/calls/IncomingCallProvider";
 
 type Prefs = {
   product_updates: boolean;
@@ -34,6 +35,8 @@ export default function NotificationsSettingsPage() {
   const [savingKey, setSavingKey] = useState<keyof Prefs | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [inviteBusy, setInviteBusy] = useState<string | null>(null);
+  const [callNotificationBusy, setCallNotificationBusy] = useState(false);
+  const callNotifications = useCallNotifications();
 
   const pendingInvites = useMemo(
     () =>
@@ -172,6 +175,84 @@ export default function NotificationsSettingsPage() {
             ))}
           </div>
         )}
+      </Card>
+
+      <h2 className="mb-2 text-sm font-semibold text-ink">Call ringing</h2>
+      <Card className="mb-4 p-4">
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex items-start gap-3">
+            <span className="mt-0.5 flex h-9 w-9 items-center justify-center rounded-lg bg-accent-soft text-accent-d">
+              <Bell className="h-4 w-4" />
+            </span>
+            <div>
+              <div className="text-sm font-medium text-ink">Background call notifications</div>
+              <div className="text-xs text-ink-3">
+                Best-effort web ringing
+                {callNotifications?.isIos && !callNotifications.isInstalled
+                  ? " · Add AdeHQ to your Home Screen on iOS."
+                  : "."}
+              </div>
+              {callNotifications?.health?.lastFailureAt ? (
+                <div className="mt-1 text-xs text-danger">
+                  Last delivery failure:{" "}
+                  {new Date(callNotifications.health.lastFailureAt).toLocaleString()}
+                </div>
+              ) : null}
+            </div>
+          </div>
+          <Toggle
+            checked={
+              callNotifications?.notificationPermission === "granted" &&
+              Boolean(callNotifications.health?.enabledDevices)
+            }
+            disabled={
+              callNotificationBusy ||
+              callNotifications?.notificationPermission === "unsupported"
+            }
+            onChange={(enabled) => {
+              if (!callNotifications) return;
+              setCallNotificationBusy(true);
+              setError(null);
+              void (enabled
+                ? callNotifications.enableNotifications()
+                : callNotifications.disableNotifications()
+              )
+                .catch((notificationError) =>
+                  setError(
+                    notificationError instanceof Error
+                      ? notificationError.message
+                      : "Could not update call notifications.",
+                  ),
+                )
+                .finally(() => setCallNotificationBusy(false));
+            }}
+          />
+        </div>
+        {callNotifications?.notificationPermission === "granted" &&
+        callNotifications.health?.enabledDevices ? (
+          <div className="mt-3 flex justify-end">
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={callNotificationBusy}
+              onClick={() => {
+                setCallNotificationBusy(true);
+                void callNotifications
+                  .testNotifications()
+                  .catch((notificationError) =>
+                    setError(
+                      notificationError instanceof Error
+                        ? notificationError.message
+                        : "Could not send a test notification.",
+                    ),
+                  )
+                  .finally(() => setCallNotificationBusy(false));
+              }}
+            >
+              Send test
+            </Button>
+          </div>
+        ) : null}
       </Card>
 
       <h2 className="mb-2 text-sm font-semibold text-ink">Email preferences</h2>

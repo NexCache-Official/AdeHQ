@@ -1955,7 +1955,9 @@ export function RoomChat({
               Add employee
             </button>
           )}
-          {!isMayaDmEmployee && <WorkforceCallButton roomId={room.id} iconOnly />}
+          {!isMayaDmEmployee && (
+            <WorkforceCallButton roomId={room.id} iconOnly human={isDm && !dmEmployee} />
+          )}
           <button
             type="button"
             className="hidden h-[34px] w-[34px] items-center justify-center rounded-[10px] border border-border bg-surface text-ink-2 transition-colors hover:bg-muted xl:flex"

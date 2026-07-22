@@ -34,6 +34,8 @@ export const metadata: Metadata = {
   title: "AdeHQ — Your AI Workforce Workspace",
   description:
     "The easiest way to create and manage your AI workforce. Hire AI employees, give them tools, and work with them in project rooms.",
+  manifest: "/manifest.webmanifest",
+  themeColor: "#111827",
 };
 
 export default function RootLayout({
