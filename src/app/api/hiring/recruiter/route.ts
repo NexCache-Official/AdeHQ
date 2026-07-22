@@ -20,7 +20,9 @@ import {
   detectRecruiterUserIntent,
   mayaReplyForRecruiterIntent,
   mayaReplyForHiringFlowMeta,
+  isBriefEditInstruction,
   isHiringFlowMetaReply,
+  isInstructionShapedBriefLine,
   shouldSkipBriefMutationForMessage,
   shouldSkipBriefUpdateIntent,
 } from "@/lib/hiring/recruiter-intents";
@@ -220,6 +222,12 @@ function useRecruiterLlm(
   if (mode === "refine" || mode === "brief_refine" || mode === "regenerate") return true;
   if (action === "refine_section") return true;
 
+  const lastUser = [...conversation].reverse().find((m) => m.role === "user")?.text ?? "";
+  // Document-style brief edits must always go through the LLM rewrite path —
+  // even for library roles — so Maya rewrites the artifact instead of appending
+  // the instruction as a responsibility bullet.
+  if (isBriefEditInstruction(lastUser)) return true;
+
   const roleKey = body.roleKey ?? null;
   const knownLibraryRole = Boolean(roleKey && roleKey !== "custom");
   // Popular / library roles already carry structure — keep Maya snappy with the
@@ -228,7 +236,6 @@ function useRecruiterLlm(
     return false;
   }
 
-  const lastUser = [...conversation].reverse().find((m) => m.role === "user")?.text ?? "";
   const userTurns = conversation.filter((m) => m.role === "user").length;
   if (userTurns >= 1 && lastUser.trim().length > 2 && !isHiringSmallTalk(lastUser)) return true;
   if (lastUser.length > 220) return true;
@@ -243,6 +250,17 @@ function openingMessage(body: RecruiterBody, departmentId: string | null, roleKe
   });
 }
 
+function scrubInstructionShapedBrief(brief: AiEmployeeJobBrief): AiEmployeeJobBrief {
+  return {
+    ...brief,
+    businessFocus: brief.businessFocus.filter((line) => !isInstructionShapedBriefLine(line)),
+    coreResponsibilities: brief.coreResponsibilities.filter(
+      (line) => !isInstructionShapedBriefLine(line),
+    ),
+    assumptions: brief.assumptions.filter((line) => !isInstructionShapedBriefLine(line)),
+  };
+}
+
 function buildResponse(input: {
   body: RecruiterBody;
   brief: AiEmployeeJobBrief;
@@ -255,9 +273,10 @@ function buildResponse(input: {
   const lastUser = [...input.conversation].reverse().find((m) => m.role === "user")?.text ?? "";
   const userIntent = detectRecruiterUserIntent(lastUser);
   const skipBriefMutation = shouldSkipBriefMutationForMessage(lastUser);
+  const cleanedInputBrief = scrubInstructionShapedBrief(input.brief);
   const chipMutation =
-    !skipBriefMutation && lastUser ? applyChipMutation(lastUser, input.brief) : null;
-  let brief = { ...(chipMutation?.brief ?? input.brief), openQuestions: [] };
+    !skipBriefMutation && lastUser ? applyChipMutation(lastUser, cleanedInputBrief) : null;
+  let brief = { ...(chipMutation?.brief ?? cleanedInputBrief), openQuestions: [] };
   const roleKey = input.body.roleKey ?? null;
   const roleFocus =
     !skipBriefMutation && lastUser ? applyRoleFocusAnswer(lastUser, brief, roleKey) : null;
@@ -409,6 +428,8 @@ RULES:
 12. Never ask about channels, rooms, or start location.
 13. ${MAYA_HIRE_LANGUAGE_RULE}
 14. NEVER paste the user's exact words into responsibilities or business focus. Interpret intent. Flow-control replies ("okay", "move on", "looks good") mean proceed — do not add them to the brief.
+15. The job brief is a living document/artifact. When the user asks to improve, rewrite, deepen, or make it more skilled/complex/analytical, EDIT the existing brief like ChatGPT editing a doc: rewrite mission, responsibilities, business focus, metrics, and approval rules to match the request. Do NOT add the instruction itself as a bullet (never "Own make it more skilled…").
+16. When rewriting, remove any prior bullets that look like raw chat instructions pasted into the brief, then replace them with professional role content.
 
 Mode: ${body.mode ?? "chat"}
 ${body.refineInstruction ? `Refine (${body.refineMode ?? "improve"}) section ${body.refineSection}: ${body.refineInstruction}` : ""}
@@ -508,9 +529,18 @@ export async function POST(request: NextRequest) {
     const history = conversation
       .map((m) => `${m.role === "ade" ? "Ade" : "User"}: ${m.text}`)
       .join("\n");
+    const lastUserForPrompt =
+      [...conversation].reverse().find((m) => m.role === "user")?.text ?? "";
+    const briefEdit = isBriefEditInstruction(lastUserForPrompt);
     const llmPrompt = [
       `Conversation:\n${history || "(starting)"}`,
-      body.currentBrief ? `Current brief:\n${JSON.stringify({ ...body.currentBrief, openQuestions: [] })}` : "",
+      body.currentBrief
+        ? `Current brief (edit this artifact in place; return the full updated brief):\n${JSON.stringify({ ...body.currentBrief, openQuestions: [] })}`
+        : "",
+      briefEdit
+        ? `BRIEF EDIT REQUEST: "${lastUserForPrompt}"
+Treat the current brief as a document. Rewrite the relevant sections so the role is stronger and matches this request. Keep professional hiring language. Never copy the edit request into responsibilities or business focus.`
+        : "",
     ]
       .filter(Boolean)
       .join("\n\n");
@@ -568,12 +598,16 @@ export async function POST(request: NextRequest) {
       );
     } catch (err) {
       console.error("[hiring/recruiter] LLM failed, using rule-based fallback", err);
+      const failedEdit = isBriefEditInstruction(lastUserForPrompt);
       return NextResponse.json(
         await finalizeRecruiterResponse(
           buildResponse({
             body,
             brief: baseBrief,
             conversation,
+            message: failedEdit
+              ? "I couldn't reshape the brief just now. Try that edit again, or tell me which section to deepen — mission, analysis rigor, or success metrics."
+              : undefined,
             usedFallback: true,
           }),
           { conversation, roleKey },

@@ -1,7 +1,10 @@
 import type { AiEmployeeJobBrief } from "./types";
 import { getRoleByKey } from "./role-library";
 import { normalizeRecruiterAnswer } from "./normalize-recruiter-answer";
-import { shouldSkipBriefMutationForMessage } from "./recruiter-intents";
+import {
+  isBriefEditInstruction,
+  shouldSkipBriefMutationForMessage,
+} from "./recruiter-intents";
 
 const FOCUS_MAP: Record<string, { businessFocus: string; technicalFocus?: string; responsibility: string }> = {
   competitors: {
@@ -147,13 +150,36 @@ function isSpecificLookingDomain(domain?: string): boolean {
   ].includes(lower);
 }
 
+function looksLikeInstructionNotFocus(text: string): boolean {
+  const lower = text.toLowerCase();
+  // Imperative / comparative edit language is not a focus area label.
+  if (
+    /^(make|rewrite|revise|rework|improve|enhance|upgrade|strengthen|elevate|polish|tighten|update|change|adjust|tweak|edit|modify|fix)\b/i.test(
+      lower,
+    )
+  ) {
+    return true;
+  }
+  if (
+    /\b(more|less)\s+(skilled|complex|rigorous|sophisticated|analytical|strategic|detailed|ambitious|senior|junior)\b/i.test(
+      lower,
+    )
+  ) {
+    return true;
+  }
+  return false;
+}
+
 function interpretFreeformFocus(text: string): { businessFocus: string; responsibility: string } | null {
   const cleaned = text.replace(/\s+/g, " ").trim();
   if (cleaned.length < 12 || cleaned.length > 240) return null;
+  // Never wrap document-edit instructions into "Own … work for the team".
+  if (looksLikeInstructionNotFocus(cleaned)) return null;
   // Prefer a short interpreted phrase — never paste a long user dump into the brief.
   const clause = cleaned.split(/[.—]| for our | so we | because /i)[0]?.trim() ?? cleaned;
   const phrase = clause.length > 72 ? `${clause.slice(0, 69).trim()}…` : clause;
   if (phrase.length < 8) return null;
+  if (looksLikeInstructionNotFocus(phrase)) return null;
   const label = phrase.charAt(0).toUpperCase() + phrase.slice(1);
   return {
     businessFocus: label,
@@ -168,7 +194,7 @@ export function applyRoleFocusAnswer(
 ): { brief: AiEmployeeJobBrief; focusLabel: string | null } | null {
   const trimmed = normalizeRecruiterAnswer(answer);
   if (!trimmed || trimmed.length > 240) return null;
-  if (shouldSkipBriefMutationForMessage(trimmed)) return null;
+  if (shouldSkipBriefMutationForMessage(trimmed) || isBriefEditInstruction(trimmed)) return null;
 
   const role = getRoleByKey(roleKey ?? undefined);
   const chips = role?.questionTemplates.coreWorkChips ?? [];

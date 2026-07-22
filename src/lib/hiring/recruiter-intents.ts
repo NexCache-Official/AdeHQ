@@ -46,11 +46,85 @@ export function isHiringFlowMetaReply(text: string): boolean {
   return false;
 }
 
+/**
+ * User is asking Maya to rewrite/improve the job brief as a document — not naming a
+ * focus area to append. These must go through LLM edit, never "Own {text} work…".
+ */
+export function isBriefEditInstruction(text: string): boolean {
+  const trimmed = text.trim();
+  if (!trimmed) return false;
+  const lower = trimmed.toLowerCase();
+
+  // Deterministic chip mutations already handle these cleanly without freeform wrap.
+  if (
+    /\b(make it more senior|more senior|senior advisor|make it more hands-on|hands-on|implementation-focused)\b/i.test(
+      lower,
+    )
+  ) {
+    return false;
+  }
+
+  if (
+    /\b(rewrite|revise|rework|reshape|redraft|improve|enhance|upgrade|strengthen|elevate|polish|tighten)\b/i.test(
+      lower,
+    ) &&
+    /\b(brief|mission|responsibilit|job|role|analysis|research|scope|focus|metrics?)\b/i.test(lower)
+  ) {
+    return true;
+  }
+
+  if (
+    /\b(make (it|the|this|them)\b.{0,40}\b(more|less|deeper|stronger|sharper|better|harder|smarter|rigorous|sophisticated|complex|skilled|senior|junior|strategic|analytical|detailed|ambitious)\b)/i.test(
+      lower,
+    )
+  ) {
+    return true;
+  }
+
+  if (
+    /\b(more|less)\s+(skilled|complex|rigorous|sophisticated|analytical|strategic|detailed|ambitious|senior|junior)\b/i.test(
+      lower,
+    )
+  ) {
+    return true;
+  }
+
+  if (
+    /\b(update|change|adjust|tweak|edit|modify|fix)\b.+\b(brief|mission|responsibilit|analysis|research quality|depth)\b/i.test(
+      lower,
+    )
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
 /** True when the user's message should not mutate brief fields (navigation, approval, meta chips). */
 export function shouldSkipBriefMutationForMessage(text: string): boolean {
   return (
-    shouldSkipBriefUpdateIntent(detectRecruiterUserIntent(text)) || isHiringFlowMetaReply(text)
+    shouldSkipBriefUpdateIntent(detectRecruiterUserIntent(text)) ||
+    isHiringFlowMetaReply(text) ||
+    // Brief-edit instructions are document rewrites — never append as focus bullets.
+    isBriefEditInstruction(text)
   );
+}
+
+/** Drop bullets that look like chat instructions pasted into the brief artifact. */
+export function isInstructionShapedBriefLine(text: string): boolean {
+  const trimmed = text.trim();
+  if (!trimmed) return true;
+  if (/^own\s+make\b/i.test(trimmed)) return true;
+  if (/^primary focus:\s*make\b/i.test(trimmed)) return true;
+  if (isBriefEditInstruction(trimmed)) return true;
+  if (
+    /^(make|rewrite|revise|rework|improve|enhance|upgrade|strengthen|elevate|polish|tighten|update|change|adjust|tweak|edit|modify|fix)\b/i.test(
+      trimmed,
+    )
+  ) {
+    return true;
+  }
+  return false;
 }
 
 export function mayaReplyForHiringFlowMeta(text: string): string | null {

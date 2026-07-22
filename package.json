@@ -97,7 +97,8 @@
     "test:calls:human": "tsx scripts/test-human-hybrid-calls.ts",
     "test:calls:cloudflare-live": "node scripts/test-cloudflare-realtime-live.mjs",
     "test:calls:e2e": "node scripts/test-human-calls-e2e.mjs",
-    "test:calls:browsers": "node scripts/test-call-browser-compat.mjs"
+    "test:calls:browsers": "node scripts/test-call-browser-compat.mjs",
+    "test:hiring:brief-edit": "tsx scripts/test-brief-edit-instructions.ts"
   },
   "dependencies": {
     "@ai-sdk/gateway": "^4.0.12",

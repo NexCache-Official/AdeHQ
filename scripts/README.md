@@ -22,6 +22,7 @@ Runnable tooling for AdeHQ. Prefer **npm scripts** from the repo root (`package.
 | Human/hybrid calls | `npm run test:calls:human` (canonical state, SFU secret boundary, push, consent, WH voice path) |
 | Cloudflare Realtime live | `vercel env run -- npm run test:calls:cloudflare-live` (real session, publish, subscribe, echo; uses server env) |
 | Human call API E2E | `npm run test:calls:e2e` (two humans, idempotency, atomic accept, leases, consent, artifacts, cleanup) |
+| Hiring brief edits | `npm run test:hiring:brief-edit` (Maya must rewrite the job brief, not append chat instructions as bullets) |
 | Call browser compatibility | `npm run test:calls:browsers` (Chromium, Firefox, WebKit WebRTC/media/push capability probe; set `CALL_BROWSER_REQUIRE_ALL=1` for release gating) |
 | Brain gauntlet | `npm run test:brain:gauntlet` (release + reliability + steward shadow + brain + access) |
 | Brain Step shadow | `npm run test:brain:step-shadow` (live SF: Qwen3-8B vs Step-3.5-Flash) |
