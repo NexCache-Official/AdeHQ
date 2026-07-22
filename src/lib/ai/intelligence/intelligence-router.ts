@@ -1,7 +1,7 @@
 import { generateObject } from "ai";
 import { z } from "zod";
 import { SILICONFLOW_CHEAP_MODEL, isSiliconFlowConfigured } from "@/lib/config/features";
-import { resolveModel, getOutputTokenCap, getTimeoutMs } from "@/lib/ai/model-catalog";
+import { resolveModel, getOutputTokenCap } from "@/lib/ai/model-catalog";
 import { siliconFlowChatModel, siliconFlowProviderOptions } from "@/lib/ai/siliconflow-client";
 import type { IntelligenceContext } from "./intelligence-context";
 import { appendIntelligenceStep } from "./telemetry";
@@ -15,6 +15,17 @@ const RouterDecisionSchema = z.object({
 });
 
 export type IntelligenceRouterResult = z.infer<typeof RouterDecisionSchema>;
+
+/**
+ * This step decides a single enum field ("route") — it is not a full reply —
+ * so it must never eat into the "cheap" tier's full reply budget (30s via
+ * getTimeoutMs("cheap")). Production traces showed this call consistently
+ * timing out at exactly 30000ms whenever SiliconFlow's cheap tier was slow,
+ * wasting a full 30s before the pipeline could even fall back to a direct
+ * reply. A short, dedicated timeout means a slow provider fails fast here and
+ * the employee still replies promptly via the direct/fallback path.
+ */
+const ROUTER_TIMEOUT_MS = 8_000;
 
 const ROUTER_SYSTEM = `You are a lightweight intent router for AdeHQ AI employees.
 Decide how to handle the latest user message before any expensive tools run.
@@ -78,7 +89,7 @@ export async function runIntelligenceRouter(
         .filter(Boolean)
         .join("\n"),
       maxOutputTokens: getOutputTokenCap("cheap"),
-      abortSignal: AbortSignal.timeout(getTimeoutMs("cheap")),
+      abortSignal: AbortSignal.timeout(ROUTER_TIMEOUT_MS),
       providerOptions: siliconFlowProviderOptions(model),
     });
 

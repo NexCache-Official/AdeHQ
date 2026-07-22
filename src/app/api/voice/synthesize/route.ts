@@ -8,6 +8,7 @@ import {
 import { isBrainVoiceV1Enabled } from "@/lib/brain/flags";
 import { executeTextToSpeech } from "@/lib/brain/voice/execute";
 import { persistTtsArtifact } from "@/lib/brain/voice/persist";
+import { safeApiErrorMessage } from "@/lib/server/api-error";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -97,7 +98,7 @@ export async function POST(request: NextRequest) {
     }
     console.error("[AdeHQ voice/synthesize]", error);
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Speech synthesis failed" },
+      { error: safeApiErrorMessage(error, "Speech synthesis failed. Please try again.") },
       { status: 500 },
     );
   }

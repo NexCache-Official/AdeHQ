@@ -18,6 +18,47 @@ const ACTIVE_SUBSCRIPTION_STATUSES: SubscriptionStatus[] = [
   "enterprise",
 ];
 
+/**
+ * In-memory safety net matching the "free" row seeded by
+ * 20260706200000_commercial_plan_entitlements.sql. Only used if
+ * platform_plan_configs is ever unexpectedly empty (transient read failure,
+ * replica lag, or a not-yet-applied migration) — see resolveWorkspacePlan.
+ * Deliberately the most restrictive tier so a fallback never over-grants.
+ */
+const FALLBACK_FREE_PLAN_CONFIG: PlanConfig = {
+  planSlug: DEFAULT_PLAN_SLUG,
+  displayName: "Free",
+  monthlyPriceCents: 0,
+  annualPriceCents: 0,
+  trialDays: 0,
+  isActive: true,
+  weeklyWorkHours: 10,
+  humanMembersUnlimited: true,
+  aiEmployeesUnlimited: true,
+  maxAiEmployees: null,
+  maxMembers: null,
+  maxWorkspaces: 1,
+  maxRooms: 5,
+  maxTopics: 25,
+  maxStorageBytes: 1073741824,
+  maxBrowserRunsPerWeek: 2,
+  maxFileUploadMb: 10,
+  allowedIntelligenceTiers: ["cheap", "balanced"],
+  browserResearchEnabled: false,
+  gatewaySearchEnabled: true,
+  customAiEmployeesEnabled: true,
+  teamFeaturesEnabled: false,
+  adminControlsEnabled: false,
+  prioritySupport: false,
+  entitlements: {
+    web_search: "limited",
+    browser_research: "preview_limited",
+    intelligence_tier: "efficient",
+    storage_tier: "low",
+    support_tier: "basic",
+  },
+};
+
 function toPlanConfig(row: PlanConfigRow): PlanConfig {
   return {
     planSlug: row.plan_slug,
@@ -167,7 +208,21 @@ export async function resolveWorkspacePlan(
     source = "default";
   }
   if (!config) {
-    throw new Error("No plan configs found. Apply migration 20260706200000_commercial_plan_entitlements.sql.");
+    // platform_plan_configs should always have at least the "free" row (see
+    // 20260706200000_commercial_plan_entitlements.sql). If it's ever empty —
+    // a transient read, replica lag, or a not-yet-applied migration — fail
+    // open with safe, restrictive defaults instead of throwing. This function
+    // sits on the hot path for every message send and Listen click; an
+    // uncaught throw here previously surfaced its raw message (mentioning
+    // the migration filename) straight to end users. Log loudly server-side
+    // so the underlying problem stays visible in the Debug trace / server
+    // logs instead of the chat UI.
+    console.error(
+      "[AdeHQ billing] platform_plan_configs has no rows for plan or default 'free' — using in-memory fallback. Verify migration 20260706200000_commercial_plan_entitlements.sql has run.",
+    );
+    config = FALLBACK_FREE_PLAN_CONFIG;
+    planSlug = DEFAULT_PLAN_SLUG;
+    source = "default";
   }
 
   const overrideWorkHours =

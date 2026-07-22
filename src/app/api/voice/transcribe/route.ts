@@ -10,6 +10,7 @@ import { assessSttRequest, executeSpeechToText } from "@/lib/brain/voice/execute
 import { enqueueMeetingTranscriptionJob } from "@/lib/brain/voice/jobs";
 import { persistPrivateAudio } from "@/lib/brain/voice/persist";
 import { shouldUseAsyncStt } from "@/lib/brain/voice/select";
+import { safeApiErrorMessage } from "@/lib/server/api-error";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -150,7 +151,7 @@ export async function POST(request: NextRequest) {
     }
     console.error("[AdeHQ voice/transcribe]", error);
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Transcription failed" },
+      { error: safeApiErrorMessage(error, "Transcription failed. Please try again.") },
       { status: 500 },
     );
   }

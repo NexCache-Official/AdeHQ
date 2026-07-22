@@ -148,7 +148,14 @@ function mapClassifierObjectToPlan(
   };
 }
 
-/** Direct SiliconFlow path — unchanged from pre-Runtime V2 behavior. */
+/**
+ * Direct SiliconFlow path — unchanged from pre-Runtime V2 behavior, except for
+ * the added abortSignal below. This call previously had no timeout at all, so
+ * a slow/hanging SiliconFlow response could stall the room message POST
+ * indefinitely. It only classifies room routing (intent + who should reply),
+ * not a full reply, so 8s is generous; on timeout the caller falls back to
+ * deterministic/heuristic routing (see classifyRoomMessageDeterministic).
+ */
 export async function classifyWithLlmOld(
   input: OrchestratorInput,
   employees: AIEmployeeProfile[],
@@ -165,6 +172,7 @@ export async function classifyWithLlmOld(
       providerOptions: siliconFlowProviderOptions(DEFAULT_SILICONFLOW_MODEL),
       schema: classifierSchema,
       prompt: buildClassifierPrompt(input, employees),
+      abortSignal: AbortSignal.timeout(8_000),
     });
 
     return mapClassifierObjectToPlan(object, employees);

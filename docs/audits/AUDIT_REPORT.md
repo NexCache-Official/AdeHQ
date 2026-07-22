@@ -441,6 +441,113 @@ was *both* slower and less reliable on this schema in this environment.
   7/7 pass, confirmed stable across 3 repeated runs.
 - `tsc --noEmit` clean across the whole project.
 
+## Session 2026-07-22 — AI reply latency + error-leak + voice recording fixes
+
+User report: "Hey everyone!" took ~15s for a broadcast greeting reply and a
+DM ("what's your name and what can you do?") took **125924ms** (~2 min),
+with the Debug trace showing an `[intelligence] router` step failing at
+exactly **30004ms**. Separately, clicking **Listen** on an AI reply surfaced
+a raw `"No plan configs found. Apply migration
+20260706200000_commercial_plan_entitlements.sql."` error directly in the
+chat UI, and stopping a voice-note recording surfaced `"mime type
+audio/webm;codecs=opus is not supported"` instead of a transcript.
+
+**Migrations**: verified via `supabase migration list --linked` — every
+local migration (including `20260706200000_commercial_plan_entitlements`)
+is present on the linked `psufoswopnknzhxfyvwa` (AdeHQ) project, and a
+direct service-role query confirmed `platform_plan_configs` has all 5 rows
+(free/pro/team/business/enterprise). No missing migration; the error text
+was almost certainly from an earlier deploy or a transient read, not an
+ongoing gap — but see the defensive fix below regardless.
+
+**Root causes found & fixed:**
+- `src/lib/ai/intelligence/intelligence-router.ts` — the lightweight
+  route-classification step (`direct`/`search`/`browse`/`clarify`, one enum
+  field) was reusing the "cheap" tier's full **30s** reply budget
+  (`getTimeoutMs("cheap")`) as its own timeout. When SiliconFlow's cheap
+  tier was slow, this step burned the full 30s before the pipeline could
+  fall back to a direct reply — exactly matching the observed `30004ms`
+  failures. Gave it its own dedicated `ROUTER_TIMEOUT_MS = 8_000`, since a
+  single-field classification never needs anywhere near a full reply
+  budget; a slow provider now fails fast here instead of stalling the
+  whole turn.
+- `src/lib/orchestration/llm-classifier.ts` (`classifyWithLlmOld`) — the
+  legacy room-orchestration classifier's `generateObject` call had **no
+  timeout at all** (no `abortSignal`), so a hanging/slow SiliconFlow
+  response could stall a room message's classification indefinitely with
+  no bound. Added an 8s `abortSignal.timeout` — on timeout the caller
+  already falls back to the deterministic/heuristic classifier
+  (`classifyRoomMessageDeterministic`), so this is a pure latency-ceiling
+  fix with no behavior change on the happy path.
+- `src/lib/billing/plans/resolve-workspace-plan.ts` — `resolveWorkspacePlan`
+  previously threw a raw `Error` naming the migration filename whenever
+  `platform_plan_configs` had no row for the resolved plan *and* no "free"
+  row. This function sits on the hot path for every message send, Listen
+  click, and quota check, and several callers (e.g.
+  `/api/voice/synthesize`) forwarded `error.message` straight into the
+  response body, which the `ListenButton` UI then rendered verbatim. Now
+  fails open with an in-memory `FALLBACK_FREE_PLAN_CONFIG` (matching the
+  seeded "free" row) plus a loud `console.error` for the Debug trace/server
+  logs, instead of throwing into user-facing UI.
+- New `src/lib/server/api-error.ts` (`safeApiErrorMessage`) — pattern-based
+  filter that swaps an unexpected/500-class error's message for a generic,
+  friendly fallback when it looks like internal/infra leakage (mentions
+  "migration", a missing table/relation, RLS, a raw `STT/TTS failed (nnn):
+  ...` provider body, etc.), while leaving already-friendly, deliberately
+  thrown messages (validation, policy reasons) untouched. Wired into
+  `/api/voice/synthesize` and `/api/voice/transcribe`'s catch-all error
+  responses — the two routes directly implicated by this report. The
+  original error is still `console.error`'d for the Debug trace.
+- `src/lib/brain/voice/adapter.ts` (`callSiliconFlowStt`) — root cause of
+  the `"mime type audio/webm;codecs=opus is not supported"` error: the
+  browser's `MediaRecorder` blob `type` (`audio/webm;codecs=opus`) was
+  passed straight through as the multipart file part's Content-Type to
+  SiliconFlow's transcription endpoint, which rejects the `;codecs=...`
+  parameter and echoes it back verbatim in its error body (which then
+  became the user-facing error via the bug above). Added `bareMimeType()` /
+  `extensionForMimeType()` to strip codec parameters before building the
+  upload `Blob`, so only the bare container type (`audio/webm`, `audio/wav`,
+  etc.) is ever sent.
+- `src/components/VoiceNoteButton.tsx` — UX pass requested by the report
+  ("doesn't show progress or transcribed text"): explicit `Recording ·
+  Ns · tap to stop` / `Transcribing…` / `Added to message` status labels
+  (previously just a bare spinner icon with no text), a best-effort live
+  caption during recording via the browser's `SpeechRecognition` API where
+  available (feature-detected; Firefox has none, so this degrades to
+  "Listening…" there — the authoritative transcript always comes from the
+  server STT call on stop, never from this live caption), and a clearer
+  empty-transcript message ("Didn't catch that…") instead of silently
+  no-op'ing. Recorder mimeType selection now tries `webm/opus → webm →
+  mp4 → ogg/opus` and reads back `recorder.mimeType` actually granted by
+  the browser, rather than assuming the first candidate succeeded.
+
+**Not fixed in this pass (flagged for follow-up, out of "fix it quickly"
+scope):** the DM case's outer wall-clock time (125924ms) has ~90s not
+accounted for by any single measured step in the `[intelligence]` timeline
+(router 30004ms + composer 4221ms ≈ 34.2s of the 125.9s total) — likely
+spread across the many sequential Supabase round trips in
+`processEmployeeResponse`/`processQueuedAgentRun` (cost-guard begin/finalize,
+shadow-run planning/recording, `appendRunStep` calls, effects persistence)
+rather than one obvious offender. Reducing the two timeouts above bounds
+the worst case but doesn't explain 100% of that one trace; a proper fix
+needs real APM/timing spans around each DB round trip, not static reading.
+
+**Verified**:
+- `npx tsc --noEmit` — clean.
+- `npm run build` — clean production build.
+- `npm run test:brain:voice` — 20/20 pass.
+- `npm run test:room-steward` — 17/17 pass.
+- `npm run test:dm-steward` — pre-existing `deep research request →
+  browser_research` failure confirmed present before these changes too
+  (via `git stash`); unrelated to this session's edits, not introduced by
+  it.
+- `npm run test:ai-callers` — 32/32 pass.
+- `npm run test:runtime:mock` — 7/7 pass.
+- Removed three stray `scripts/tmp-*.mjs` scratch files (hybrid-access E2E,
+  profile-avatar seed, workforce-studio UI smoke) left untracked from prior
+  sessions — explicitly labeled "throwaway"/"one-off" in their own headers,
+  not referenced by any npm script or doc, safe to delete rather than commit.
+
 ## Log
 
 | 2026-07-10 | Hire AI Employee wizard: typed "I need a leasing agent who can screen tenant applicants, answer prospective tenant questions, and schedule property tours" on Step 1 (Role) | Maya proposes real-estate-relevant role(s), e.g. "Leasing Agent" / "Property Manager", and Job Brief step 4 reflects tenant screening, tour scheduling | Step 2 (Context): Maya suggested generic SaaS-startup roles — "Software Engineer, Executive Assistant, Sales Development Rep" — none matching a leasing/property role. Follow-up quick-reply chips were "Daily operations / Customer support / Data analysis / Process automation," again generic. The live-updating "Draft Job Brief" panel showed title **"AI Employee"**, department **"General business"**, and mission **"Help the team succeed as a ai employee in general business."** — completely generic, dropped all my specifics (leasing, tenants, tours), and contains a grammar bug ("as a ai employee" instead of "an AI employee"). | **Critical / Important** (bug: grammar+data-loss is Important; the vertical-blindness is a Critical product-market gap for a real estate customer) | Role-parsing/classification step likely maps free text against a fixed catalog of SaaS/startup role templates (Software Engineer, SDR, EA, etc.) with no real-estate-specific roles (Leasing Agent, Property Manager, Listing Agent, Transaction Coordinator) and a weak fallback that discards the original input instead of using it verbatim in the mission field | Add a "custom/other" path that keeps the user's literal input verbatim in the mission when no catalog role matches well enough, add real-estate role templates, fix the "a ai employee" grammar bug, and use an article-aware template ("an {role}" not "a {role}") | Open | This is the single most damaging finding so far for the real-estate persona specifically: the CEO in this scenario is being funneled toward hiring a generic "AI Employee" instead of a Leasing Agent, on the platform's flagship "hire a teammate in minutes" flow. First impressions of the hiring wizard (UI, step design, live-updating brief) are excellent — the content generation is the weak link. |

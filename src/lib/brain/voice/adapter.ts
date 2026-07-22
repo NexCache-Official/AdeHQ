@@ -57,6 +57,32 @@ export async function callSiliconFlowTts(params: {
   };
 }
 
+/**
+ * Browser MediaRecorder blobs carry a fully-qualified type like
+ * "audio/webm;codecs=opus" — the codec parameter is meaningful to the
+ * browser but several OpenAI-compatible transcription endpoints (including
+ * SiliconFlow's) validate the Content-Type of the uploaded file part
+ * strictly and reject anything beyond the bare container type, replying with
+ * an error literally naming the rejected string (e.g. "mime type
+ * audio/webm;codecs=opus is not supported"). Strip codec/parameter
+ * suffixes and keep only the container MIME type the provider actually
+ * checks against.
+ */
+function bareMimeType(mimeType: string | undefined, fallback: string): string {
+  const base = mimeType?.split(";")[0]?.trim().toLowerCase();
+  return base || fallback;
+}
+
+/** File extension matching a bare audio MIME type, for the multipart filename. */
+function extensionForMimeType(bareType: string): string {
+  if (bareType.includes("webm")) return "webm";
+  if (bareType.includes("wav")) return "wav";
+  if (bareType.includes("ogg")) return "ogg";
+  if (bareType.includes("mp4") || bareType.includes("m4a")) return "m4a";
+  if (bareType.includes("mpeg") || bareType.includes("mp3")) return "mp3";
+  return "webm";
+}
+
 export async function callSiliconFlowStt(params: {
   routeId: SttRouteId;
   audioBytes: Buffer;
@@ -79,11 +105,11 @@ export async function callSiliconFlowStt(params: {
   const baseURL = (params.baseURL ?? SILICONFLOW_API_BASE_URL).replace(/\/$/, "");
   const started = Date.now();
 
+  const bareType = bareMimeType(params.mimeType, "audio/webm");
+  const ext = extensionForMimeType(bareType);
   const form = new FormData();
-  const blob = new Blob([new Uint8Array(params.audioBytes)], {
-    type: params.mimeType || "audio/webm",
-  });
-  form.append("file", blob, params.fileName || "audio.webm");
+  const blob = new Blob([new Uint8Array(params.audioBytes)], { type: bareType });
+  form.append("file", blob, params.fileName || `audio.${ext}`);
   form.append("model", route.model);
 
   const response = await fetch(`${baseURL}/audio/transcriptions`, {
