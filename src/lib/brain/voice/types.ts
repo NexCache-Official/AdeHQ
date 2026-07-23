@@ -34,6 +34,13 @@ export type EmployeeVoiceProfile = {
   tone: "professional" | "warm" | "energetic" | "calm" | "direct" | "thoughtful";
   pace: number;
   routePreference: "auto" | "standard" | "premium" | "local";
+  /**
+   * Gender of the spoken voice. `auto` infers from the employee first name;
+   * talking style (tone/pace) stays independent.
+   */
+  genderMode: "auto" | "female" | "male";
+  /** Resolved gender used for voice-pool selection. */
+  resolvedGender: "female" | "male";
   providerBindings: Array<{
     provider: string;
     voiceId: string;

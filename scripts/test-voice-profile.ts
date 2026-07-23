@@ -2,12 +2,17 @@ import assert from "node:assert/strict";
 import {
   bridgeClipKey,
   cacheBridgeClip,
+  createProgressiveFillerScheduler,
   getCachedBridgeClip,
   HybridLocalTurnDetector,
+  inferVoiceGenderFromName,
   isLikelySttHallucination,
   normalizeEmployeeVoiceProfile,
   resolveProviderVoice,
   transcriptHasUsableSpeech,
+  voiceMatchesGender,
+  XAI_FEMALE_VOICES,
+  XAI_MALE_VOICES,
 } from "../src/lib/brain/voice";
 
 const first = normalizeEmployeeVoiceProfile("employee-a", {
@@ -25,6 +30,41 @@ assert.equal(
   resolveProviderVoice(second, "xai", "standard"),
   "fallback voice identity must remain deterministic",
 );
+
+assert.equal(inferVoiceGenderFromName("Priya Carter"), "female");
+assert.equal(inferVoiceGenderFromName("David Chen"), "male");
+const priya = normalizeEmployeeVoiceProfile(
+  "emp-priya",
+  { genderMode: "auto" },
+  { employeeName: "Priya Carter", realignGender: true },
+);
+assert.equal(priya.resolvedGender, "female");
+assert.ok(
+  voiceMatchesGender(
+    resolveProviderVoice(priya, "xai", "standard") ?? "",
+    "female",
+    "xai",
+  ),
+);
+assert.ok((XAI_FEMALE_VOICES as readonly string[]).includes(resolveProviderVoice(priya, "xai", "standard")!));
+const david = normalizeEmployeeVoiceProfile(
+  "emp-david",
+  { genderMode: "auto" },
+  { employeeName: "David Chen", realignGender: true },
+);
+assert.equal(david.resolvedGender, "male");
+assert.ok((XAI_MALE_VOICES as readonly string[]).includes(resolveProviderVoice(david, "xai", "standard")!));
+
+const spoken: string[] = [];
+const scheduler = createProgressiveFillerScheduler({
+  seed: "turn_fill",
+  intervalMs: 10_000,
+  maxPhrases: 2,
+  speak: (phrase) => spoken.push(phrase),
+});
+scheduler.start("thinking");
+assert.equal(spoken.length, 1);
+scheduler.stop();
 const bridgeKey = bridgeClipKey({
   routeId: "route_call_tts_xai",
   voice: "eve",

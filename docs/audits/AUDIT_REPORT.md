@@ -6,6 +6,21 @@ Scope of this pass: Phase 1 (partial), Phase 2/3 (partial via Maya/Elena/David),
 
 ---
 
+## Session 2026-07-23 — Voice Brain Fast Path (PR-18.2A5–A10)
+
+**Finding:** TTS (~110–400 ms) is no longer the live-call bottleneck; Brain first
+content token was ~3–6 s. Cartesia’s ~280 ms TTS win is not worth ~2.8× xAI cost
+until Brain TTFT is fixed.
+
+**Shipped:** `local_instant` / `voice_fast` / `work_full` router, hot
+`VoiceSessionSnapshot`, latency waterfall on `call_turns.metadata`, async effect
+compiler (post-speech), interim STT prefetch, `npm run benchmark:voice-brain`.
+TTS policy unchanged: xAI standard, CosyVoice fallback, Cartesia premium/benchmark only.
+Also folded from the call-response latency pass (TTS-harness itself not shipped):
+instant-answer deltas on voice, CosyVoice HTTP chunk forward, and listen-state
+race fix when playback is still queued.
+
+
 ## Session 2026-07-23 — PR-25 Playbook / Artifact / Procedure Runtime
 
 **Scope:** Slice 25.0–25.9 foundations: architecture audit docs, additive migration,

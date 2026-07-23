@@ -31,11 +31,7 @@ import {
   cacheBridgeClip,
   getCachedBridgeClip,
 } from "./bridge-clips";
-import {
-  LIVE_CALL_BRIDGE_PHRASES,
-  LIVE_CALL_WORKING_PHRASES,
-  pickBridgePhrase,
-} from "./bridge-phrases";
+import { createProgressiveFillerScheduler } from "./intelligent-fillers";
 import { GroqWhisperAdapter } from "./live-adapters";
 import {
   normalizeSpeechLanguage,
@@ -57,6 +53,24 @@ import {
   isAffirmativeSearchFollowUp,
   isMetaResearchInstruction,
 } from "@/lib/ai/research/resolve-research-query";
+import { routeVoiceBrainTurn } from "./voice-brain-router";
+import {
+  appendVoiceSessionTurn,
+  buildVoiceSessionSnapshot,
+  getVoiceSessionSnapshot,
+} from "./voice-session-snapshot";
+import {
+  createVoiceBrainLatencyTrace,
+  logVoiceBrainLatency,
+  markVoiceBrainLatency,
+  voiceBrainLatencyMetadata,
+} from "./voice-latency-trace";
+import {
+  generateVoiceLaneReply,
+  persistVoiceLaneReply,
+} from "./voice-lane-response";
+import { scheduleVoiceAsyncEffects } from "./async-effect-compiler";
+import { clearVoicePrefetchState } from "./voice-prefetch";
 
 function isWeakVoiceReply(text: string): boolean {
   const trimmed = text.trim();
@@ -480,22 +494,60 @@ export async function executeEmployeeCallTurn(input: {
     topic.id,
     `${turnId}_message`,
   );
-  // Keep more of the live call thread than the default lean chat path so
-  // short follow-ups ("yes", "google that") still resolve the prior topic.
+
+  const warmSnapshot = getVoiceSessionSnapshot(input.callSessionId);
+  const latencyTrace = createVoiceBrainLatencyTrace({
+    callId: input.callSessionId,
+    turnId,
+    warm: Boolean(warmSnapshot),
+  });
+  markVoiceBrainLatency(latencyTrace, "authComplete");
+  let snapshot =
+    warmSnapshot ??
+    (await buildVoiceSessionSnapshot({
+      client: input.client,
+      callId: input.callSessionId,
+      workspaceId: input.workspaceId,
+      roomId: input.roomId,
+      topicId: topic.id,
+      humanUserId: input.humanUserId,
+      employeeId: input.employeeId,
+    }));
+  markVoiceBrainLatency(latencyTrace, "sessionLoaded");
+  appendVoiceSessionTurn(input.callSessionId, {
+    speaker: "human",
+    text: stt.text,
+    at: new Date().toISOString(),
+  });
+  snapshot = getVoiceSessionSnapshot(input.callSessionId) ?? snapshot;
+  clearVoicePrefetchState(input.callSessionId);
+
+  const routeDecision = routeVoiceBrainTurn({
+    message: stt.text,
+    snapshot,
+    triggerMessageId: humanMessage.id,
+  });
+  latencyTrace.route = routeDecision.route;
+  markVoiceBrainLatency(latencyTrace, "routingComplete");
+
+  // Ordinary conversation uses lean hydration; tool/research turns keep full context.
   const ctx = await loadTopicContext(
     input.client,
     input.workspaceId,
     input.roomId,
     topic.id,
-    { lean: false },
+    { lean: routeDecision.route !== "work_full" },
   );
+  markVoiceBrainLatency(latencyTrace, "contextFetchComplete");
 
   const chunker = new SpeechChunker();
-  const voiceProfile = await loadEmployeeVoiceProfile(
-    input.client,
-    input.workspaceId,
-    input.employeeId,
-  );
+  const voiceProfile =
+    snapshot.employeeVoiceProfile ??
+    (await loadEmployeeVoiceProfile(
+      input.client,
+      input.workspaceId,
+      input.employeeId,
+    ));
   // The call-session policy is canonical for billing. A durable employee
   // preference must never silently upgrade a standard call to a paid route.
   const premiumVoiceRequested = input.routeContext.premiumVoiceRequested;
@@ -548,7 +600,10 @@ export async function executeEmployeeCallTurn(input: {
           await session.interrupt("User interrupted.");
           break;
         }
-        if (!firstAudioAt) firstAudioAt = new Date().toISOString();
+        if (!firstAudioAt) {
+          firstAudioAt = new Date().toISOString();
+          markVoiceBrainLatency(latencyTrace, "firstTtsByte");
+        }
         await input.emit({
           type: "employee.audio.delta",
           audio: Buffer.from(chunk.bytes).toString("base64"),
@@ -659,16 +714,14 @@ export async function executeEmployeeCallTurn(input: {
     });
   };
 
-  // Immediate spoken bridge while the Brain (and any search) starts — keeps the
-  // call feeling live instead of silent for several seconds before first audio.
-  // The first provider result is cached by voice identity; cache hits incur no
-  // provider request or customer WH.
+  // Intelligent progressive fillers while Brain/tools work — humans don't sit
+  // in dead air. Stop as soon as real answer content is speakable.
   const needsBridge =
-    messageLikelyNeedsResearch(stt.text) ||
-    isMetaResearchInstruction(stt.text) ||
-    isAffirmativeSearchFollowUp(stt.text, ctx.room.messages, humanMessage.id);
-  let bridgeSpoken = false;
-  let workingBridgeSpoken = false;
+    routeDecision.route === "work_full" &&
+    (messageLikelyNeedsResearch(stt.text) ||
+      isMetaResearchInstruction(stt.text) ||
+      isAffirmativeSearchFollowUp(stt.text, ctx.room.messages, humanMessage.id));
+  let fillersStopped = false;
   const speakBridgePhrase = (phrase: string, kind: "bridge" | "working") => {
     const cacheKey = bridgeClipKey({
       routeId: primaryRouteId,
@@ -724,7 +777,10 @@ export async function executeEmployeeCallTurn(input: {
             },
           });
         }
-        if (!firstAudioAt) firstAudioAt = new Date().toISOString();
+        if (!firstAudioAt) {
+          firstAudioAt = new Date().toISOString();
+          markVoiceBrainLatency(latencyTrace, "firstTtsByte");
+        }
         await input.emit({
           type: "state.changed",
           turn: "speaking",
@@ -739,70 +795,201 @@ export async function executeEmployeeCallTurn(input: {
       })
       .catch(() => undefined);
   };
-  if (needsBridge) {
-    bridgeSpoken = true;
-    speakBridgePhrase(
-      pickBridgePhrase(turnId, LIVE_CALL_BRIDGE_PHRASES),
-      "bridge",
-    );
+  const fillerScheduler = createProgressiveFillerScheduler({
+    seed: turnId,
+    intervalMs: 2_400,
+    maxPhrases: routeDecision.route === "work_full" ? 3 : 2,
+    speak: (phrase, phase) => {
+      if (fillersStopped || input.signal?.aborted) return;
+      speakBridgePhrase(
+        phrase,
+        phase === "working" || phase === "searching" ? "working" : "bridge",
+      );
+    },
+  });
+  let delayedFillerTimer: ReturnType<typeof setTimeout> | null = null;
+  if (routeDecision.route === "work_full") {
+    fillerScheduler.start(needsBridge ? "searching" : "thinking");
+  } else if (routeDecision.route === "voice_fast") {
+    // If the fast Brain is slow to first token, speak a light thinking beat
+    // instead of dead air — cancel once content arrives.
+    delayedFillerTimer = setTimeout(() => {
+      if (
+        !fillersStopped &&
+        !latencyTrace.providerFirstContentTokenAt &&
+        !streamedReplyText.trim()
+      ) {
+        fillerScheduler.start("thinking");
+      }
+    }, 750);
   }
+  const stopFillers = () => {
+    fillersStopped = true;
+    fillerScheduler.stop();
+    if (delayedFillerTimer) {
+      clearTimeout(delayedFillerTimer);
+      delayedFillerTimer = null;
+    }
+  };
 
   const streamSanitizer = new StreamReplySanitizer();
   const chunkTimeout = setInterval(() => {
     for (const chunk of chunker.flushIfTimedOut()) enqueueSpeech(chunk);
   }, Math.max(40, Math.floor(chunker.maximumWaitMs / 4)));
-  let response: Awaited<ReturnType<typeof processEmployeeResponse>>;
+  let response: Awaited<ReturnType<typeof processEmployeeResponse>> | null = null;
+  let laneFinalReply: string | null = null;
+  const pushSpeakableDelta = (delta: string) => {
+    if (!delta) return;
+    if (!firstTokenAt) firstTokenAt = new Date().toISOString();
+    if (!latencyTrace.firstSpeakablePhraseAt && delta.trim()) {
+      markVoiceBrainLatency(latencyTrace, "firstSpeakablePhrase");
+      stopFillers();
+    }
+    streamedReplyText += delta;
+    for (const chunk of chunker.push(delta)) enqueueSpeech(chunk);
+    void input.emit({ type: "employee.text.delta", text: delta });
+  };
+
   try {
-    response = await processEmployeeResponse(
-      input.client,
-      ctx,
-      input.employeeId,
-      stt.text,
-      {
-        triggerMessageId: humanMessage.id,
-        initiatedByUserId: input.humanUserId,
-        voiceCall: true,
+    if (
+      routeDecision.route === "local_instant" ||
+      routeDecision.route === "voice_fast"
+    ) {
+      const lane = await generateVoiceLaneReply({
+        decision: routeDecision,
+        snapshot,
+        userMessage: stt.text,
+        seed: turnId,
         abortSignal: input.signal,
-        onReplyDelta: (delta) => {
-          if (!firstTokenAt) firstTokenAt = new Date().toISOString();
-          streamedReplyText += delta;
-          const safeDelta = streamSanitizer.push(delta);
-          if (!safeDelta) return;
-          // Prefer audio first: enqueue TTS before mirroring text to the side
-          // panel so speech leads the transcript instead of trailing it.
-          for (const chunk of chunker.push(safeDelta)) enqueueSpeech(chunk);
-          void input.emit({ type: "employee.text.delta", text: safeDelta });
-        },
-        onActivity: (activity) => {
-          if (activity === "using_tool" || activity === "searching") {
-            usedTools = true;
+        trace: latencyTrace,
+        onReplyDelta: pushSpeakableDelta,
+      });
+      laneFinalReply = lane.reply.trim();
+      const employee =
+        ctx.employees.find((item) => item.id === input.employeeId) ??
+        ({
+          id: snapshot.employeeId,
+          name: snapshot.employeeName,
+          role: snapshot.employeeRole,
+          roleKey: "operations",
+          provider: "siliconflow",
+          model: lane.model ?? "local_instant",
+          seniority: "senior",
+          status: "working",
+          instructions: "",
+          communicationStyle: "",
+          successCriteria: "",
+          tools: [],
+          permissions: {
+            readMemory: true,
+            writeDraftMemory: false,
+            pinMemory: false,
+            createTasks: false,
+            assignTasks: false,
+            messageEmployees: false,
+            startCalls: true,
+            requestApproval: false,
+            approvalBeforeExternal: true,
+            approvalBeforeEmails: true,
+            approvalBeforeCode: true,
+            approvalBeforeBilling: true,
+          },
+          memoryCount: 0,
+          tasksCompleted: 0,
+          messagesSent: 0,
+          approvalsRequested: 0,
+          avgResponseTime: "",
+          trustScore: 0,
+          accent: "#4f46e5",
+          lastActiveAt: new Date().toISOString(),
+          createdAt: new Date().toISOString(),
+        } as (typeof ctx.employees)[number]);
+      await persistVoiceLaneReply({
+        client: input.client,
+        workspaceId: input.workspaceId,
+        roomId: input.roomId,
+        topicId: topic.id,
+        employee,
+        reply: laneFinalReply || "Okay.",
+        triggerMessageId: humanMessage.id,
+        callId: input.callSessionId,
+        turnId,
+        humanUserId: input.humanUserId,
+        userMessage: stt.text,
+        route: routeDecision.route,
+        snapshot,
+      });
+    } else {
+      response = await processEmployeeResponse(
+        input.client,
+        ctx,
+        input.employeeId,
+        stt.text,
+        {
+          triggerMessageId: humanMessage.id,
+          initiatedByUserId: input.humanUserId,
+          voiceCall: true,
+          abortSignal: input.signal,
+          onReplyDelta: (delta) => {
+            if (!latencyTrace.providerRequestStartedAt) {
+              markVoiceBrainLatency(latencyTrace, "providerRequestStarted");
+            }
+            if (!latencyTrace.providerFirstEventAt && delta) {
+              markVoiceBrainLatency(latencyTrace, "providerFirstEvent");
+              markVoiceBrainLatency(latencyTrace, "providerHeadersReceived");
+            }
+            streamedReplyText += delta;
+            const safeDelta = streamSanitizer.push(delta);
+            if (!safeDelta) return;
+            if (!latencyTrace.providerFirstContentTokenAt && safeDelta.trim()) {
+              markVoiceBrainLatency(latencyTrace, "providerFirstContentToken");
+            }
+            pushSpeakableDelta(safeDelta);
+          },
+          onActivity: (activity) => {
+            if (activity === "using_tool" || activity === "searching") {
+              usedTools = true;
+              void input.emit({
+                type: "state.changed",
+                turn: "using_tools",
+                activity,
+              });
+              if (!fillersStopped && !speechStateStarted) {
+                fillerScheduler.bump(
+                  activity === "searching" ? "searching" : "working",
+                );
+              }
+              return;
+            }
+            if (speechStateStarted || firstAudioAt) return;
             void input.emit({
               type: "state.changed",
-              turn: "using_tools",
+              turn: "thinking",
               activity,
             });
-            // If search started without the initial bridge (intent miss), speak
-            // a filler now. Skip a second phrase when we already bridged.
-            if (!bridgeSpoken && !workingBridgeSpoken && !speechStateStarted) {
-              workingBridgeSpoken = true;
-              speakBridgePhrase(
-                pickBridgePhrase(`${turnId}:work`, LIVE_CALL_WORKING_PHRASES),
-                "working",
-              );
-            }
-            return;
-          }
-          // Once voice synthesis starts, keep one coherent speaking phase
-          // instead of bouncing back to thinking between phrase deltas.
-          if (speechStateStarted || firstAudioAt) return;
-          void input.emit({
-            type: "state.changed",
-            turn: "thinking",
-            activity,
-          });
+          },
         },
-      },
-    );
+      );
+      appendVoiceSessionTurn(input.callSessionId, {
+        speaker: "employee",
+        text: response.reply,
+        at: new Date().toISOString(),
+      });
+      scheduleVoiceAsyncEffects({
+        client: input.client,
+        workspaceId: input.workspaceId,
+        roomId: input.roomId,
+        topicId: topic.id,
+        employeeId: input.employeeId,
+        employeeName: response.employeeName,
+        humanUserId: input.humanUserId,
+        callId: input.callSessionId,
+        turnId,
+        userMessage: stt.text,
+        employeeReply: response.reply,
+        route: "work_full",
+      });
+    }
   } catch (error) {
     await ttsChain.catch(() => undefined);
     const session = await ttsSessionPromise.catch(() => null);
@@ -838,29 +1025,34 @@ export async function executeEmployeeCallTurn(input: {
         tts_wh: ttsWh,
         settled_wh: sttWh + ttsWh,
         completed_at: new Date().toISOString(),
+        metadata: voiceBrainLatencyMetadata(latencyTrace),
       },
     });
     throw error;
   } finally {
     clearInterval(chunkTimeout);
+    stopFillers();
   }
   const trailingSafe = streamSanitizer.finish();
   if (trailingSafe) {
-    for (const chunk of chunker.push(trailingSafe)) enqueueSpeech(chunk);
-    void input.emit({ type: "employee.text.delta", text: trailingSafe });
+    pushSpeakableDelta(trailingSafe);
   }
   for (const chunk of chunker.finish()) enqueueSpeech(chunk);
   // Prefer sanitized model prose; if the model only leaked tool XML or deferred,
   // fall back to the live-search grounding answer so the caller hears the fact.
   const modelReply = sanitizeReplyForChat(
-    response.reply || streamSanitizer.sanitizedText,
+    laneFinalReply || response?.reply || streamSanitizer.sanitizedText,
   ).trim();
   const usedGroundingFallback =
-    isWeakVoiceReply(modelReply) && Boolean(response.voiceGroundingAnswer?.trim());
+    Boolean(response) &&
+    isWeakVoiceReply(modelReply) &&
+    Boolean(response?.voiceGroundingAnswer?.trim());
   const finalReply = usedGroundingFallback
-    ? sanitizeReplyForChat(response.voiceGroundingAnswer!).trim()
+    ? sanitizeReplyForChat(response!.voiceGroundingAnswer!).trim()
     : modelReply;
-  const spokenFromStream = Boolean(streamSanitizer.sanitizedText.trim());
+  const spokenFromStream = Boolean(
+    streamSanitizer.sanitizedText.trim() || streamedReplyText.trim(),
+  );
   // Speak when the stream produced nothing usable, or when we replaced a weak
   // deferral/tool-leak with the search grounding answer.
   if (finalReply && (!spokenFromStream || usedGroundingFallback)) {
@@ -883,7 +1075,7 @@ export async function executeEmployeeCallTurn(input: {
   await input.emit({ type: "employee.audio.end" });
 
   let brainWh = 0;
-  if (response.agentRunId) {
+  if (response?.agentRunId) {
     const { data: usageRows } = await input.client
       .from("ai_usage_events")
       .select("actual_cost_usd, estimated_cost_usd")
@@ -914,7 +1106,10 @@ export async function executeEmployeeCallTurn(input: {
     actualWh: brainWh,
     customerChargedWh: brainWh,
     outcome: interrupted ? "cancelled" : "success",
-    metadata: { agentRunId: response.agentRunId ?? null },
+    metadata: {
+      agentRunId: response?.agentRunId ?? null,
+      voiceRoute: routeDecision.route,
+    },
   });
   await settleReservation(input.client, {
     reservationId: reservation.reservationId,
@@ -946,9 +1141,10 @@ export async function executeEmployeeCallTurn(input: {
     id: `${turnId}_employee`,
     call_id: input.callSessionId,
     speaker_id: input.employeeId,
-    speaker_name: response.employeeName,
+    speaker_name: response?.employeeName ?? snapshot.employeeName,
     text: interrupted ? spokenText : finalReply,
   });
+  logVoiceBrainLatency(latencyTrace);
   await upsertCallTurn(input.client, {
     workspaceId: input.workspaceId,
     callId: input.callSessionId,
@@ -963,7 +1159,7 @@ export async function executeEmployeeCallTurn(input: {
       interrupted,
       interrupted_at_character: interrupted ? spokenText.length : null,
       tts_route_id: primaryRouteId,
-      agent_run_id: response.agentRunId ?? null,
+      agent_run_id: response?.agentRunId ?? null,
       stt_wh: sttWh,
       brain_wh: brainWh,
       tts_wh: ttsWh,
@@ -971,7 +1167,12 @@ export async function executeEmployeeCallTurn(input: {
       first_text_token_at: firstTokenAt,
       first_audio_at: firstAudioAt,
       completed_at: new Date().toISOString(),
-      metadata: { used_tools: usedTools },
+      metadata: {
+        used_tools: usedTools,
+        voiceRoute: routeDecision.route,
+        routeReason: routeDecision.reason,
+        ...voiceBrainLatencyMetadata(latencyTrace),
+      },
     },
   });
   const { data: settledTurns } = await input.client

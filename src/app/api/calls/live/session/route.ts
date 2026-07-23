@@ -11,6 +11,7 @@ import {
   assertEffectiveAiAccess,
 } from "@/lib/server/room-access";
 import {
+  buildVoiceSessionSnapshot,
   createCallSession,
   resolveLiveCallEntitlements,
   setCallSessionState,
@@ -22,6 +23,7 @@ import {
 } from "@/lib/billing/voice/usage";
 import { isMayaEmployee } from "@/lib/maya-employee";
 import { resolveLiveCallsTransport } from "@/lib/brain/voice/worker-transport";
+import { ensureGeneralTopic } from "@/lib/server/topic-helpers";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -257,6 +259,32 @@ export async function POST(request: NextRequest) {
       title: `Call with ${String(room.name ?? "employee")}`,
       entitlements,
     });
+    // PR-18.2A6 — warm the Voice Session Snapshot at connect so ordinary turns
+    // do not re-hydrate the full employee/DM context on the critical path.
+    try {
+      const topic = await ensureGeneralTopic(
+        orchestrationClient,
+        workspaceId,
+        conversationId,
+      );
+      await buildVoiceSessionSnapshot({
+        client: orchestrationClient,
+        callId: created.callId,
+        workspaceId,
+        roomId: conversationId,
+        topicId: topic.id,
+        humanUserId: user.id,
+        employeeId,
+      });
+    } catch (snapshotError) {
+      console.warn("[AdeHQ live-call] voice session snapshot warm failed", {
+        callId: created.callId,
+        error:
+          snapshotError instanceof Error
+            ? snapshotError.message
+            : String(snapshotError),
+      });
+    }
     return NextResponse.json({
       ...created,
       sttMode,

@@ -34,6 +34,13 @@ export type SpeechRouteSelection = {
   ttsRouteId: LiveTtsRouteId;
 };
 
+/**
+ * Live-call TTS policy (frozen until Brain TTFT is fixed):
+ * - Standard: xAI (best cost/latency balance; TTS is no longer the bottleneck)
+ * - Economy/fallback: SiliconFlow CosyVoice when xAI is unavailable
+ * - Premium: still xAI today (`ADEHQ_LIVE_TTS_XAI_PREMIUM=1`). Cartesia remains
+ *   benchmark-only — do not make it the standard route for a ~280 ms gain.
+ */
 export function selectSpeechRoutes(context: SpeechRouteContext): SpeechRouteSelection {
   const accurate =
     context.lowConfidence || (context.previousTranscriptionFailures ?? 0) > 0;

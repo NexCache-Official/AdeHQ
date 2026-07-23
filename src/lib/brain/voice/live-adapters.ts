@@ -214,17 +214,35 @@ export class SiliconFlowStreamingTtsAdapter implements TextToSpeechAdapter {
       if (closed) throw new Error("TTS session is closed.");
       if (!text.trim()) return;
       const task = chain.then(async () => {
-        const result = await this.synthesize({
+        // Forward HTTP body chunks as they arrive. The previous arrayBuffer()
+        // path waited for the entire CosyVoice payload before any playback.
+        const response = await this.request({
           ...input,
           text,
           format: "wav",
           signal,
         });
-        queue.push({
-          sequence: sequence++,
-          bytes: result.bytes,
-          mimeType: "audio/wav",
-        });
+        const mimeType =
+          response.headers.get("content-type")?.split(";")[0] ?? "audio/wav";
+        const body = response.body;
+        if (!body) {
+          const bytes = new Uint8Array(await response.arrayBuffer());
+          if (bytes.byteLength) {
+            queue.push({ sequence: sequence++, bytes, mimeType });
+          }
+          return;
+        }
+        const reader = body.getReader();
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          if (!value?.byteLength) continue;
+          queue.push({
+            sequence: sequence++,
+            bytes: value,
+            mimeType,
+          });
+        }
       });
       chain = task.catch((error) => {
         closed = true;

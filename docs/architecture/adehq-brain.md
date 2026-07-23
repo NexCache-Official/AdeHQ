@@ -497,6 +497,11 @@ AudioWorklet + browser VAD
   before Brain so junk captions never become employee replies.
 - Call chrome exposes only call-like activity: Listening, Understanding, Working
   (tools/research), and Speaking — not "Preparing voice" / "Thinking".
+- **PR-18.2A5–A10 Voice Brain Fast Path:** ordinary turns use `local_instant` /
+  `voice_fast` with a hot `VoiceSessionSnapshot` and latency waterfall; only
+  research/tools use `work_full`. See [`voice-brain-fast-path.md`](./voice-brain-fast-path.md).
+- Live TTS policy remains **xAI standard**, CosyVoice fallback, Cartesia
+  benchmark/premium-only — do not optimize TTS further until Brain TTFT is fixed.
 
 Flags: `ADEHQ_LIVE_CALLS_V1=1`,
 `NEXT_PUBLIC_ADEHQ_LIVE_CALLS_V1=1`, and
