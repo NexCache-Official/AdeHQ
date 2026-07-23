@@ -24,13 +24,14 @@ type Props = {
   onEnd: () => void;
 };
 
+/** Keep call chrome feel like a phone call — only a few states matter. */
 const ACTIVITY_LABEL: Record<string, string> = {
   connecting: "Connecting…",
   listening: "Listening…",
   transcribing: "Understanding…",
-  thinking: "Thinking…",
-  using_tools: "Using tools…",
-  synthesizing: "Preparing voice…",
+  thinking: "Understanding…",
+  using_tools: "Working…",
+  synthesizing: "Speaking…",
   speaking: "Speaking…",
   reconnecting: "Reconnecting…",
   failed: "Call needs attention",

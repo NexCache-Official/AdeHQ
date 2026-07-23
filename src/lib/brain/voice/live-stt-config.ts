@@ -14,8 +14,9 @@ export const LIVE_STT_MEDIA_BOUNDARY = {
   channels: 1,
   preRollMs: 200,
   // Once local VAD opens the gate, forward speech plus the trailing silence
-  // used by Smart Turn. Never forward continuous room audio while idle.
-  maximumTrailingSilenceMs: 800,
+  // used by local turn detection. Never forward continuous room audio while idle.
+  // Keep in sync with DEFAULT_TURN_DETECTION_POLICY.hardTimeoutMs.
+  maximumTrailingSilenceMs: 1800,
 } as const;
 
 const SUPPORTED_PROVIDERS = new Set<StreamingSttProvider>([

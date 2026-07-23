@@ -16,7 +16,9 @@ const META_RESEARCH_PATTERNS = [
   /\b(look up|look into|search for|check the web for)\b/i,
   /\b(search for (that|it|this)|search (that|it|this))\b/i,
   /\b(find out|please find out|can you find out)\b/i,
-  /\b(can you (search|look|check|browse|google))\b/i,
+  /\b(find(?:ing)?\s+(?:me\s+)?(?:the\s+)?(?:address|location|phone|hours|website))\b/i,
+  /\b(?:what(?:'s|\s+is)|where(?:'s|\s+is))\s+(?:the\s+)?(?:address|location)\b/i,
+  /\b(can you (search|look|check|browse|google|help))\b/i,
   /\b(use (google|the web|web search|live search))\b/i,
   /\b(go (search|look)|do (a )?search)\b/i,
 ];

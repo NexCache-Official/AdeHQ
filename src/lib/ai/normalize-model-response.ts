@@ -218,23 +218,129 @@ const SCHEMA_LEAK_MARKER =
 const TOOL_CALL_BLOCK =
   /\[TOOL_CALL\][\s\S]*?\[\/TOOL_CALL\]/gi;
 
+/** MiniMax / vendor XML tool calls that some models invent as plain text. */
+const MINIMAX_TOOL_CALL_BLOCK =
+  /<(?:minimax:)?tool_call\b[^>]*>[\s\S]*?<\/(?:minimax:)?tool_call\s*>/gi;
+const INVOKE_TOOL_BLOCK =
+  /<invoke\b[^>]*>[\s\S]*?<\/invoke\s*>/gi;
+const GENERIC_TOOL_XML_BLOCK =
+  /<(?:tool_call|toolcall|function_call)\b[^>]*>[\s\S]*?<\/(?:tool_call|toolcall|function_call)\s*>/gi;
+
 const TOOL_CALL_LEAK_MARKER =
-  /\[TOOL_CALL\]|\{\s*tool\s*=>\s*["'][a-zA-Z][\w.-]*["']|--(?:title|template|columns|rows)\s+/i;
+  /\[TOOL_CALL\]|\{\s*tool\s*=>\s*["'][a-zA-Z][\w.-]*["']|--(?:title|template|columns|rows)\s+|<(?:minimax:)?tool_call\b|<invoke\b[^>]*\bname\s*=|<\/(?:minimax:)?tool_call\s*>/i;
 
 export function replyLeakedToolCallSyntax(text: string): boolean {
   return TOOL_CALL_LEAK_MARKER.test(text) || SCHEMA_LEAK_MARKER.test(text);
 }
 
-function stripSchemaLeak(text: string): string {
-  let cleaned = text.replace(TOOL_CALL_BLOCK, "").trim();
-  // Truncate dangling open blocks / narrated DSL
-  const openBlock = cleaned.search(/\[TOOL_CALL\]/i);
-  if (openBlock >= 0) cleaned = cleaned.slice(0, openBlock).trim();
+/**
+ * Strip model-invented tool markup (AdeHQ DSL + MiniMax/XML) from a reply.
+ * Safe for chat, voice transcripts, and TTS — never speaks/shows tool XML.
+ */
+export function stripModelLeakMarkup(text: string): string {
+  let cleaned = text
+    .replace(TOOL_CALL_BLOCK, "")
+    .replace(MINIMAX_TOOL_CALL_BLOCK, "")
+    .replace(INVOKE_TOOL_BLOCK, "")
+    .replace(GENERIC_TOOL_XML_BLOCK, "")
+    .trim();
+
+  // Truncate dangling open blocks / narrated DSL / incomplete XML.
+  const openMarkers = [
+    cleaned.search(/\[TOOL_CALL\]/i),
+    cleaned.search(/<(?:minimax:)?tool_call\b/i),
+    cleaned.search(/<invoke\b/i),
+    cleaned.search(/<(?:tool_call|toolcall|function_call)\b/i),
+    cleaned.search(/\{\s*tool\s*=>/i),
+  ].filter((index) => index >= 0);
+  if (openMarkers.length > 0) {
+    cleaned = cleaned.slice(0, Math.min(...openMarkers)).trim();
+  }
+
   const match = SCHEMA_LEAK_MARKER.exec(cleaned);
   if (match) cleaned = cleaned.slice(0, match.index).trim();
-  const arrowTool = cleaned.search(/\{\s*tool\s*=>/i);
-  if (arrowTool >= 0) cleaned = cleaned.slice(0, arrowTool).trim();
   return cleaned;
+}
+
+function stripSchemaLeak(text: string): string {
+  return stripModelLeakMarkup(text);
+}
+
+/**
+ * Index where incomplete tool markup begins (caller should hold emission).
+ * Returns -1 when the buffer is safe to fully sanitize/emit.
+ */
+export function incompleteToolMarkupStart(text: string): number {
+  const openers = [
+    text.lastIndexOf("<minimax:tool_call"),
+    text.lastIndexOf("<tool_call"),
+    text.lastIndexOf("<invoke"),
+    text.lastIndexOf("<function_call"),
+    text.lastIndexOf("[TOOL_CALL]"),
+  ].filter((index) => index >= 0);
+  if (openers.length === 0) return -1;
+  const start = Math.max(...openers);
+  const tail = text.slice(start);
+  const closed =
+    /<\/(?:minimax:)?tool_call\s*>/i.test(tail) ||
+    /<\/invoke\s*>/i.test(tail) ||
+    /<\/function_call\s*>/i.test(tail) ||
+    /\[\/TOOL_CALL\]/i.test(tail);
+  return closed ? -1 : start;
+}
+
+/**
+ * Stateful filter for streaming model deltas. Holds incomplete tool tags and
+ * never emits MiniMax/XML tool markup to TTS or the live transcript.
+ */
+export class StreamReplySanitizer {
+  private raw = "";
+  private emitted = "";
+
+  push(delta: string): string {
+    if (!delta) return "";
+    this.raw += delta;
+    const holdAt = incompleteToolMarkupStart(this.raw);
+    const visibleRaw = holdAt >= 0 ? this.raw.slice(0, holdAt) : this.raw;
+    const cleaned = stripModelLeakMarkup(visibleRaw);
+    if (!cleaned) return "";
+    if (cleaned.startsWith(this.emitted)) {
+      const next = cleaned.slice(this.emitted.length);
+      this.emitted = cleaned;
+      return next;
+    }
+    // Strip removed earlier content (complete tool block). Only emit net-new
+    // prose if we have not spoken yet; otherwise wait for finish().
+    if (!this.emitted) {
+      this.emitted = cleaned;
+      return cleaned;
+    }
+    this.emitted = cleaned;
+    return "";
+  }
+
+  finish(): string {
+    const cleaned = stripModelLeakMarkup(this.raw);
+    if (!cleaned) {
+      this.emitted = "";
+      return "";
+    }
+    if (cleaned.startsWith(this.emitted)) {
+      const next = cleaned.slice(this.emitted.length);
+      this.emitted = cleaned;
+      return next;
+    }
+    if (!this.emitted) {
+      this.emitted = cleaned;
+      return cleaned;
+    }
+    this.emitted = cleaned;
+    return "";
+  }
+
+  get sanitizedText(): string {
+    return this.emitted || stripModelLeakMarkup(this.raw);
+  }
 }
 
 function finalizeReply(text: string): string {

@@ -1,4 +1,8 @@
-import { sanitizeReplyForChat } from "@/lib/ai/normalize-model-response";
+import {
+  replyLeakedToolCallSyntax,
+  sanitizeReplyForChat,
+  StreamReplySanitizer,
+} from "@/lib/ai/normalize-model-response";
 
 function assert(condition: boolean, message: string): asserts condition {
   if (!condition) throw new Error(message);
@@ -55,5 +59,27 @@ console.log("✓ does not mangle ordinary prose containing the words 'effects' o
 const plain = "Counter with $7.55M and hold your walk-away at $7.7M.";
 assert(sanitizeReplyForChat(plain) === plain, "clean plain text must pass through unchanged");
 console.log("✓ clean plain-text replies pass through unchanged");
+
+// MiniMax / vendor tool XML must never reach chat or call transcripts.
+const minimaxLeak =
+  `Sure — I'll check. <minimax:tool_call> <invoke name="web_search"> <parameter name="query">Dubai Shawarma Canterbury address</parameter> </invoke> </minimax:tool_call>`;
+const cleanedMinimax = sanitizeReplyForChat(minimaxLeak);
+assert(!cleanedMinimax.includes("minimax:tool_call"), "must strip minimax tool_call XML");
+assert(!cleanedMinimax.includes("web_search"), "must strip invoke web_search markup");
+assert(cleanedMinimax.includes("Sure"), "must keep the clean prose prefix");
+assert(replyLeakedToolCallSyntax(minimaxLeak), "must detect minimax tool XML as a leak");
+console.log("✓ strips MiniMax tool_call XML while preserving clean prose");
+
+const stream = new StreamReplySanitizer();
+assert(
+  stream.push("<minimax:tool_call>") === "",
+  "incomplete tool tags must be held",
+);
+assert(
+  stream.push('<invoke name="web_search"></invoke></minimax:tool_call> Hello there.') ===
+    "Hello there.",
+  "stream sanitizer must emit only post-strip prose",
+);
+console.log("✓ stream sanitizer holds incomplete MiniMax tags");
 
 console.log("All sanitize-reply schema-leak tests passed.");

@@ -31,11 +31,17 @@ import {
   cacheBridgeClip,
   getCachedBridgeClip,
 } from "./bridge-clips";
+import {
+  LIVE_CALL_BRIDGE_PHRASES,
+  LIVE_CALL_WORKING_PHRASES,
+  pickBridgePhrase,
+} from "./bridge-phrases";
 import { GroqWhisperAdapter } from "./live-adapters";
 import {
   normalizeSpeechLanguage,
   transcriptLooksLikeLanguageMismatch,
 } from "./transcript-language";
+import { transcriptHasUsableSpeech } from "./transcript-quality";
 import type {
   FinalTranscript,
   ServerCallEvent,
@@ -43,9 +49,37 @@ import type {
 } from "./live-types";
 import { messageLikelyNeedsResearch } from "@/lib/ai/message-intent";
 import {
+  replyLeakedToolCallSyntax,
+  sanitizeReplyForChat,
+  StreamReplySanitizer,
+} from "@/lib/ai/normalize-model-response";
+import {
   isAffirmativeSearchFollowUp,
   isMetaResearchInstruction,
 } from "@/lib/ai/research/resolve-research-query";
+
+function isWeakVoiceReply(text: string): boolean {
+  const trimmed = text.trim();
+  if (!trimmed) return true;
+  if (replyLeakedToolCallSyntax(trimmed)) return true;
+  if (
+    /^(?:got it|on it)(?:\s*[—-]\s*i'?ll follow up(?:\s+on this)?(?:\s+shortly)?)?\.?$/i.test(
+      trimmed,
+    )
+  ) {
+    return true;
+  }
+  // Model deferred ("Sure — I'll check") without speaking any fact — prefer
+  // the live-search grounding answer instead of leaving the caller hanging.
+  const deferredOnly =
+    /\b(?:i'?ll (?:look|check|pull|search|follow up)|let me (?:look|check|search|pull)|one sec|hang on|looking that up)\b/i.test(
+      trimmed,
+    ) || /^(?:sure|okay|ok|yeah|yep)(?:\s*[—,.!-].*)?$/i.test(trimmed);
+  if (deferredOnly && trimmed.length < 140 && !/\d{2,}/.test(trimmed)) {
+    return true;
+  }
+  return false;
+}
 
 type EmitCallEvent = (event: ServerCallEvent) => void | Promise<void>;
 
@@ -286,7 +320,45 @@ export async function executeEmployeeCallTurn(input: {
         routeContext: input.routeContext,
         speechContext,
       });
-  if (!stt.text) throw new Error("No speech was detected.");
+  const usableSpeech = transcriptHasUsableSpeech({
+    text: stt.text,
+    confidence: stt.confidence,
+    durationSeconds: input.durationSeconds,
+  });
+  if (!usableSpeech) {
+    // Soft-skip noise / Whisper silence hallucinations ("Thank you.") so the
+    // call stays in listening without surfacing a turn failure to the human.
+    await upsertCallTurn(input.client, {
+      workspaceId: input.workspaceId,
+      callId: input.callSessionId,
+      turnId,
+      sequence: input.sequence,
+      idempotencyKey,
+      state: "completed",
+      values: {
+        human_transcript: "",
+        completed_at: new Date().toISOString(),
+        metadata: {
+          skipped: true,
+          skipReason: stt.text?.trim()
+            ? "stt_hallucination_or_noise"
+            : "no_speech_detected",
+          rawTranscript: stt.text ?? "",
+          sttConfidence: stt.confidence ?? null,
+          durationSeconds: input.durationSeconds,
+        },
+      },
+    });
+    await input.emit({ type: "state.changed", turn: "listening" });
+    return {
+      turnId,
+      transcript: "",
+      reply: "",
+      sttWh: 0,
+      brainWh: 0,
+      ttsWh: 0,
+    };
+  }
 
   const sttLedger = await recordBrainUsage({
     client: input.client,
@@ -595,70 +667,87 @@ export async function executeEmployeeCallTurn(input: {
     messageLikelyNeedsResearch(stt.text) ||
     isMetaResearchInstruction(stt.text) ||
     isAffirmativeSearchFollowUp(stt.text, ctx.room.messages, humanMessage.id);
-  if (needsBridge) {
-    const bridgeText = "Yeah — give me a sec, I'll pull that up.";
+  let bridgeSpoken = false;
+  let workingBridgeSpoken = false;
+  const speakBridgePhrase = (phrase: string, kind: "bridge" | "working") => {
     const cacheKey = bridgeClipKey({
       routeId: primaryRouteId,
       voice: providerVoice ?? voiceProfile.voiceIdentityKey,
       locale: voiceProfile.locale,
       pace: voiceProfile.pace,
-      text: bridgeText,
+      text: phrase,
     });
-    ttsChain = ttsChain.then(async () => {
-      let clip = getCachedBridgeClip(cacheKey);
-      if (!clip) {
-        const generated = await selected.tts.synthesize({
-          text: bridgeText,
-          voice: providerVoice,
-          locale: voiceProfile.locale,
-          speed: voiceProfile.pace,
-          format: "mp3",
-          signal: input.signal,
+    ttsChain = ttsChain
+      .then(async () => {
+        let clip = getCachedBridgeClip(cacheKey);
+        if (!clip) {
+          const generated = await selected.tts.synthesize({
+            text: phrase,
+            voice: providerVoice,
+            locale: voiceProfile.locale,
+            speed: voiceProfile.pace,
+            format: "mp3",
+            signal: input.signal,
+          });
+          clip = {
+            bytes: generated.bytes,
+            mimeType: generated.mimeType,
+            routeId: generated.routeId,
+          };
+          cacheBridgeClip(cacheKey, clip);
+          await recordBrainUsage({
+            client: input.client,
+            workspaceId: input.workspaceId,
+            idempotencyKey: `${turnId}:tts:${kind}:${primaryRouteId}:${phrase.slice(0, 24)}`,
+            employeeId: input.employeeId,
+            userId: input.humanUserId,
+            roomId: input.roomId,
+            sourceType: "artifact",
+            routeId: generated.routeId,
+            usage:
+              generated.routeId === "route_call_tts_xai"
+                ? { ttsCharacters: generated.characters }
+                : { ttsUtf8Bytes: generated.utf8Bytes },
+            status: "succeeded",
+            billableToWorkspace: false,
+            capability: "text_to_speech",
+            workType: "call_tts_bridge",
+            runtimeMode: "voice_call",
+            metadata: {
+              callId: input.callSessionId,
+              turnId,
+              voiceIdentityKey: voiceProfile.voiceIdentityKey,
+              cacheMiss: true,
+              treatment: "included_allowance",
+              allowanceBucket: "tts_starter",
+              bridgeKind: kind,
+            },
+          });
+        }
+        if (!firstAudioAt) firstAudioAt = new Date().toISOString();
+        await input.emit({
+          type: "state.changed",
+          turn: "speaking",
+          activity: "speaking",
         });
-        clip = {
-          bytes: generated.bytes,
-          mimeType: generated.mimeType,
-          routeId: generated.routeId,
-        };
-        cacheBridgeClip(cacheKey, clip);
-        await recordBrainUsage({
-          client: input.client,
-          workspaceId: input.workspaceId,
-          idempotencyKey: `${turnId}:tts:bridge:${primaryRouteId}`,
-          employeeId: input.employeeId,
-          userId: input.humanUserId,
-          roomId: input.roomId,
-          sourceType: "artifact",
-          routeId: generated.routeId,
-          usage:
-            generated.routeId === "route_call_tts_xai"
-              ? { ttsCharacters: generated.characters }
-              : { ttsUtf8Bytes: generated.utf8Bytes },
-          status: "succeeded",
-          billableToWorkspace: false,
-          capability: "text_to_speech",
-          workType: "call_tts_bridge",
-          runtimeMode: "voice_call",
-          metadata: {
-            callId: input.callSessionId,
-            turnId,
-            voiceIdentityKey: voiceProfile.voiceIdentityKey,
-            cacheMiss: true,
-            treatment: "included_allowance",
-            allowanceBucket: "tts_starter",
-          },
+        await input.emit({
+          type: "employee.audio.delta",
+          audio: clip.bytes.toString("base64"),
+          sequence: audioSequence++,
+          mimeType: clip.mimeType,
         });
-      }
-      if (!firstAudioAt) firstAudioAt = new Date().toISOString();
-      await input.emit({
-        type: "employee.audio.delta",
-        audio: clip.bytes.toString("base64"),
-        sequence: audioSequence++,
-        mimeType: clip.mimeType,
-      });
-    }).catch(() => undefined);
+      })
+      .catch(() => undefined);
+  };
+  if (needsBridge) {
+    bridgeSpoken = true;
+    speakBridgePhrase(
+      pickBridgePhrase(turnId, LIVE_CALL_BRIDGE_PHRASES),
+      "bridge",
+    );
   }
 
+  const streamSanitizer = new StreamReplySanitizer();
   const chunkTimeout = setInterval(() => {
     for (const chunk of chunker.flushIfTimedOut()) enqueueSpeech(chunk);
   }, Math.max(40, Math.floor(chunker.maximumWaitMs / 4)));
@@ -677,19 +766,38 @@ export async function executeEmployeeCallTurn(input: {
         onReplyDelta: (delta) => {
           if (!firstTokenAt) firstTokenAt = new Date().toISOString();
           streamedReplyText += delta;
+          const safeDelta = streamSanitizer.push(delta);
+          if (!safeDelta) return;
           // Prefer audio first: enqueue TTS before mirroring text to the side
           // panel so speech leads the transcript instead of trailing it.
-          for (const chunk of chunker.push(delta)) enqueueSpeech(chunk);
-          void input.emit({ type: "employee.text.delta", text: delta });
+          for (const chunk of chunker.push(safeDelta)) enqueueSpeech(chunk);
+          void input.emit({ type: "employee.text.delta", text: safeDelta });
         },
         onActivity: (activity) => {
-          if (activity === "using_tool" || activity === "searching") usedTools = true;
+          if (activity === "using_tool" || activity === "searching") {
+            usedTools = true;
+            void input.emit({
+              type: "state.changed",
+              turn: "using_tools",
+              activity,
+            });
+            // If search started without the initial bridge (intent miss), speak
+            // a filler now. Skip a second phrase when we already bridged.
+            if (!bridgeSpoken && !workingBridgeSpoken && !speechStateStarted) {
+              workingBridgeSpoken = true;
+              speakBridgePhrase(
+                pickBridgePhrase(`${turnId}:work`, LIVE_CALL_WORKING_PHRASES),
+                "working",
+              );
+            }
+            return;
+          }
           // Once voice synthesis starts, keep one coherent speaking phase
           // instead of bouncing back to thinking between phrase deltas.
           if (speechStateStarted || firstAudioAt) return;
           void input.emit({
             type: "state.changed",
-            turn: activity === "using_tool" ? "using_tools" : "thinking",
+            turn: "thinking",
             activity,
           });
         },
@@ -736,12 +844,26 @@ export async function executeEmployeeCallTurn(input: {
   } finally {
     clearInterval(chunkTimeout);
   }
+  const trailingSafe = streamSanitizer.finish();
+  if (trailingSafe) {
+    for (const chunk of chunker.push(trailingSafe)) enqueueSpeech(chunk);
+    void input.emit({ type: "employee.text.delta", text: trailingSafe });
+  }
   for (const chunk of chunker.finish()) enqueueSpeech(chunk);
-  // Structured (non-stream) Brain turns — research/tool path — never call
-  // onReplyDelta, so speak the final reply here. Any streamed delta means the
-  // primary chunker owns the complete reply, including its final tail.
-  const finalReply = response.reply.trim();
-  if (finalReply && !streamedReplyText.trim()) {
+  // Prefer sanitized model prose; if the model only leaked tool XML or deferred,
+  // fall back to the live-search grounding answer so the caller hears the fact.
+  const modelReply = sanitizeReplyForChat(
+    response.reply || streamSanitizer.sanitizedText,
+  ).trim();
+  const usedGroundingFallback =
+    isWeakVoiceReply(modelReply) && Boolean(response.voiceGroundingAnswer?.trim());
+  const finalReply = usedGroundingFallback
+    ? sanitizeReplyForChat(response.voiceGroundingAnswer!).trim()
+    : modelReply;
+  const spokenFromStream = Boolean(streamSanitizer.sanitizedText.trim());
+  // Speak when the stream produced nothing usable, or when we replaced a weak
+  // deferral/tool-leak with the search grounding answer.
+  if (finalReply && (!spokenFromStream || usedGroundingFallback)) {
     const late = new SpeechChunker();
     for (const chunk of late.push(finalReply)) enqueueSpeech(chunk);
     for (const chunk of late.finish()) enqueueSpeech(chunk);
@@ -757,7 +879,7 @@ export async function executeEmployeeCallTurn(input: {
   }
   await audioConsumer.catch(() => undefined);
   await ttsSession?.close();
-  await input.emit({ type: "employee.text.final", text: response.reply });
+  await input.emit({ type: "employee.text.final", text: finalReply });
   await input.emit({ type: "employee.audio.end" });
 
   let brainWh = 0;
@@ -776,10 +898,10 @@ export async function executeEmployeeCallTurn(input: {
   }
   const interrupted = Boolean(input.signal?.aborted);
   const spokenText = spokenChunks.join(" ").trim();
-  const unspokenText = response.reply.startsWith(spokenText)
-    ? response.reply.slice(spokenText.length).trim()
+  const unspokenText = finalReply.startsWith(spokenText)
+    ? finalReply.slice(spokenText.length).trim()
     : interrupted
-      ? response.reply
+      ? finalReply
       : "";
   await settleCallComponent(input.client, {
     workspaceId: input.workspaceId,
@@ -825,7 +947,7 @@ export async function executeEmployeeCallTurn(input: {
     call_id: input.callSessionId,
     speaker_id: input.employeeId,
     speaker_name: response.employeeName,
-    text: interrupted ? spokenText : response.reply,
+    text: interrupted ? spokenText : finalReply,
   });
   await upsertCallTurn(input.client, {
     workspaceId: input.workspaceId,
@@ -835,7 +957,7 @@ export async function executeEmployeeCallTurn(input: {
     idempotencyKey,
     state: interrupted ? "interrupted" : "completed",
     values: {
-      employee_transcript: response.reply,
+      employee_transcript: finalReply,
       spoken_text: spokenText,
       unspoken_text: unspokenText,
       interrupted,
@@ -880,5 +1002,5 @@ export async function executeEmployeeCallTurn(input: {
     turn: interrupted ? "interrupted" : "completed",
     activity: "waiting",
   });
-  return { turnId, transcript: stt.text, reply: response.reply, sttWh, brainWh, ttsWh };
+  return { turnId, transcript: stt.text, reply: finalReply, sttWh, brainWh, ttsWh };
 }

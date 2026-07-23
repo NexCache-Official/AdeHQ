@@ -66,7 +66,15 @@ export async function processEmployeeResponse(
   employeeId: string,
   content: string,
   options: ProcessEmployeeOptions = {},
-): Promise<EmployeeResponse & { aiMessageId: string; aiMode: string; agentRunId?: string }> {
+): Promise<
+  EmployeeResponse & {
+    aiMessageId: string;
+    aiMode: string;
+    agentRunId?: string;
+    /** Live-search answer used to ground voice turns when the model leaks junk. */
+    voiceGroundingAnswer?: string;
+  }
+> {
   const roomEmployee = ctx.employees.find((e) => e.id === employeeId);
   if (!roomEmployee) {
     throw new Error("Employee not found in this room.");
@@ -254,6 +262,7 @@ export async function processEmployeeResponse(
   // like "yes" / "google that" after a prior topic — run a quick web search and
   // feed findings into the spoken reply so the employee doesn't invent numbers
   // or ask for a Drive file that does not exist.
+  let voiceGroundingAnswer: string | undefined;
   if (options.voiceCall) {
     const resolved = resolveResearchQuery({
       userMessage: content,
@@ -308,6 +317,7 @@ export async function processEmployeeResponse(
           searchMode: "fast_fact",
         });
         if (search.answer?.trim()) {
+          voiceGroundingAnswer = search.answer.trim();
           const sourceLines = (search.sources ?? [])
             .slice(0, 3)
             .map((source, index) => {
@@ -320,9 +330,10 @@ export async function processEmployeeResponse(
             [
               "LIVE WEB SEARCH RESULTS (use these; do not invent figures):",
               `Query: ${searchQuery}`,
-              search.answer.trim(),
+              voiceGroundingAnswer,
               sourceLines ? `Sources:\n${sourceLines}` : "",
               "Speak the useful findings now in 1–3 short sentences. Do not defer. Offer to go deeper only after answering.",
+              "Never emit tool XML, <minimax:tool_call>, <invoke>, or [TOOL_CALL] blocks — answer in plain spoken prose only.",
             ]
               .filter(Boolean)
               .join("\n"),
@@ -721,5 +732,6 @@ export async function processEmployeeResponse(
     aiMessageId: aiMessage.id,
     aiMode,
     agentRunId: runId,
+    ...(voiceGroundingAnswer ? { voiceGroundingAnswer } : {}),
   };
 }

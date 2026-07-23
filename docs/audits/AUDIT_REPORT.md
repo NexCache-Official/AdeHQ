@@ -6,6 +6,29 @@ Scope of this pass: Phase 1 (partial), Phase 2/3 (partial via Maya/Elena/David),
 
 ---
 
+## Session 2026-07-23 — Live call STT false "Thank you" + call chrome
+
+**Symptom:** On AI-employee live calls, ambient mic noise was committed as a
+human turn; STT often captioned it as "Thank you." / similar, and the employee
+replied. Turns also ended too early while the human was still talking. Call UI
+flashed non-call states like "Preparing voice…" / "Thinking…".
+
+**Fix:** Longer local endpointing (≈1.1s pause / 1.8s hard fallback), higher
+energy VAD + post-playback suppress, xAI `filler_words=false`, soft-skip for
+silence hallucinations before Brain, and call chrome reduced to Listening /
+Understanding / Working / Speaking.
+
+**Follow-up (same day):** Address lookups like “finding the address for …”
+missed research intent, so no bridge/pre-search ran and MiniMax invented
+`<minimax:tool_call>` XML that was spoken + shown in the transcript. Fixed by
+expanding lookup intent, stripping MiniMax/XML in stream + chat sanitizers,
+speaking bridge fillers while search runs, and falling back to search grounding
+when the model only leaks tools/deferrals.
+
+**Deploy:** App/Vercel only — no Supabase schema change.
+
+---
+
 ## Session 2026-07-23 — Drive upload vanishes (Vercel root cause)
 
 **Symptom:** Upload progress hits 100%, Drive stays empty (including single-file uploads).

@@ -9,6 +9,7 @@ import { createSupabaseSecretClient } from "@/lib/supabase/server";
 import {
   buildCallVocabulary,
   executeEmployeeCallTurn,
+  isSilenceHallucinationPhrase,
   loadEmployeeVoiceProfile,
   normalizeSpeechLanguage,
   resolveLiveCallEntitlements,
@@ -239,6 +240,12 @@ export async function GET(request: NextRequest) {
             try {
               for await (const transcriptEvent of openedSession.events) {
                 if (transcriptEvent.type === "partial") {
+                  // Keep call captions clean: hide classic silence junk only.
+                  // Do not apply short-duration heuristics here — real "yes"
+                  // partials would otherwise disappear mid-utterance.
+                  if (isSilenceHallucinationPhrase(transcriptEvent.text)) {
+                    continue;
+                  }
                   send(ws, {
                     type: "transcript.partial",
                     text: transcriptEvent.text,

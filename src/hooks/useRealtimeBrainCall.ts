@@ -308,7 +308,9 @@ export function useRealtimeBrainCall() {
       setListeningLevel(level);
     }
     if (mutedRef.current || !socketReadyRef.current) return;
-    const voice = level >= 0.022;
+    // Slightly higher than ambient room noise / laptop fans so idle calls do
+    // not open phantom turns that STT fills with "Thank you."
+    const voice = level >= 0.038;
     const canCapture =
       !pttRef.current || pttHeldRef.current;
     if (!canCapture) return;
@@ -316,7 +318,7 @@ export function useRealtimeBrainCall() {
     if (playbackActiveRef.current && !bargeInEnabledRef.current) return;
     if (playbackActiveRef.current && voice) {
       if (!bargeInStartedRef.current) bargeInStartedRef.current = now;
-      if (now - bargeInStartedRef.current >= 220) {
+      if (now - bargeInStartedRef.current >= 280) {
         clearPlayback(true);
         speakingRef.current = true;
         speechStartedRef.current = now;
@@ -325,8 +327,10 @@ export function useRealtimeBrainCall() {
       bargeInStartedRef.current = 0;
     }
 
+    // After the employee finishes speaking, suppress mic commits long enough
+    // that echo / room wash does not become a fake human turn.
     const postPlaybackSuppressed =
-      !playbackActiveRef.current && now - playbackEndedAtRef.current < 180;
+      !playbackActiveRef.current && now - playbackEndedAtRef.current < 450;
     if (postPlaybackSuppressed && !pttHeldRef.current) return;
 
     if (voice && !speakingRef.current) {
@@ -355,8 +359,8 @@ export function useRealtimeBrainCall() {
     const silenceMs = lastVoiceRef.current ? now - lastVoiceRef.current : 0;
     if (
       !pttRef.current &&
-      sustainedSpeechMs >= 250 &&
-      silenceMs >= 250 &&
+      sustainedSpeechMs >= 450 &&
+      silenceMs >= 550 &&
       !turnDecisionPendingRef.current
     ) {
       turnDecisionPendingRef.current = true;
@@ -364,10 +368,9 @@ export function useRealtimeBrainCall() {
         .evaluate({
           speechDurationMs: sustainedSpeechMs,
           silenceDurationMs: silenceMs,
-          // The CPU ONNX worker supplies semantic confidence after transport
-          // migration. Until then, local VAD commits at a natural 450ms pause
-          // with an 800ms hard fallback.
-          semanticCompletionConfidence: silenceMs >= 450 ? 0.6 : 0,
+          // Until the ONNX Smart Turn worker supplies real semantic confidence,
+          // only treat a ~1.1s pause as complete (hard fallback ~1.8s).
+          semanticCompletionConfidence: silenceMs >= 1100 ? 0.75 : 0,
         })
         .then((decision) => {
           if (!decision.commit || !speakingRef.current) return;
@@ -408,8 +411,18 @@ export function useRealtimeBrainCall() {
         ].includes(next)
       ) {
         setActivity(next as LiveCallActivity);
+        // Soft-skipped noise turns never emit transcript.final — drop the draft
+        // so phantom "Thank you." captions do not linger in the call UI.
+        if (next === "listening") {
+          setTranscript((current) =>
+            current.filter((line) => line.id !== "human-draft"),
+          );
+        }
       } else if (turn === "interrupted") {
         setActivity("listening");
+        setTranscript((current) =>
+          current.filter((line) => line.id !== "human-draft"),
+        );
       }
       return;
     }
@@ -518,7 +531,13 @@ export function useRealtimeBrainCall() {
       return;
     }
     if (type === "error") {
-      setError(String(event.message ?? "Call error."));
+      const message = String(event.message ?? "Call error.");
+      // Soft STT skips are recoverable and should not flash call chrome.
+      if (/no speech was detected|stt_hallucination/i.test(message)) {
+        setActivity("listening");
+        return;
+      }
+      setError(message);
     }
   }
 
