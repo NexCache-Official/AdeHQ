@@ -9,6 +9,49 @@ import type { SavedArtifactType } from "@/lib/types";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+/**
+ * GET /api/artifacts?workspaceId=&kind=&status=
+ * Lists existing artifacts even when artifact runtime flag is OFF.
+ */
+export async function GET(request: NextRequest) {
+  try {
+    const { user, client } = await requireAuthUser(request);
+    const workspaceId = request.nextUrl.searchParams.get("workspaceId")?.trim();
+    if (!workspaceId) {
+      return NextResponse.json({ ok: false, error: "workspaceId is required." }, { status: 400 });
+    }
+    await requireWorkspaceMembership(client, workspaceId, user.id);
+
+    const kind = request.nextUrl.searchParams.get("kind")?.trim();
+    const status = request.nextUrl.searchParams.get("status")?.trim();
+    const limit = Math.min(
+      200,
+      Math.max(1, Number(request.nextUrl.searchParams.get("limit") ?? 100) || 100),
+    );
+
+    let q = client
+      .from("artifacts")
+      .select("*")
+      .eq("workspace_id", workspaceId)
+      .order("updated_at", { ascending: false })
+      .limit(limit);
+    if (kind) q = q.eq("kind", kind);
+    if (status) q = q.eq("status", status);
+
+    const { data, error } = await q;
+    if (error) throw error;
+
+    const artifacts = (data ?? []).map((row) => artifactFromRow(row as Record<string, unknown>));
+    return NextResponse.json({ ok: true, artifacts });
+  } catch (error) {
+    if (error instanceof AuthError) {
+      return NextResponse.json({ ok: false, error: error.message }, { status: error.status });
+    }
+    console.error("[AdeHQ artifacts GET]", error);
+    return NextResponse.json({ ok: false, error: "Unable to list artifacts." }, { status: 500 });
+  }
+}
+
 const ARTIFACT_TYPES: SavedArtifactType[] = [
   "prd",
   "report",

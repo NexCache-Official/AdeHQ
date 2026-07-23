@@ -27,7 +27,13 @@ export type PlatformFlagKey =
   | "adehq_brain_image_v1"
   | "adehq_brain_video_v1"
   | "adehq_brain_voice_v1"
-  | "adehq_brain_steward_v1";
+  | "adehq_brain_steward_v1"
+  | "adehq_playbook_runtime_v1"
+  | "adehq_custom_playbooks_v1"
+  | "adehq_artifact_runtime_v1"
+  | "adehq_artifact_export_v1"
+  | "adehq_artifact_visual_qa_v1"
+  | "adehq_procedure_runtime_v1";
 
 const FLAG_DEFAULTS: Record<string, unknown> = {
   signups_enabled: true,
@@ -50,6 +56,13 @@ const FLAG_DEFAULTS: Record<string, unknown> = {
   adehq_brain_video_v1: true,
   adehq_brain_voice_v1: false,
   adehq_brain_steward_v1: false,
+  // PR-25 — all default OFF
+  adehq_playbook_runtime_v1: false,
+  adehq_custom_playbooks_v1: false,
+  adehq_artifact_runtime_v1: false,
+  adehq_artifact_export_v1: false,
+  adehq_artifact_visual_qa_v1: false,
+  adehq_procedure_runtime_v1: false,
 };
 
 /** Optional env fallbacks if the DB row is missing (e.g. before migration runs). */
@@ -69,6 +82,12 @@ const FLAG_ENV_FALLBACKS: Partial<Record<PlatformFlagKey, string>> = {
   adehq_brain_video_v1: "ADEHQ_BRAIN_VIDEO_V1",
   adehq_brain_voice_v1: "ADEHQ_BRAIN_VOICE_V1",
   adehq_brain_steward_v1: "ADEHQ_BRAIN_STEWARD_V1",
+  adehq_playbook_runtime_v1: "ADEHQ_PLAYBOOK_RUNTIME_V1",
+  adehq_custom_playbooks_v1: "ADEHQ_CUSTOM_PLAYBOOKS_V1",
+  adehq_artifact_runtime_v1: "ADEHQ_ARTIFACT_RUNTIME_V1",
+  adehq_artifact_export_v1: "ADEHQ_ARTIFACT_EXPORT_V1",
+  adehq_artifact_visual_qa_v1: "ADEHQ_ARTIFACT_VISUAL_QA_V1",
+  adehq_procedure_runtime_v1: "ADEHQ_PROCEDURE_RUNTIME_V1",
 };
 
 const CACHE_TTL_MS = 15_000;

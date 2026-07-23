@@ -80,7 +80,14 @@ check(
   "runtime catalog string parses",
   Number(CATALOG_VERSION) === RELEASE_MANIFEST.catalogVersion,
 );
-check("voice/steward expected off in baseline", !info.release.expectedFeatures.voiceV1 && !info.release.expectedFeatures.stewardV1);
+check(
+  "voice/steward expected on; PR-25 runtimes expected off",
+  info.release.expectedFeatures.voiceV1 &&
+    info.release.expectedFeatures.stewardV1 &&
+    !info.release.expectedFeatures.playbookRuntimeV1 &&
+    !info.release.expectedFeatures.artifactRuntimeV1 &&
+    !info.release.expectedFeatures.procedureRuntimeV1,
+);
 
 console.log(`\n${failed ? `Failed: ${failed}` : "All reliability foundation checks passed."}\n`);
 process.exit(failed ? 1 : 0);

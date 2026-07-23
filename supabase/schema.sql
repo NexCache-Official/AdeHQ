@@ -2213,3 +2213,15 @@ grant execute on function public.burn_live_call_minutes(
   uuid, text, timestamptz, timestamptz, numeric, numeric, text, text,
   integer, text, jsonb
 ) to service_role;
+
+-- =============================================================================
+-- PR-25 Playbook / Procedure / Artifact Runtime
+-- Canonical DDL lives in:
+--   supabase/migrations/20260723200000_pr25_playbook_artifact_runtime.sql
+-- Apply that migration for greenfield installs after this baseline schema.
+-- New tables: playbooks, playbook_versions, playbook_runs, playbook_run_steps,
+-- procedure_registry, procedure_versions, procedure_executions,
+-- artifact_exports, artifact_provenance, artifact_reviews,
+-- workspace_brand_kits, workspace_brand_kit_versions.
+-- Extends: artifacts, artifact_versions, brain_shared_findings.
+-- =============================================================================

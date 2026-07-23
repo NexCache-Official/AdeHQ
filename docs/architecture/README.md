@@ -10,5 +10,7 @@ Living engineering design for systems that are actively evolving in this repo.
 | [`browser-research-known-issues.md`](./browser-research-known-issues.md) | Parked browser-research issues |
 | [`human-hybrid-calls.md`](./human-hybrid-calls.md) | Human + hybrid calling (Cloudflare Realtime SFU) |
 | [`workforce-studio.md`](./workforce-studio.md) | Maya Workforce Studio — team composer, simulation, provisioning |
+| [`pr25-playbook-artifact-audit.md`](./pr25-playbook-artifact-audit.md) | PR-25 playbook/artifact audit — extend vs add tables, reuse paths |
+| [`pr25-playbook-artifact-runtime.md`](./pr25-playbook-artifact-runtime.md) | PR-25 playbook/artifact runtime — contracts, pipeline, flags, APIs |
 
 Inbox transport proof notes: [`../inbox/inbox-transport-proof.md`](../inbox/inbox-transport-proof.md).
