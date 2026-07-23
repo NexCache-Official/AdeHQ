@@ -52,6 +52,7 @@ import {
   type AssignSavePayload,
 } from "@/components/inbox/ThreadReader";
 import { Composer, type ComposerInitial, type SendPayload } from "@/components/inbox/Composer";
+import { ComposerWindow } from "@/components/inbox/ComposerWindow";
 import type {
   DraftDTO,
   InboxFolder,
@@ -126,6 +127,8 @@ export default function InboxPage() {
     open: false,
     initial: {},
   });
+  const [composerStatus, setComposerStatus] = useState("");
+  const inboxShellRef = useRef<HTMLDivElement>(null);
   const [mobileView, setMobileView] = useState<"folders" | "list" | "thread">("list");
   const [undoBanner, setUndoBanner] = useState<{
     outboxId: string;
@@ -1014,7 +1017,7 @@ export default function InboxPage() {
   const listItems = folder === "drafts" ? drafts : threads;
 
   return (
-    <div className="relative flex h-full min-h-0 bg-canvas">
+    <div ref={inboxShellRef} className="relative flex h-full min-h-0 bg-canvas">
       {/* Folders — desktop always; mobile when mobileView=folders */}
       <ResizablePane
         id={PANE_PRESETS.inboxFolders.id}
@@ -1324,30 +1327,47 @@ export default function InboxPage() {
             demoMode={isDemo}
           />
         </div>
-        {composer.open && (
-          <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 flex justify-center px-6">
-            <div className="pointer-events-auto flex h-[min(432px,70vh)] w-full max-w-3xl flex-col overflow-hidden rounded-t-2xl border border-b-0 border-border bg-surface shadow-[0_-8px_40px_rgba(36,30,26,0.14)] animate-[composeUp_0.28s_ease]">
-              <Composer
-                workspaceId={workspaceId}
-                demoMode={isDemo}
-                initial={{
-                  ...composer.initial,
-                  mailboxAddress: mailbox.mailbox?.address,
-                  canApprove: mailbox.access.canApprove,
-                }}
-                onSend={handleSend}
-                onClose={() => {
-                  setComposer({ open: false, initial: {} });
-                  if (folder === "drafts") void loadFolder("drafts", { silent: true });
-                }}
-                onDraftChange={() => {
-                  if (folder === "drafts") void loadFolder("drafts", { silent: true });
-                }}
-              />
-            </div>
-          </div>
-        )}
       </div>
+
+      {composer.open && (
+        <ComposerWindow
+          title={
+            composer.initial.threadId
+              ? "Reply"
+              : composer.initial.subject?.trim()
+                ? composer.initial.subject
+                : "New message"
+          }
+          status={composerStatus}
+          boundsRef={inboxShellRef}
+          onClose={() => {
+            setComposer({ open: false, initial: {} });
+            setComposerStatus("");
+            if (folder === "drafts") void loadFolder("drafts", { silent: true });
+          }}
+        >
+          <Composer
+            workspaceId={workspaceId}
+            demoMode={isDemo}
+            hideChrome
+            onStatusChange={setComposerStatus}
+            initial={{
+              ...composer.initial,
+              mailboxAddress: mailbox.mailbox?.address,
+              canApprove: mailbox.access.canApprove,
+            }}
+            onSend={handleSend}
+            onClose={() => {
+              setComposer({ open: false, initial: {} });
+              setComposerStatus("");
+              if (folder === "drafts") void loadFolder("drafts", { silent: true });
+            }}
+            onDraftChange={() => {
+              if (folder === "drafts") void loadFolder("drafts", { silent: true });
+            }}
+          />
+        </ComposerWindow>
+      )}
 
       {undoBanner && (
         <div className="pointer-events-none absolute inset-x-0 bottom-4 z-20 flex justify-center px-4">

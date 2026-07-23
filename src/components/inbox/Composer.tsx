@@ -127,6 +127,8 @@ export function Composer({
   onClose,
   onDraftChange,
   demoMode = false,
+  hideChrome = false,
+  onStatusChange,
 }: {
   workspaceId: string;
   initial: ComposerInitial;
@@ -134,6 +136,9 @@ export function Composer({
   onClose: () => void;
   onDraftChange?: (draft: DraftDTO | null) => void;
   demoMode?: boolean;
+  /** When true, skip the built-in title bar (used inside ComposerWindow). */
+  hideChrome?: boolean;
+  onStatusChange?: (status: string) => void;
 }) {
   const [to, setTo] = useState((initial.to ?? []).join(", "));
   const [cc, setCc] = useState((initial.cc ?? []).join(", "));
@@ -489,36 +494,46 @@ export function Composer({
     (requiresApproval || originType === "ai_employee") &&
     approvalStatus !== "approved";
 
+  const statusLabel = demoMode
+    ? "Demo draft"
+    : saveState === "saving"
+      ? "Saving…"
+      : saveState === "saved"
+        ? "Draft saved"
+        : originType === "ai_employee"
+          ? initial.canApprove
+            ? "AI draft · review & send"
+            : "AI draft · needs approval"
+          : "";
+
+  useEffect(() => {
+    onStatusChange?.(statusLabel);
+  }, [onStatusChange, statusLabel]);
+
   return (
     <div className="flex h-full min-h-0 flex-col bg-surface">
-      <div className="flex shrink-0 items-center justify-between border-b border-border px-[18px] py-3.5">
-        <span className="text-[14px] font-semibold tracking-[-0.01em] text-ink">
-          {threadId ? "Reply" : "New message"}
-          {originType === "ai_employee" && (
-            <span className="ml-2 text-xs font-normal text-ink-3">
-              {initial.canApprove ? "AI draft · review & send" : "AI draft · needs approval"}
-            </span>
-          )}
-        </span>
-        <div className="flex items-center gap-3">
-          <span className="font-mono text-[11.5px] text-green">
-            {demoMode
-              ? "Demo draft"
-              : saveState === "saving"
-                ? "Saving…"
-                : saveState === "saved"
-                  ? "Draft saved"
-                  : ""}
+      {!hideChrome && (
+        <div className="flex shrink-0 items-center justify-between border-b border-border px-[18px] py-3.5">
+          <span className="text-[14px] font-semibold tracking-[-0.01em] text-ink">
+            {threadId ? "Reply" : "New message"}
+            {originType === "ai_employee" && (
+              <span className="ml-2 text-xs font-normal text-ink-3">
+                {initial.canApprove ? "AI draft · review & send" : "AI draft · needs approval"}
+              </span>
+            )}
           </span>
-          <button
-            onClick={onClose}
-            className="flex h-[26px] w-[26px] items-center justify-center rounded-[7px] text-ink-3 transition-colors hover:bg-muted"
-            type="button"
-          >
-            <X className="h-[15px] w-[15px]" strokeWidth={2.2} />
-          </button>
+          <div className="flex items-center gap-3">
+            <span className="font-mono text-[11.5px] text-green">{statusLabel}</span>
+            <button
+              onClick={onClose}
+              className="flex h-[26px] w-[26px] items-center justify-center rounded-[7px] text-ink-3 transition-colors hover:bg-muted"
+              type="button"
+            >
+              <X className="h-[15px] w-[15px]" strokeWidth={2.2} />
+            </button>
+          </div>
         </div>
-      </div>
+      )}
 
       {isStale && (
         <div className="flex items-start gap-2 border-b border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-900">
