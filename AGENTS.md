@@ -66,5 +66,16 @@ Full script index: [`scripts/README.md`](./scripts/README.md).
 
 ## Removable / temporary
 
-- Inbox transport proof harness: `src/lib/inbox-transport-proof/`, `scripts/inbox-transport-proof.ts`, `docs/inbox/inbox-transport-proof.md` — removable once Slice A+ is validated.  
-- Design HTML mocks: `docs/design-system/mocks/` — reference only, not runtime.  
+- Inbox transport proof harness: `src/lib/inbox-transport-proof/`, `scripts/inbox-transport-proof.ts`, `docs/inbox/inbox-transport-proof.md` — removable once Slice A+ is validated. 
+- Design HTML mocks: `docs/design-system/mocks/` — reference only, not runtime.
+
+## Cursor Cloud specific instructions
+
+Node 20+ is required (VM uses Node 22). Dependencies install via `npm install` (already run by the startup update script). Standard commands live in `package.json` / `scripts/README.md`.
+
+- Run the app: `npm run dev` (Next.js on `http://localhost:3000`). No `.env.local` is needed just to boot — `src/lib/supabase/config.ts` bakes in a default hosted Supabase project, so the login/signup pages and browser client work out of the box. Server-side write/auth paths need `SUPABASE_SECRET_KEY` (`sb_secret_…`); without it those paths log "Supabase secret key is not configured" and degrade gracefully rather than crashing.
+- Demo walkthrough without real auth: start dev with `NEXT_PUBLIC_ENABLE_DEMO_MODE=true npm run dev`, then use the "Continue as Demo Founder" button on `/login`. This loads in-memory seed data (rooms, AI employees, tasks) and is the fastest way to exercise core UI (rooms/chat) end-to-end. Real signup on the default project requires email confirmation, which cannot be completed in the VM.
+- AI employee replies are optional: with no provider key the runtime falls back to scripted responses. Validate the AI runtime offline with `npm run test:runtime:mock` (no keys needed).
+- Lint: `npm run lint` is NOT usable non-interactively — ESLint is not configured in this repo (no config/deps) and `next.config.mjs` sets `eslint.ignoreDuringBuilds: true`. Running it drops into the interactive "How would you like to configure ESLint?" prompt. Use TypeScript as the effective static check instead of relying on `next lint`.
+- The `⚠ Unrecognized key(s) in object: 'serverExternalPackages'` warning on dev startup is benign (Next 14.2.5 vs newer config key) and does not affect the app.
+- The `services/voice-worker/` package is a separate, feature-flagged-off service with its own `npm install`; it is not part of `npm run dev` and is not required for core dev.
