@@ -33,6 +33,16 @@ lanes so ordinary conversation does not traverse the full workforce Brain.
 - Progressive fillers (`intelligent-fillers.ts`) speak short thinking/searching
   beats while Brain/tools run, then stop when the first real answer phrase is ready.
 
+## Daily token budget on calls
+
+Chat `beginAiRun` still meters `work_full` turns, but live calls:
+
+- Reserve the voice output cap (~280 tokens), not the full chat max (~4k)
+- Expire / ignore abandoned `reserved` usage older than 15 minutes
+- Finalize reservations when a turn aborts or throws
+- Fall back to `voice_fast` if the employee daily token/cost cap hard-blocks
+  `work_full` (Work Hours remain the call capacity gate)
+
 ## Benchmark
 
 ```bash

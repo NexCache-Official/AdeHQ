@@ -6,6 +6,7 @@ import {
   finalizeUsage,
   completeAgentRun,
   sumTodayUsage,
+  expireStaleReservedUsage,
   newAgentRunId,
   newUsageId,
   buildRunEstimate,
@@ -29,6 +30,12 @@ export type BeginAiRunContext = {
   modelMode: ModelMode;
   promptLength: number;
   explicitModel?: string;
+  /**
+   * When set (e.g. live voice turns cap at ~280), reserve/estimate against this
+   * instead of the full workspace/model output cap so interrupted calls cannot
+   * strand multi-k token reservations per turn.
+   */
+  maxOutputTokensOverride?: number;
 };
 
 export type BeginAiRunResult =
@@ -67,12 +74,16 @@ export async function beginAiRun(ctx: BeginAiRunContext): Promise<BeginAiRunResu
   }
 
   const modeCap = getOutputTokenCap(ctx.modelMode);
-  const maxOutputTokens = Math.min(modeCap, settings.maxOutputTokens);
+  const maxOutputTokens = Math.min(
+    modeCap,
+    settings.maxOutputTokens,
+    ctx.maxOutputTokensOverride ?? Number.POSITIVE_INFINITY,
+  );
   const estimate = buildRunEstimate(
     ctx.provider,
     ctx.modelMode,
     ctx.promptLength,
-    settings.maxOutputTokens,
+    maxOutputTokens,
   );
 
   // CostPolicy hard block at plan time (PR-6). Soft confirm/manager paths are UI-gated.
@@ -87,6 +98,12 @@ export async function beginAiRun(ctx: BeginAiRunContext): Promise<BeginAiRunResu
       reason: planCost.reason ?? "Estimated Work Hours exceed the workspace hard block.",
     };
   }
+
+  // Drop abandoned reservations before budgeting so interrupted voice turns
+  // cannot permanently exhaust the employee daily token cap.
+  await expireStaleReservedUsage(ctx.client, ctx.workspaceId, {
+    employeeId: ctx.employeeId,
+  });
 
   const workspaceUsage = await sumTodayUsage(ctx.client, ctx.workspaceId, {
     includeReserved: true,

@@ -970,25 +970,113 @@ export async function executeEmployeeCallTurn(input: {
           },
         },
       );
-      appendVoiceSessionTurn(input.callSessionId, {
-        speaker: "employee",
-        text: response.reply,
-        at: new Date().toISOString(),
-      });
-      scheduleVoiceAsyncEffects({
-        client: input.client,
-        workspaceId: input.workspaceId,
-        roomId: input.roomId,
-        topicId: topic.id,
-        employeeId: input.employeeId,
-        employeeName: response.employeeName,
-        humanUserId: input.humanUserId,
-        callId: input.callSessionId,
-        turnId,
-        userMessage: stt.text,
-        employeeReply: response.reply,
-        route: "work_full",
-      });
+      // Chat daily-token hard blocks should not end the live call. Fall back to
+      // the lean voice lane (already bypasses beginAiRun) so the caller still
+      // gets a spoken answer; WH capacity remains the call gate.
+      const blockedByDailyBudget =
+        response.aiMode === "blocked" &&
+        /daily (token|cost) limit exceeded/i.test(response.reply);
+      if (blockedByDailyBudget) {
+        console.warn("[AdeHQ live-call] work_full blocked; falling back to voice_fast", {
+          callId: input.callSessionId,
+          employeeId: input.employeeId,
+          reason: response.reply,
+        });
+        stopFillers();
+        streamedReplyText = "";
+        const fallbackDecision = {
+          ...routeDecision,
+          route: "voice_fast" as const,
+          reason: "daily_budget_fallback",
+        };
+        const lane = await generateVoiceLaneReply({
+          decision: fallbackDecision,
+          snapshot,
+          userMessage: stt.text,
+          seed: `${turnId}:budget-fallback`,
+          abortSignal: input.signal,
+          trace: latencyTrace,
+          onReplyDelta: pushSpeakableDelta,
+        });
+        laneFinalReply = lane.reply.trim();
+        const employee =
+          ctx.employees.find((item) => item.id === input.employeeId) ??
+          ({
+            id: snapshot.employeeId,
+            name: snapshot.employeeName,
+            role: snapshot.employeeRole,
+            roleKey: "operations",
+            provider: "siliconflow",
+            model: lane.model ?? "voice_fast",
+            seniority: "senior",
+            status: "working",
+            instructions: "",
+            communicationStyle: "",
+            successCriteria: "",
+            tools: [],
+            permissions: {
+              readMemory: true,
+              writeDraftMemory: false,
+              pinMemory: false,
+              createTasks: false,
+              assignTasks: false,
+              messageEmployees: false,
+              startCalls: true,
+              requestApproval: false,
+              approvalBeforeExternal: true,
+              approvalBeforeEmails: true,
+              approvalBeforeCode: true,
+              approvalBeforeBilling: true,
+            },
+            memoryCount: 0,
+            tasksCompleted: 0,
+            messagesSent: 0,
+            approvalsRequested: 0,
+            avgResponseTime: "",
+            trustScore: 0,
+            accent: "#4f46e5",
+            lastActiveAt: new Date().toISOString(),
+            createdAt: new Date().toISOString(),
+          } as (typeof ctx.employees)[number]);
+        await persistVoiceLaneReply({
+          client: input.client,
+          workspaceId: input.workspaceId,
+          roomId: input.roomId,
+          topicId: topic.id,
+          employee,
+          reply: laneFinalReply || "Okay.",
+          triggerMessageId: humanMessage.id,
+          callId: input.callSessionId,
+          turnId,
+          humanUserId: input.humanUserId,
+          userMessage: stt.text,
+          route: "voice_fast",
+          snapshot,
+        });
+        response = null;
+        routeDecision.route = "voice_fast";
+        latencyTrace.route = "voice_fast";
+      } else {
+        appendVoiceSessionTurn(input.callSessionId, {
+          speaker: "employee",
+          text: response.reply,
+          at: new Date().toISOString(),
+        });
+        scheduleVoiceAsyncEffects({
+          client: input.client,
+          workspaceId: input.workspaceId,
+          roomId: input.roomId,
+          topicId: topic.id,
+          employeeId: input.employeeId,
+          employeeName: response.employeeName,
+          humanUserId: input.humanUserId,
+          callId: input.callSessionId,
+          turnId,
+          userMessage: stt.text,
+          employeeReply: response.reply,
+          route: "work_full",
+        });
+      }
     }
   } catch (error) {
     await ttsChain.catch(() => undefined);
