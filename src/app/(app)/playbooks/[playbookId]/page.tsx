@@ -7,13 +7,17 @@ import { authHeaders } from "@/lib/api/auth-client";
 import { PageContainer, PageHeader } from "@/components/Page";
 import { PlaybookRunWizard } from "@/components/playbooks/PlaybookRunWizard";
 import type { PlaybookDefinitionV1 } from "@/lib/playbooks/contracts";
+import {
+  createDemoPlaybookRun,
+  loadDemoPlaybookDetail,
+} from "@/lib/playbooks/demo-catalog";
 import { BookOpen, Loader2 } from "lucide-react";
 
 export default function PlaybookDetailPage() {
   const params = useParams<{ playbookId: string }>();
   const playbookId = decodeURIComponent(params.playbookId);
   const router = useRouter();
-  const { state } = useStore();
+  const { state, backend } = useStore();
   const workspaceId = state.workspace?.id;
 
   const [definition, setDefinition] = useState<PlaybookDefinitionV1 | null>(null);
@@ -28,11 +32,22 @@ export default function PlaybookDetailPage() {
   const [running, setRunning] = useState(false);
 
   useEffect(() => {
-    if (!workspaceId) return;
+    if (!workspaceId && backend !== "demo") return;
     let cancelled = false;
     (async () => {
       setLoading(true);
+      setError(null);
       try {
+        if (backend === "demo") {
+          const detail = loadDemoPlaybookDetail(playbookId);
+          if (!detail) throw new Error("Playbook not found.");
+          if (cancelled) return;
+          setDefinition(detail.definition);
+          setEstimate(detail.estimate);
+          setName(detail.name);
+          return;
+        }
+        if (!workspaceId) throw new Error("Not signed in.");
         const headers = await authHeaders(workspaceId);
         const res = await fetch(
           `/api/playbooks/${encodeURIComponent(playbookId)}?workspaceId=${encodeURIComponent(workspaceId)}`,
@@ -53,16 +68,27 @@ export default function PlaybookDetailPage() {
     return () => {
       cancelled = true;
     };
-  }, [workspaceId, playbookId]);
+  }, [workspaceId, playbookId, backend]);
 
   const onRun = async (payload: {
     inputPayload: Record<string, unknown>;
     selectedEmployeeIds: string[];
   }) => {
-    if (!workspaceId) return;
     setRunning(true);
     setError(null);
     try {
+      if (backend === "demo") {
+        if (!definition || !estimate) throw new Error("Playbook not loaded.");
+        void payload;
+        const run = createDemoPlaybookRun({
+          playbookId,
+          definition,
+          estimate,
+        });
+        router.push(`/playbooks/runs/${run.id}`);
+        return;
+      }
+      if (!workspaceId) throw new Error("Not signed in.");
       const headers = await authHeaders(workspaceId);
       const res = await fetch(`/api/playbooks/${encodeURIComponent(playbookId)}/run`, {
         method: "POST",

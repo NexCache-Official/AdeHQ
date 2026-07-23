@@ -9,37 +9,33 @@ import { Button, Card } from "@/components/ui";
 import { EmptyState } from "@/components/States";
 import { BookOpen, Loader2, Play, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
-
-type PlaybookItem = {
-  id: string;
-  key: string;
-  name: string;
-  description: string | null;
-  category: string;
-  industryTags: string[];
-  estimatedWhMin: number | null;
-  estimatedWhMax: number | null;
-  stepCount: number;
-  roleCount: number;
-};
+import {
+  loadDemoPlaybookCatalog,
+  type PlaybookListItem,
+} from "@/lib/playbooks/demo-catalog";
 
 type FilterTab = "recommended" | "all" | string;
 
 export default function PlaybooksPage() {
-  const { state } = useStore();
+  const { state, backend } = useStore();
   const workspaceId = state.workspace?.id;
-  const [items, setItems] = useState<PlaybookItem[]>([]);
+  const [items, setItems] = useState<PlaybookListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [tab, setTab] = useState<FilterTab>("recommended");
 
   useEffect(() => {
-    if (!workspaceId) return;
+    if (!workspaceId && backend !== "demo") return;
     let cancelled = false;
     (async () => {
       setLoading(true);
       setError(null);
       try {
+        if (backend === "demo") {
+          if (!cancelled) setItems(loadDemoPlaybookCatalog());
+          return;
+        }
+        if (!workspaceId) throw new Error("Not signed in.");
         const headers = await authHeaders(workspaceId);
         const res = await fetch(`/api/playbooks?workspaceId=${encodeURIComponent(workspaceId)}`, {
           headers,
@@ -56,7 +52,7 @@ export default function PlaybooksPage() {
     return () => {
       cancelled = true;
     };
-  }, [workspaceId]);
+  }, [workspaceId, backend]);
 
   const categories = useMemo(() => {
     const set = new Set(items.map((p) => p.category));
@@ -66,9 +62,11 @@ export default function PlaybooksPage() {
   const filtered = useMemo(() => {
     if (tab === "all") return items;
     if (tab === "recommended") {
-      return items.filter((p) =>
-        ["research", "product", "sales", "marketing", "general"].includes(p.category),
-      ).slice(0, 12);
+      return items
+        .filter((p) =>
+          ["research", "product", "sales", "marketing", "general"].includes(p.category),
+        )
+        .slice(0, 12);
     }
     return items.filter((p) => p.category === tab);
   }, [items, tab]);

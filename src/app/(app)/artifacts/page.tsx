@@ -29,7 +29,7 @@ const TABS: { id: FilterTab; label: string }[] = [
 ];
 
 export default function ArtifactsLibraryPage() {
-  const { state } = useStore();
+  const { state, backend } = useStore();
   const workspaceId = state.workspace?.id;
   const [items, setItems] = useState<SavedArtifact[]>([]);
   const [loading, setLoading] = useState(true);
@@ -37,12 +37,18 @@ export default function ArtifactsLibraryPage() {
   const [tab, setTab] = useState<FilterTab>("all");
 
   useEffect(() => {
-    if (!workspaceId) return;
+    if (!workspaceId && backend !== "demo") return;
     let cancelled = false;
     (async () => {
       setLoading(true);
       setError(null);
       try {
+        if (backend === "demo") {
+          // Demo has no persisted artifact store yet — show empty library cleanly.
+          if (!cancelled) setItems([]);
+          return;
+        }
+        if (!workspaceId) throw new Error("Not signed in.");
         const headers = await authHeaders(workspaceId);
         const res = await fetch(
           `/api/artifacts?workspaceId=${encodeURIComponent(workspaceId)}`,
@@ -60,7 +66,7 @@ export default function ArtifactsLibraryPage() {
     return () => {
       cancelled = true;
     };
-  }, [workspaceId]);
+  }, [workspaceId, backend]);
 
   const filtered = useMemo(() => {
     if (tab === "all") return items;
