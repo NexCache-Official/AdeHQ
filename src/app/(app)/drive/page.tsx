@@ -8,6 +8,7 @@ import type { DriveSection } from "@/lib/drive/constants";
 import { DRIVE_PAGE_SIZE, DRIVE_SECTIONS } from "@/lib/drive/constants";
 import { driveUsagePercent, formatDriveBytes } from "@/lib/drive/format";
 import {
+  checkDriveUploadConflicts,
   createDriveFolder,
   deleteDriveFile,
   deleteDriveFolder,
@@ -25,6 +26,8 @@ import {
   type DriveDownloadResponse,
   type DriveItemType,
   type DriveListResponse,
+  type DriveUploadConflict,
+  type DriveUploadConflictResolution,
   type UploadProgress,
 } from "@/lib/drive/client";
 import type { SavedArtifact, WorkspaceStorageQuota } from "@/lib/types";
@@ -93,8 +96,24 @@ export default function DrivePage() {
   const [preview, setPreview] = useState<DriveDownloadResponse | null>(null);
   const [dragItem, setDragItem] = useState<{ type: DriveItemType; id: string } | null>(null);
   const [dropTargetFolderId, setDropTargetFolderId] = useState<string | null>(null);
+  const [uploadConflicts, setUploadConflicts] = useState<DriveUploadConflict[]>([]);
+  const [conflictIndex, setConflictIndex] = useState(0);
+  const [applyConflictToRest, setApplyConflictToRest] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const evidenceInputRef = useRef<HTMLInputElement>(null);
+  /** Ignore stale list responses when section/upload triggers overlapping loads. */
+  const loadSeqRef = useRef(0);
+  const pendingUploadRef = useRef<{
+    files: File[];
+    listSection: DriveSection | "all";
+    uploadingEvidence: boolean;
+    /** Keyed by upload slot index so two files with the same name stay distinct. */
+    resolutions: Map<
+      number,
+      { resolution: DriveUploadConflictResolution; conflict: DriveUploadConflict }
+    >;
+    conflictSlots: Array<{ fileIndex: number; conflict: DriveUploadConflict }>;
+  } | null>(null);
 
   const activeSection = section === "quotas" ? "all" : section;
 
@@ -117,7 +136,12 @@ export default function DrivePage() {
     }
   }, [searchParams]);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (overrides?: {
+    section?: DriveSection | "all";
+    folderId?: string | null;
+    page?: number;
+    query?: string;
+  }) => {
     if (backend !== "supabase" && !ENABLE_DEMO_MODE) {
       setLoading(false);
       return;
@@ -129,6 +153,12 @@ export default function DrivePage() {
       return;
     }
 
+    const seq = ++loadSeqRef.current;
+    const sectionToLoad = overrides?.section ?? activeSection;
+    const folderToLoad = overrides?.folderId !== undefined ? overrides.folderId : folderId;
+    const pageToLoad = overrides?.page ?? page;
+    const queryToLoad = overrides?.query !== undefined ? overrides.query : query;
+
     setLoading(true);
     setError(null);
     try {
@@ -137,10 +167,10 @@ export default function DrivePage() {
       const list = await Promise.race([
         fetchDriveList({
           workspaceId,
-          section: activeSection,
-          folderId,
-          query: query.trim() || undefined,
-          page,
+          section: sectionToLoad,
+          folderId: folderToLoad,
+          query: queryToLoad.trim() || undefined,
+          page: pageToLoad,
           pageSize: DRIVE_PAGE_SIZE,
         }),
         new Promise<never>((_, reject) => {
@@ -150,20 +180,24 @@ export default function DrivePage() {
           );
         }),
       ]);
+      if (seq !== loadSeqRef.current) return;
       setData(list);
       try {
         const quotaResult = await fetchDriveQuota(workspaceId);
+        if (seq !== loadSeqRef.current) return;
         setQuota(quotaResult);
       } catch (quotaErr) {
         console.warn("[AdeHQ drive] quota load failed", quotaErr);
+        if (seq !== loadSeqRef.current) return;
         setError(
           quotaErr instanceof Error ? quotaErr.message : "Unable to load storage quota.",
         );
       }
     } catch (err) {
+      if (seq !== loadSeqRef.current) return;
       setError(err instanceof Error ? err.message : "Could not load AdeHQ Drive.");
     } finally {
-      setLoading(false);
+      if (seq === loadSeqRef.current) setLoading(false);
     }
   }, [activeSection, backend, folderId, page, query, workspaceId]);
 
@@ -229,31 +263,63 @@ export default function DrivePage() {
     }
   };
 
-  const handleUpload = async (files: FileList | null) => {
-    if (!files?.length || backend !== "supabase") return;
-    const fileList = Array.from(files);
+  const runUploadBatch = async (params: {
+    files: File[];
+    listSection: DriveSection | "all";
+    uploadingEvidence: boolean;
+    resolutions: Map<
+      number,
+      { resolution: DriveUploadConflictResolution; conflict: DriveUploadConflict }
+    >;
+  }) => {
     setUploadBusy(true);
     setUploadProgress(null);
     setError(null);
     let uploadedCount = 0;
+    let skippedCount = 0;
     const failures: string[] = [];
-    // Uploads always land in files (or evidence). Leave Artifacts/Exports so
-    // the list query actually includes the new rows.
-    const uploadingEvidence = section === "evidence" || activeSection === "evidence";
-    const listSection: DriveSection | "all" = uploadingEvidence ? "evidence" : "files";
-    if (!uploadingEvidence && activeSection !== "files" && activeSection !== "all") {
-      setSection("files");
-    }
+    const slots = params.files
+      .map((file, fileIndex) => ({ file, fileIndex, decision: params.resolutions.get(fileIndex) }))
+      .filter((slot) => {
+        if (slot.decision?.resolution === "skip") {
+          skippedCount += 1;
+          return false;
+        }
+        return true;
+      });
+
     try {
-      for (const [index, file] of fileList.entries()) {
+      for (const [index, slot] of slots.entries()) {
+        const { file, decision } = slot;
         const progressMeta = {
           index: index + 1,
-          total: fileList.length,
+          total: slots.length,
           onProgress: (progress: UploadProgress) => setUploadProgress(progress),
         };
         try {
-          if (uploadingEvidence) {
+          if (params.uploadingEvidence) {
             await uploadEvidenceToDrive(file, { workspaceId, folderId }, progressMeta);
+          } else if (decision?.resolution === "replace") {
+            await uploadToDrive(
+              file,
+              {
+                workspaceId,
+                folderId,
+                replaceFileId: decision.conflict.existingFileId,
+                displayName: decision.conflict.displayName,
+              },
+              progressMeta,
+            );
+          } else if (decision?.resolution === "keep_both") {
+            await uploadToDrive(
+              file,
+              {
+                workspaceId,
+                folderId,
+                displayName: decision.conflict.suggestedName,
+              },
+              progressMeta,
+            );
           } else {
             await uploadToDrive(file, { workspaceId, folderId }, progressMeta);
           }
@@ -265,44 +331,149 @@ export default function DrivePage() {
         }
       }
       if (uploadedCount > 0) {
-        // Explicit reload with the section files land in — do not rely on the
-        // DRIVE_UPDATED listener alone (it can still close over artifacts/exports).
-        try {
-          const list = await fetchDriveList({
-            workspaceId,
-            section: listSection,
-            folderId,
-            query: query.trim() || undefined,
-            page: 1,
-            pageSize: DRIVE_PAGE_SIZE,
-          });
-          setPage(1);
-          setData(list);
-        } catch {
-          notifyDriveUpdated();
-        }
-        try {
-          setQuota(await fetchDriveQuota(workspaceId));
-        } catch {
-          // keep uploaded files visible even if quota refresh fails
-        }
-        notifyDriveUpdated();
+        setPage(1);
+        await load({
+          section: params.listSection,
+          folderId,
+          page: 1,
+          query: query.trim(),
+        });
       }
+      const notes: string[] = [];
       if (failures.length) {
-        const summary =
+        notes.push(
           uploadedCount > 0
             ? `${uploadedCount} uploaded. ${failures.length} failed — ${failures[0]}`
             : failures.length === 1
               ? failures[0]
-              : `${failures.length} uploads failed — ${failures[0]}`;
-        setError(summary);
+              : `${failures.length} uploads failed — ${failures[0]}`,
+        );
+      } else if (skippedCount > 0 && uploadedCount > 0) {
+        notes.push(`${uploadedCount} uploaded. ${skippedCount} skipped.`);
+      } else if (skippedCount > 0 && uploadedCount === 0) {
+        notes.push(skippedCount === 1 ? "Upload skipped." : `${skippedCount} uploads skipped.`);
       }
+      if (notes.length) setError(notes.join(" "));
     } finally {
       setUploadBusy(false);
       setUploadProgress(null);
+      pendingUploadRef.current = null;
+      setUploadConflicts([]);
+      setConflictIndex(0);
+      setApplyConflictToRest(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
       if (evidenceInputRef.current) evidenceInputRef.current.value = "";
     }
+  };
+
+  const handleUpload = async (files: FileList | null) => {
+    if (!files?.length || backend !== "supabase") return;
+    const fileList = Array.from(files);
+    setError(null);
+
+    const uploadingEvidence = section === "evidence" || activeSection === "evidence";
+    const listSection: DriveSection | "all" = uploadingEvidence
+      ? "evidence"
+      : activeSection === "all"
+        ? "all"
+        : "files";
+    if (!uploadingEvidence && activeSection !== "files" && activeSection !== "all") {
+      setSection("files");
+    }
+
+    // Evidence uploads keep the previous path (no name collision UX yet).
+    if (uploadingEvidence) {
+      await runUploadBatch({
+        files: fileList,
+        listSection,
+        uploadingEvidence: true,
+        resolutions: new Map(),
+      });
+      return;
+    }
+
+    setUploadBusy(true);
+    try {
+      const conflicts = await checkDriveUploadConflicts({
+        workspaceId,
+        folderId,
+        names: fileList.map((file) => file.name),
+      });
+      if (!conflicts.length) {
+        await runUploadBatch({
+          files: fileList,
+          listSection,
+          uploadingEvidence: false,
+          resolutions: new Map(),
+        });
+        return;
+      }
+
+      // Pair each conflict to the first unused file slot with that original name.
+      const usedSlots = new Set<number>();
+      const conflictSlots: Array<{ fileIndex: number; conflict: DriveUploadConflict }> = [];
+      for (const conflict of conflicts) {
+        const fileIndex = fileList.findIndex(
+          (file, index) => file.name === conflict.originalName && !usedSlots.has(index),
+        );
+        if (fileIndex < 0) continue;
+        usedSlots.add(fileIndex);
+        conflictSlots.push({ fileIndex, conflict });
+      }
+
+      pendingUploadRef.current = {
+        files: fileList,
+        listSection,
+        uploadingEvidence: false,
+        resolutions: new Map(),
+        conflictSlots,
+      };
+      setUploadConflicts(conflictSlots.map((slot) => slot.conflict));
+      setConflictIndex(0);
+      setApplyConflictToRest(false);
+      setUploadBusy(false);
+    } catch (err) {
+      setUploadBusy(false);
+      setError(err instanceof Error ? err.message : "Could not check for duplicate files.");
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
+  const resolveUploadConflict = (resolution: DriveUploadConflictResolution) => {
+    const pending = pendingUploadRef.current;
+    if (!pending || !pending.conflictSlots.length) return;
+
+    const remaining = pending.conflictSlots.slice(conflictIndex);
+    const applyTo = applyConflictToRest ? remaining : remaining.slice(0, 1);
+    for (const slot of applyTo) {
+      pending.resolutions.set(slot.fileIndex, {
+        resolution,
+        conflict: slot.conflict,
+      });
+    }
+
+    const nextIndex = conflictIndex + applyTo.length;
+    if (nextIndex >= pending.conflictSlots.length) {
+      const batch = {
+        files: pending.files,
+        listSection: pending.listSection,
+        uploadingEvidence: pending.uploadingEvidence,
+        resolutions: pending.resolutions,
+      };
+      setUploadConflicts([]);
+      void runUploadBatch(batch);
+      return;
+    }
+    setConflictIndex(nextIndex);
+    setApplyConflictToRest(false);
+  };
+
+  const cancelUploadConflicts = () => {
+    pendingUploadRef.current = null;
+    setUploadConflicts([]);
+    setConflictIndex(0);
+    setApplyConflictToRest(false);
+    if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
   const handlePreview = async (type: DriveItemType, id: string) => {
@@ -825,6 +996,70 @@ export default function DrivePage() {
             </Button>
           </div>
         </div>
+      </Modal>
+
+      <Modal
+        open={uploadConflicts.length > 0}
+        onClose={cancelUploadConflicts}
+        size="md"
+      >
+        <ModalHeader
+          title="File already exists"
+          subtitle={
+            uploadConflicts.length > 1
+              ? `Conflict ${conflictIndex + 1} of ${uploadConflicts.length}`
+              : "Choose how to continue"
+          }
+          onClose={cancelUploadConflicts}
+        />
+        {uploadConflicts[conflictIndex] ? (
+          <div className="space-y-4 p-4">
+            <p className="text-sm text-ink-2">
+              <span className="font-medium text-ink">
+                {uploadConflicts[conflictIndex].existingDisplayName}
+              </span>{" "}
+              {uploadConflicts[conflictIndex].existingFileId
+                ? "is already in this folder."
+                : "appears more than once in this upload."}
+            </p>
+            <p className="text-sm text-ink-3">
+              Keep both will upload as{" "}
+              <span className="font-medium text-ink">
+                {uploadConflicts[conflictIndex].suggestedName}
+              </span>
+              .
+            </p>
+            {uploadConflicts.length - conflictIndex > 1 ? (
+              <label className="flex items-center gap-2 text-sm text-ink-2">
+                <input
+                  type="checkbox"
+                  checked={applyConflictToRest}
+                  onChange={(e) => setApplyConflictToRest(e.target.checked)}
+                  className="rounded border-border"
+                />
+                Apply this choice to the remaining{" "}
+                {uploadConflicts.length - conflictIndex - 1} conflict
+                {uploadConflicts.length - conflictIndex - 1 === 1 ? "" : "s"}
+              </label>
+            ) : null}
+            <div className="flex flex-wrap justify-end gap-2">
+              <Button variant="ghost" onClick={cancelUploadConflicts}>
+                Cancel
+              </Button>
+              <Button variant="secondary" onClick={() => resolveUploadConflict("skip")}>
+                Skip
+              </Button>
+              {uploadConflicts[conflictIndex].existingFileId ? (
+                <Button variant="secondary" onClick={() => resolveUploadConflict("replace")}>
+                  Replace
+                </Button>
+              ) : null}
+              <Button onClick={() => resolveUploadConflict("keep_both")}>
+                Keep both
+              </Button>
+            </div>
+          </div>
+        ) : null}
       </Modal>
 
       {viewerArtifact && (

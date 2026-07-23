@@ -220,6 +220,35 @@ function uploadFormWithProgress<T>(
   });
 }
 
+export type DriveUploadConflict = {
+  originalName: string;
+  displayName: string;
+  existingFileId: string;
+  existingDisplayName: string;
+  suggestedName: string;
+};
+
+export type DriveUploadConflictResolution = "keep_both" | "replace" | "skip";
+
+export async function checkDriveUploadConflicts(params: {
+  workspaceId: string;
+  folderId?: string | null;
+  names: string[];
+}): Promise<DriveUploadConflict[]> {
+  const headers = await authHeaders();
+  const res = await fetch("/api/drive/upload/conflicts", {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      workspaceId: params.workspaceId,
+      folderId: params.folderId ?? null,
+      names: params.names,
+    }),
+  });
+  const body = await parseJson<{ conflicts: DriveUploadConflict[] }>(res);
+  return body.conflicts ?? [];
+}
+
 export async function uploadToDrive(
   file: File,
   payload: {
@@ -227,6 +256,10 @@ export async function uploadToDrive(
     folderId?: string | null;
     roomId?: string | null;
     topicId?: string | null;
+    /** Sanitized display name override (keep-both numbered name). */
+    displayName?: string | null;
+    /** When set, deletes this file first then uploads under the same/folder name. */
+    replaceFileId?: string | null;
   },
   options?: {
     onProgress?: (progress: UploadProgress) => void;
@@ -240,13 +273,15 @@ export async function uploadToDrive(
   if (payload.folderId) form.set("folderId", payload.folderId);
   if (payload.roomId) form.set("roomId", payload.roomId);
   if (payload.topicId) form.set("topicId", payload.topicId);
+  if (payload.displayName) form.set("displayName", payload.displayName);
+  if (payload.replaceFileId) form.set("replaceFileId", payload.replaceFileId);
 
   const body = await uploadFormWithProgress<{ file: WorkspaceFile }>(
     "/api/drive/upload",
     form,
     options?.onProgress,
     {
-      fileName: file.name,
+      fileName: payload.displayName || file.name,
       index: options?.index ?? 1,
       total: options?.total ?? 1,
     },

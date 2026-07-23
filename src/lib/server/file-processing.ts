@@ -50,6 +50,9 @@ function friendlyParseError(message: string): string {
   if (lower.includes("password") || lower.includes("encrypt")) {
     return "This file is password-protected or encrypted. Remove the protection and upload it again.";
   }
+  if (lower.includes("dommatrix") || lower.includes("@napi-rs/canvas") || lower.includes("canvas")) {
+    return "PDF text extraction is unavailable in this environment. The file is still saved — try again shortly, or download it from Drive.";
+  }
   if (
     lower.includes("corrupt") ||
     lower.includes("central directory") ||
@@ -170,6 +173,8 @@ function markdownTable(headers: string[], rows: unknown[][]): string {
 }
 
 async function parsePdf(buffer: Buffer): Promise<ParsedFileResult> {
+  // Worker must load before pdf-parse so DOMMatrix / canvas globals exist on Vercel.
+  await import("pdf-parse/worker");
   const { PDFParse } = await import("pdf-parse");
   const parser = new PDFParse({ data: buffer });
   try {
@@ -279,7 +284,7 @@ function parseCsvFile(buffer: Buffer): ParsedFileResult {
     }) as unknown[][];
   } catch {
     return {
-      status: "failed",
+      status: "ready",
       parseStatus: "failed",
       extractedText: null,
       textPreview: null,
@@ -421,7 +426,7 @@ export async function parseUploadedFile(buffer: Buffer, extension: string): Prom
         break;
       default:
         return {
-          status: "failed",
+          status: "ready",
           parseStatus: "failed",
           extractedText: null,
           textPreview: null,
@@ -437,8 +442,9 @@ export async function parseUploadedFile(buffer: Buffer, extension: string): Prom
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unable to process file.";
+    // Bytes are already (or about to be) stored — keep status ready so Drive still lists the file.
     return {
-      status: "failed",
+      status: "ready",
       parseStatus: "failed",
       extractedText: null,
       textPreview: null,

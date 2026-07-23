@@ -111,6 +111,7 @@
     "@ai-sdk/gateway": "^4.0.12",
     "@ai-sdk/openai": "^4.0.0",
     "@browserbasehq/stagehand": "^3.6.0",
+    "@napi-rs/canvas": "^0.1.100",
     "@react-email/components": "^1.0.12",
     "@react-email/render": "^2.0.10",
     "@supabase/supabase-js": "^2.108.2",

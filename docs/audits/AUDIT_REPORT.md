@@ -6,6 +6,28 @@ Scope of this pass: Phase 1 (partial), Phase 2/3 (partial via Maya/Elena/David),
 
 ---
 
+## Session 2026-07-23 — Drive upload vanishes (Vercel root cause)
+
+**Symptom:** Upload progress hits 100%, Drive stays empty (including single-file uploads).
+
+**Vercel production logs:** `POST /api/drive/upload` returned **200** with real
+`fileId`s. PDF path logged `@napi-rs/canvas` / `DOMMatrix` warnings.
+
+**DB proof (`workspace_files`):** rows existed. PDFs were `status=failed` with
+`parserError: "DOMMatrix is not defined"`. Drive list filtered
+`.neq("status", "failed")`, so PDFs disappeared after a “successful” upload.
+DOCX/MD/XLSX were `ready` (also embedding 400s on SiliconFlow — separate from
+visibility).
+
+**Fix:** load `pdf-parse/worker` + externalize `@napi-rs/canvas`; never demote
+stored files to `status=failed` (use `parse_status=failed`); list failed rows;
+stale list-load race guard after upload; repaired existing failed-but-stored rows.
+
+**Follow-up:** duplicate-name upload UX — preflight conflicts API + modal with
+Keep both (`name (N).ext`) / Replace / Skip before upload proceeds.
+
+---
+
 ## Session 2026-07-23 — PR-22B → 22E (ontology, goal diffs, goldens)
 
 **Shipped on top of 22A/C:**

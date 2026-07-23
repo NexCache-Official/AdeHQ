@@ -13,6 +13,7 @@ import {
   validateUploadType,
   WORKSPACE_FILE_BUCKET,
 } from "@/lib/server/file-processing";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -27,6 +28,74 @@ function displayNameFromUser(user: { email?: string; user_metadata?: Record<stri
   );
 }
 
+async function deleteExistingDriveFile(
+  client: SupabaseClient,
+  params: {
+    workspaceId: string;
+    fileId: string;
+    folderId: string | null;
+    userId: string;
+    role: string;
+  },
+): Promise<{ ok: true; displayName: string } | { ok: false; status: number; error: string }> {
+  const { data: row, error } = await client
+    .from("workspace_files")
+    .select("id, display_name, storage_bucket, storage_path, size_bytes, drive_folder_id, uploaded_by_user_id")
+    .eq("workspace_id", params.workspaceId)
+    .eq("id", params.fileId)
+    .maybeSingle();
+  if (error) throw error;
+  if (!row) return { ok: false, status: 404, error: "File to replace was not found." };
+
+  const existingFolder = row.drive_folder_id ? String(row.drive_folder_id) : null;
+  if (existingFolder !== params.folderId) {
+    return { ok: false, status: 400, error: "Replace target is not in this folder." };
+  }
+
+  const isAdmin = params.role === "admin";
+  if (!isAdmin && String(row.uploaded_by_user_id ?? "") !== params.userId) {
+    return {
+      ok: false,
+      status: 403,
+      error: "Only the uploader or a workspace admin can replace this file.",
+    };
+  }
+
+  const storageBucket = String(row.storage_bucket ?? WORKSPACE_FILE_BUCKET);
+  const storagePath = String(row.storage_path ?? "");
+  if (storagePath) {
+    const { error: storageError } = await client.storage.from(storageBucket).remove([storagePath]);
+    if (storageError) console.warn("[AdeHQ drive upload] replace storage remove failed", storageError);
+  }
+
+  await client
+    .from("message_attachments")
+    .delete()
+    .eq("workspace_id", params.workspaceId)
+    .eq("file_id", params.fileId);
+
+  await recordStorageUsage({
+    workspaceId: params.workspaceId,
+    userId: params.userId,
+    eventType: "delete",
+    bucket: storageBucket,
+    objectPath: storagePath,
+    sizeBytes: Number(row.size_bytes ?? 0),
+    deltaBytes: -Number(row.size_bytes ?? 0),
+    entityType: "file",
+    entityId: params.fileId,
+  }).catch((err) => console.warn("[AdeHQ drive upload] replace quota ledger failed", err));
+
+  const { error: deleteError } = await client
+    .from("workspace_files")
+    .delete()
+    .eq("workspace_id", params.workspaceId)
+    .eq("id", params.fileId);
+  if (deleteError) throw deleteError;
+
+  return { ok: true, displayName: sanitizeFileName(String(row.display_name)) };
+}
+
 export async function POST(request: NextRequest) {
   try {
     const { user, client } = await requireAuthUser(request);
@@ -36,6 +105,8 @@ export async function POST(request: NextRequest) {
     const roomId = form.get("roomId") ? String(form.get("roomId")) : null;
     let topicId = form.get("topicId") ? String(form.get("topicId")) : null;
     const folderId = form.get("folderId") ? String(form.get("folderId")) : null;
+    const replaceFileId = form.get("replaceFileId") ? String(form.get("replaceFileId")) : null;
+    const displayNameOverride = form.get("displayName") ? String(form.get("displayName")) : null;
 
     if (!workspaceId) {
       return NextResponse.json({ error: "workspaceId is required." }, { status: 400 });
@@ -85,8 +156,23 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: validation.error }, { status: 400 });
     }
 
+    let displayName = sanitizeFileName(displayNameOverride || file.name);
+    if (replaceFileId) {
+      const replaced = await deleteExistingDriveFile(client, {
+        workspaceId,
+        fileId: replaceFileId,
+        folderId,
+        userId: user.id,
+        role,
+      });
+      if (!replaced.ok) {
+        return NextResponse.json({ error: replaced.error }, { status: replaced.status });
+      }
+      // Keep the original name when replacing unless the client overrode it.
+      if (!displayNameOverride) displayName = replaced.displayName;
+    }
+
     const fileId = randomUUID();
-    const displayName = sanitizeFileName(file.name);
     const buffer = Buffer.from(await file.arrayBuffer());
     const checksum = fileChecksum(buffer);
     const storagePath = `${workspaceId}/${fileId}/${displayName}`;
@@ -143,10 +229,13 @@ export async function POST(request: NextRequest) {
     try {
       const parsed = await parseUploadedFile(buffer, validation.extension);
 
+      // File bytes are already in storage — never demote the row to status=failed
+      // (Drive list historically hid those, so uploads looked like they vanished).
+      const fileStatus = parsed.parseStatus === "failed" ? "ready" : parsed.status;
       const { data: updated, error: updateError } = await client
         .from("workspace_files")
         .update({
-          status: parsed.status,
+          status: fileStatus,
           parse_status: parsed.parseStatus,
           extracted_text: parsed.extractedText,
           text_preview: parsed.textPreview,
@@ -189,7 +278,7 @@ export async function POST(request: NextRequest) {
           .select("id, content");
         if (chunkError) throw chunkError;
 
-        if (parsed.status === "ready" && insertedChunks?.length) {
+        if (parsed.parseStatus === "parsed" && insertedChunks?.length) {
           await embedFileChunks(
             client,
             workspaceId,
@@ -206,6 +295,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({
         file: workspaceFileFromRow(updated as Record<string, unknown>),
         chunksCreated: parsed.chunks.length,
+        ...(parsed.parseStatus === "failed"
+          ? { warning: parsed.errorMessage ?? "File saved, but text extraction failed." }
+          : {}),
       });
     } catch (postPersistError) {
       console.warn("[AdeHQ drive upload] post-persist processing failed", postPersistError);

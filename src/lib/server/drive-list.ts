@@ -117,8 +117,7 @@ async function loadSectionCounts(
     client
       .from("workspace_files")
       .select("id", { count: "exact", head: true })
-      .eq("workspace_id", workspaceId)
-      .neq("status", "failed"),
+      .eq("workspace_id", workspaceId),
     client
       .from("artifacts")
       .select("id", { count: "exact", head: true })
@@ -214,9 +213,12 @@ export async function listDriveContents(
         ? (() => {
             let query = client
               .from("workspace_files")
-              .select("*", singleType && !q ? { count: "exact" } : undefined)
+              // Never select extracted_text in the list — it can be huge and is unused in the grid.
+              .select(
+                "id, workspace_id, room_id, topic_id, drive_folder_id, drive_section, uploaded_by_user_id, original_name, display_name, mime_type, extension, size_bytes, storage_bucket, storage_path, status, parse_status, text_preview, page_count, sheet_count, row_count, checksum, source_metadata, error_message, created_at, updated_at",
+                singleType && !q ? { count: "exact" } : undefined,
+              )
               .eq("workspace_id", params.workspaceId)
-              .neq("status", "failed")
               .order("created_at", { ascending: false })
               .range(fetchFrom, fetchTo);
             query = folderId

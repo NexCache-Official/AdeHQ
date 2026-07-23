@@ -34,8 +34,20 @@ const nextConfig = {
     // Keep the demo build green on stylistic lint; TypeScript checks still run.
     ignoreDuringBuilds: true,
   },
+  // pdf-parse v2 needs its worker + native canvas outside the Next bundle on Vercel.
+  serverExternalPackages: [
+    "@browserbasehq/stagehand",
+    "@napi-rs/canvas",
+    "pdf-parse",
+    "pdfjs-dist",
+  ],
   experimental: {
-    serverComponentsExternalPackages: ["@browserbasehq/stagehand", "pdf-parse", "pdfjs-dist"],
+    serverComponentsExternalPackages: [
+      "@browserbasehq/stagehand",
+      "@napi-rs/canvas",
+      "pdf-parse",
+      "pdfjs-dist",
+    ],
   },
   async headers() {
     return [
