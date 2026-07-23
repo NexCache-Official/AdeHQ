@@ -35,7 +35,8 @@ Runnable tooling for AdeHQ. Prefer **npm scripts** from the repo root (`package.
 | Workforce Studio provisioning E2E | `npm run test:workforce-studio:provisioning` (needs `.env.local`; live Supabase service-role: full lifecycle, forced-failure compensation, retry-after-failure, 2/5/20-seat matrix) |
 | Workforce Studio NL-edit golden + adversarial | `npm run test:workforce-studio:promptfoo` (needs `SILICONFLOW_API_KEY` in `.env.local`; live SiliconFlow call via custom promptfoo provider — see [`docs/architecture/workforce-studio.md`](../docs/architecture/workforce-studio.md)) |
 | Call browser compatibility | `npm run test:calls:browsers` (Chromium, Firefox, WebKit WebRTC/media/push capability probe; set `CALL_BROWSER_REQUIRE_ALL=1` for release gating) |
-| Brain gauntlet | `npm run test:brain:gauntlet` (release + reliability + steward shadow + brain + access) |
+| Brain gauntlet | `npm run test:brain:gauntlet` (release + reliability + steward shadow + brain + access + PR-25) |
+| PR-25 playbook/artifact/procedure | `npm run test:pr25` (contracts, execution, renderers, registry, goldens, flags; no DB) |
 | Brain Step shadow | `npm run test:brain:step-shadow` (live SF: Qwen3-8B vs Step-3.5-Flash) |
 | Brain Step harness | `npm run test:brain:step-harness` (larger agreement + WH cost report) |
 | Brain Exa search | `npm run test:brain:search` (Exa-first chain, routing, citations) |

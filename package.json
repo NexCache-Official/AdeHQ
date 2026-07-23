@@ -1,6 +1,6 @@
 {
   "name": "adehq",
-  "version": "20.1.5",
+  "version": "20.2.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -32,7 +32,11 @@
     "typecheck:voice-benchmark": "tsc --noEmit --strict --target ES2022 --module commonjs --moduleResolution node --esModuleInterop --skipLibCheck scripts/benchmark-voice-worker-pipeline.ts scripts/voice-benchmark-candidates.ts scripts/test-voice-benchmark-contract.ts",
     "test:voice-benchmark": "tsx scripts/test-voice-benchmark-contract.ts",
     "benchmark:voice-worker": "tsx -r dotenv/config scripts/benchmark-voice-worker-pipeline.ts dotenv_config_path=.env.local",
-    "test:brain:gauntlet": "npm run verify:release && npm run test:brain:reliability && npm run test:brain:steward-shadow && npm run test:brain:steward-execution && npm run test:brain:voice && npm run test:brain && npm run test:workspace-access",
+    "test:brain:gauntlet": "npm run verify:release && npm run test:brain:reliability && npm run test:brain:steward-shadow && npm run test:brain:steward-execution && npm run test:brain:voice && npm run test:brain && npm run test:workspace-access && npm run test:pr25",
+    "test:pr25": "tsx scripts/test-pr25-playbook-contracts.ts && tsx scripts/test-pr25-playbook-execution.ts && tsx scripts/test-pr25-playbook-idempotency.ts && tsx scripts/test-pr25-playbook-cancel.ts && tsx scripts/test-pr25-artifact-schemas.ts && tsx scripts/test-pr25-artifact-renderers.ts && tsx scripts/test-pr25-artifact-provenance.ts && tsx scripts/test-pr25-artifact-rls.ts && tsx scripts/test-pr25-procedure-registry.ts && tsx scripts/test-pr25-work-hours.ts && tsx scripts/test-pr25-golden-playbooks.ts && tsx scripts/test-pr25-e2e.ts && tsx scripts/test-pr25-flags-default-off.ts",
+    "test:pr25:gauntlet": "npm run test:pr25",
+    "test:pr25:contracts": "tsx scripts/test-pr25-playbook-contracts.ts",
+    "test:pr25:renderers": "tsx scripts/test-pr25-artifact-renderers.ts",
     "test:brain": "tsx scripts/test-brain-catalog-invariants.ts && tsx scripts/test-brain-metering-matrix.ts && tsx scripts/test-brain-intensity-invariant.ts && tsx scripts/test-brain-steward-facade.ts && tsx scripts/test-brain-no-customer-media-cta.ts && tsx scripts/test-brain-auto-ux.ts && tsx scripts/test-brain-search-exa-first.ts && tsx scripts/test-brain-vision.ts && tsx scripts/test-brain-image.ts && tsx scripts/test-brain-video.ts && tsx scripts/test-brain-reliability-foundation.ts && tsx scripts/test-brain-steward-shadow.ts && tsx scripts/test-brain-steward-execution.ts && tsx scripts/test-brain-voice.ts",
     "test:brain:search": "tsx scripts/test-brain-search-exa-first.ts && tsx scripts/test-search-routing.ts && tsx scripts/test-search-citations.ts",
     "test:brain:vision": "tsx scripts/test-brain-vision.ts",

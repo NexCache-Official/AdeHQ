@@ -32,6 +32,13 @@ export async function publishSharedFinding(
     visibility?: SharedFindingVisibility;
     /** Hard reject if caller marks private DM context. */
     containsPrivateDmContext?: boolean;
+    /** Optional PR-25 playbook / artifact correlation (additive). */
+    playbookRunId?: string | null;
+    playbookRunStepId?: string | null;
+    artifactId?: string | null;
+    artifactSectionKey?: string | null;
+    findingType?: string | null;
+    sourceRefs?: Array<Record<string, unknown>>;
   },
 ): Promise<SharedFinding | null> {
   if (input.containsPrivateDmContext) {
@@ -54,7 +61,7 @@ export async function publishSharedFinding(
     containsPrivateDmContext: false,
   };
 
-  const { error } = await client.from("brain_shared_findings").insert({
+  const row: Record<string, unknown> = {
     id: finding.id,
     workspace_id: input.workspaceId,
     brain_run_id: finding.brainRunId,
@@ -67,7 +74,20 @@ export async function publishSharedFinding(
     confidence: finding.confidence,
     visibility: finding.visibility,
     contains_private_dm_context: false,
-  });
+  };
+
+  if (input.playbookRunId !== undefined) row.playbook_run_id = input.playbookRunId;
+  if (input.playbookRunStepId !== undefined) {
+    row.playbook_run_step_id = input.playbookRunStepId;
+  }
+  if (input.artifactId !== undefined) row.artifact_id = input.artifactId;
+  if (input.artifactSectionKey !== undefined) {
+    row.artifact_section_key = input.artifactSectionKey;
+  }
+  if (input.findingType !== undefined) row.finding_type = input.findingType;
+  if (input.sourceRefs !== undefined) row.source_refs = input.sourceRefs;
+
+  const { error } = await client.from("brain_shared_findings").insert(row);
   if (error) throw error;
   return finding;
 }

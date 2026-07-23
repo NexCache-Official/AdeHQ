@@ -14,6 +14,16 @@ export const LIVE_BRAIN_CALLS_ENABLED =
 export const HUMAN_CALLS_ENABLED =
   process.env.NEXT_PUBLIC_ADEHQ_HUMAN_CALLS_V1 === "1";
 
+/** PR-25 Playbooks UI entry points (public). Server runtime flags still apply. */
+export const PLAYBOOKS_V1 =
+  process.env.NEXT_PUBLIC_ADEHQ_PLAYBOOKS_V1 === "1" ||
+  process.env.NEXT_PUBLIC_ADEHQ_PLAYBOOKS_V1 === "true";
+
+/** PR-25 Artifacts library UI entry points (public). Server runtime flags still apply. */
+export const ARTIFACTS_V1 =
+  process.env.NEXT_PUBLIC_ADEHQ_ARTIFACTS_V1 === "1" ||
+  process.env.NEXT_PUBLIC_ADEHQ_ARTIFACTS_V1 === "true";
+
 /**
  * Layered employee intelligence pipeline. Enabled by default; set
  * INTELLIGENCE_V1_ENABLED=false to fall back to the legacy research path.

@@ -13,7 +13,12 @@ import {
 import { isMayaEmployee, partitionWorkforce } from "@/lib/maya-employee";
 import { MAYA_WORKFORCE_BADGE } from "@/lib/hiring/maya";
 import { useStore } from "@/lib/demo-store";
-import { ENABLE_DEMO_MODE, WORKFORCE_CALLS_ENABLED } from "@/lib/config/features";
+import {
+  ARTIFACTS_V1,
+  ENABLE_DEMO_MODE,
+  PLAYBOOKS_V1,
+  WORKFORCE_CALLS_ENABLED,
+} from "@/lib/config/features";
 import { useShellUI } from "./AppShell";
 import { useDebugTrace } from "./DebugProvider";
 import { WorkspaceSwitcher } from "./WorkspaceSwitcher";
@@ -42,6 +47,8 @@ import {
   Phone,
   Home,
   Hash,
+  BookOpen,
+  FileStack,
   HardDrive,
   Mail,
   MessageSquare,
@@ -189,6 +196,26 @@ export function Sidebar() {
           <span className="flex-1 truncate">Inbox</span>
           {unreadBadge(inboxUnread)}
         </Link>
+
+        {PLAYBOOKS_V1 && (
+          <Link
+            href="/playbooks"
+            className={cn("nav-link", isActive("/playbooks") && "nav-link-active")}
+          >
+            <BookOpen className="h-[17px] w-[17px]" strokeWidth={1.8} />
+            <span className="flex-1 truncate">Playbooks</span>
+          </Link>
+        )}
+
+        {ARTIFACTS_V1 && (
+          <Link
+            href="/artifacts"
+            className={cn("nav-link", isActive("/artifacts") && "nav-link-active")}
+          >
+            <FileStack className="h-[17px] w-[17px]" strokeWidth={1.8} />
+            <span className="flex-1 truncate">Artifacts</span>
+          </Link>
+        )}
 
         <Link href="/drive" className={cn("nav-link", isActive("/drive") && "nav-link-active")}>
           <HardDrive className="h-[17px] w-[17px]" strokeWidth={1.8} />
