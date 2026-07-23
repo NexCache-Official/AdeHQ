@@ -63,7 +63,14 @@ import type {
 } from "@/lib/inbox/types";
 import { motion } from "framer-motion";
 import { workAssignableEmployees } from "@/lib/maya-employee";
-import { EMAIL_MISSION_LABELS } from "@/lib/inbox/mission-status";
+import {
+  demoInboxBrief,
+  demoMailboxResponse,
+  demoThreadDetail,
+  demoThreadsForFolder,
+  DEMO_THREAD_ID_SENT,
+} from "@/lib/inbox/demo-seed";
+import { InboxMissionPill } from "@/components/inbox/InboxMissionPill";
 
 const FOLDERS: { key: InboxFolder; label: string; icon: typeof InboxIcon }[] = [
   { key: "inbox", label: "Inbox", icon: InboxIcon },
@@ -93,9 +100,10 @@ function relativeTime(iso: string | null): string {
 }
 
 export default function InboxPage() {
-  const { state, actions } = useStore();
+  const { state, actions, backend } = useStore();
   const router = useRouter();
   const workspaceId = state.workspace.id;
+  const isDemo = backend === "demo";
 
   const [mailbox, setMailbox] = useState<InboxMailboxResponse | null>(null);
   const [mailboxError, setMailboxError] = useState<string | null>(null);
@@ -195,6 +203,13 @@ export default function InboxPage() {
   // --- Mailbox lookup -------------------------------------------------------
   const loadMailbox = useCallback(async () => {
     if (!workspaceId) return;
+    if (isDemo) {
+      setMailbox(demoMailboxResponse(workspaceId));
+      setMailboxError(null);
+      setBrief(demoInboxBrief());
+      setAssistanceMode("ai_triage");
+      return;
+    }
     // Bound the request so a hung API never leaves the page on
     // "Loading inbox…" forever (seen in CEO E2E + real usage).
     try {
@@ -212,7 +227,7 @@ export default function InboxPage() {
     } catch (err) {
       setMailboxError(err instanceof Error ? err.message : "Failed to load inbox.");
     }
-  }, [workspaceId]);
+  }, [workspaceId, isDemo]);
 
   useEffect(() => {
     setMailbox(null);
@@ -262,7 +277,16 @@ export default function InboxPage() {
 
       try {
         let next: FolderCache;
-        if (target === "drafts") {
+        if (isDemo) {
+          next =
+            target === "drafts"
+              ? { threads: [], nextCursor: null, drafts: [] }
+              : {
+                  threads: demoThreadsForFolder(target),
+                  nextCursor: null,
+                  drafts: [],
+                };
+        } else if (target === "drafts") {
           const list = await fetchDrafts(workspaceId);
           next = { threads: [], nextCursor: null, drafts: list };
         } else {
@@ -296,15 +320,15 @@ export default function InboxPage() {
         }
       }
     },
-    [workspaceId, access?.canRead, applyFolderToUi, labelFilter],
+    [workspaceId, access?.canRead, applyFolderToUi, labelFilter, isDemo],
   );
 
   useEffect(() => {
-    if (!workspaceId || !access?.canRead) return;
+    if (!workspaceId || !access?.canRead || isDemo) return;
     void fetchInboxLabels({ workspaceId })
       .then((res) => setMailboxLabels(res.labels ?? []))
       .catch(() => setMailboxLabels([]));
-  }, [workspaceId, access?.canRead, mailboxId]);
+  }, [workspaceId, access?.canRead, mailboxId, isDemo]);
 
   useEffect(() => {
     if (!access?.canRead) return;
@@ -363,6 +387,17 @@ export default function InboxPage() {
       setMobileView("thread");
       setLoadingThread(true);
       try {
+        if (isDemo) {
+          const detail =
+            threadId === DEMO_THREAD_ID_SENT
+              ? demoThreadDetail()
+              : { ...demoThreadDetail(), id: threadId };
+          setThreadDetail({ ...detail, hasUnread: false });
+          setThreads((prev) =>
+            prev.map((t) => (t.id === threadId ? { ...t, hasUnread: false } : t)),
+          );
+          return;
+        }
         const detail = await fetchThread({ workspaceId, threadId });
         setThreadDetail({ ...detail, hasUnread: false });
         // Optimistically clear unread in the list + cache.
@@ -379,7 +414,7 @@ export default function InboxPage() {
         setLoadingThread(false);
       }
     },
-    [workspaceId],
+    [workspaceId, isDemo],
   );
 
   // Deep link from EmailWorkContext bridge: /inbox?thread=… (requires inbox ACL).
@@ -392,6 +427,15 @@ export default function InboxPage() {
     deepLinkOpened.current = deepLinkThreadId;
     void openThread(deepLinkThreadId);
   }, [deepLinkThreadId, access?.canRead, workspaceId, openThread]);
+
+  // Demo: land on Sent with the sample thread selected (Inbox.dc.html).
+  const demoSeeded = useRef(false);
+  useEffect(() => {
+    if (!isDemo || !access?.canRead || demoSeeded.current) return;
+    demoSeeded.current = true;
+    setFolder("sent");
+    void openThread(DEMO_THREAD_ID_SENT);
+  }, [isDemo, access?.canRead, openThread]);
 
   // --- Realtime (debounced silent refresh of current folder + open thread) --
   const refreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -887,6 +931,21 @@ export default function InboxPage() {
 
   useEffect(() => {
     if (!workspaceId || !mailbox || !mailbox.claimed) return;
+    if (isDemo) {
+      setBrief(demoInboxBrief());
+      setAssistanceMode("ai_triage");
+      setWorkspaceMembers(
+        state.workspaceMembers
+          .filter((m) => m.status !== "removed")
+          .map((m) => ({
+            id: m.userId,
+            name: m.name ?? m.email ?? "Member",
+            email: m.email ?? null,
+            role: m.role,
+          })),
+      );
+      return;
+    }
     void fetchMailboxSettings(workspaceId)
       .then((s) => setAssistanceMode(s.assistanceMode))
       .catch(() => {});
@@ -896,7 +955,7 @@ export default function InboxPage() {
     void fetchMailboxMembers(workspaceId)
       .then(setWorkspaceMembers)
       .catch(() => {});
-  }, [workspaceId, mailbox]);
+  }, [workspaceId, mailbox, isDemo, state.workspaceMembers]);
 
   const runThreadAction = useCallback(
     async (action: "archive" | "unarchive" | "unread" | "spam", spam?: boolean) => {
@@ -963,119 +1022,126 @@ export default function InboxPage() {
         limits={PANE_PRESETS.inboxFolders}
         fluidBelowMd
         className={cn(
-          "border-r border-border bg-surface",
+          "border-r border-border bg-[rgb(252_251_251)]",
           mobileView === "folders" ? "flex" : "hidden md:flex",
         )}
         collapsedLabel="Folders"
       >
-      <nav className="flex h-full min-h-0 w-full flex-col px-2 py-3">
-        <div className="px-2 pb-3">
+      <nav className="flex h-full min-h-0 w-full flex-col">
+        <div className="px-3.5 pb-2.5 pt-3.5">
           <button
             onClick={() => setComposer({ open: true, initial: {} })}
             disabled={!mailbox.access.canSend}
-            className="flex w-full min-w-0 items-center justify-center gap-2 rounded-lg bg-accent px-3 py-2 text-sm font-medium text-white transition hover:opacity-90 disabled:opacity-40"
+            className="flex w-full min-w-0 items-center justify-center gap-2 rounded-[10px] bg-accent px-3 py-2.5 text-[13.5px] font-semibold text-white shadow-[0_1px_2px_rgba(36,30,26,0.25)] transition-colors hover:bg-accent-d disabled:opacity-40"
           >
-            <PenSquare className="h-4 w-4 shrink-0" />
+            <PenSquare className="h-[15px] w-[15px] shrink-0" strokeWidth={2} />
             <span className="truncate">Compose</span>
           </button>
         </div>
-        {brief && (
-          <motion.div
-            initial={{ opacity: 0, y: 6 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
-            className="relative mx-2 mb-3 overflow-hidden rounded-xl border border-border bg-gradient-to-br from-accent-soft/80 via-canvas to-canvas px-3 py-3 shadow-[0_1px_0_rgba(15,23,42,0.04)]"
-          >
-            <div
-              className="pointer-events-none absolute -right-6 -top-8 h-20 w-20 rounded-full bg-accent/10 blur-2xl"
-              aria-hidden
-            />
-            <p className="relative text-[13px] font-semibold tracking-tight text-ink">
-              {brief.greeting}
+        <div className="border-b border-border px-3.5 pb-3">
+          <div className="overflow-hidden rounded-xl border border-border bg-surface px-3 pb-3 pt-3">
+            <p className="text-[13.5px] font-semibold tracking-[-0.01em] text-ink">
+              {brief?.greeting ?? "Hello"}
             </p>
-            <p className="relative mt-0.5 text-[10px] text-ink-3">Your inbox pulse</p>
-            <div className="relative mt-2.5 grid grid-cols-2 gap-1.5">
+            <p className="mt-px text-[11.5px] text-ink-3">Your inbox pulse</p>
+            <div className="mt-[11px] grid grid-cols-2 gap-[7px]">
               {(
                 [
-                  { label: "New", value: brief.stats.unread },
-                  { label: "Approval", value: brief.stats.needsApproval },
-                  { label: "High", value: brief.stats.highPriority },
-                  { label: "Assigned", value: brief.stats.assignedToMe },
+                  { label: "NEW", value: brief?.stats.unread ?? 0 },
+                  { label: "APPROVAL", value: brief?.stats.needsApproval ?? 0 },
+                  { label: "HIGH", value: brief?.stats.highPriority ?? 0 },
+                  { label: "ASSIGNED", value: brief?.stats.assignedToMe ?? 0 },
                 ] as const
               ).map((stat) => (
                 <div
                   key={stat.label}
-                  className="rounded-lg border border-border/70 bg-surface/80 px-2 py-1.5 backdrop-blur-sm"
+                  className="rounded-[9px] border border-border bg-canvas px-2.5 py-2"
                 >
-                  <p
-                    className={cn(
-                      "text-sm font-semibold tabular-nums",
-                      stat.value > 0 ? "text-accent-d" : "text-ink-2",
-                    )}
-                  >
+                  <p className="text-[19px] font-semibold leading-none tracking-[-0.02em] text-ink">
                     {stat.value}
                   </p>
-                  <p className="text-[10px] text-ink-3">{stat.label}</p>
+                  <p className="mt-1.5 font-mono text-[10.5px] tracking-[0.04em] text-ink-3">
+                    {stat.label}
+                  </p>
                 </div>
               ))}
             </div>
-          </motion.div>
-        )}
-        <p className="truncate px-3 pb-2 text-xs text-ink-3">{mailbox.mailbox?.address}</p>
-        {FOLDERS.map((f) => (
-          <button
-            key={f.key}
-            onClick={() => {
-              setFolder(f.key);
-              setMobileView("list");
-            }}
-            className={cn(
-              "relative flex min-w-0 items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-ink-2 transition hover:bg-muted",
-              folder === f.key && "bg-accent-soft font-medium text-accent-d hover:bg-accent-soft",
+            {mailbox.mailbox?.address && (
+              <div className="mt-[11px] flex min-w-0 items-center gap-1.5 font-mono text-[11px] text-ink-3">
+                <InboxIcon className="h-3 w-3 shrink-0" strokeWidth={2} />
+                <span className="truncate">{mailbox.mailbox.address}</span>
+              </div>
             )}
-          >
-            <f.icon className="h-4 w-4 shrink-0" />
-            <span className="min-w-0 truncate">{f.label}</span>
-          </button>
-        ))}
+          </div>
+        </div>
+        <div className="rail-scroll min-h-0 flex-1 space-y-0.5 overflow-y-auto px-2.5 py-2.5">
+          {FOLDERS.map((f) => (
+            <button
+              key={f.key}
+              onClick={() => {
+                setFolder(f.key);
+                setMobileView("list");
+              }}
+              className={cn(
+                "flex w-full min-w-0 items-center gap-[11px] rounded-[9px] px-2.5 py-2 text-left text-[13.5px] transition-colors",
+                folder === f.key
+                  ? "bg-accent-soft font-semibold text-ink"
+                  : "font-medium text-ink-2 hover:bg-muted",
+              )}
+            >
+              <f.icon
+                className={cn("h-4 w-4 shrink-0", folder === f.key ? "text-ink" : "text-ink-3")}
+                strokeWidth={1.9}
+              />
+              <span className="min-w-0 flex-1 truncate">{f.label}</span>
+            </button>
+          ))}
+        </div>
         {mailbox.access.canManage && (
-          <button
-            type="button"
-            onClick={() => setSettingsOpen((v) => !v)}
-            className="mt-auto flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-ink-3 hover:bg-muted hover:text-ink"
-          >
-            <Settings2 className="h-4 w-4" /> AI settings
-          </button>
-        )}
-        {settingsOpen && mailbox.access.canManage && (
-          <div className="mx-2 mt-1 space-y-1 rounded-lg border border-border bg-canvas p-2 text-xs">
-            {(
-              [
-                ["manual", "Off"],
-                ["ai_triage", "Organise inbox"],
-                ["ai_triage_suggested_replies", "Organise and suggest actions"],
-              ] as const
-            ).map(([mode, label]) => (
-              <button
-                key={mode}
-                type="button"
-                onClick={() => {
-                  setAssistanceMode(mode);
-                  void updateMailboxSettings({ workspaceId, assistanceMode: mode });
-                }}
-                className={cn(
-                  "block w-full rounded-md px-2 py-1.5 text-left",
-                  assistanceMode === mode ? "bg-accent-soft text-accent-d" : "hover:bg-muted",
-                )}
-              >
-                {label}
-              </button>
-            ))}
-            <p className="px-2 pb-1 pt-1 text-[10px] leading-snug text-ink-3">
-              AdeHQ will classify and prioritise incoming email. It will not generate or send
-              replies unless you request it.
-            </p>
-            <MailboxRulesMini workspaceId={workspaceId} />
+          <div className="border-t border-border px-3 py-2.5">
+            <button
+              type="button"
+              onClick={() => setSettingsOpen((v) => !v)}
+              className="flex w-full items-center gap-2.5 rounded-lg px-2 py-[7px] text-[13px] text-ink-2 transition-colors hover:bg-muted"
+            >
+              <Settings2 className="h-[15px] w-[15px] text-ink-3" strokeWidth={2} />
+              AI settings
+            </button>
+            {settingsOpen && (
+              <div className="mt-1 space-y-1 rounded-[10px] border border-border bg-surface p-2 text-xs">
+                {(
+                  [
+                    ["manual", "Off"],
+                    ["ai_triage", "Organise inbox"],
+                    ["ai_triage_suggested_replies", "Organise and suggest actions"],
+                  ] as const
+                ).map(([mode, label]) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    onClick={() => {
+                      setAssistanceMode(mode);
+                      if (!isDemo) {
+                        void updateMailboxSettings({ workspaceId, assistanceMode: mode });
+                      }
+                    }}
+                    className={cn(
+                      "block w-full rounded-lg px-2.5 py-1.5 text-left",
+                      assistanceMode === mode
+                        ? "bg-accent-soft font-medium text-ink"
+                        : "text-ink-2 hover:bg-muted",
+                    )}
+                  >
+                    {label}
+                  </button>
+                ))}
+                <p className="px-2.5 pb-1 pt-1 text-[10px] leading-snug text-ink-3">
+                  AdeHQ will classify and prioritise incoming email. It will not generate or send
+                  replies unless you request it.
+                </p>
+                {!isDemo && <MailboxRulesMini workspaceId={workspaceId} />}
+              </div>
+            )}
           </div>
         )}
       </nav>
@@ -1094,28 +1160,33 @@ export default function InboxPage() {
         collapsedLabel="Mail"
       >
       <div className="flex h-full min-h-0 w-full flex-col">
-        <div className="space-y-2 border-b border-border px-4 py-3">
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2">
+        <div className="shrink-0 space-y-2 border-b border-border px-[18px]">
+          <div className="flex h-[52px] items-center justify-between gap-2">
+            <div className="flex min-w-0 items-center gap-2">
               <button
                 type="button"
                 onClick={() => setMobileView("folders")}
-                className="rounded p-1 text-ink-3 hover:bg-muted md:hidden"
+                className="rounded-lg p-1.5 text-ink-3 hover:bg-muted md:hidden"
                 aria-label="Folders"
               >
                 <Folder className="h-4 w-4" />
               </button>
-              <h1 className="min-w-0 truncate text-sm font-semibold capitalize text-ink">
+              <h1 className="min-w-0 truncate text-[14px] font-semibold tracking-[-0.01em] text-ink">
                 {FOLDERS.find((f) => f.key === folder)?.label}
               </h1>
             </div>
-            {loadingList && <Loader2 className="h-4 w-4 animate-spin text-ink-3" />}
+            <div className="flex items-center gap-2">
+              {loadingList && <Loader2 className="h-3.5 w-3.5 animate-spin text-ink-3" />}
+              <span className="font-mono text-[11.5px] text-ink-3">
+                {folder === "drafts" ? drafts.length : threads.length}
+              </span>
+            </div>
           </div>
           {folder !== "drafts" && mailboxLabels.length > 0 && (
             <select
               value={labelFilter ?? ""}
               onChange={(e) => setLabelFilter(e.target.value || null)}
-              className="w-full rounded-lg border border-border bg-canvas px-2 py-1.5 text-xs text-ink"
+              className="mb-2.5 w-full rounded-lg border border-border bg-canvas px-2.5 py-1.5 text-xs text-ink"
               aria-label="Filter by label"
             >
               <option value="">All labels</option>
@@ -1211,7 +1282,7 @@ export default function InboxPage() {
       {/* Reader / composer — main work view (not collapsible) */}
       <div
         className={cn(
-          "flex min-h-0 w-full min-w-0 flex-1 flex-col",
+          "relative flex min-h-0 w-full min-w-0 flex-1 flex-col bg-[rgb(252_251_250)]",
           mobileView !== "thread" && "hidden md:flex",
         )}
       >
@@ -1250,26 +1321,30 @@ export default function InboxPage() {
             onOpenAttachment={(id) => void handleOpenAttachment(id)}
             onClose={closeThread}
             drafting={drafting}
+            demoMode={isDemo}
           />
         </div>
         {composer.open && (
-          <div className="flex max-h-[52vh] min-h-[300px] shrink-0 flex-col overflow-hidden border-t border-border">
-            <Composer
-              workspaceId={workspaceId}
-              initial={{
-                ...composer.initial,
-                mailboxAddress: mailbox.mailbox?.address,
-                canApprove: mailbox.access.canApprove,
-              }}
-              onSend={handleSend}
-              onClose={() => {
-                setComposer({ open: false, initial: {} });
-                if (folder === "drafts") void loadFolder("drafts", { silent: true });
-              }}
-              onDraftChange={() => {
-                if (folder === "drafts") void loadFolder("drafts", { silent: true });
-              }}
-            />
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 flex justify-center px-6">
+            <div className="pointer-events-auto flex h-[min(432px,70vh)] w-full max-w-3xl flex-col overflow-hidden rounded-t-2xl border border-b-0 border-border bg-surface shadow-[0_-8px_40px_rgba(36,30,26,0.14)] animate-[composeUp_0.28s_ease]">
+              <Composer
+                workspaceId={workspaceId}
+                demoMode={isDemo}
+                initial={{
+                  ...composer.initial,
+                  mailboxAddress: mailbox.mailbox?.address,
+                  canApprove: mailbox.access.canApprove,
+                }}
+                onSend={handleSend}
+                onClose={() => {
+                  setComposer({ open: false, initial: {} });
+                  if (folder === "drafts") void loadFolder("drafts", { silent: true });
+                }}
+                onDraftChange={() => {
+                  if (folder === "drafts") void loadFolder("drafts", { silent: true });
+                }}
+              />
+            </div>
           </div>
         )}
       </div>
@@ -1329,106 +1404,76 @@ function ThreadRow({
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.2, delay: Math.min(index, 8) * 0.02 }}
       className={cn(
-        "relative flex w-full min-w-0 flex-col gap-0.5 border-b border-border-2 px-4 py-3 text-left transition-colors hover:bg-muted",
-        active && "bg-accent-soft hover:bg-accent-soft",
-        thread.hasUnread && "bg-accent-soft/40",
+        "relative flex w-full min-w-0 flex-col border-b border-[rgb(239_238_236)] px-[18px] py-3.5 text-left transition-colors hover:bg-muted/70",
+        active && "border-l-2 border-l-ink bg-accent-soft hover:bg-accent-soft",
+        !active && thread.hasUnread && "bg-muted/40",
       )}
     >
-      <span
-        className={cn(
-          "absolute inset-y-0 left-0 w-0.5",
-          thread.priority === "urgent" && "bg-rose-500",
-          thread.priority === "high" && "bg-amber-500",
-          thread.priority === "low" && "bg-border",
-          (!thread.priority || thread.priority === "normal") && "bg-transparent",
-        )}
-        aria-hidden
-      />
       <div className="flex items-center justify-between gap-2">
         <div className="flex min-w-0 items-center gap-2">
-          {thread.hasUnread ? (
-            <span className="h-2 w-2 shrink-0 rounded-full bg-accent" title="Unread" />
-          ) : (
-            <span className="h-2 w-2 shrink-0" />
+          {thread.hasUnread && (
+            <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-ink" title="Unread" />
           )}
           <span
             className={cn(
-              "truncate text-sm text-ink-2",
-              thread.hasUnread && "font-semibold text-ink",
+              "truncate text-[13px] text-ink-2",
+              (thread.hasUnread || active) && "font-semibold text-ink",
             )}
           >
             {peerLabel}
           </span>
         </div>
-        <span className="shrink-0 text-xs text-ink-3">{relativeTime(thread.timestamp)}</span>
-      </div>
-      <div className="flex min-w-0 items-center gap-1.5 pl-4">
-        <span
-          className={cn(
-            "min-w-0 flex-1 truncate text-sm text-ink-2",
-            thread.hasUnread && "font-medium text-ink",
-          )}
-        >
-          {thread.subject}
+        <span className="shrink-0 font-mono text-[11px] text-ink-3">
+          {relativeTime(thread.timestamp)}
         </span>
       </div>
-      <div className="flex min-w-0 items-center gap-1.5 pl-4">
+      <div
+        className={cn(
+          "mt-1.5 truncate text-[13.5px] tracking-[-0.01em] text-ink",
+          (thread.hasUnread || active) && "font-semibold",
+        )}
+      >
+        {thread.subject || "(no subject)"}
+      </div>
+      <div className="mt-1 truncate text-[12.5px] text-ink-3">
+        {thread.aiActivity || thread.snippet}
+      </div>
+      <div className="mt-2.5 flex min-w-0 flex-wrap items-center gap-1.5">
         {thread.hasAttachments && <Paperclip className="h-3 w-3 shrink-0 text-ink-3" />}
         {deliveryBad && (
-          <span className="shrink-0 text-[10px] font-medium uppercase tracking-wide text-rose-600">
+          <span className="font-mono text-[10px] font-medium uppercase tracking-wide text-danger">
             {thread.deliveryStatus === "bounced" ? "Bounced" : "Not delivered"}
           </span>
         )}
         {deliveryPending && (
-          <span className="shrink-0 text-[10px] font-medium uppercase tracking-wide text-amber-700">
+          <span className="font-mono text-[10px] font-medium uppercase tracking-wide text-amber">
             Sending
           </span>
         )}
         {(thread.draftStatus === "queued" || thread.draftStatus === "running") && (
-          <span className="shrink-0 text-[10px] font-medium uppercase tracking-wide text-accent-d">
+          <span className="font-mono text-[10px] font-medium uppercase tracking-wide text-ink-3">
             Drafting
           </span>
         )}
         {thread.missionStatus !== "idle" &&
           thread.missionStatus !== "assigned" &&
           thread.missionStatus !== "drafting" && (
-            <span
-              className={cn(
-                "shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-medium",
-                thread.missionStatus === "awaiting_human" &&
-                  "bg-amber-50 text-amber-800",
-                thread.missionStatus === "pending_send" &&
-                  "bg-rose-50 text-rose-700",
-                thread.missionStatus === "brainstorming" &&
-                  "bg-accent-soft text-accent-d",
-                ["queued", "sent", "waiting_reply"].includes(thread.missionStatus) &&
-                  "bg-emerald-50 text-emerald-700",
-              )}
-            >
-              {EMAIL_MISSION_LABELS[thread.missionStatus]}
-            </span>
+            <InboxMissionPill status={thread.missionStatus} />
           )}
-        <span className="min-w-0 flex-1 truncate text-xs text-ink-3">
-          {thread.aiActivity || thread.snippet}
-        </span>
+        {thread.labels?.slice(0, 3).map((label) => (
+          <span
+            key={label.id}
+            className="rounded-md border border-border bg-muted px-1.5 py-0.5 text-[10px] font-medium text-ink-2"
+            style={
+              label.color
+                ? { backgroundColor: `${label.color}22`, color: label.color }
+                : undefined
+            }
+          >
+            {label.name}
+          </span>
+        ))}
       </div>
-      {thread.labels?.length > 0 && (
-        <div className="flex flex-wrap gap-1 pl-4 pt-1">
-          {thread.labels.slice(0, 3).map((label) => (
-            <span
-              key={label.id}
-              className="rounded-md bg-muted px-1.5 py-0.5 text-[10px] font-medium text-ink-2"
-              style={
-                label.color
-                  ? { backgroundColor: `${label.color}22`, color: label.color }
-                  : undefined
-              }
-            >
-              {label.name}
-            </span>
-          ))}
-        </div>
-      )}
     </motion.button>
   );
 }
@@ -1437,18 +1482,22 @@ function DraftRow({ draft, onClick }: { draft: DraftDTO; onClick: () => void }) 
   return (
     <button
       onClick={onClick}
-      className="flex w-full min-w-0 flex-col gap-0.5 border-b border-border-2 px-4 py-3 text-left transition hover:bg-muted"
+      className="flex w-full min-w-0 flex-col border-b border-[rgb(239_238_236)] px-[18px] py-3.5 text-left transition hover:bg-muted/70"
     >
       <div className="flex min-w-0 items-center justify-between gap-2">
-        <span className="min-w-0 flex-1 truncate text-sm text-ink-2">
-          {draft.to.length > 0 ? draft.to.join(", ") : "(no recipient)"}
+        <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-ink">
+          {draft.to.length > 0 ? `To: ${draft.to.join(", ")}` : "(no recipient)"}
         </span>
-        <span className="shrink-0 text-xs text-ink-3">{relativeTime(draft.updatedAt)}</span>
+        <span className="shrink-0 font-mono text-[11px] text-ink-3">
+          {relativeTime(draft.updatedAt)}
+        </span>
       </div>
-      <span className="block min-w-0 truncate text-sm text-ink">
+      <span className="mt-1.5 block min-w-0 truncate text-[13.5px] font-semibold tracking-[-0.01em] text-ink">
         {draft.subject || "(no subject)"}
       </span>
-      <span className="block min-w-0 truncate text-xs text-ink-3">{draft.textBody || ""}</span>
+      <span className="mt-1 block min-w-0 truncate text-[12.5px] text-ink-3">
+        {draft.textBody || ""}
+      </span>
     </button>
   );
 }

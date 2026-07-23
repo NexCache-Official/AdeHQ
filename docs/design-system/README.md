@@ -37,6 +37,7 @@ There is no separate design-package. **Tokens and primitives in this repo are au
 | App shell | [`src/components/AppShell.tsx`](../../src/components/AppShell.tsx) | `h-screen`; Sidebar + main |
 | Left rail | [`src/components/Sidebar.tsx`](../../src/components/Sidebar.tsx) | Pinned header (workspace → work hours → search) + scroll middle + pinned footer (hire + profile). Default width **260px**. |
 | Home | [`src/app/(app)/page.tsx`](../../src/app/(app)/page.tsx) | Wired to `Home.dc.html` (hero, stats, workforce + activity) |
+| Inbox | [`src/app/(app)/inbox/page.tsx`](../../src/app/(app)/inbox/page.tsx) + `src/components/inbox/*` | Wired to `Inbox.dc.html` (folders pulse, list, reader, compose sheet). Demo seed: `src/lib/inbox/demo-seed.ts` |
 | Resizable panes | [`src/components/layout/ResizablePane.tsx`](../../src/components/layout/ResizablePane.tsx) | Side panes only; main work column stays `flex-1` |
 | Pane prefs | [`src/lib/layout/pane-prefs.ts`](../../src/lib/layout/pane-prefs.ts) | `localStorage` keys `adehq.pane.*` |
 

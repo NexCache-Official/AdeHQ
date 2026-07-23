@@ -77,14 +77,14 @@ export const PANE_PRESETS = {
   },
   inboxFolders: {
     id: "inbox-folders",
-    defaultWidth: 208,
+    defaultWidth: 216,
     minWidth: 180,
     maxWidth: 300,
     collapsedWidth: 44,
   },
   inboxList: {
     id: "inbox-list",
-    defaultWidth: 320,
+    defaultWidth: 300,
     minWidth: 240,
     maxWidth: 480,
     collapsedWidth: 44,

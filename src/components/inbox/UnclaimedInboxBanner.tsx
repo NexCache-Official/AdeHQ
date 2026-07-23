@@ -47,7 +47,7 @@ export function UnclaimedInboxBanner() {
     return () => {
       cancelled = true;
     };
-  }, [workspaceId, isAdmin]);
+  }, [workspaceId, isAdmin, backend]);
 
   if (!show) return null;
 
