@@ -7,20 +7,20 @@ const STATUS_STYLE: Record<
   EmployeeStatus,
   { label: string; color: string; soft: string; dot: string }
 > = {
-  online: { label: "Online", color: "#16A34A", soft: "#DCFCE7", dot: "bg-emerald-500" },
-  idle: { label: "Idle", color: "#9B968B", soft: "#F0EDE6", dot: "bg-ink-3" },
-  working: { label: "Working", color: "#2F6FED", soft: "#E7EFFE", dot: "bg-accent" },
+  online: { label: "Online", color: "#2b7440", soft: "#e1f5e4", dot: "bg-green" },
+  idle: { label: "Idle", color: "#66625e", soft: "#f3f1ef", dot: "bg-ink-3" },
+  working: { label: "Working", color: "#2b7440", soft: "#e1f5e4", dot: "bg-green" },
   waiting_approval: {
     label: "Waiting for approval",
-    color: "#CB8A1B",
-    soft: "#FBEFD6",
+    color: "#a45e00",
+    soft: "#ffeccd",
     dot: "bg-amber",
   },
-  on_call: { label: "On call", color: "#2F6FED", soft: "#E5EDFD", dot: "bg-info" },
+  on_call: { label: "On call", color: "#414f5d", soft: "#f1f0ee", dot: "bg-info" },
   offline: {
     label: "Offline — Work Hours used up",
-    color: "#6B7280",
-    soft: "#F3F4F6",
+    color: "#66625e",
+    soft: "#f3f1ef",
     dot: "bg-ink-3",
   },
   blocked: { label: "Blocked", color: "#D9483B", soft: "#FBE3E0", dot: "bg-danger" },
