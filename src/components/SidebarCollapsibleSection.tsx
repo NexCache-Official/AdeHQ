@@ -131,7 +131,7 @@ export function SidebarNestedLink({
     <Link
       href={href}
       className={cn(
-        "flex items-center gap-1.5 rounded-lg py-1.5 pl-[27px] pr-2 text-[13.5px] transition-colors",
+        "flex min-w-0 max-w-full items-center gap-1.5 rounded-lg py-1.5 pl-[27px] pr-2 text-[13.5px] transition-colors",
         active
           ? "bg-[var(--rail-active-bg)] font-medium text-[var(--rail-active-ink)]"
           : "text-[var(--rail-ink-2)] hover:bg-[var(--rail-hover)] hover:text-[var(--rail-ink)]",
@@ -145,7 +145,7 @@ export function SidebarNestedLink({
         <span className="mr-1.5 shrink-0 text-[var(--rail-ink-3)]">#</span>
       )}
       <span className="min-w-0 flex-1 truncate">{label}</span>
-      {badge}
+      {badge ? <span className="min-w-0 shrink truncate">{badge}</span> : null}
     </Link>
   );
 }

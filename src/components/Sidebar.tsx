@@ -301,7 +301,7 @@ export function Sidebar() {
                       label={employee.name}
                       badge={
                         isMaya ? (
-                          <span className="ml-auto shrink-0 whitespace-nowrap rounded border border-[var(--rail-edge)] bg-[var(--rail-badge-bg)] px-[5px] py-px font-mono text-[9px] tracking-[0.03em] text-[var(--rail-badge-ink)]">
+                          <span className="max-w-[7.5rem] truncate rounded border border-[var(--rail-edge)] bg-[var(--rail-badge-bg)] px-[5px] py-px font-mono text-[9px] tracking-[0.03em] text-[var(--rail-badge-ink)]">
                             {MAYA_WORKFORCE_BADGE}
                           </span>
                         ) : dm ? (
