@@ -15,7 +15,7 @@ const GREETING =
   /^(?:hi|hello|hey|morning|good morning|good afternoon|good evening|thanks|thank you|got it|sounds good)(?:\s+(?:everyone|team|all|folks|guys|there))?[!. ]*$/i;
 
 const DIRECT_WORK =
-  /\b(?:write|draft|compose|rewrite|summarize|outline|brainstorm|plan|create|make|edit|review)\b/i;
+  /\b(?:add|write|draft|compose|rewrite|summarize|outline|brainstorm|plan|create|make|edit|review|log|save|send|update)\b/i;
 
 /** Spreadsheet / table deliverables should not be forced into web-search by Research mode. */
 const ARTIFACT_DELIVERABLE =

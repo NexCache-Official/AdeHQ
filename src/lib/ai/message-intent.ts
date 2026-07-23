@@ -40,6 +40,9 @@ const EXPLICIT_ARTIFACT_TOOL_INTENT =
 const CRM_OR_TASK_DELIVERY_INTENT =
   /\b(?:crm|contacts?|deals?|companies|tasks?|follow[- ]ups?)\b[\s\S]{0,100}\b(?:add|create|log|save|update|new)\b|\b(?:add|create|log|save|update|new)\b[\s\S]{0,100}\b(?:crm|contacts?|deals?|companies|tasks?|follow[- ]ups?)\b/i;
 
+const OPERATIONAL_TOOL_NOUN =
+  /\b(?:crm|contacts?|companies|deals?|pipelines?|investors?|inbox|e?-?mails?|mails?|tasks?|to-?dos?|follow[- ]ups?|reminders?|memory)\b/i;
+
 /**
  * Web research / lookup asks — including voice-call turns like "research Tesla"
  * or "quick Google search". These must not take the plain-prose stream path
@@ -94,6 +97,33 @@ export function messageLikelyNeedsStructuredEffects(message: string): boolean {
 /** True when the user is asking for a web lookup / research (chat or call). */
 export function messageLikelyNeedsResearch(message: string): boolean {
   return RESEARCH_OR_LOOKUP_INTENT.test(message.trim());
+}
+
+/**
+ * True only for an actual business mutation/read action, not for research by
+ * itself. `messageLikelyNeedsStructuredEffects` intentionally includes pure
+ * research so it avoids the plain-text stream path, which is too broad for the
+ * DM steward's "must continue to employee tools" decision.
+ */
+export function messageLikelyNeedsBusinessTool(message: string): boolean {
+  const text = message.trim();
+  if (!text) return false;
+  if (TOOL_WORK_VERB.test(text) && TOOL_WORK_NOUN.test(text)) return true;
+  if (ARTIFACT_DELIVERY_INTENT.test(text)) return true;
+  if (EXPLICIT_ARTIFACT_TOOL_INTENT.test(text)) return true;
+  if (CRM_OR_TASK_DELIVERY_INTENT.test(text)) return true;
+  if (isDriveArtifactAsk(text)) return true;
+  return false;
+}
+
+/** Mixed research + action requests need search evidence and then tool execution. */
+export function messageNeedsResearchBeforeBusinessTool(message: string): boolean {
+  const text = message.trim();
+  return (
+    messageLikelyNeedsResearch(text) &&
+    messageLikelyNeedsBusinessTool(text) &&
+    OPERATIONAL_TOOL_NOUN.test(text)
+  );
 }
 
 export function isShortToolRetryMessage(message: string): boolean {

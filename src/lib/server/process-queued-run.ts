@@ -30,7 +30,7 @@ import {
 } from "@/lib/server/queue-follow-up-runs";
 import { GREETING_MAX_OUTPUT_TOKENS, isDeferredWorkPromise } from "@/lib/server/room-governance";
 import type { QueuedRun } from "@/lib/server/queue-agent-runs";
-import type { CollaborationRole, ConversationPlan } from "@/lib/types";
+import type { CollaborationRole, ConversationPlan, MessageArtifact } from "@/lib/types";
 import {
   finalizeOrchestrationIfComplete,
   updateOrchestrationEmployeeStatus,
@@ -58,9 +58,15 @@ import {
 import { canEmployeeUseBrowserResearch } from "@/lib/ai/browser-research/permissions";
 import { resolveEmployeePromptTier } from "@/lib/ai/employee-prompt-tier";
 import {
+  messageNeedsResearchBeforeBusinessTool,
   messageLikelyNeedsStructuredEffects,
   resolveToolWorkSourceMessage,
 } from "@/lib/ai/message-intent";
+import { executeSearchAnswer } from "@/lib/ai/search";
+import {
+  buildActionResearchContext,
+  buildBusinessDiscoveryQuery,
+} from "@/lib/ai/research/action-research";
 import {
   inferRequiredArtifactToolCall,
   replyForInferredArtifactTool,
@@ -71,6 +77,7 @@ import {
   replyForInferredEmailTools,
   replyForInferredEmailReadTool,
 } from "@/lib/integrations/infer-email-tool-call";
+import { inferRequiredCrmToolCalls } from "@/lib/integrations/infer-crm-tool-call";
 import {
   executePlannedResearch,
   getResearchCapabilities,
@@ -909,6 +916,7 @@ export async function processQueuedAgentRun(
       ctx.room.messages,
     );
     const toolWorkNeeded = messageLikelyNeedsStructuredEffects(toolWorkSource);
+    const mixedResearchAction = messageNeedsResearchBeforeBusinessTool(toolWorkSource);
     const modelUserMessage =
       toolWorkNeeded && toolWorkSource.trim() !== triggerUserContent.trim()
         ? `${content}
@@ -1088,6 +1096,98 @@ export async function processQueuedAgentRun(
     const preferTavily = Boolean(runMetadata.preferTavily ?? runMetadata.preferResearch);
     const preferAgentMode = Boolean(runMetadata.preferAgentMode ?? runMetadata.preferBrowserbase);
     const isDmRoom = ctx.room.kind === "dm";
+    let actionResearchArtifact: MessageArtifact | undefined;
+
+    // Mixed requests need two phases: obtain focused evidence, then let the
+    // employee model emit the requested write tool calls. The old search-only
+    // branch returned here and silently skipped CRM/tasks/investors/memory.
+    if (mixedResearchAction) {
+      const focusedQuery = buildBusinessDiscoveryQuery(toolWorkSource);
+      await appendRunStep(client, {
+        workspaceId,
+        agentRunId: runId,
+        roomId,
+        topicId,
+        employeeId,
+        stepType: "tool_call",
+        title: "Researching before action",
+        summary: focusedQuery.slice(0, 160),
+        status: "running",
+      });
+
+      try {
+        const research = await executeSearchAnswer({
+          client,
+          workspaceId,
+          roomId,
+          topicId,
+          employeeId,
+          employeeName: employee.name,
+          query: focusedQuery,
+          agentRunId: runId,
+        });
+        fileContextPrompt = [
+          fileContextPrompt,
+          buildActionResearchContext({
+            query: focusedQuery,
+            answer: research.answer,
+            sources: research.sources,
+          }),
+        ]
+          .filter(Boolean)
+          .join("\n\n");
+        actionResearchArtifact = research.webSourcesArtifact;
+        runMetadata.actionResearch = {
+          query: focusedQuery,
+          route: research.route,
+          sourceCount: research.sources.length,
+          completed: true,
+        };
+        await appendRunStep(client, {
+          workspaceId,
+          agentRunId: runId,
+          roomId,
+          topicId,
+          employeeId,
+          stepType: "tool_call",
+          title: "Research complete — executing requested action",
+          summary: `${research.sources.length} source${research.sources.length === 1 ? "" : "s"} found`,
+          status: "success",
+        });
+      } catch (error) {
+        // Search quality must not erase an explicit mutation. The employee can
+        // still create the user-supplied record with uncertainty in its notes.
+        const message = formatResearchError(error);
+        fileContextPrompt = [
+          fileContextPrompt,
+          [
+            "LIVE RESEARCH FOR THE REQUESTED BUSINESS ACTION FAILED:",
+            message,
+            "Still execute the user's requested action using only user-supplied facts.",
+            "Mark unverified fields clearly and do not invent contact details.",
+          ].join("\n"),
+        ]
+          .filter(Boolean)
+          .join("\n\n");
+        runMetadata.actionResearch = {
+          query: focusedQuery,
+          sourceCount: 0,
+          completed: false,
+          error: message,
+        };
+        await appendRunStep(client, {
+          workspaceId,
+          agentRunId: runId,
+          roomId,
+          topicId,
+          employeeId,
+          stepType: "error",
+          title: "Research unavailable — continuing with supplied facts",
+          summary: message,
+          status: "failed",
+        }).catch(() => undefined);
+      }
+    }
 
     // Drive file asks must never enter search/browse — planResearch and
     // intelligence often treat "vendor/PropTech" wording as market research and
@@ -1099,6 +1199,7 @@ export async function processQueuedAgentRun(
       !collaborationOnly &&
       !artifactIntent &&
       !driveArtifactAsk &&
+      !mixedResearchAction &&
       !shouldAnswerFromKnowledge(intelligence) &&
       (getResearchCapabilities(employee).canSearch ||
         canEmployeeUseBrowserResearch(employee))
@@ -1933,13 +2034,14 @@ export async function processQueuedAgentRun(
       const inferredArtifact = inferRequiredArtifactToolCall(toolWorkSource);
       const inferredEmail = inferRequiredEmailToolCalls(toolWorkSource);
       const inferredEmailRead = inferRequiredEmailReadToolCalls(toolWorkSource);
+      const inferredCrm = inferRequiredCrmToolCalls(toolWorkSource);
       const inferred = inferredArtifact
         ? [inferredArtifact]
         : inferredEmail.length
           ? inferredEmail
           : inferredEmailRead.length
             ? inferredEmailRead
-            : [];
+            : inferredCrm;
       if (inferred.length) {
         console.warn("[AdeHQ process-queued-run] synthesizing toolCalls", {
           runId,
@@ -2052,6 +2154,15 @@ export async function processQueuedAgentRun(
         triggerMessageText: toolWorkNeeded ? toolWorkSource : undefined,
       },
     );
+
+    if (actionResearchArtifact) {
+      artifacts = await attachArtifactToMessage(client, {
+        workspaceId,
+        messageId: aiMessage.id,
+        artifact: actionResearchArtifact,
+      });
+      aiMessage.artifacts = artifacts;
+    }
 
     const isDm = ctx.room.kind === "dm";
     if (isDm) {

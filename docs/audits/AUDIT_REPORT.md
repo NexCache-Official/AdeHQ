@@ -615,6 +615,35 @@ needs real APM/timing spans around each DB round trip, not static reading.
   sessions — explicitly labeled "throwaway"/"one-off" in their own headers,
   not referenced by any npm script or doc, safe to delete rather than commit.
 
+## Session 2026-07-23 — mixed research + CRM action silently skipped
+
+**Symptom:** Priya was asked to research Dubai Shawarma in Canterbury and add
+a $30,000 CRM deal. Search returned a weak "no information" answer with numbered
+citations, while no CRM row or memory was created.
+
+**Root cause:** the DM steward classified the whole mixed instruction as a
+`current_fact_question`. `processQueuedAgentRun` executed gateway/Tavily search,
+persisted that answer, and returned before the structured employee/tool path.
+Priya's production grants were correct (CRM, investors, email, tasks, Drive,
+calendar, browser, and web search all enabled).
+
+**Fix:** mixed research + operational-action requests now use a focused business
+discovery query, inject the verified answer/source URLs into the employee
+context, then continue through the structured tool executor. Search failure no
+longer cancels an explicit mutation. The final message retains the web-source
+artifact, durable research is requested in `effects.memory`, and an explicit CRM
+deal has a conservative deterministic fallback if both model tool-call attempts
+no-op.
+
+**Live search proof:** the focused query found the Canterbury business at
+45 St Peter's Street, CT1 2BG, phone +44 1227 379330, email
+`dubaicanterbury@gmail.com`, and active Companies House record 16884329.
+
+**Verified:** `npx tsc --noEmit`, message-intent and DM-steward tests, search
+citation/quality tests, and AI caller audit pass. Integration core/permission
+test files still contain pre-existing assertions for removed legacy workspace
+roles and the old hidden-locked-tool prompt behavior.
+
 ## Log
 
 | 2026-07-10 | Hire AI Employee wizard: typed "I need a leasing agent who can screen tenant applicants, answer prospective tenant questions, and schedule property tours" on Step 1 (Role) | Maya proposes real-estate-relevant role(s), e.g. "Leasing Agent" / "Property Manager", and Job Brief step 4 reflects tenant screening, tour scheduling | Step 2 (Context): Maya suggested generic SaaS-startup roles — "Software Engineer, Executive Assistant, Sales Development Rep" — none matching a leasing/property role. Follow-up quick-reply chips were "Daily operations / Customer support / Data analysis / Process automation," again generic. The live-updating "Draft Job Brief" panel showed title **"AI Employee"**, department **"General business"**, and mission **"Help the team succeed as a ai employee in general business."** — completely generic, dropped all my specifics (leasing, tenants, tours), and contains a grammar bug ("as a ai employee" instead of "an AI employee"). | **Critical / Important** (bug: grammar+data-loss is Important; the vertical-blindness is a Critical product-market gap for a real estate customer) | Role-parsing/classification step likely maps free text against a fixed catalog of SaaS/startup role templates (Software Engineer, SDR, EA, etc.) with no real-estate-specific roles (Leasing Agent, Property Manager, Listing Agent, Transaction Coordinator) and a weak fallback that discards the original input instead of using it verbatim in the mission field | Add a "custom/other" path that keeps the user's literal input verbatim in the mission when no catalog role matches well enough, add real-estate role templates, fix the "a ai employee" grammar bug, and use an article-aware template ("an {role}" not "a {role}") | Open | This is the single most damaging finding so far for the real-estate persona specifically: the CEO in this scenario is being funneled toward hiring a generic "AI Employee" instead of a Leasing Agent, on the platform's flagship "hire a teammate in minutes" flow. First impressions of the hiring wizard (UI, step design, live-updating brief) are excellent — the content generation is the weak link. |

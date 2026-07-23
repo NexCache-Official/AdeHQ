@@ -3,7 +3,11 @@ import {
   messageLikelyNeedsResearch,
   isShortToolRetryMessage,
   conversationLikelyNeedsStructuredEffects,
+  messageLikelyNeedsBusinessTool,
+  messageNeedsResearchBeforeBusinessTool,
 } from "@/lib/ai/message-intent";
+import { buildBusinessDiscoveryQuery } from "@/lib/ai/research/action-research";
+import { inferRequiredCrmToolCalls } from "@/lib/integrations/infer-crm-tool-call";
 
 function assert(condition: boolean, message: string): asserts condition {
   if (!condition) throw new Error(message);
@@ -134,4 +138,27 @@ assert(
 );
 
 console.log("✓ research / google / yes-follow-up intents are detected");
+
+const mixedCrmAsk =
+  "Add a CRM deal for Dubai Shawarma, Canterbury, UK. do some research on their business first and then add to the CRM table that there is an open pipeline for a $30,000 kitchen renovation deal.";
+assert(messageLikelyNeedsBusinessTool(mixedCrmAsk), "mixed CRM request must be a business tool action");
+assert(
+  messageNeedsResearchBeforeBusinessTool(mixedCrmAsk),
+  "mixed CRM request must trigger research enrichment before action",
+);
+const discoveryQuery = buildBusinessDiscoveryQuery(mixedCrmAsk);
+assert(
+  /Dubai Shawarma/i.test(discoveryQuery) && /Canterbury/i.test(discoveryQuery),
+  `focused query must preserve company and location: ${discoveryQuery}`,
+);
+assert(
+  !/30,000|crm table|open pipeline/i.test(discoveryQuery),
+  `focused query must remove mutation/deal noise: ${discoveryQuery}`,
+);
+const crmFallback = inferRequiredCrmToolCalls(mixedCrmAsk);
+assert(crmFallback.length === 1, "explicit CRM deal must have a deterministic last-resort call");
+assert(crmFallback[0]?.tool === "crm.createDeal", "fallback must create a CRM deal");
+assert(crmFallback[0]?.args.amount === 30000, "fallback must preserve the deal amount");
+
+console.log("✓ mixed research + CRM requests preserve action routing and focused search");
 console.log("All message-intent tests passed.");

@@ -57,6 +57,18 @@ async function main() {
     expectTrue(!decision.browserRequired);
   });
 
+  await test("research + CRM mutation → employee_model with search enrichment", () => {
+    const decision = classifyDmMessageWithSteward(
+      baseInput({
+        messageContent:
+          "Add a CRM deal for Dubai Shawarma, Canterbury, UK. Research the business first, then add a $30,000 kitchen renovation deal.",
+      }),
+    );
+    expectTrue(decision.route === "employee_model");
+    expectTrue(decision.searchRequired === true);
+    expectTrue(/action|tools/i.test(decision.reason));
+  });
+
   await test("deep research request → browser_research", () => {
     const decision = classifyDmMessageWithSteward(
       baseInput({

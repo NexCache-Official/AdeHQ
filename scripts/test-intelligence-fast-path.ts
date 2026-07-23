@@ -15,6 +15,10 @@ const cases = [
   ["2 + 2 * 5", "instant_answer"],
   ["10 kg to lbs", "instant_answer"],
   ["write me an outreach email", "direct"],
+  [
+    "Add a CRM deal for Dubai Shawarma, Canterbury, UK. Research the business first, then add a $30,000 kitchen renovation deal.",
+    "direct",
+  ],
   ["who are the biggest sponsors for this year's world cup?", "obvious_search"],
   ["what was Perplexity revenue in 2025?", "obvious_search"],
   ["latest funding for Acme", "obvious_search"],

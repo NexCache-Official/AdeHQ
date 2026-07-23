@@ -4,6 +4,7 @@ import {
   requiresDeepBrowserResearch,
 } from "@/lib/ai/search/search-router";
 import { isDriveArtifactAsk } from "@/lib/ai/detect-drive-artifact-ask";
+import { messageNeedsResearchBeforeBusinessTool } from "@/lib/ai/message-intent";
 import { detectWorkStopRequest } from "@/lib/orchestration/work-stop";
 
 export type DmStewardIntent =
@@ -197,6 +198,40 @@ export function classifyDmMessageWithSteward(input: DmStewardInput): DmStewardDe
     };
   }
 
+  if (messageNeedsResearchBeforeBusinessTool(message)) {
+    return {
+      intent: "direct_answer",
+      shouldRespond: true,
+      route: "employee_model",
+      browserRequired: false,
+      searchRequired: true,
+      reason: "Mixed research and business action — enrich first, then execute employee tools.",
+      contextPolicy,
+      costPolicy: { stewardModel: "efficient", estimatedWorkMinutes: 5 },
+    };
+  }
+
+  const deepBrowser = requiresDeepBrowserResearch(message, {
+    preferAgentMode: input.preferAgentMode,
+    explicitBrowserTask: input.preferAgentMode,
+  });
+
+  if (deepBrowser) {
+    return {
+      intent: input.preferAgentMode ? "browser_task" : "deep_research_request",
+      shouldRespond: true,
+      route: "browser_research",
+      browserRequired: true,
+      searchRequired: false,
+      reason: "Multi-step or explicit browser work requested.",
+      contextPolicy,
+      costPolicy: {
+        stewardModel: "efficient",
+        estimatedWorkMinutes: 15,
+      },
+    };
+  }
+
   // File deliverables before generic draft/write or market-research search diversion.
   if (isDriveArtifactAsk(message) || ARTIFACT_PATTERNS.some((p) => p.test(message))) {
     return {
@@ -221,27 +256,6 @@ export function classifyDmMessageWithSteward(input: DmStewardInput): DmStewardDe
       reason: "Writing/drafting request — employee model.",
       contextPolicy,
       costPolicy: { stewardModel: "efficient", estimatedWorkMinutes: 2 },
-    };
-  }
-
-  const deepBrowser = requiresDeepBrowserResearch(message, {
-    preferAgentMode: input.preferAgentMode,
-    explicitBrowserTask: input.preferAgentMode,
-  });
-
-  if (deepBrowser) {
-    return {
-      intent: input.preferAgentMode ? "browser_task" : "deep_research_request",
-      shouldRespond: true,
-      route: "browser_research",
-      browserRequired: true,
-      searchRequired: false,
-      reason: "Multi-step or explicit browser work requested.",
-      contextPolicy,
-      costPolicy: {
-        stewardModel: "efficient",
-        estimatedWorkMinutes: 15,
-      },
     };
   }
 
