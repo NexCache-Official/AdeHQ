@@ -15,7 +15,13 @@ import {
 import { runGatewaySearchAnswer, estimateGatewaySearchCostUsd } from "./vercel-gateway-search";
 import { runExaSearchAnswer, estimateExaSearchCostUsd } from "./exa-search";
 import { runTavilySearchAnswer, estimateTavilySearchAnswerCostUsd } from "./tavily-search";
-import type { SearchAnswerResult, SearchNeed, SearchRoute, SearchRouteDecision } from "./types";
+import type {
+  SearchAnswerResult,
+  SearchMode,
+  SearchNeed,
+  SearchRoute,
+  SearchRouteDecision,
+} from "./types";
 import { estimateWorkMinutesFromCost } from "@/lib/ai/work-hours/estimate";
 import {
   buildWebSourcesArtifactFromCards,
@@ -62,6 +68,8 @@ export type ExecuteSearchAnswerParams = {
   preferAgentMode?: boolean;
   agentRunId?: string;
   routeOverride?: SearchRoute;
+  /** Force fast-fact synthesis (voice calls). */
+  searchMode?: SearchMode;
 };
 
 export type ExecuteSearchAnswerMeta = {
@@ -94,9 +102,10 @@ function buildDecision(params: ExecuteSearchAnswerParams): SearchRouteDecision {
     { preferAgentMode: params.preferAgentMode },
     defaultSearchStewardCapabilities(),
   );
+  let decision: SearchRouteDecision;
   if (params.routeOverride) {
     const base = stewardDecisionToRouteDecision(steward);
-    return {
+    decision = {
       ...base,
       need: base.need === "none" ? "current_fact" : base.need,
       route: params.routeOverride,
@@ -104,8 +113,20 @@ function buildDecision(params: ExecuteSearchAnswerParams): SearchRouteDecision {
       reason: "route_override",
       maxResults: base.maxResults ?? 5,
     };
+  } else {
+    decision = stewardDecisionToRouteDecision(steward);
   }
-  return stewardDecisionToRouteDecision(steward);
+  if (params.searchMode) {
+    return {
+      ...decision,
+      searchMode: params.searchMode,
+      maxResults:
+        params.searchMode === "fast_fact"
+          ? Math.min(decision.maxResults ?? 5, 5)
+          : decision.maxResults,
+    };
+  }
+  return decision;
 }
 
 async function runProviderSearch(

@@ -150,10 +150,21 @@ export async function processEmployeeResponse(
     : [];
   const artifactIntent = detectArtifactIntent(content);
   options.onActivity?.("thinking");
-  const fileContextBundle = await retrieveFileContext(client, ctx.workspaceId, topicId, {
-    userMessage: content,
-    priorityFileIds: attachmentFileIds,
-  });
+  // Voice turns pay for every DB round-trip. Skip Drive retrieval unless the
+  // user attached files or clearly asked about a document.
+  const shouldRetrieveFiles =
+    attachmentFileIds.length > 0 ||
+    (!options.voiceCall && Boolean(content.trim())) ||
+    (options.voiceCall &&
+      /\b(?:file|drive|doc|document|pdf|spreadsheet|sheet|attachment|upload)\b/i.test(
+        content,
+      ));
+  const fileContextBundle = shouldRetrieveFiles
+    ? await retrieveFileContext(client, ctx.workspaceId, topicId, {
+        userMessage: content,
+        priorityFileIds: attachmentFileIds,
+      })
+    : { chunks: [], files: [], chunkIds: new Set<string>(), fileIds: new Set<string>() };
   let fileContextPrompt = buildFileContextPrompt(fileContextBundle);
   if (options.voiceCall) {
     fileContextPrompt = [
@@ -161,13 +172,14 @@ export async function processEmployeeResponse(
       [
         "CALL PRESENTATION POLICY (presentation only; all normal permissions, tools, memory, and routing still apply):",
         "You are on a live phone call with a teammate — sound human, not scripted.",
-        "Lead with the answer. Default to one to three spoken sentences and about 25–80 words unless they ask for more.",
+        "Lead with the answer immediately. Default to one to three spoken sentences and about 25–80 words unless they ask for more.",
         "Use contractions and natural phrasing, but avoid repetitive filler words and avoid sounding scripted or corporate.",
         "If the useful answer is long, speak the decision or key finding first and put the detailed list, table, or source trail in the durable chat transcript. Offer to continue rather than reading everything aloud.",
         "Never reuse a generic check-in opener (e.g. \"Anything on your mind?\") when the user is continuing a prior ask — especially short replies like yes/yeah/sure/ok.",
-        "If they ask to search/research without repeating the topic, infer it from the recent conversation and confirm once if needed (\"Want me to look up Tesla's recent financials?\").",
-        "For public-company / web facts, search or use tools — do not invent numbers, and do not ask them to upload a Drive file unless the data is clearly internal.",
-        "When tools or search will take time, do not generate repeated holding phrases. The call runtime plays one voice-matched acknowledgement.",
+        "If they ask to search/research without repeating the topic, infer it from the recent conversation and answer from LIVE WEB SEARCH RESULTS / CRM context — do not ask them to wait again.",
+        "For public-company / web facts, use the live search results already provided. Never invent numbers, and do not ask them to upload a Drive file unless the data is clearly internal.",
+        "Never answer a search ask with only a deferral like \"Got it — I'll follow up\" or \"I'll look into that.\" Either speak the useful findings now, or say the web lookup failed and give the best CRM/workspace answer you already have.",
+        "When tools or search will take time, do not generate repeated holding phrases. The call runtime already played one acknowledgement.",
         "Avoid markdown, tables, citation identifiers, and raw URLs in spoken lines. Put detail in the durable chat transcript.",
       ].join("\n"),
     ]
@@ -291,10 +303,13 @@ export async function processEmployeeResponse(
           employeeName: employee.name,
           query: searchQuery,
           agentRunId: undefined,
+          // Voice needs first audio fast; prefer the short fact preset.
+          preferAgentMode: false,
+          searchMode: "fast_fact",
         });
         if (search.answer?.trim()) {
           const sourceLines = (search.sources ?? [])
-            .slice(0, 4)
+            .slice(0, 3)
             .map((source, index) => {
               const title = source.title || source.url || `Source ${index + 1}`;
               return `- ${title}`;
@@ -307,10 +322,17 @@ export async function processEmployeeResponse(
               `Query: ${searchQuery}`,
               search.answer.trim(),
               sourceLines ? `Sources:\n${sourceLines}` : "",
-              "Speak a concise phone-call summary of the useful findings. Offer to go deeper if helpful.",
+              "Speak the useful findings now in 1–3 short sentences. Do not defer. Offer to go deeper only after answering.",
             ]
               .filter(Boolean)
               .join("\n"),
+          ]
+            .filter(Boolean)
+            .join("\n\n");
+        } else {
+          fileContextPrompt = [
+            fileContextPrompt,
+            "LIVE WEB SEARCH returned no usable answer. Say that briefly, then answer from CRM/workspace context if available — do not invent web facts and do not only say you'll follow up.",
           ]
             .filter(Boolean)
             .join("\n\n");
@@ -516,8 +538,13 @@ export async function processEmployeeResponse(
     provider: employee.provider,
     modelMode,
     promptTier,
-    maxOutputTokens: maxOutputTokens ?? getOutputTokenCap(modelMode),
-    timeoutMs: getTimeoutMs(modelMode),
+    // Live calls need first spoken tokens fast — keep replies short and fail
+    // closed on long Brain stalls instead of sitting in silence.
+    maxOutputTokens: options.voiceCall
+      ? Math.min(maxOutputTokens ?? 280, 280)
+      : (maxOutputTokens ?? getOutputTokenCap(modelMode)),
+    timeoutMs: options.voiceCall ? 12_000 : getTimeoutMs(modelMode),
+    voiceCall: options.voiceCall,
     context: {
       workspaceId: ctx.workspaceId,
       roomId: ctx.room.id,

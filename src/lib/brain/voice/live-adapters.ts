@@ -90,7 +90,7 @@ export class GroqWhisperAdapter implements SpeechToTextAdapter {
     form.append("model", this.model);
     form.append("response_format", "verbose_json");
     form.append("timestamp_granularities[]", "segment");
-    if (context.language) form.append("language", context.language);
+    form.append("language", (context.language ?? "en").trim() || "en");
     if (context.vocabularyPrompt) {
       form.append("prompt", context.vocabularyPrompt.slice(0, 900));
     }

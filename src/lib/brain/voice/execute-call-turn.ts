@@ -31,6 +31,11 @@ import {
   cacheBridgeClip,
   getCachedBridgeClip,
 } from "./bridge-clips";
+import { GroqWhisperAdapter } from "./live-adapters";
+import {
+  normalizeSpeechLanguage,
+  transcriptLooksLikeLanguageMismatch,
+} from "./transcript-language";
 import type {
   FinalTranscript,
   ServerCallEvent,
@@ -68,6 +73,49 @@ export function pcm16ToWav(
   return Buffer.concat([header, Buffer.from(pcm)]);
 }
 
+async function repairMismatchedTranscript(input: {
+  transcript: FinalTranscript;
+  audioBytes: Buffer;
+  durationSeconds: number;
+  turnId: string;
+  speechContext: SpeechContext;
+}): Promise<FinalTranscript> {
+  const expected = normalizeSpeechLanguage(input.speechContext.language);
+  if (
+    !transcriptLooksLikeLanguageMismatch(input.transcript.text, expected) ||
+    !process.env.GROQ_API_KEY?.trim()
+  ) {
+    return input.transcript;
+  }
+  try {
+    const repaired = await new GroqWhisperAdapter().transcribeUtterance(
+      {
+        bytes: input.audioBytes,
+        mimeType: "audio/wav",
+        fileName: `${input.turnId}-lang-repair.wav`,
+        durationSeconds: input.durationSeconds,
+      },
+      { ...input.speechContext, language: expected },
+    );
+    if (
+      repaired.text.trim() &&
+      !transcriptLooksLikeLanguageMismatch(repaired.text, expected)
+    ) {
+      return {
+        ...repaired,
+        raw: {
+          repairedFrom: input.transcript.raw ?? input.transcript.text,
+          repairReason: "language_mismatch",
+          providerRaw: repaired.raw,
+        },
+      };
+    }
+  } catch {
+    // Keep the original streaming caption if repair fails.
+  }
+  return input.transcript;
+}
+
 async function transcribeWithFallback(
   input: {
     client: SupabaseClient;
@@ -86,7 +134,7 @@ async function transcribeWithFallback(
 ): Promise<FinalTranscript> {
   const selected = selectSpeechRoutes(input.routeContext);
   try {
-    return await selected.stt.transcribeUtterance(
+    const primary = await selected.stt.transcribeUtterance(
       {
         bytes: input.audioBytes,
         mimeType: "audio/wav",
@@ -95,6 +143,13 @@ async function transcribeWithFallback(
       },
       input.speechContext,
     );
+    return repairMismatchedTranscript({
+      transcript: primary,
+      audioBytes: input.audioBytes,
+      durationSeconds: input.durationSeconds,
+      turnId: input.turnId,
+      speechContext: input.speechContext,
+    });
   } catch (error) {
     await recordBrainUsage({
       client: input.client,
@@ -192,34 +247,45 @@ export async function executeEmployeeCallTurn(input: {
       kind: "voice_note",
     });
   }
-  const stt =
-    input.finalTranscript ??
-    (await transcribeWithFallback({
-      client: input.client,
+  const speechLanguage = normalizeSpeechLanguage(
+    input.routeContext.language ?? "en",
+  );
+  const speechContext: SpeechContext = {
+    workspaceId: input.workspaceId,
+    conversationId: input.roomId,
+    humanUserId: input.humanUserId,
+    employeeId: input.employeeId,
+    language: speechLanguage,
+    vocabularyPrompt: await buildCallVocabulary(input.client, {
       workspaceId: input.workspaceId,
-      userId: input.humanUserId,
+      conversationId: input.roomId,
+      humanUserId: input.humanUserId,
       employeeId: input.employeeId,
-      roomId: input.roomId,
-      callId: input.callSessionId,
-      turnId,
-      sequence: input.sequence,
-      audioBytes: wav,
-      durationSeconds: input.durationSeconds,
-      routeContext: input.routeContext,
-      speechContext: {
+    }),
+    signal: input.signal,
+  };
+  const stt = input.finalTranscript
+    ? await repairMismatchedTranscript({
+        transcript: input.finalTranscript,
+        audioBytes: wav,
+        durationSeconds: input.durationSeconds,
+        turnId,
+        speechContext,
+      })
+    : await transcribeWithFallback({
+        client: input.client,
         workspaceId: input.workspaceId,
-        conversationId: input.roomId,
-        humanUserId: input.humanUserId,
+        userId: input.humanUserId,
         employeeId: input.employeeId,
-        vocabularyPrompt: await buildCallVocabulary(input.client, {
-          workspaceId: input.workspaceId,
-          conversationId: input.roomId,
-          humanUserId: input.humanUserId,
-          employeeId: input.employeeId,
-        }),
-        signal: input.signal,
-      },
-    }));
+        roomId: input.roomId,
+        callId: input.callSessionId,
+        turnId,
+        sequence: input.sequence,
+        audioBytes: wav,
+        durationSeconds: input.durationSeconds,
+        routeContext: input.routeContext,
+        speechContext,
+      });
   if (!stt.text) throw new Error("No speech was detected.");
 
   const sttLedger = await recordBrainUsage({

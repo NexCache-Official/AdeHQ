@@ -40,7 +40,10 @@ import { streamSiliconFlowText } from "@/lib/ai/siliconflow-call";
 import { estimateCost, resolveModel } from "@/lib/ai/model-catalog";
 import { sanitizeReplyForChat } from "@/lib/ai/normalize-model-response";
 import { isEmployeeReplyStreamingEnabled } from "@/lib/config/features";
-import { conversationLikelyNeedsStructuredEffects } from "@/lib/ai/message-intent";
+import {
+  conversationLikelyNeedsStructuredEffects,
+  messageLikelyNeedsBusinessTool,
+} from "@/lib/ai/message-intent";
 
 export type EmployeeDirectRuntimeDispatch = "old" | "shadow" | "legacy-guarded" | "runtime-on";
 
@@ -325,11 +328,20 @@ async function callLegacyEmployeeRoute(
   };
 }
 
-function directCapabilityAllowsStreaming(input: EmployeeDirectRouteInput): boolean {
+function directCapabilityAllowsStreaming(
+  input: EmployeeDirectRouteInput,
+  options: EmployeeDirectRouteOptions = {},
+): boolean {
   if (input.artifactIntent) return false;
-  // Match the queued runtime gate: research / CRM / email / retries must stay
-  // on the structured path. Plain streaming hardcodes empty effects, which is
-  // why voice calls were inventing Tesla numbers and forgetting prior topics.
+  // Voice calls pre-run web search into the prompt, then need streamed speech.
+  // Blocking the structured path here created 10s+ silence after the bridge
+  // phrase and weak "I'll follow up" answers with no spoken findings.
+  // Keep CRM/email tool turns on the structured path; stream everything else.
+  if (options.voiceCall && !messageLikelyNeedsBusinessTool(input.message)) {
+    return true;
+  }
+  // Match the queued runtime gate: CRM / email / retries must stay on the
+  // structured path. Plain streaming hardcodes empty effects.
   if (
     conversationLikelyNeedsStructuredEffects(
       input.message,
@@ -346,7 +358,7 @@ async function streamEmployeeDirectResponse(
   options: EmployeeDirectRouteOptions,
   streaming: EmployeeDirectReplyStreaming,
 ): Promise<EmployeeDirectRouteResult> {
-  if (!directCapabilityAllowsStreaming(input)) {
+  if (!directCapabilityAllowsStreaming(input, options)) {
     throw new Error("This call turn requires the structured Brain path.");
   }
   const modelMode = resolveDirectEmployeeModelMode(

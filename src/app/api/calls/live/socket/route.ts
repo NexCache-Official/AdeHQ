@@ -9,6 +9,8 @@ import { createSupabaseSecretClient } from "@/lib/supabase/server";
 import {
   buildCallVocabulary,
   executeEmployeeCallTurn,
+  loadEmployeeVoiceProfile,
+  normalizeSpeechLanguage,
   resolveLiveCallEntitlements,
   selectSpeechRoutes,
   setCallSessionState,
@@ -198,6 +200,13 @@ export async function GET(request: NextRequest) {
         );
       };
 
+      const voiceProfile = await loadEmployeeVoiceProfile(
+        orchestrationClient,
+        payload.workspaceId,
+        String(call.primary_employee_id),
+      ).catch(() => null);
+      const speechLanguage = normalizeSpeechLanguage(voiceProfile?.locale ?? "en");
+
       if (streamingEnabled) {
         try {
           const vocabularyPrompt = await buildCallVocabulary(orchestrationClient, {
@@ -208,6 +217,7 @@ export async function GET(request: NextRequest) {
           });
           const selected = selectSpeechRoutes({
             callMode: "live_streaming",
+            language: speechLanguage,
             truePartialsRequired: true,
             premiumVoiceRequested: call.voice_route_policy === "premium",
             entitlements,
@@ -220,6 +230,7 @@ export async function GET(request: NextRequest) {
             conversationId: String(call.room_id),
             humanUserId,
             employeeId: String(call.primary_employee_id),
+            language: speechLanguage,
             vocabularyPrompt,
             signal: streamAbort.signal,
           });
@@ -395,6 +406,7 @@ export async function GET(request: NextRequest) {
                   durationSeconds: Math.max(0.1, event.durationSeconds),
                   routeContext: {
                     callMode: effectiveCallMode,
+                    language: speechLanguage,
                     premiumVoiceRequested: call.voice_route_policy === "premium",
                     entitlements,
                   },

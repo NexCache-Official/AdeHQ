@@ -7,6 +7,7 @@ import type {
   StreamingTranscriptionSession,
   UtteranceInput,
 } from "./live-types";
+import { normalizeSpeechLanguage } from "./transcript-language";
 
 const XAI_STREAMING_STT_URL = "wss://api.x.ai/v1/stt";
 
@@ -108,8 +109,10 @@ export class XaiStreamingSttAdapter implements SpeechToTextAdapter {
       // avoids fighting local floor control while still yielding partials.
       endpointing: "5000",
       filler_words: "true",
+      // Always pin a language. Unconstrained xAI STT can invent wrong-script
+      // phrases (e.g. Russian "Продолжение следует..." for English speech).
+      language: normalizeSpeechLanguage(context.language),
     });
-    if (context.language) params.set("language", context.language);
     for (const keyterm of vocabularyKeyterms(context.vocabularyPrompt)) {
       params.append("keyterm", keyterm);
     }

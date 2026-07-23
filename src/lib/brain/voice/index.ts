@@ -70,3 +70,4 @@ export * from "./vocabulary";
 export * from "./call-session";
 export * from "./call-transport";
 export * from "./execute-call-turn";
+export * from "./transcript-language";

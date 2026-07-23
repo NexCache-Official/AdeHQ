@@ -17,8 +17,11 @@ import {
   evaluateSttPolicy,
   DEFAULT_WORKSPACE_VOICE_SETTINGS,
   scoreSttRouteSelection,
+  normalizeSpeechLanguage,
+  transcriptLooksLikeLanguageMismatch,
 } from "../src/lib/brain/voice";
 import { buildSegmentsFromTranscript } from "../src/lib/brain/voice/adapter";
+import { resolveRouteGenerationParams } from "../src/lib/ai/employee-response-contract";
 
 let failed = 0;
 function check(name: string, ok: boolean, detail = "") {
@@ -148,6 +151,30 @@ check(
   "member labels omit model SKUs",
   labels.every((l) => l && !/CosyVoice|SenseVoice|Fish/i.test(l)),
 );
+
+check("speech language defaults to en", normalizeSpeechLanguage(undefined) === "en");
+check(
+  "speech language normalizes locale tags",
+  normalizeSpeechLanguage("en-US") === "en",
+);
+check(
+  "cyrillic caption mismatches english calls",
+  transcriptLooksLikeLanguageMismatch("Продолжение следует...", "en"),
+);
+check(
+  "english caption matches english calls",
+  !transcriptLooksLikeLanguageMismatch("Can you search Dubai Shawarma?", "en"),
+);
+
+const voiceGen = resolveRouteGenerationParams(
+  "Can you do a quick search on Dubai Shawarma?",
+  { voiceCall: true },
+);
+check(
+  "voice calls cap output tokens for fast speech",
+  voiceGen.maxOutputTokens <= 320,
+);
+check("voice calls use a short Brain timeout", voiceGen.timeoutMs <= 12_000);
 
 console.log(`\n${failed ? `Failed: ${failed}` : "All voice foundation checks passed."}\n`);
 process.exit(failed ? 1 : 0);

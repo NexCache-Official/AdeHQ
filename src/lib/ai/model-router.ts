@@ -48,6 +48,8 @@ export type RouteOptions = {
   leadReply?: string;
   conversationMode?: string;
   promptTier?: EmployeePromptBuildOptions["promptTier"];
+  /** Live phone-call path: prefer streamed spoken answers after pre-search. */
+  voiceCall?: boolean;
   context?: RouteContext;
 };
 

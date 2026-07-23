@@ -191,17 +191,25 @@ const TOOL_WORK_MIN_TOKENS = 900;
 /** Token/temperature/timeout params shared by legacy + runtime paths. */
 export function resolveRouteGenerationParams(
   message: string,
-  options: { maxOutputTokens?: number; timeoutMs?: number } = {},
+  options: {
+    maxOutputTokens?: number;
+    timeoutMs?: number;
+    voiceCall?: boolean;
+  } = {},
 ): EmployeeRouteGenerationParams {
-  const baseMaxTokens = options.maxOutputTokens ?? 2000;
+  const baseMaxTokens = options.voiceCall
+    ? Math.min(options.maxOutputTokens ?? 280, 320)
+    : (options.maxOutputTokens ?? 2000);
   const lengthBasedCap = inferOutputTokenCap(message, baseMaxTokens);
-  const maxOutputTokens = messageLikelyNeedsStructuredEffects(message)
-    ? Math.max(lengthBasedCap, Math.min(TOOL_WORK_MIN_TOKENS, baseMaxTokens))
-    : lengthBasedCap;
+  // Voice turns never need tool-call JSON headroom — spoken prose only.
+  const maxOutputTokens =
+    !options.voiceCall && messageLikelyNeedsStructuredEffects(message)
+      ? Math.max(lengthBasedCap, Math.min(TOOL_WORK_MIN_TOKENS, baseMaxTokens))
+      : lengthBasedCap;
   return {
     maxOutputTokens,
     temperature: inferTemperature(message),
-    timeoutMs: options.timeoutMs ?? 45_000,
+    timeoutMs: options.timeoutMs ?? (options.voiceCall ? 12_000 : 45_000),
   };
 }
 
