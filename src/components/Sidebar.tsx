@@ -78,7 +78,7 @@ export function Sidebar() {
 
   useEffect(() => {
     const workspaceId = state.workspace?.id;
-    if (!workspaceId) {
+    if (!workspaceId || backend === "demo") {
       setInboxUnread(0);
       return;
     }
@@ -100,7 +100,7 @@ export function Sidebar() {
       cancelled = true;
       clearInterval(timer);
     };
-  }, [state.workspace?.id, pathname]);
+  }, [state.workspace?.id, pathname, backend]);
 
   const myRole = state.workspaceMembers.find((m) => m.userId === state.user?.id)?.role;
   const canHire = canManageAiEmployees(myRole);

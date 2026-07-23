@@ -10,19 +10,19 @@ export function SidebarWorkHoursMeter() {
   const workspaceId = backend === "supabase" ? state.workspace?.id ?? null : null;
   const { data, loading } = useWorkspaceUsage(workspaceId);
 
-  if (!workspaceId) return null;
-
+  // Demo mode has no usage API — still render the meter so the rail matches Home.dc.html.
+  const isDemo = backend !== "supabase" || !workspaceId;
   const cap = data?.capacity;
-  const unlimited = cap?.unlimited ?? false;
-  // Same period total as Settings → Usage (floored ledger rollup).
-  const used = data?.totalWorkHours ?? cap?.used ?? 0;
-  const allowance = cap?.allowance ?? 0;
+  const unlimited = isDemo ? false : (cap?.unlimited ?? false);
+  const used = isDemo ? 0.41 : (data?.totalWorkHours ?? cap?.used ?? 0);
+  const allowance = isDemo ? 125 : (cap?.allowance ?? 0);
   const pct = unlimited || allowance <= 0 ? 0 : Math.min(100, (used / allowance) * 100);
-  const warn = cap?.warningLevel === "low" || cap?.warningLevel === "exhausted";
+  const warn = !isDemo && (cap?.warningLevel === "low" || cap?.warningLevel === "exhausted");
+  const href = isDemo ? "/settings" : "/settings/usage";
 
   return (
     <Link
-      href="/settings/usage"
+      href={href}
       className="block rounded-[10px] border border-[var(--rail-border)] bg-[var(--rail-fill)] px-[11px] py-[9px] transition-colors hover:bg-[var(--rail-hover)]"
       title="Hired AI employees only · Maya is free · rolling 7-day usage clock"
     >
@@ -31,11 +31,13 @@ export function SidebarWorkHoursMeter() {
           AI WORK HOURS
         </span>
         <span className="min-w-0 shrink truncate text-right font-mono text-[11px] font-medium tabular-nums text-[var(--rail-ink)]">
-          {loading
-            ? "…"
-            : unlimited
-              ? "Unlimited"
-              : `${used.toFixed(2)} / ${allowance.toFixed(2)}`}
+          {isDemo
+            ? `${used.toFixed(2)} / ${allowance.toFixed(2)}`
+            : loading
+              ? "…"
+              : unlimited
+                ? "Unlimited"
+                : `${used.toFixed(2)} / ${allowance.toFixed(2)}`}
         </span>
       </div>
       {!unlimited && (

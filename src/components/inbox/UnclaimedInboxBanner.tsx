@@ -12,7 +12,7 @@ const DISMISS_KEY = "adehq.inboxClaimBannerDismissed";
  * Home banner for admins when the workspace has not claimed an inbox address yet.
  */
 export function UnclaimedInboxBanner() {
-  const { state } = useStore();
+  const { state, backend } = useStore();
   const workspaceId = state.workspace.id;
   const role =
     state.workspaceMembers.find((m) => m.userId === state.user?.id)?.role ?? "member";
@@ -21,7 +21,8 @@ export function UnclaimedInboxBanner() {
   const [show, setShow] = useState(false);
 
   useEffect(() => {
-    if (!workspaceId || !isAdmin) {
+    // Demo mode has no signed-in Supabase session — skip mailbox probe.
+    if (!workspaceId || !isAdmin || backend === "demo") {
       setShow(false);
       return;
     }
