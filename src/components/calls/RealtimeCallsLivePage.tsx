@@ -55,6 +55,9 @@ function RealtimeCallsInner() {
   const [selectedRoomId, setSelectedRoomId] = useState("");
   const [premium, setPremium] = useState(false);
   const [premiumVoiceAllowed, setPremiumVoiceAllowed] = useState(false);
+  const [premiumVoiceHint, setPremiumVoiceHint] = useState(
+    "Available on Pro and above",
+  );
   const [active, setActive] = useState<ActiveCall | null>(null);
   const [history, setHistory] = useState<CallSessionSummary[]>([]);
   const [startingHumanId, setStartingHumanId] = useState<string | null>(null);
@@ -133,12 +136,25 @@ function RealtimeCallsInner() {
         if (!response.ok || cancelled) return;
         const body = (await response.json()) as {
           premiumVoiceEnabled?: boolean;
+          premiumVoiceEntitled?: boolean;
+          premiumConfigured?: boolean;
           enabled?: boolean;
         };
         if (cancelled) return;
         const allowed = Boolean(body.enabled && body.premiumVoiceEnabled);
         setPremiumVoiceAllowed(allowed);
         if (!allowed) setPremium(false);
+        if (allowed) {
+          setPremiumVoiceHint("Higher-quality voice for Pro plans and above");
+        } else if (body.enabled && body.premiumVoiceEntitled && body.premiumConfigured === false) {
+          setPremiumVoiceHint("Premium voice is temporarily unavailable");
+        } else if (body.enabled && body.premiumVoiceEntitled === false) {
+          setPremiumVoiceHint("Available on Pro and above");
+        } else if (!body.enabled) {
+          setPremiumVoiceHint("Live employee calls are not enabled yet");
+        } else {
+          setPremiumVoiceHint("Available on Pro and above");
+        }
       } catch {
         // Setup UI still works; Connect will surface entitlement errors.
       }
@@ -516,9 +532,7 @@ function RealtimeCallsInner() {
                     <span className="mt-1 block text-xs text-ink-3">
                       {voice === "standard"
                         ? "Efficient everyday speech"
-                        : premiumVoiceAllowed
-                          ? "Higher-quality voice for Pro plans and above"
-                          : "Available on Pro and above"}
+                        : premiumVoiceHint}
                     </span>
                   </button>
                 );

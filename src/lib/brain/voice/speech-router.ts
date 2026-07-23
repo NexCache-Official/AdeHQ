@@ -174,6 +174,8 @@ export async function resolveLiveCallEntitlements(
     return {
       ...operationallyBound,
       enabled: true,
+      // Alpha validates the full call stack, including premium TTS when configured.
+      premiumVoiceEnabled: true,
       maxCallDurationMinutes: Math.max(operationallyBound.maxCallDurationMinutes, 30),
       maxIdleMinutes: Math.max(operationallyBound.maxIdleMinutes, 5),
       maxTurnWh: Math.max(operationallyBound.maxTurnWh, 5),

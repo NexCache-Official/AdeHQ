@@ -18,9 +18,14 @@ export async function GET(request: NextRequest) {
     const premiumConfigured =
       process.env.ADEHQ_LIVE_TTS_XAI_PREMIUM === "1" &&
       Boolean(process.env.XAI_API_KEY?.trim());
+    const premiumVoiceEntitled = entitlements.premiumVoiceEnabled;
     return NextResponse.json({
       enabled: entitlements.enabled,
-      premiumVoiceEnabled: entitlements.premiumVoiceEnabled && premiumConfigured,
+      /** Plan allows premium AND xAI premium TTS is configured. */
+      premiumVoiceEnabled: premiumVoiceEntitled && premiumConfigured,
+      /** Plan alone (ignores provider config) — used for accurate UI copy. */
+      premiumVoiceEntitled,
+      premiumConfigured,
       recordingEnabled: entitlements.recordingEnabled,
       maxCallDurationMinutes: entitlements.maxCallDurationMinutes,
     });
