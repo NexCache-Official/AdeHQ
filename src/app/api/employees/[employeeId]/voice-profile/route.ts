@@ -7,10 +7,7 @@ import {
   requireWorkspaceMembership,
 } from "@/lib/supabase/auth-server";
 import { createSupabaseSecretClient } from "@/lib/supabase/server";
-import {
-  normalizeEmployeeVoiceProfile,
-  type EmployeeVoiceProfile,
-} from "@/lib/brain/voice";
+import { normalizeEmployeeVoiceProfile } from "@/lib/brain/voice";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -23,6 +20,7 @@ const profilePatchSchema = z.object({
     .optional(),
   pace: z.number().min(0.7).max(1.5).optional(),
   routePreference: z.enum(["auto", "standard", "premium", "local"]).optional(),
+  genderMode: z.enum(["auto", "female", "male"]).optional(),
   providerBindings: z
     .array(
       z.object({
@@ -38,15 +36,20 @@ const profilePatchSchema = z.object({
 async function loadEmployee(
   workspaceId: string,
   employeeId: string,
-): Promise<{ voice_profile: unknown } | null> {
+): Promise<{ voice_profile: unknown; name: string | null } | null> {
   const { data, error } = await createSupabaseSecretClient()
     .from("ai_employees")
-    .select("voice_profile")
+    .select("voice_profile, name")
     .eq("workspace_id", workspaceId)
     .eq("id", employeeId)
     .maybeSingle();
   if (error) throw error;
-  return data;
+  return data
+    ? {
+        voice_profile: data.voice_profile,
+        name: typeof data.name === "string" ? data.name : null,
+      }
+    : null;
 }
 
 export async function GET(
@@ -66,7 +69,10 @@ export async function GET(
       return NextResponse.json({ error: "Employee not found." }, { status: 404 });
     }
     return NextResponse.json({
-      profile: normalizeEmployeeVoiceProfile(employeeId, employee.voice_profile),
+      profile: normalizeEmployeeVoiceProfile(employeeId, employee.voice_profile, {
+        employeeName: employee.name,
+      }),
+      employeeName: employee.name,
     });
   } catch (error) {
     if (error instanceof AuthError) {
@@ -93,23 +99,32 @@ export async function PATCH(
       return NextResponse.json({ error: "Employee not found." }, { status: 404 });
     }
     const patch = profilePatchSchema.parse(await request.json());
-    const current = normalizeEmployeeVoiceProfile(
-      employeeId,
-      employee.voice_profile,
-    );
-    const next: EmployeeVoiceProfile = {
-      ...current,
+    const existingProfile =
+      employee.voice_profile && typeof employee.voice_profile === "object"
+        ? (employee.voice_profile as Record<string, unknown>)
+        : {};
+    const mergedRaw = {
+      ...existingProfile,
       ...patch,
-      accent: patch.accent === null ? undefined : (patch.accent ?? current.accent),
-      providerBindings: patch.providerBindings ?? current.providerBindings,
+      accent:
+        patch.accent === null
+          ? undefined
+          : (patch.accent ?? existingProfile.accent),
+      providerBindings:
+        patch.providerBindings ?? existingProfile.providerBindings,
     };
+    const next = normalizeEmployeeVoiceProfile(employeeId, mergedRaw, {
+      employeeName: employee.name,
+      // Auto/manual gender changes should re-seat the voice into the right pool.
+      realignGender: Boolean(patch.genderMode) || Boolean(patch.providerBindings),
+    });
     const { error } = await createSupabaseSecretClient()
       .from("ai_employees")
       .update({ voice_profile: next })
       .eq("workspace_id", workspaceId)
       .eq("id", employeeId);
     if (error) throw error;
-    return NextResponse.json({ profile: next });
+    return NextResponse.json({ profile: next, employeeName: employee.name });
   } catch (error) {
     if (error instanceof AuthError) {
       return NextResponse.json({ error: error.message }, { status: error.status });

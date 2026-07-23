@@ -31,11 +31,7 @@ import {
   cacheBridgeClip,
   getCachedBridgeClip,
 } from "./bridge-clips";
-import {
-  LIVE_CALL_BRIDGE_PHRASES,
-  LIVE_CALL_WORKING_PHRASES,
-  pickBridgePhrase,
-} from "./bridge-phrases";
+import { createProgressiveFillerScheduler } from "./intelligent-fillers";
 import { GroqWhisperAdapter } from "./live-adapters";
 import {
   normalizeSpeechLanguage,
@@ -718,15 +714,14 @@ export async function executeEmployeeCallTurn(input: {
     });
   };
 
-  // Immediate spoken bridge only on the full work path (research/tools).
-  // local_instant / voice_fast should start the real answer immediately.
+  // Intelligent progressive fillers while Brain/tools work — humans don't sit
+  // in dead air. Stop as soon as real answer content is speakable.
   const needsBridge =
     routeDecision.route === "work_full" &&
     (messageLikelyNeedsResearch(stt.text) ||
       isMetaResearchInstruction(stt.text) ||
       isAffirmativeSearchFollowUp(stt.text, ctx.room.messages, humanMessage.id));
-  let bridgeSpoken = false;
-  let workingBridgeSpoken = false;
+  let fillersStopped = false;
   const speakBridgePhrase = (phrase: string, kind: "bridge" | "working") => {
     const cacheKey = bridgeClipKey({
       routeId: primaryRouteId,
@@ -800,13 +795,42 @@ export async function executeEmployeeCallTurn(input: {
       })
       .catch(() => undefined);
   };
-  if (needsBridge) {
-    bridgeSpoken = true;
-    speakBridgePhrase(
-      pickBridgePhrase(turnId, LIVE_CALL_BRIDGE_PHRASES),
-      "bridge",
-    );
+  const fillerScheduler = createProgressiveFillerScheduler({
+    seed: turnId,
+    intervalMs: 2_400,
+    maxPhrases: routeDecision.route === "work_full" ? 3 : 2,
+    speak: (phrase, phase) => {
+      if (fillersStopped || input.signal?.aborted) return;
+      speakBridgePhrase(
+        phrase,
+        phase === "working" || phase === "searching" ? "working" : "bridge",
+      );
+    },
+  });
+  let delayedFillerTimer: ReturnType<typeof setTimeout> | null = null;
+  if (routeDecision.route === "work_full") {
+    fillerScheduler.start(needsBridge ? "searching" : "thinking");
+  } else if (routeDecision.route === "voice_fast") {
+    // If the fast Brain is slow to first token, speak a light thinking beat
+    // instead of dead air — cancel once content arrives.
+    delayedFillerTimer = setTimeout(() => {
+      if (
+        !fillersStopped &&
+        !latencyTrace.providerFirstContentTokenAt &&
+        !streamedReplyText.trim()
+      ) {
+        fillerScheduler.start("thinking");
+      }
+    }, 750);
   }
+  const stopFillers = () => {
+    fillersStopped = true;
+    fillerScheduler.stop();
+    if (delayedFillerTimer) {
+      clearTimeout(delayedFillerTimer);
+      delayedFillerTimer = null;
+    }
+  };
 
   const streamSanitizer = new StreamReplySanitizer();
   const chunkTimeout = setInterval(() => {
@@ -819,6 +843,7 @@ export async function executeEmployeeCallTurn(input: {
     if (!firstTokenAt) firstTokenAt = new Date().toISOString();
     if (!latencyTrace.firstSpeakablePhraseAt && delta.trim()) {
       markVoiceBrainLatency(latencyTrace, "firstSpeakablePhrase");
+      stopFillers();
     }
     streamedReplyText += delta;
     for (const chunk of chunker.push(delta)) enqueueSpeech(chunk);
@@ -929,11 +954,9 @@ export async function executeEmployeeCallTurn(input: {
                 turn: "using_tools",
                 activity,
               });
-              if (!bridgeSpoken && !workingBridgeSpoken && !speechStateStarted) {
-                workingBridgeSpoken = true;
-                speakBridgePhrase(
-                  pickBridgePhrase(`${turnId}:work`, LIVE_CALL_WORKING_PHRASES),
-                  "working",
+              if (!fillersStopped && !speechStateStarted) {
+                fillerScheduler.bump(
+                  activity === "searching" ? "searching" : "working",
                 );
               }
               return;
@@ -1008,6 +1031,7 @@ export async function executeEmployeeCallTurn(input: {
     throw error;
   } finally {
     clearInterval(chunkTimeout);
+    stopFillers();
   }
   const trailingSafe = streamSanitizer.finish();
   if (trailingSafe) {

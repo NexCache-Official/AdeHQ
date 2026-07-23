@@ -81,3 +81,5 @@ export * from "./voice-fast-brain";
 export * from "./async-effect-compiler";
 export * from "./voice-prefetch";
 export * from "./voice-lane-response";
+export * from "./voice-gender";
+export * from "./intelligent-fillers";

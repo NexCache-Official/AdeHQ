@@ -12,7 +12,22 @@ export const LIVE_CALL_BRIDGE_PHRASES = [
 
 export const LIVE_CALL_WORKING_PHRASES = [
   "Still on it — almost there.",
-  "Got it — wrapping this up now.",
+  "Digging a bit more.",
+  "One more second.",
+  "Got it forming — hang tight.",
+] as const;
+
+export const LIVE_CALL_THINKING_PHRASES = [
+  "Hmm — let me think.",
+  "Right — give me a beat.",
+  "Okay — working through that.",
+  "Yeah — one second.",
+] as const;
+
+export const LIVE_CALL_LEAD_IN_PHRASES = [
+  "So — here's what I'm seeing.",
+  "Alright — short version.",
+  "Okay — here's the answer.",
 ] as const;
 
 /** Stable pick so the same turn keeps one phrase for cache hits. */

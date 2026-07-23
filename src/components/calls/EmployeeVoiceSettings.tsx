@@ -1,20 +1,28 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { authHeaders } from "@/lib/api/auth-client";
 import { cn } from "@/lib/utils";
 
-const VOICES = [
-  { id: "eve", label: "Composed" },
-  { id: "ara", label: "Warm" },
-  { id: "leo", label: "Clear" },
-  { id: "rex", label: "Confident" },
-  { id: "sal", label: "Grounded" },
+const FEMALE_VOICES = [
+  { id: "eve", label: "Eve" },
+  { id: "ara", label: "Ara" },
 ] as const;
 
+const MALE_VOICES = [
+  { id: "leo", label: "Leo" },
+  { id: "rex", label: "Rex" },
+  { id: "sal", label: "Sal" },
+] as const;
+
+type GenderMode = "auto" | "female" | "male";
+
 type ProfileResponse = {
+  employeeName?: string | null;
   profile?: {
     pace?: number;
+    genderMode?: GenderMode;
+    resolvedGender?: "female" | "male";
     providerBindings?: Array<{
       provider: string;
       voiceId: string;
@@ -36,10 +44,18 @@ export function EmployeeVoiceSettings({
 }) {
   const [voiceId, setVoiceId] = useState("eve");
   const [pace, setPace] = useState(1);
+  const [genderMode, setGenderMode] = useState<GenderMode>("auto");
+  const [resolvedGender, setResolvedGender] = useState<"female" | "male">("female");
   const [saving, setSaving] = useState(false);
   const [previewing, setPreviewing] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [providerBindings, setProviderBindings] = useState<ProviderBinding[]>([]);
+  const [employeeName, setEmployeeName] = useState<string | null>(null);
+
+  const voiceOptions = useMemo(
+    () => (resolvedGender === "female" ? FEMALE_VOICES : MALE_VOICES),
+    [resolvedGender],
+  );
 
   useEffect(() => {
     if (!workspaceId || !employeeId) return;
@@ -60,6 +76,11 @@ export function EmployeeVoiceSettings({
         if (binding?.voiceId) setVoiceId(binding.voiceId);
         setProviderBindings(bindings);
         if (typeof body.profile?.pace === "number") setPace(body.profile.pace);
+        if (body.profile?.genderMode) setGenderMode(body.profile.genderMode);
+        if (body.profile?.resolvedGender) {
+          setResolvedGender(body.profile.resolvedGender);
+        }
+        if (body.employeeName) setEmployeeName(body.employeeName);
       } catch {
         // Keep call setup usable when profile loading is temporarily unavailable.
       } finally {
@@ -71,9 +92,17 @@ export function EmployeeVoiceSettings({
     };
   }, [employeeId, workspaceId]);
 
-  async function save(nextVoiceId: string, nextPace = pace) {
+  async function save(input: {
+    nextVoiceId?: string;
+    nextPace?: number;
+    nextGenderMode?: GenderMode;
+  }) {
+    const nextVoiceId = input.nextVoiceId ?? voiceId;
+    const nextPace = input.nextPace ?? pace;
+    const nextGenderMode = input.nextGenderMode ?? genderMode;
     setVoiceId(nextVoiceId);
     setPace(nextPace);
+    setGenderMode(nextGenderMode);
     setSaving(true);
     try {
       const nextBindings: ProviderBinding[] = [
@@ -94,11 +123,24 @@ export function EmployeeVoiceSettings({
           headers: await authHeaders(workspaceId),
           body: JSON.stringify({
             pace: nextPace,
+            genderMode: nextGenderMode,
             providerBindings: nextBindings,
           }),
         },
       );
-      if (response.ok) setProviderBindings(nextBindings);
+      if (!response.ok) return;
+      const body = (await response.json()) as ProfileResponse;
+      const bindings = body.profile?.providerBindings ?? nextBindings;
+      setProviderBindings(bindings);
+      const binding = bindings.find(
+        (candidate) =>
+          candidate.provider === "xai" && candidate.qualityTier === "standard",
+      );
+      if (binding?.voiceId) setVoiceId(binding.voiceId);
+      if (body.profile?.resolvedGender) {
+        setResolvedGender(body.profile.resolvedGender);
+      }
+      if (body.profile?.genderMode) setGenderMode(body.profile.genderMode);
     } finally {
       setSaving(false);
     }
@@ -128,14 +170,60 @@ export function EmployeeVoiceSettings({
   return (
     <div className="space-y-3">
       <div>
-        <p className="text-xs font-medium text-ink-3">Employee voice identity</p>
-        <div className="mt-2 grid grid-cols-5 gap-1.5">
-          {VOICES.map((voice) => (
+        <p className="text-xs font-medium text-ink-3">Voice gender</p>
+        <div className="mt-2 grid grid-cols-3 gap-1.5">
+          {(
+            [
+              { id: "auto", label: "Auto" },
+              { id: "female", label: "Female" },
+              { id: "male", label: "Male" },
+            ] as const
+          ).map((option) => (
+            <button
+              key={option.id}
+              type="button"
+              disabled={saving}
+              onClick={() =>
+                void save({
+                  nextGenderMode: option.id,
+                  // Let the server pick a voice in the new gender pool.
+                  nextVoiceId:
+                    option.id === "female"
+                      ? "eve"
+                      : option.id === "male"
+                        ? "leo"
+                        : voiceId,
+                })
+              }
+              className={cn(
+                "rounded-lg border px-2 py-2 text-xs transition-colors",
+                genderMode === option.id
+                  ? "border-accent-500 bg-accent-500/10 text-ink"
+                  : "border-border text-ink-3 hover:bg-muted",
+              )}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+        <p className="mt-1.5 text-[11px] text-ink-3">
+          Auto uses the employee first name
+          {employeeName ? ` (“${employeeName.split(/\s+/)[0]}”)` : ""} so female
+          employees get a female voice and male employees a male voice. Talking
+          style stays separate.
+        </p>
+      </div>
+      <div>
+        <p className="text-xs font-medium text-ink-3">
+          {resolvedGender === "female" ? "Female" : "Male"} voice
+        </p>
+        <div className="mt-2 grid grid-cols-3 gap-1.5">
+          {voiceOptions.map((voice) => (
             <button
               key={voice.id}
               type="button"
               disabled={saving}
-              onClick={() => void save(voice.id)}
+              onClick={() => void save({ nextVoiceId: voice.id })}
               className={cn(
                 "rounded-lg border px-2 py-2 text-xs transition-colors",
                 voice.id === voiceId
@@ -161,7 +249,7 @@ export function EmployeeVoiceSettings({
           value={pace}
           disabled={saving}
           onChange={(event) => setPace(Number(event.target.value))}
-          onPointerUp={() => void save(voiceId, pace)}
+          onPointerUp={() => void save({ nextPace: pace })}
           className="mt-2 w-full accent-accent-500"
         />
       </label>

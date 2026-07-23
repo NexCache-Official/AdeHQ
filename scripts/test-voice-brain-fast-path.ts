@@ -33,6 +33,8 @@ function sampleSnapshot(): VoiceSessionSnapshot {
       pace: 1,
       tone: "warm",
       routePreference: "auto",
+      genderMode: "auto",
+      resolvedGender: "female",
       providerBindings: [],
       premiumVoiceAllowed: false,
     },

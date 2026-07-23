@@ -26,6 +26,13 @@ lanes so ordinary conversation does not traverse the full workforce Brain.
 - **Economy/fallback:** SiliconFlow CosyVoice
 - **Premium:** xAI behind premium flag (Cartesia stays benchmark-only)
 
+## Voice gender + intelligent fillers
+
+- `genderMode: auto | female | male` — Auto infers from the employee first name
+  (Priya → female / Eve·Ara; David → male / Leo·Rex·Sal). Tone/pace stay separate.
+- Progressive fillers (`intelligent-fillers.ts`) speak short thinking/searching
+  beats while Brain/tools run, then stop when the first real answer phrase is ready.
+
 ## Benchmark
 
 ```bash

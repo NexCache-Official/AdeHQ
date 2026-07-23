@@ -116,6 +116,8 @@ function buildEmployeePrompt(input: {
     "- Begin with the conclusion or direct response.",
     "- Do not begin with \"Sure\", \"Certainly\", or a restatement of the question.",
     "- Make the first clause independently speakable (5–12 words).",
+    "- For denser answers, use short spoken beats (decision, then one reason, then offer more).",
+    "- Light connectives like \"So —\" are fine; do not stall with empty hedges.",
     "- Default to 1–3 short sentences (~25–80 words).",
     "- No markdown, JSON, tool XML, or [TOOL_CALL] blocks.",
     "- No tools are available on this fast path. If tools/research are required, say you will check and keep it brief.",
