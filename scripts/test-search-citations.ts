@@ -1,6 +1,7 @@
 import {
   realignSearchCitations,
   buildWebSourcesArtifactFromCards,
+  finalizeReplayedSearchPresentation,
 } from "@/lib/ai/search/source-normalizer";
 import type {
   NormalizedSearchSources,
@@ -126,6 +127,26 @@ assert(
   "artifact position 2 must be s1, matching the [2] marker",
 );
 
+// --- Cache/session replay must preserve the same alignment ------------------
+const replayed = finalizeReplayedSearchPresentation({
+  answer,
+  sources: rawSources,
+  query: "Apple quarterly revenue",
+});
+const replaySources = replayed.artifact?.meta?.webSources ?? [];
+assert(replaySources.length === 7, "replay must pull cited sources 6 and 7 back into the artifact");
+for (const n of markersIn(replayed.answer)) {
+  assert(
+    replaySources[n - 1]?.url === replayed.sources[n - 1]?.url,
+    `replayed marker [${n}] must resolve to the matching artifact source`,
+  );
+}
+assert(
+  !markersIn(replayed.answer).some((n) => n > replaySources.length),
+  "replayed answer must not contain an out-of-range citation marker",
+);
+
 console.log("✓ realignSearchCitations: markers renumbered, hidden citations recovered, junk dropped");
 console.log("✓ buildWebSourcesArtifactFromCards: artifact order matches inline markers");
+console.log("✓ cached/session replay keeps citation markers aligned with Sources cards");
 console.log("All search citation tests passed.");

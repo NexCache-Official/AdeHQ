@@ -633,7 +633,9 @@ context, then continue through the structured tool executor. Search failure no
 longer cancels an explicit mutation. The final message retains the web-source
 artifact, durable research is requested in `effects.memory`, and an explicit CRM
 deal has a conservative deterministic fallback if both model tool-call attempts
-no-op.
+no-op. Cache and research-session replay now also re-run citation alignment
+before rebuilding Sources cards, preventing stored `[6]`/`[7]` markers from
+outnumbering a re-ranked five-card artifact.
 
 **Live search proof:** the focused query found the Canterbury business at
 45 St Peter's Street, CT1 2BG, phone +44 1227 379330, email

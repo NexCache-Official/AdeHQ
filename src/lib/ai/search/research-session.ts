@@ -3,7 +3,7 @@ import type { MessageArtifact } from "@/lib/types";
 import { uid, nowISO } from "@/lib/utils";
 import { getResearchSessionTtlDays } from "./config";
 import type { SearchAnswerResult, SearchRoute } from "./types";
-import { buildWebSourcesArtifact, normalizeGatewaySearchSources } from "./source-normalizer";
+import { finalizeReplayedSearchPresentation } from "./source-normalizer";
 import { stripFillerWords } from "./search-cache";
 
 export type ResearchSessionReuse = {
@@ -141,18 +141,20 @@ export async function getReusableSessionFindings(
     if (!queriesOverlap(input.query, row.query)) continue;
 
     const sources = Array.isArray(row.sources) ? row.sources : [];
-    const normalized = normalizeGatewaySearchSources(sources, row.query, { maxUsed: 5 });
-    const artifact =
-      normalized.usedSourceCount > 0 ? buildWebSourcesArtifact(normalized) : undefined;
+    const presentation = finalizeReplayedSearchPresentation({
+      answer: row.answer,
+      sources,
+      query: row.query,
+    });
 
     return {
       sessionId: session.id,
-      answer: row.answer,
-      sources,
+      answer: presentation.answer,
+      sources: presentation.sources,
       route: (row.provider as SearchRoute) ?? "gateway_perplexity",
       providerRoute: (row.provider_route as SearchAnswerResult["providerRoute"]) ?? "vercel_gateway",
-      webSourcesArtifact: artifact,
-      searchSourcesArtifact: artifact,
+      webSourcesArtifact: presentation.artifact,
+      searchSourcesArtifact: presentation.artifact,
       confidence: row.confidence ?? undefined,
     };
   }

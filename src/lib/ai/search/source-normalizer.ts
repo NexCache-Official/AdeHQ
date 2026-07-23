@@ -303,6 +303,45 @@ export function realignSearchCitations(params: {
   return { text: rewritten, sources: ordered };
 }
 
+/**
+ * Rebuild a cached/session search answer so its inline markers and Sources
+ * artifact share exactly the same ordering. Replay previously re-ranked the
+ * sources to five cards while leaving the stored answer's [n] markers intact.
+ */
+export function finalizeReplayedSearchPresentation(input: {
+  answer: string;
+  sources: SearchSource[];
+  query: string;
+  searchNeed?: SearchNeed;
+}): {
+  answer: string;
+  sources: SearchSource[];
+  artifact?: import("@/lib/types").MessageArtifact;
+} {
+  const normalized = normalizeGatewaySearchSources(input.sources, input.query, {
+    maxUsed: 5,
+    searchNeed: input.searchNeed,
+  });
+  const aligned = realignSearchCitations({
+    text: stripInlineSourcesSection(input.answer),
+    rawSources: input.sources,
+    normalized,
+  });
+  const sources = aligned.sources.map((source) => ({
+    title: source.title,
+    url: source.url,
+    snippet: source.snippet,
+  }));
+  const artifact =
+    aligned.sources.length > 0
+      ? buildWebSourcesArtifactFromCards(aligned.sources, {
+          sourceCount: normalized.sourceCount,
+          excludedSourceCount: Math.max(0, normalized.sourceCount - aligned.sources.length),
+        })
+      : undefined;
+  return { answer: aligned.text, sources, artifact };
+}
+
 /** Remove inline Sources section — cards render separately. */
 export function stripInlineSourcesSection(text: string): string {
   return text

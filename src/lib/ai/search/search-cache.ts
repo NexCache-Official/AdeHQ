@@ -3,8 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { SearchAnswerResult, SearchRoute } from "./types";
 import type { MessageArtifact } from "@/lib/types";
 import {
-  buildWebSourcesArtifact,
-  normalizeGatewaySearchSources,
+  finalizeReplayedSearchPresentation,
   type NormalizedSearchSources,
 } from "./source-normalizer";
 import { nowISO } from "@/lib/utils";
@@ -141,21 +140,22 @@ type CacheRow = {
 
 function rowToCachedAnswer(row: CacheRow): CachedSearchAnswer {
   const sources = Array.isArray(row.sources) ? row.sources : [];
-  const normalized = normalizeGatewaySearchSources(sources, row.query, {
-    maxUsed: 5,
+  const presentation = finalizeReplayedSearchPresentation({
+    answer: row.answer,
+    sources,
+    query: row.query,
+    searchNeed: row.search_meta?.searchNeed,
   });
-  const artifact =
-    normalized.usedSourceCount > 0 ? buildWebSourcesArtifact(normalized) : undefined;
   return {
     cacheKey: row.cache_key,
     query: row.query,
-    answer: row.answer,
-    sources,
+    answer: presentation.answer,
+    sources: presentation.sources,
     route: row.route,
     providerRoute: row.provider_route,
     searchMeta: row.search_meta ?? undefined,
-    searchSourcesArtifact: artifact,
-    webSourcesArtifact: artifact,
+    searchSourcesArtifact: presentation.artifact,
+    webSourcesArtifact: presentation.artifact,
     hitCount: row.hit_count,
     confidence: row.search_meta?.confidence,
   };
