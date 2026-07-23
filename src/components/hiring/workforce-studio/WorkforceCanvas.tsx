@@ -22,7 +22,7 @@ import { Users, Building2, User, Trash2 } from "lucide-react";
 import { Card, Button, Badge } from "@/components/ui";
 import { uid } from "@/lib/utils";
 import { SeatCard } from "./RosterEditor";
-import type { CollaborationEdgeType, WorkforceBlueprintPayload } from "@/lib/hiring/workforce-studio/types";
+import type { CollaborationEdgeType, SimulationReport, WorkforceBlueprintPayload } from "@/lib/hiring/workforce-studio/types";
 
 const EDGE_COLOR: Record<CollaborationEdgeType, string> = {
   handoff: "#f59e0b",
@@ -67,7 +67,7 @@ function SeatNode({ data, selected }: NodeProps) {
       <div className="mt-1 flex items-center gap-1 text-[10px] uppercase text-ink-3">
         <span>{seat.seniority}</span>
         <span aria-hidden>·</span>
-        <span>{seat.modelMode}</span>
+        <span>Brain auto</span>
       </div>
       <Handle type="source" position={Position.Bottom} className="!h-2 !w-2 !bg-accent" />
     </div>
@@ -182,7 +182,15 @@ function layout(payload: WorkforceBlueprintPayload): { nodes: Node[]; edges: Edg
   return { nodes, edges };
 }
 
-export function WorkforceCanvas({ payload, updatePayload }: { payload: WorkforceBlueprintPayload; updatePayload: Updater }) {
+export function WorkforceCanvas({
+  payload,
+  updatePayload,
+  simulationReport = null,
+}: {
+  payload: WorkforceBlueprintPayload;
+  updatePayload: Updater;
+  simulationReport?: SimulationReport | null;
+}) {
   const { nodes, edges } = useMemo(() => layout(payload), [payload]);
   const [selection, setSelection] = useState<{ kind: "seat" | "room" | "edge"; id: string } | null>(null);
 
@@ -323,6 +331,19 @@ export function WorkforceCanvas({ payload, updatePayload }: { payload: Workforce
           <SeatCard
             seat={selectedSeat}
             rooms={payload.rooms}
+            defaultExpanded
+            worksWith={[
+              ...new Set(
+                payload.edges
+                  .filter((e) => e.fromSeatId === selectedSeat.id || e.toSeatId === selectedSeat.id)
+                  .map((e) => {
+                    const otherId = e.fromSeatId === selectedSeat.id ? e.toSeatId : e.fromSeatId;
+                    return payload.seats.find((s) => s.id === otherId)?.roleTitle;
+                  })
+                  .filter((t): t is string => Boolean(t)),
+              ),
+            ].slice(0, 3)}
+            capacityBand={simulationReport?.workHoursForecast.find((b) => b.seatId === selectedSeat.id) ?? null}
             onUpdate={(patch) => updateSeat(selectedSeat.id, patch)}
             onRemove={() => removeSeat(selectedSeat.id)}
             onSetRoom={(roomId) => setSeatRoom(selectedSeat.id, roomId)}

@@ -11,11 +11,17 @@ not just a multi-select hire form.
 ```text
 Company Operating Profile (persistent, versioned context)
         ↓
-Template pick + intake questions  →  composed WorkforceBlueprintPayload (draft)
+Business entry (NL description)  →  BusinessOperatingDiagnosis
         ↓
-Workforce Canvas (React Flow) + Roster editor + NL edits  — draft, lock, autosave
+Adaptive clarifying questions (≤5, stop early on confidence)
         ↓
-Simulate a Week  →  coverage / permission / WH-forecast report
+Archetype → functional modules → industry adaptation → curated pack
+        ↓
+compile to TemplateManifest → composeBlueprintFromTemplate
+        ↓
+Team reveal → canvas-first Studio + Maya goal-ops (WH impact diffs)
+        ↓
+Simulate a Week  →  coverage / permission / WH-band report
         ↓
 Approve  →  immutable snapshot (canonical hash) at a frozen revision
         ↓
@@ -23,6 +29,12 @@ Provision  →  idempotent, checkpointed, batched saga (team_hire_plans)
         ↓
 First Mission  →  welcome messages, outcome tasks, Team Charter + Role Scorecards
 ```
+
+**Secondary entry:** Starting points lists curated packs grouped by category
+(Commerce, Hospitality, Professional, Technology, Education/Media, Operational),
+assembled from the PR-22B ontology. Legacy `software_house` / `saas_startup` /
+`general_ops` remain for stable tech/ops graphs. Brain `modelMode` stays on the
+seat payload but is **not** customer-editable.
 
 ## Data model
 
@@ -62,22 +74,56 @@ defaults, evaluates scaling rules, and produces a `WorkforceBlueprintPayload`
 (`canonical.ts#canonicalHash` is key-order independent, used both for the
 composer's determinism tests and for the approval hash).
 
+## Business Architect (PR-22A)
+
+Entry is natural-language first (`BusinessEntryPanel` → diagnose → clarify →
+compose → `TeamReveal`). Server modules:
+
+| Module | Role |
+|---|---|
+| `diagnosis-types.ts` | `BusinessOperatingDiagnosis` + clarification types |
+| `diagnose-business.ts` | Free-text (+ optional website fetch) → diagnosis via `generateObject` |
+| `adaptive-questions.ts` | Next question or `{ done }` (cap 5 / confidence ≥ 0.75) |
+| `map-diagnosis-to-template.ts` | Archetype/modules/pack selection → manifest + intake |
+| `compose-from-diagnosis.ts` | Profile upsert + compose + optional mission polish + draft |
+| `ontology/*` | PR-22B archetypes, modules, adaptations, curated packs, compile |
+
+API: `POST .../architect/diagnose`, `.../next-question`, `.../compose`.
+Diagnosis + `businessDescription` persist on the company operating profile
+payload (no separate table).
+
+## Ontology (PR-22B)
+
+Three layers under `src/lib/hiring/workforce-studio/ontology/`:
+
+1. **Business archetypes** (16) — how the business operates
+2. **Functional modules** — reusable seat/room/edge fragments
+3. **Industry adaptations** — mission/KPI overlays (ecommerce support ≠ restaurant support)
+
+Curated packs are thin assemblies (`packs.ts`) compiled to `TemplateManifest` via
+`compilePackToManifest`. Legacy `software_house` / `saas_startup` / `general_ops`
+remain in the registry for composition parity; everything else is ontology-built.
+
+## Goal-based edits (PR-22D)
+
+`goal-ops.ts` runs deterministic recipes (`make_leaner`, `optimize_growth`,
+`optimize_support`, `reduce_costs`, `add_qc`, `increase_speed`, `more_cautious`,
+`prepare_expansion`, `design_around_humans`) producing `NlEditProposal` + WH
+impact bands. API: `POST .../blueprints/[id]/goal-op`. Free-text Ask Maya still
+uses `nl-edit.ts`.
+
 ## Editing surfaces
 
-- **Workforce Canvas** (`WorkforceCanvas.tsx`) — React Flow graph of seat /
-  room / human-reference nodes and typed edges. Full keyboard nav (arrow
-  selection, `Delete`/`Backspace` to remove), `aria-label`s, and an `sr-only`
-  hint block.
-- **Roster editor** (`RosterEditor.tsx`) — structured list fallback (used
-  automatically on mobile/tablet via `matchMedia`, and as the primary editor
-  before canvas work started). Includes the `AuthorityMatrixEditor` (all 11
-  capability domains × 4 access levels, table-based for a11y) and full
-  `WorkforceOutcome` authoring (title/metric/target/checkpointCadence).
-- **NL edit bar** (`NlEditBar.tsx`) — "Ask Maya" free-text edits. Always
-  reviewable: the LLM proposes a small typed diff (`nl-edit.ts` /
-  `nl-edit-apply.ts`), never a payload rewrite; nothing is applied until the
-  admin clicks Apply. See [Natural-language edits](#natural-language-edits)
-  below for the schema-reliability details.
+- **Workforce Canvas** (`WorkforceCanvas.tsx`) — default view on desktop
+  (≥1024px). React Flow graph of seat / room / human-reference nodes and typed
+  edges. Full keyboard nav, `aria-label`s, and an `sr-only` hint block.
+- **Roster editor** (`RosterEditor.tsx`) — compact seat cards + inspector;
+  list fallback on narrow viewports. Simulation panel shows **Expected weekly
+  capacity: low–high WH** with light/typical/busy copy. Includes the
+  `AuthorityMatrixEditor` and full `WorkforceOutcome` authoring.
+- **Maya panel** (`NlEditBar.tsx`) — nine goal-op shortcuts with WH impact review
+  plus free-text Ask Maya. Always reviewable diffs; see
+  [Natural-language edits](#natural-language-edits).
 - **Undo/redo** — capped client-side history stack in `useBlueprintEditor.ts`,
   wired to `Cmd/Ctrl+Z` / `Shift+Z`.
 - **Autosave + conflict recovery** — debounced autosave; a revision conflict
@@ -164,6 +210,9 @@ asks for.
 | Command | Covers |
 |---|---|
 | `npm run test:workforce-studio:composition` | Template manifest structural checks, JsonLogic scaling rules, deterministic composition, canonical hash. |
+| `npm run test:workforce-studio:architect` | Ontology pack compile integrity + diagnosis → pack mapping + adaptive-question stops. |
+| `npm run test:workforce-studio:goldens` | 35 offline business-description → diagnose heuristic → map → compose assertions. |
+| `npm run test:workforce-studio:pack-score` | Structural quality score across all registry packs (orphans, WH bands, safe JsonLogic). |
 | `npm run test:workforce-studio:provisioning` | Full lifecycle against a live Supabase service-role client: compose → lock → patch → approve → provision → complete; forced-failure compensation rollback; retry-after-failure with no duplicate resources; explicit 2/5/20-seat matrix. |
 | `npm run test:workforce-studio:promptfoo` | Golden + adversarial NL-edit scenarios against the real `proposeNlEdit` path via a live SiliconFlow call (`promptfoo/workforce-studio/`) — see below. |
 
@@ -191,6 +240,11 @@ since promptfoo runs outside the Next.js process).
 ```
 src/lib/hiring/workforce-studio/
   types.ts                 blueprint payload + seat + outcome + WH-forecast types
+  diagnosis-types.ts         BusinessOperatingDiagnosis + clarify types
+  diagnose-business.ts       NL → diagnosis
+  adaptive-questions.ts      progressive clarify / early stop
+  map-diagnosis-to-template.ts  thin pack mapping
+  compose-from-diagnosis.ts  diagnose path → draft blueprint
   composer.ts               template + intake answers → WorkforceBlueprintPayload
   json-logic.ts             safe JsonLogic evaluation for scaling rules
   canonical.ts              key-order-independent hashing (approval + determinism)
@@ -206,18 +260,20 @@ src/lib/hiring/workforce-studio/
   templates/                 software-house, saas-startup, general-ops manifests
 
 src/components/hiring/workforce-studio/
-  WorkforceStudioShell.tsx   top-level flow state machine (template → design → provisioning)
-  TemplatePicker.tsx, IntakeForm.tsx
-  WorkforceCanvas.tsx        React Flow canvas
-  RosterEditor.tsx           structured editor + AuthorityMatrixEditor + outcomes
-  NlEditBar.tsx              "Ask Maya" diff review UI
+  WorkforceStudioShell.tsx   architect → reveal → canvas Studio → provisioning
+  BusinessEntryPanel.tsx, DiagnosisPanel.tsx, ClarifyChatPanel.tsx, TeamReveal.tsx
+  TemplatePicker.tsx, IntakeForm.tsx   secondary "Starting points"
+  WorkforceCanvas.tsx        React Flow canvas (desktop default)
+  RosterEditor.tsx           compact cards + WH bands + AuthorityMatrixEditor
+  NlEditBar.tsx              Maya panel + shortcut prompts + diff review
   ProvisioningView.tsx       live plan/step progress
   useBlueprintEditor.ts      client state: draft, lock, autosave, undo/redo, NL edit
 
 src/app/(app)/hire/team/      Team hire mode route
-src/app/api/hiring/workforce-studio/   blueprints, plans, templates, profile routes
+src/app/api/hiring/workforce-studio/   architect/*, blueprints, plans, templates, profile
 
 promptfoo/workforce-studio/   golden + adversarial NL-edit regression suite
 scripts/test-workforce-studio-composition.ts
+scripts/test-workforce-architect.ts
 scripts/test-workforce-studio-provisioning.ts
 ```

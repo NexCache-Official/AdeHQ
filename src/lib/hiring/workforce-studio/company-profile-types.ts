@@ -2,6 +2,8 @@
 // reads before composing a team. Kept separate from any one blueprint so it
 // survives across many team-building sessions.
 
+import type { BusinessOperatingDiagnosis } from "./diagnosis-types";
+
 export type CompanyOperatingProfile = {
   workspaceId: string;
   revision: number;
@@ -15,11 +17,20 @@ export type CompanyOperatingProfile = {
   riskTolerance: "conservative" | "balanced" | "aggressive";
   complianceNotes: string;
   workingHoursNote: string;
+  /** Free-text business description from the Architect entry. */
+  businessDescription: string;
+  /** Optional website URL used as diagnosis context. */
+  websiteUrl: string;
+  /** Latest structured diagnosis from Maya Business Architect (PR-22A). */
+  diagnosis: BusinessOperatingDiagnosis | null;
   updatedBy: string | null;
   updatedAt: string;
 };
 
-export const EMPTY_COMPANY_PROFILE: Omit<CompanyOperatingProfile, "workspaceId" | "updatedAt" | "updatedBy"> = {
+export const EMPTY_COMPANY_PROFILE: Omit<
+  CompanyOperatingProfile,
+  "workspaceId" | "updatedAt" | "updatedBy"
+> = {
   revision: 0,
   companyName: "",
   industry: "",
@@ -31,4 +42,7 @@ export const EMPTY_COMPANY_PROFILE: Omit<CompanyOperatingProfile, "workspaceId" 
   riskTolerance: "balanced",
   complianceNotes: "",
   workingHoursNote: "",
+  businessDescription: "",
+  websiteUrl: "",
+  diagnosis: null,
 };

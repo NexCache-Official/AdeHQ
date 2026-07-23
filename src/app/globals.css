@@ -468,6 +468,14 @@ body {
     transform: translateY(0);
   }
 }
+
+/* Workforce Studio entry / reveal polish (PR-22E) */
+.studio-fade-up {
+  animation: lgFadeUp 0.45s ease both;
+}
+.studio-fade-up-delay {
+  animation: lgFadeUp 0.5s ease 0.08s both;
+}
 @keyframes lgAurora {
   0%,
   100% {

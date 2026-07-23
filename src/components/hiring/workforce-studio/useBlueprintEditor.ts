@@ -5,17 +5,28 @@ import {
   acquireLock,
   advanceProvisioning,
   approveBlueprintDraft,
+  composeFromArchitect,
   createBlueprint,
+  diagnoseBusinessArchitect,
   fetchBlueprint,
   fetchTemplates,
+  nextArchitectQuestion,
   patchBlueprintDraft,
+  proposeGoalBlueprintOp,
   proposeNlBlueprintEdit,
   releaseLock,
   runSimulation as runSimulationApi,
   startProvisioning,
+  type GoalOpImpactSummary,
   type TemplateSummary,
 } from "@/lib/hiring/workforce-studio/client-api";
+import type { GoalOpId } from "@/lib/hiring/workforce-studio/goal-ops";
 import { applyNlEditProposal, type NlEditDiffOp, type NlEditProposal } from "@/lib/hiring/workforce-studio/nl-edit-apply";
+import type {
+  BusinessOperatingDiagnosis,
+  ClarificationAnswer,
+  ClarificationQuestion,
+} from "@/lib/hiring/workforce-studio/diagnosis-types";
 import type {
   SimulationReport,
   TeamHirePlanRecord,
@@ -26,6 +37,10 @@ import type {
 
 export type StudioPhase =
   | "loading"
+  | "architect_entry"
+  | "architect_diagnosis"
+  | "architect_clarify"
+  | "team_reveal"
   | "templates"
   | "intake"
   | "editor"
@@ -58,8 +73,26 @@ export function useBlueprintEditor(workspaceId: string | null) {
   const [steps, setSteps] = useState<TeamHirePlanStep[]>([]);
 
   const [nlAsking, setNlAsking] = useState(false);
-  const [nlProposal, setNlProposal] = useState<{ proposal: NlEditProposal; ops: NlEditDiffOp[] } | null>(null);
+  const [nlProposal, setNlProposal] = useState<{
+    proposal: NlEditProposal;
+    ops: NlEditDiffOp[];
+    impact?: GoalOpImpactSummary | null;
+  } | null>(null);
   const [nlMessage, setNlMessage] = useState<string | null>(null);
+
+  // PR-22A Business Architect state
+  const [businessDescription, setBusinessDescription] = useState("");
+  const [websiteUrl, setWebsiteUrl] = useState("");
+  const [diagnosis, setDiagnosis] = useState<BusinessOperatingDiagnosis | null>(null);
+  const [clarifyAnswers, setClarifyAnswers] = useState<ClarificationAnswer[]>([]);
+  const [currentQuestion, setCurrentQuestion] = useState<ClarificationQuestion | null>(null);
+  const [clarifyAskedCount, setClarifyAskedCount] = useState(0);
+  const [clarifyRemaining, setClarifyRemaining] = useState(0);
+  const [architectBusy, setArchitectBusy] = useState(false);
+  const [designReasons, setDesignReasons] = useState<string[]>([]);
+  const [revealWhLow, setRevealWhLow] = useState(0);
+  const [revealWhHigh, setRevealWhHigh] = useState(0);
+  const [mappingReason, setMappingReason] = useState<string | null>(null);
 
   // Autosave/save conflict — set when a save is rejected because someone
   // else (or another tab) saved a newer revision first. We NEVER silently
@@ -86,10 +119,10 @@ export function useBlueprintEditor(workspaceId: string | null) {
         const list = await fetchTemplates(workspaceId);
         if (cancelled) return;
         setTemplates(list);
-        setPhase("templates");
+        setPhase("architect_entry");
       } catch (err) {
         if (cancelled) return;
-        setError(err instanceof Error ? err.message : "Failed to load team templates.");
+        setError(err instanceof Error ? err.message : "Failed to load Workforce Studio.");
         setPhase("error");
       }
     })();
@@ -139,6 +172,152 @@ export function useBlueprintEditor(workspaceId: string | null) {
     }
     setIntakeAnswers(defaults);
     setPhase("intake");
+  }, []);
+
+  const openStartingPoints = useCallback(() => {
+    setError(null);
+    setPhase("templates");
+  }, []);
+
+  const startBlankTeam = useCallback(() => {
+    const general = templates.find((t) => t.key === "general_ops") ?? templates[0];
+    if (!general) {
+      setError("No team systems are available yet.");
+      return;
+    }
+    chooseTemplate(general);
+  }, [templates, chooseTemplate]);
+
+  const runDiagnose = useCallback(
+    async (description: string, siteUrl: string) => {
+      if (!workspaceId) return;
+      setArchitectBusy(true);
+      setError(null);
+      setBusinessDescription(description);
+      setWebsiteUrl(siteUrl);
+      try {
+        const result = await diagnoseBusinessArchitect(workspaceId, {
+          description,
+          websiteUrl: siteUrl || undefined,
+        });
+        setDiagnosis(result.diagnosis);
+        setClarifyAnswers([]);
+        setCurrentQuestion(null);
+        setPhase("architect_diagnosis");
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Maya couldn't diagnose that business.");
+      } finally {
+        setArchitectBusy(false);
+      }
+    },
+    [workspaceId],
+  );
+
+  const composeArchitectTeam = useCallback(
+    async (answers: ClarificationAnswer[]) => {
+      if (!workspaceId || !diagnosis) return;
+      setArchitectBusy(true);
+      setError(null);
+      const leftoverId = blueprintIdRef.current;
+      const leftoverToken = lockTokenRef.current;
+      if (leftoverId && leftoverToken) {
+        void releaseLock(workspaceId, leftoverId, leftoverToken);
+        blueprintIdRef.current = null;
+        lockTokenRef.current = null;
+        setLockToken(null);
+      }
+      try {
+        const result = await composeFromArchitect(workspaceId, {
+          diagnosis,
+          answers,
+          businessDescription,
+          websiteUrl: websiteUrl || undefined,
+        });
+        blueprintIdRef.current = result.blueprint.id;
+        setBlueprint(result.blueprint);
+        setDraftPayload(result.blueprint.draftPayload);
+        setLockToken(result.lockToken);
+        setBlueprintName(result.blueprint.name);
+        setDirty(false);
+        setSimulationReport(null);
+        setDesignReasons(result.designReasons);
+        setRevealWhLow(result.expectedWeeklyWhLow);
+        setRevealWhHigh(result.expectedWeeklyWhHigh);
+        setMappingReason(result.mappingReason);
+        pastRef.current = [];
+        futureRef.current = [];
+        setHistoryTick((t) => t + 1);
+        setPhase("team_reveal");
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Maya couldn't compose the team.");
+      } finally {
+        setArchitectBusy(false);
+      }
+    },
+    [workspaceId, diagnosis, businessDescription, websiteUrl],
+  );
+
+  const beginClarify = useCallback(async () => {
+    if (!workspaceId || !diagnosis) return;
+    setArchitectBusy(true);
+    setError(null);
+    try {
+      const next = await nextArchitectQuestion(workspaceId, {
+        diagnosis,
+        answers: clarifyAnswers,
+      });
+      if (next.done) {
+        await composeArchitectTeam(clarifyAnswers);
+      } else {
+        setCurrentQuestion(next.question);
+        setClarifyAskedCount(next.askedCount);
+        setClarifyRemaining(next.remainingEstimate);
+        setPhase("architect_clarify");
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Couldn't load the next question.");
+    } finally {
+      setArchitectBusy(false);
+    }
+  }, [workspaceId, diagnosis, clarifyAnswers, composeArchitectTeam]);
+
+  const answerClarify = useCallback(
+    async (optionId: string, freeText?: string) => {
+      if (!workspaceId || !diagnosis || !currentQuestion) return;
+      const nextAnswers: ClarificationAnswer[] = [
+        ...clarifyAnswers,
+        {
+          questionId: currentQuestion.id,
+          optionId: optionId === "free_text" ? undefined : optionId,
+          freeText,
+        },
+      ];
+      setClarifyAnswers(nextAnswers);
+      setArchitectBusy(true);
+      setError(null);
+      try {
+        const next = await nextArchitectQuestion(workspaceId, {
+          diagnosis,
+          answers: nextAnswers,
+        });
+        if (next.done) {
+          await composeArchitectTeam(nextAnswers);
+        } else {
+          setCurrentQuestion(next.question);
+          setClarifyAskedCount(next.askedCount);
+          setClarifyRemaining(next.remainingEstimate);
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Couldn't continue the interview.");
+      } finally {
+        setArchitectBusy(false);
+      }
+    },
+    [workspaceId, diagnosis, currentQuestion, clarifyAnswers, composeArchitectTeam],
+  );
+
+  const openStudioFromReveal = useCallback(() => {
+    setPhase("editor");
   }, []);
 
   const setAnswer = useCallback((questionId: string, value: unknown) => {
@@ -233,7 +412,7 @@ export function useBlueprintEditor(workspaceId: string | null) {
         setNlMessage(result.message ?? "I couldn't turn that into a concrete change.");
         setNlProposal(null);
       } else {
-        setNlProposal({ proposal: result.proposal, ops: result.ops });
+        setNlProposal({ proposal: result.proposal, ops: result.ops, impact: null });
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Maya couldn't process that request.");
@@ -241,6 +420,29 @@ export function useBlueprintEditor(workspaceId: string | null) {
       setNlAsking(false);
     }
   }, [workspaceId, blueprint]);
+
+  const runGoalOp = useCallback(
+    async (op: GoalOpId) => {
+      if (!workspaceId || !blueprint) return;
+      setNlAsking(true);
+      setNlMessage(null);
+      setError(null);
+      try {
+        const result = await proposeGoalBlueprintOp(workspaceId, blueprint.id, op);
+        if (!result.proposal || result.ops.length === 0) {
+          setNlMessage(result.message ?? "No structural change needed for that goal.");
+          setNlProposal(null);
+        } else {
+          setNlProposal({ proposal: result.proposal, ops: result.ops, impact: result.impact });
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Maya couldn't process that goal.");
+      } finally {
+        setNlAsking(false);
+      }
+    },
+    [workspaceId, blueprint],
+  );
 
   const applyNlProposal = useCallback(() => {
     if (!nlProposal) return;
@@ -251,6 +453,17 @@ export function useBlueprintEditor(workspaceId: string | null) {
   const discardNlProposal = useCallback(() => {
     setNlProposal(null);
     setNlMessage(null);
+  }, []);
+
+  const dismissAssumption = useCallback((assumptionId: string) => {
+    setDiagnosis((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        assumptions: prev.assumptions.filter((a) => a.id !== assumptionId),
+        confidence: Math.min(0.95, prev.confidence + 0.03),
+      };
+    });
   }, []);
 
   // Dedupes concurrent save() calls within this tab (e.g. autosave firing at
@@ -477,8 +690,27 @@ export function useBlueprintEditor(workspaceId: string | null) {
     nlProposal,
     nlMessage,
     askMaya,
+    runGoalOp,
     applyNlProposal,
     discardNlProposal,
+    dismissAssumption,
+    diagnosis,
+    businessDescription,
+    websiteUrl,
+    currentQuestion,
+    clarifyAskedCount,
+    clarifyRemaining,
+    architectBusy,
+    designReasons,
+    revealWhLow,
+    revealWhHigh,
+    mappingReason,
+    runDiagnose,
+    beginClarify,
+    answerClarify,
+    openStudioFromReveal,
+    openStartingPoints,
+    startBlankTeam,
     backToTemplates: () => {
       // Release the server-side draft lock before clearing local state.
       // Without this, "Start over" orphans the lock for up to LOCK_TTL and a
@@ -504,9 +736,16 @@ export function useBlueprintEditor(workspaceId: string | null) {
       setNlProposal(null);
       setNlMessage(null);
       setSaveConflict(null);
+      setDiagnosis(null);
+      setClarifyAnswers([]);
+      setCurrentQuestion(null);
+      setDesignReasons([]);
+      setMappingReason(null);
+      setBusinessDescription("");
+      setWebsiteUrl("");
       pastRef.current = [];
       futureRef.current = [];
-      setPhase("templates");
+      setPhase("architect_entry");
     },
   };
 }

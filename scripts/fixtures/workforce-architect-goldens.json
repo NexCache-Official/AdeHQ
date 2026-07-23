@@ -1,0 +1,403 @@
+[
+  {
+    "id": "shopify_gym",
+    "description": "I run a Shopify store selling gym accessories. ~300 orders a month.",
+    "expectedArchetypeId": "ecommerce_dtc",
+    "expectedPackKey": "shopify_store",
+    "requiredRoleKeys": [
+      "customer_support_agent",
+      "operations_assistant"
+    ],
+    "forbiddenRoleKeys": [],
+    "maxSeats": 8
+  },
+  {
+    "id": "dtc_skincare",
+    "description": "DTC skincare brand on Shopify with ads and email retention.",
+    "expectedArchetypeId": "ecommerce_dtc",
+    "expectedPackKey": null,
+    "requiredRoleKeys": [
+      "operations_assistant"
+    ],
+    "forbiddenRoleKeys": [
+      "software_engineer"
+    ],
+    "maxSeats": 10
+  },
+  {
+    "id": "retail_convenience",
+    "description": "I own three convenience stores and need help with stock and staffing admin.",
+    "expectedArchetypeId": "physical_retail",
+    "expectedPackKey": "physical_retail_store",
+    "requiredRoleKeys": [
+      "operations_assistant"
+    ],
+    "forbiddenRoleKeys": [],
+    "maxSeats": 8
+  },
+  {
+    "id": "wholesale",
+    "description": "Wholesale distribution business shipping to retailers weekly.",
+    "expectedArchetypeId": "logistics_distribution",
+    "expectedPackKey": "wholesale_distribution",
+    "requiredRoleKeys": [
+      "operations_assistant"
+    ],
+    "forbiddenRoleKeys": [],
+    "maxSeats": 8
+  },
+  {
+    "id": "restaurant",
+    "description": "Family restaurant, one location, dine-in + delivery. Help with reservations and reviews.",
+    "expectedArchetypeId": "restaurant_hospitality",
+    "expectedPackKey": "restaurant",
+    "requiredRoleKeys": [
+      "operations_assistant",
+      "customer_support_agent"
+    ],
+    "forbiddenRoleKeys": [
+      "software_engineer"
+    ],
+    "maxSeats": 8
+  },
+  {
+    "id": "cafe",
+    "description": "Neighbourhood caf\u00e9 and bakery with morning rush and catering orders.",
+    "expectedArchetypeId": "restaurant_hospitality",
+    "expectedPackKey": null,
+    "requiredRoleKeys": [
+      "operations_assistant"
+    ],
+    "forbiddenRoleKeys": [],
+    "maxSeats": 8
+  },
+  {
+    "id": "hotel",
+    "description": "Small guesthouse with bookings, guest messages, and housekeeping coordination.",
+    "expectedArchetypeId": "restaurant_hospitality",
+    "expectedPackKey": null,
+    "requiredRoleKeys": [
+      "operations_assistant"
+    ],
+    "forbiddenRoleKeys": [],
+    "maxSeats": 8
+  },
+  {
+    "id": "salon",
+    "description": "Hair salon booking appointments and following up with clients.",
+    "expectedArchetypeId": "healthcare_wellness",
+    "expectedPackKey": "salon_beauty",
+    "requiredRoleKeys": [
+      "operations_assistant"
+    ],
+    "forbiddenRoleKeys": [],
+    "maxSeats": 6
+  },
+  {
+    "id": "gym",
+    "description": "Boutique fitness studio with memberships and class schedules.",
+    "expectedArchetypeId": "healthcare_wellness",
+    "expectedPackKey": "gym_fitness",
+    "requiredRoleKeys": [
+      "operations_assistant"
+    ],
+    "forbiddenRoleKeys": [],
+    "maxSeats": 8
+  },
+  {
+    "id": "trades",
+    "description": "Plumbing and home services company \u2014 quoting, scheduling, customer updates.",
+    "expectedArchetypeId": "trades_home_services",
+    "expectedPackKey": "home_services_trades",
+    "requiredRoleKeys": [
+      "operations_assistant",
+      "sales_development_rep"
+    ],
+    "forbiddenRoleKeys": [],
+    "maxSeats": 8
+  },
+  {
+    "id": "accounting",
+    "description": "Small accounting firm with three partners. Proposals and client follow-ups eat the week.",
+    "expectedArchetypeId": "professional_services",
+    "expectedPackKey": "accounting_firm",
+    "requiredRoleKeys": [
+      "bookkeeping_assistant"
+    ],
+    "forbiddenRoleKeys": [
+      "software_engineer"
+    ],
+    "maxSeats": 8
+  },
+  {
+    "id": "legal",
+    "description": "Boutique law firm needing matter admin and careful client communications.",
+    "expectedArchetypeId": "professional_services",
+    "expectedPackKey": "legal_services",
+    "requiredRoleKeys": [
+      "operations_assistant"
+    ],
+    "forbiddenRoleKeys": [],
+    "maxSeats": 8
+  },
+  {
+    "id": "consultancy",
+    "description": "Management consultancy \u2014 proposals, delivery admin, and pipeline.",
+    "expectedArchetypeId": "professional_services",
+    "expectedPackKey": "consultancy",
+    "requiredRoleKeys": [
+      "sales_development_rep"
+    ],
+    "forbiddenRoleKeys": [],
+    "maxSeats": 8
+  },
+  {
+    "id": "mkt_agency",
+    "description": "Marketing agency running ads and content for SMB clients.",
+    "expectedArchetypeId": "marketing_agency",
+    "expectedPackKey": "marketing_agency",
+    "requiredRoleKeys": [
+      "marketing_manager"
+    ],
+    "forbiddenRoleKeys": [],
+    "maxSeats": 8
+  },
+  {
+    "id": "recruitment",
+    "description": "Recruitment agency coordinating candidates and client hiring managers.",
+    "expectedArchetypeId": "recruitment_staffing",
+    "expectedPackKey": "recruitment_agency",
+    "requiredRoleKeys": [
+      "sales_development_rep"
+    ],
+    "forbiddenRoleKeys": [],
+    "maxSeats": 8
+  },
+  {
+    "id": "real_estate",
+    "description": "Real estate agency with listings, viewings, and prospect enquiries.",
+    "expectedArchetypeId": "real_estate_property",
+    "expectedPackKey": "real_estate_agency",
+    "requiredRoleKeys": [
+      "operations_assistant",
+      "sales_development_rep"
+    ],
+    "forbiddenRoleKeys": [],
+    "maxSeats": 8
+  },
+  {
+    "id": "property_mgmt",
+    "description": "Property management company handling tenants and maintenance requests.",
+    "expectedArchetypeId": "real_estate_property",
+    "expectedPackKey": "property_management",
+    "requiredRoleKeys": [
+      "operations_assistant",
+      "customer_support_agent"
+    ],
+    "forbiddenRoleKeys": [],
+    "maxSeats": 8
+  },
+  {
+    "id": "saas",
+    "description": "B2B SaaS subscription analytics product for product teams.",
+    "expectedArchetypeId": "software_product",
+    "expectedPackKey": "saas_startup",
+    "requiredRoleKeys": [
+      "product_manager",
+      "full_stack_developer"
+    ],
+    "forbiddenRoleKeys": [],
+    "maxSeats": 10
+  },
+  {
+    "id": "agency_dev",
+    "description": "Development agency shipping client mobile apps and web products.",
+    "expectedArchetypeId": "software_agency",
+    "expectedPackKey": "software_house",
+    "requiredRoleKeys": [
+      "product_manager",
+      "software_engineer"
+    ],
+    "forbiddenRoleKeys": [],
+    "maxSeats": 10
+  },
+  {
+    "id": "mobile_startup",
+    "description": "Mobile app startup building a consumer habit product.",
+    "expectedArchetypeId": "software_product",
+    "expectedPackKey": null,
+    "requiredRoleKeys": [
+      "product_manager"
+    ],
+    "forbiddenRoleKeys": [],
+    "maxSeats": 10
+  },
+  {
+    "id": "ai_startup",
+    "description": "AI startup with a SaaS product and research-heavy roadmap.",
+    "expectedArchetypeId": "software_product",
+    "expectedPackKey": null,
+    "requiredRoleKeys": [
+      "product_manager"
+    ],
+    "forbiddenRoleKeys": [],
+    "maxSeats": 12
+  },
+  {
+    "id": "it_msp",
+    "description": "IT support provider for SMBs with tickets and client onboarding.",
+    "expectedArchetypeId": "software_agency",
+    "expectedPackKey": "it_support_provider",
+    "requiredRoleKeys": [
+      "customer_support_agent"
+    ],
+    "forbiddenRoleKeys": [],
+    "maxSeats": 8
+  },
+  {
+    "id": "tutoring",
+    "description": "University tutoring business with sessions and parent updates.",
+    "expectedArchetypeId": "education_training",
+    "expectedPackKey": "tutoring_business",
+    "requiredRoleKeys": [
+      "project_manager",
+      "customer_support_agent"
+    ],
+    "forbiddenRoleKeys": [],
+    "maxSeats": 8
+  },
+  {
+    "id": "online_course",
+    "description": "Online course business with cohort launches and learner support.",
+    "expectedArchetypeId": "education_training",
+    "expectedPackKey": "online_course_business",
+    "requiredRoleKeys": [
+      "project_manager"
+    ],
+    "forbiddenRoleKeys": [],
+    "maxSeats": 8
+  },
+  {
+    "id": "youtube",
+    "description": "YouTube creator business with publishing cadence and sponsorships.",
+    "expectedArchetypeId": "creator_media",
+    "expectedPackKey": "creator_youtube",
+    "requiredRoleKeys": [
+      "marketing_manager"
+    ],
+    "forbiddenRoleKeys": [],
+    "maxSeats": 8
+  },
+  {
+    "id": "newsletter",
+    "description": "Newsletter media company with editorial calendar and audience growth.",
+    "expectedArchetypeId": "creator_media",
+    "expectedPackKey": "newsletter_media",
+    "requiredRoleKeys": [
+      "marketing_manager"
+    ],
+    "forbiddenRoleKeys": [],
+    "maxSeats": 8
+  },
+  {
+    "id": "nonprofit",
+    "description": "Community nonprofit coordinating donors, volunteers, and programs.",
+    "expectedArchetypeId": "nonprofit_community",
+    "expectedPackKey": null,
+    "requiredRoleKeys": [
+      "operations_assistant"
+    ],
+    "forbiddenRoleKeys": [],
+    "maxSeats": 8
+  },
+  {
+    "id": "clinic",
+    "description": "Dental clinic appointments and patient follow-up admin.",
+    "expectedArchetypeId": "healthcare_wellness",
+    "expectedPackKey": null,
+    "requiredRoleKeys": [
+      "operations_assistant"
+    ],
+    "forbiddenRoleKeys": [],
+    "maxSeats": 6
+  },
+  {
+    "id": "multi_retail",
+    "description": "Multi-location retail fashion brand with stock and store CX.",
+    "expectedArchetypeId": "physical_retail",
+    "expectedPackKey": null,
+    "requiredRoleKeys": [
+      "operations_assistant"
+    ],
+    "forbiddenRoleKeys": [],
+    "maxSeats": 10
+  },
+  {
+    "id": "ecommerce_brand",
+    "description": "Ecommerce brand selling home goods with ads, email, and returns.",
+    "expectedArchetypeId": "ecommerce_dtc",
+    "expectedPackKey": "ecommerce_brand",
+    "requiredRoleKeys": [
+      "operations_assistant",
+      "customer_support_agent"
+    ],
+    "forbiddenRoleKeys": [],
+    "maxSeats": 10
+  },
+  {
+    "id": "sales_team",
+    "description": "I need a sales department to build outbound pipeline for our B2B offer.",
+    "expectedArchetypeId": "general_business",
+    "expectedPackKey": "sales_department",
+    "requiredRoleKeys": [
+      "sales_development_rep"
+    ],
+    "forbiddenRoleKeys": [],
+    "maxSeats": 6
+  },
+  {
+    "id": "support_dept",
+    "description": "We need a customer support department for a growing inbox.",
+    "expectedArchetypeId": "general_business",
+    "expectedPackKey": null,
+    "requiredRoleKeys": [
+      "customer_support_agent"
+    ],
+    "forbiddenRoleKeys": [],
+    "maxSeats": 6
+  },
+  {
+    "id": "finance_team",
+    "description": "Finance and reporting team for monthly close and invoices.",
+    "expectedArchetypeId": "general_business",
+    "expectedPackKey": null,
+    "requiredRoleKeys": [
+      "bookkeeping_assistant"
+    ],
+    "forbiddenRoleKeys": [],
+    "maxSeats": 6
+  },
+  {
+    "id": "exec_office",
+    "description": "Executive office support for a founder drowning in follow-ups.",
+    "expectedArchetypeId": "general_business",
+    "expectedPackKey": null,
+    "requiredRoleKeys": [
+      "executive_assistant"
+    ],
+    "forbiddenRoleKeys": [],
+    "maxSeats": 6
+  },
+  {
+    "id": "general_ops",
+    "description": "General small business needing ops, books, and admin help.",
+    "expectedArchetypeId": "general_business",
+    "expectedPackKey": "general_ops",
+    "requiredRoleKeys": [
+      "operations_assistant",
+      "bookkeeping_assistant"
+    ],
+    "forbiddenRoleKeys": [],
+    "maxSeats": 6
+  }
+]

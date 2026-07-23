@@ -3,6 +3,11 @@
 
 import { authHeaders } from "@/lib/api/auth-client";
 import type { CompanyOperatingProfile } from "./company-profile-types";
+import type {
+  BusinessOperatingDiagnosis,
+  ClarificationAnswer,
+  ClarificationQuestion,
+} from "./diagnosis-types";
 import type { WorkforceBlueprintPayload, WorkforceBlueprintRecord, SimulationReport } from "./types";
 import type { TeamHirePlanRecord, TeamHirePlanStep } from "./types";
 import type { NlEditDiffOp, NlEditProposal } from "./nl-edit-apply";
@@ -13,6 +18,7 @@ export type TemplateSummary = {
   name: string;
   description: string;
   industry: string;
+  category?: string;
   intakeQuestions: import("./templates/types").IntakeQuestion[];
   baseSeatCount: number;
   scalingRuleCount: number;
@@ -197,6 +203,33 @@ export async function proposeNlBlueprintEdit(
   );
 }
 
+export type GoalOpImpactSummary = {
+  beforeLowWh: number;
+  beforeHighWh: number;
+  afterLowWh: number;
+  afterHighWh: number;
+  deltaLowWh: number;
+  deltaHighWh: number;
+  bullets: string[];
+};
+
+export async function proposeGoalBlueprintOp(
+  workspaceId: string,
+  blueprintId: string,
+  op: string,
+): Promise<{
+  proposal: NlEditProposal | null;
+  ops: NlEditDiffOp[];
+  impact: GoalOpImpactSummary | null;
+  message?: string;
+}> {
+  return req(
+    `/api/hiring/workforce-studio/blueprints/${blueprintId}/goal-op`,
+    { method: "POST", body: JSON.stringify({ workspaceId, op }) },
+    workspaceId,
+  );
+}
+
 export async function advanceProvisioning(
   workspaceId: string,
   planId: string,
@@ -204,6 +237,61 @@ export async function advanceProvisioning(
   return req(
     `/api/hiring/workforce-studio/plans/${planId}/advance`,
     { method: "POST", body: JSON.stringify({ workspaceId }) },
+    workspaceId,
+  );
+}
+
+export async function diagnoseBusinessArchitect(
+  workspaceId: string,
+  params: { description: string; websiteUrl?: string },
+): Promise<{ diagnosis: BusinessOperatingDiagnosis; profile: CompanyOperatingProfile }> {
+  return req(
+    "/api/hiring/workforce-studio/architect/diagnose",
+    { method: "POST", body: JSON.stringify({ workspaceId, ...params }) },
+    workspaceId,
+  );
+}
+
+export async function nextArchitectQuestion(
+  workspaceId: string,
+  params: { diagnosis: BusinessOperatingDiagnosis; answers: ClarificationAnswer[] },
+): Promise<
+  | {
+      done: false;
+      question: ClarificationQuestion;
+      askedCount: number;
+      remainingEstimate: number;
+    }
+  | { done: true; confidence: number; askedCount: number; reason: string }
+> {
+  return req(
+    "/api/hiring/workforce-studio/architect/next-question",
+    { method: "POST", body: JSON.stringify({ workspaceId, ...params }) },
+    workspaceId,
+  );
+}
+
+export async function composeFromArchitect(
+  workspaceId: string,
+  params: {
+    diagnosis: BusinessOperatingDiagnosis;
+    answers: ClarificationAnswer[];
+    businessDescription: string;
+    websiteUrl?: string;
+  },
+): Promise<{
+  blueprint: WorkforceBlueprintRecord;
+  lockToken: string;
+  lockExpiresAt: string;
+  designReasons: string[];
+  expectedWeeklyWhLow: number;
+  expectedWeeklyWhHigh: number;
+  templateKey: string;
+  mappingReason: string;
+}> {
+  return req(
+    "/api/hiring/workforce-studio/architect/compose",
+    { method: "POST", body: JSON.stringify({ workspaceId, ...params }) },
     workspaceId,
   );
 }

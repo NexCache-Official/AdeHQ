@@ -56,6 +56,9 @@ export async function PUT(request: NextRequest) {
         riskTolerance: (body.riskTolerance as RiskTolerance) ?? "balanced",
         complianceNotes: body.complianceNotes?.trim() ?? "",
         workingHoursNote: body.workingHoursNote?.trim() ?? "",
+        businessDescription: "",
+        websiteUrl: "",
+        diagnosis: null,
       },
     });
 

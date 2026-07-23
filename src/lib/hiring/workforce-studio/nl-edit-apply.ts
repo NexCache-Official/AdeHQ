@@ -89,6 +89,32 @@ export type NlEditDiffOp =
   | { kind: "update_seat"; seatId: string; roleTitle: string; fields: string[] }
   | { kind: "add_outcome"; title: string };
 
+/** Build reviewable ops from a proposal against the current payload. */
+export function buildNlEditOps(payload: WorkforceBlueprintPayload, proposal: NlEditProposal): NlEditDiffOp[] {
+  const ops: NlEditDiffOp[] = [];
+  proposal.addSeats.forEach((s, i) => {
+    ops.push({
+      kind: "add_seat",
+      roleTitle: proposal.addSeatTitles[i] ?? s.roleKey,
+      mission: s.mission,
+    });
+  });
+  for (const seatId of proposal.removeSeatIds) {
+    const seat = payload.seats.find((s) => s.id === seatId);
+    if (seat) ops.push({ kind: "remove_seat", seatId, roleTitle: seat.roleTitle });
+  }
+  for (const update of proposal.updateSeats) {
+    const seat = payload.seats.find((s) => s.id === update.seatId);
+    if (!seat) continue;
+    const fields = Object.keys(update).filter((k) => k !== "seatId" && update[k as keyof typeof update] !== undefined);
+    if (fields.length) ops.push({ kind: "update_seat", seatId: update.seatId, roleTitle: seat.roleTitle, fields });
+  }
+  for (const outcome of proposal.addOutcomes) {
+    ops.push({ kind: "add_outcome", title: outcome.title });
+  }
+  return ops;
+}
+
 /** Deterministically apply an already-reviewed proposal to a draft payload. */
 export function applyNlEditProposal(
   payload: WorkforceBlueprintPayload,

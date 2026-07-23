@@ -6,6 +6,51 @@ Scope of this pass: Phase 1 (partial), Phase 2/3 (partial via Maya/Elena/David),
 
 ---
 
+## Session 2026-07-23 — PR-22B → 22E (ontology, goal diffs, goldens)
+
+**Shipped on top of 22A/C:**
+- **22B ontology** — 16 archetypes, reusable functional modules, industry
+  adaptations, ~30 curated packs compiled to `TemplateManifest`; Starting
+  points grouped by category. Legacy software_house / saas_startup / general_ops
+  retained for stable tech/ops graphs.
+- **22D goal-ops** — deterministic Maya shortcuts with WH impact review card;
+  `POST .../goal-op`; free-text NL edit unchanged.
+- **22E** — 35 offline business-description goldens, pack quality scorer, light
+  `studio-fade-up` motion on entry/diagnosis/reveal, assumption dismiss on
+  diagnosis.
+
+**Verify:** `npm run test:workforce-studio:architect`, `:composition`,
+`:goldens`, `:pack-score`; `npx tsc --noEmit`.
+
+**Residual:** PDF/document import still out; live promptfoo architect goldens
+optional; full human usability study not in-repo.
+
+---
+
+## Session 2026-07-23 — PR-22A + thin PR-22C (Maya Business Architect)
+
+**Shipped:** Natural-language Business Architect entry for Workforce Studio
+(`/hire/team`): diagnose → ≤5 adaptive clarify questions → map to existing
+packs → team reveal → canvas-first Studio. Brain model picker hidden
+(customer-facing); WH shown as low–high bands with light/typical/busy copy;
+Maya panel shortcuts (leaner / growth / support). Template picker demoted to
+"Starting points". Compose still feeds unchanged Simulate / Approve / Provision.
+
+**QA notes / residual risk:**
+- Website URL fetch into diagnose is best-effort (timeout + size cap); no PDF
+  import yet (explicit non-goal).
+- Industry differentiation beyond pack + intake flags is still thin until
+  PR-22B (archetype/module registry) — Shopify vs restaurant both land on
+  `general_ops` with different intake/mission polish, not fully distinct packs.
+- Goal-based structural diffs (beyond Maya prompt shortcuts) remain PR-22D.
+
+**Verify:**
+- `npm run test:workforce-studio:architect`
+- `npm run test:workforce-studio:composition`
+- Manual: description → reveal → Open Studio (no model select) → Simulate shows WH band → Start over releases lock
+
+---
+
 ## Session 2026-07-16 — White-hat security hardening (app.adehq.com)
 
 **Probes (cheap, no flood):**

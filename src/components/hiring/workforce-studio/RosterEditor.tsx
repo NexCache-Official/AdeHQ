@@ -21,7 +21,8 @@ export function RosterEditor({
   simulationReport: SimulationReport | null;
 }) {
   const roles = getAllRoles();
-  const [view, setView] = useState<"list" | "canvas">("list");
+  // Canvas-first on desktop (PR-22C); list remains the accessible fallback.
+  const [view, setView] = useState<"list" | "canvas">("canvas");
 
   // The React Flow canvas needs real pointer + trackpad precision to be
   // usable — on mobile/tablet widths we force the accessible list view and
@@ -166,11 +167,12 @@ export function RosterEditor({
         ) : null}
 
         {view === "canvas" && canUseCanvas ? (
-          <WorkforceCanvas payload={payload} updatePayload={updatePayload} />
+          <WorkforceCanvas payload={payload} updatePayload={updatePayload} simulationReport={simulationReport} />
         ) : (
           <SeatsSection
             payload={payload}
             roles={roles}
+            simulationReport={simulationReport}
             onUpdateSeat={updateSeat}
             onRemoveSeat={removeSeat}
             onAddSeat={addSeat}
@@ -191,6 +193,7 @@ export function RosterEditor({
 function SeatsSection({
   payload,
   roles,
+  simulationReport,
   onUpdateSeat,
   onRemoveSeat,
   onAddSeat,
@@ -198,12 +201,14 @@ function SeatsSection({
 }: {
   payload: WorkforceBlueprintPayload;
   roles: ReturnType<typeof getAllRoles>;
+  simulationReport: SimulationReport | null;
   onUpdateSeat: (seatId: string, patch: Partial<WorkforceSeat>) => void;
   onRemoveSeat: (seatId: string) => void;
   onAddSeat: (roleKey: string) => void;
   onSetSeatRoom: (seatId: string, roomId: string) => void;
 }) {
   const [addRoleKey, setAddRoleKey] = useState(roles[0]?.roleKey ?? "");
+  const titleById = new Map(payload.seats.map((s) => [s.id, s.roleTitle]));
 
   return (
     <section>
@@ -227,127 +232,171 @@ function SeatsSection({
         </div>
       </div>
       <div className="space-y-3">
-        {payload.seats.map((seat) => (
-          <SeatCard
-            key={seat.id}
-            seat={seat}
-            rooms={payload.rooms}
-            onUpdate={(patch) => onUpdateSeat(seat.id, patch)}
-            onRemove={() => onRemoveSeat(seat.id)}
-            onSetRoom={(roomId) => onSetSeatRoom(seat.id, roomId)}
-          />
-        ))}
+        {payload.seats.map((seat) => {
+          const worksWith = payload.edges
+            .filter((e) => e.fromSeatId === seat.id || e.toSeatId === seat.id)
+            .map((e) => titleById.get(e.fromSeatId === seat.id ? e.toSeatId : e.fromSeatId))
+            .filter((t): t is string => Boolean(t));
+          const band = simulationReport?.workHoursForecast.find((b) => b.seatId === seat.id) ?? null;
+          return (
+            <SeatCard
+              key={seat.id}
+              seat={seat}
+              rooms={payload.rooms}
+              worksWith={[...new Set(worksWith)].slice(0, 3)}
+              capacityBand={band}
+              onUpdate={(patch) => onUpdateSeat(seat.id, patch)}
+              onRemove={() => onRemoveSeat(seat.id)}
+              onSetRoom={(roomId) => onSetSeatRoom(seat.id, roomId)}
+            />
+          );
+        })}
       </div>
     </section>
   );
 }
 
+function authoritySummary(policy: WorkforceSeat["authorityPolicy"]): string {
+  const entries = Object.entries(policy ?? {});
+  if (entries.length === 0) return "No authority set";
+  const autonomous = entries.filter(([, level]) => level === "act_autonomously").length;
+  const gated = entries.filter(([, level]) => level === "act_with_approval" || level === "read").length;
+  if (autonomous >= entries.length - 1) return "Mostly autonomous";
+  if (gated > autonomous) return "Approval-gated";
+  return `${autonomous} autonomous · ${entries.length} domains`;
+}
+
 export function SeatCard({
   seat,
   rooms,
+  worksWith = [],
+  capacityBand = null,
   onUpdate,
   onRemove,
   onSetRoom,
+  defaultExpanded = false,
 }: {
   seat: WorkforceSeat;
   rooms: WorkforceBlueprintPayload["rooms"];
+  worksWith?: string[];
+  capacityBand?: SimulationReport["workHoursForecast"][number] | null;
   onUpdate: (patch: Partial<WorkforceSeat>) => void;
   onRemove: () => void;
   onSetRoom: (roomId: string) => void;
+  defaultExpanded?: boolean;
 }) {
+  const [expanded, setExpanded] = useState(defaultExpanded);
   const [authorityOpen, setAuthorityOpen] = useState(false);
+  const missionLine = seat.mission.trim().split(/\n/)[0]?.slice(0, 120) || "No mission yet";
+
   return (
     <Card className="space-y-3 p-4">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="truncate font-semibold text-ink">{seat.roleTitle}</div>
+          <p className="mt-1 truncate text-[12px] text-ink-2">{missionLine}</p>
+          <div className="mt-2 flex flex-wrap gap-1.5 text-[10px] text-ink-3">
+            <Badge className="bg-muted text-ink-3">{seat.seniority}</Badge>
+            <Badge className="bg-muted text-ink-3">Brain: Auto</Badge>
+            <Badge className="bg-muted text-ink-3">{authoritySummary(seat.authorityPolicy)}</Badge>
+            {capacityBand ? (
+              <Badge className="bg-accent-soft text-accent-d">
+                {capacityBand.lowWh}–{capacityBand.highWh} WH
+              </Badge>
+            ) : null}
+          </div>
+          {worksWith.length > 0 ? (
+            <p className="mt-1.5 truncate text-[11px] text-ink-3">Works with {worksWith.join(", ")}</p>
+          ) : null}
+        </div>
+        <div className="flex shrink-0 items-center gap-1">
+          <Button size="sm" variant="ghost" onClick={() => setExpanded((v) => !v)}>
+            {expanded ? "Hide" : "Edit"}
+          </Button>
+          <button type="button" onClick={onRemove} className="rounded-lg p-1.5 text-ink-3 hover:bg-danger/10 hover:text-danger">
+            <Trash2 className="h-4 w-4" />
+          </button>
+        </div>
+      </div>
+
+      {expanded ? (
+        <>
           <input
             value={seat.operationalVariant ?? ""}
             placeholder="Variant (e.g. Frontend)"
             onChange={(e) => onUpdate({ operationalVariant: e.target.value })}
-            className="mt-1 w-full max-w-[280px] rounded-md border border-transparent bg-transparent px-0 text-[12px] text-ink-3 outline-none focus:border-border focus:bg-surface focus:px-1.5 focus:py-0.5"
+            className="w-full max-w-[280px] rounded-md border border-border bg-surface px-1.5 py-0.5 text-[12px] text-ink-3 outline-none focus:border-accent"
           />
-        </div>
-        <button type="button" onClick={onRemove} className="rounded-lg p-1.5 text-ink-3 hover:bg-danger/10 hover:text-danger">
-          <Trash2 className="h-4 w-4" />
-        </button>
-      </div>
 
-      <textarea
-        value={seat.mission}
-        onChange={(e) => onUpdate({ mission: e.target.value })}
-        rows={2}
-        className="w-full resize-none rounded-lg border border-border bg-surface px-3 py-2 text-[13px] outline-none focus:border-accent"
-      />
+          <textarea
+            value={seat.mission}
+            onChange={(e) => onUpdate({ mission: e.target.value })}
+            rows={2}
+            className="w-full resize-none rounded-lg border border-border bg-surface px-3 py-2 text-[13px] outline-none focus:border-accent"
+          />
 
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-        <label className="space-y-1">
-          <span className="block text-[10px] uppercase text-ink-3">Seniority</span>
-          <select
-            value={seat.seniority}
-            onChange={(e) => onUpdate({ seniority: e.target.value as WorkforceSeat["seniority"] })}
-            className="w-full rounded-md border border-border bg-surface px-2 py-1 text-xs"
-          >
-            {["assistant", "specialist", "manager", "director", "advisor"].map((s) => (
-              <option key={s} value={s}>
-                {s}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="space-y-1">
-          <span className="block text-[10px] uppercase text-ink-3">Model</span>
-          <select
-            value={seat.modelMode}
-            onChange={(e) => onUpdate({ modelMode: e.target.value as WorkforceSeat["modelMode"] })}
-            className="w-full rounded-md border border-border bg-surface px-2 py-1 text-xs"
-          >
-            {["cheap", "balanced", "strong", "long_context", "coding", "creative"].map((m) => (
-              <option key={m} value={m}>
-                {m}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="col-span-2 space-y-1">
-          <span className="block text-[10px] uppercase text-ink-3">Primary room</span>
-          <select
-            value={seat.primaryRoomId ?? ""}
-            onChange={(e) => onSetRoom(e.target.value)}
-            className="w-full rounded-md border border-border bg-surface px-2 py-1 text-xs"
-          >
-            <option value="">— none —</option>
-            {rooms.map((r) => (
-              <option key={r.id} value={r.id}>
-                {r.name}
-              </option>
-            ))}
-          </select>
-        </label>
-      </div>
-
-      <div>
-        <button
-          type="button"
-          onClick={() => setAuthorityOpen((v) => !v)}
-          aria-expanded={authorityOpen}
-          className="flex w-full items-center justify-between gap-1 text-[10px] uppercase text-ink-3 hover:text-ink"
-        >
-          <span className="flex items-center gap-1">
-            <ShieldAlert className="h-3 w-3" /> Authority policy
-          </span>
-          <ChevronDown className={cn("h-3.5 w-3.5 transition", authorityOpen && "rotate-180")} />
-        </button>
-        {authorityOpen ? (
-          <div className="mt-2">
-            <AuthorityMatrixEditor
-              seatId={seat.id}
-              policy={seat.authorityPolicy}
-              onChange={(domain, level) => onUpdate({ authorityPolicy: { ...seat.authorityPolicy, [domain]: level } })}
-            />
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            <label className="space-y-1">
+              <span className="block text-[10px] uppercase text-ink-3">Seniority</span>
+              <select
+                value={seat.seniority}
+                onChange={(e) => onUpdate({ seniority: e.target.value as WorkforceSeat["seniority"] })}
+                className="w-full rounded-md border border-border bg-surface px-2 py-1 text-xs"
+              >
+                {["assistant", "specialist", "manager", "director", "advisor"].map((s) => (
+                  <option key={s} value={s}>
+                    {s}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="space-y-1">
+              <span className="block text-[10px] uppercase text-ink-3">Brain</span>
+              <div className="rounded-md border border-border bg-canvas px-2 py-1 text-xs text-ink-2">
+                Automatically selected
+              </div>
+            </label>
+            <label className="col-span-2 space-y-1">
+              <span className="block text-[10px] uppercase text-ink-3">Primary room</span>
+              <select
+                value={seat.primaryRoomId ?? ""}
+                onChange={(e) => onSetRoom(e.target.value)}
+                className="w-full rounded-md border border-border bg-surface px-2 py-1 text-xs"
+              >
+                <option value="">— none —</option>
+                {rooms.map((r) => (
+                  <option key={r.id} value={r.id}>
+                    {r.name}
+                  </option>
+                ))}
+              </select>
+            </label>
           </div>
-        ) : null}
-      </div>
+
+          <div>
+            <button
+              type="button"
+              onClick={() => setAuthorityOpen((v) => !v)}
+              aria-expanded={authorityOpen}
+              className="flex w-full items-center justify-between gap-1 text-[10px] uppercase text-ink-3 hover:text-ink"
+            >
+              <span className="flex items-center gap-1">
+                <ShieldAlert className="h-3 w-3" /> Authority policy
+              </span>
+              <ChevronDown className={cn("h-3.5 w-3.5 transition", authorityOpen && "rotate-180")} />
+            </button>
+            {authorityOpen ? (
+              <div className="mt-2">
+                <AuthorityMatrixEditor
+                  seatId={seat.id}
+                  policy={seat.authorityPolicy}
+                  onChange={(domain, level) => onUpdate({ authorityPolicy: { ...seat.authorityPolicy, [domain]: level } })}
+                />
+              </div>
+            ) : null}
+          </div>
+        </>
+      ) : null}
     </Card>
   );
 }
@@ -584,7 +633,7 @@ function SimulationPanel({ report }: { report: SimulationReport | null }) {
   if (!report) {
     return (
       <Card className="p-4 text-[13px] text-ink-3">
-        Run a simulation to check coverage, permissions, and expected weekly Work Hours before approving.
+        Run a simulation to check coverage, permissions, and expected weekly capacity before approving.
       </Card>
     );
   }
@@ -592,10 +641,13 @@ function SimulationPanel({ report }: { report: SimulationReport | null }) {
   const critical = report.findings.filter((f) => f.severity === "critical");
   const warnings = report.findings.filter((f) => f.severity === "warning");
   const info = report.findings.filter((f) => f.severity === "info");
+  const lowWh = Math.round(report.workHoursForecast.reduce((sum, b) => sum + b.lowWh, 0));
+  const highWh = Math.round(report.workHoursForecast.reduce((sum, b) => sum + b.highWh, 0));
+  const typicalWh = Math.round(report.totalExpectedWeeklyWh);
 
   return (
     <Card className="space-y-4 p-4">
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         {report.passed ? (
           <Badge className="bg-green/15 text-green">
             <CheckCircle2 className="h-3.5 w-3.5" /> Ready
@@ -605,7 +657,16 @@ function SimulationPanel({ report }: { report: SimulationReport | null }) {
             <AlertTriangle className="h-3.5 w-3.5" /> Needs attention
           </Badge>
         )}
-        <span className="text-[12px] text-ink-3">~{report.totalExpectedWeeklyWh} WH/week</span>
+      </div>
+
+      <div className="rounded-xl border border-border bg-canvas px-3 py-2.5">
+        <p className="text-[11px] uppercase tracking-wide text-ink-3">Expected weekly capacity</p>
+        <p className="mt-0.5 text-[18px] font-semibold tabular-nums text-ink">
+          {lowWh}–{highWh} <span className="text-[13px] font-medium text-ink-3">WH</span>
+        </p>
+        <p className="mt-1 text-[11px] leading-relaxed text-ink-3">
+          Light ~{lowWh} · Typical ~{typicalWh} · Busy ~{highWh} WH/week
+        </p>
       </div>
 
       {report.narration ? <p className="text-[13px] leading-relaxed text-ink-2">{report.narration}</p> : null}
@@ -615,7 +676,7 @@ function SimulationPanel({ report }: { report: SimulationReport | null }) {
       <FindingGroup title="Info" findings={info} icon={<Info className="h-3.5 w-3.5 text-ink-3" />} />
 
       <div>
-        <div className="mb-1.5 font-mono text-[10px] uppercase text-ink-3">Work Hours forecast (per seat)</div>
+        <div className="mb-1.5 font-mono text-[10px] uppercase text-ink-3">Capacity by seat</div>
         <div className="space-y-1">
           {report.workHoursForecast.map((band) => (
             <WhBandRow key={band.seatId} band={band} />
@@ -628,17 +689,18 @@ function SimulationPanel({ report }: { report: SimulationReport | null }) {
   );
 }
 
+/** Business-facing labels for capability domains (hide infra jargon). */
 const DOMAIN_LABEL: Record<string, string> = {
-  room_scope: "Rooms",
-  tasks: "Tasks",
-  crm: "CRM",
-  email: "Email",
-  drive: "Drive",
-  artifact: "Artifacts",
-  social: "Social",
-  calendar: "Calendar",
-  investor: "Investor",
-  team: "Team",
+  room_scope: "Team coordination",
+  tasks: "Getting work done",
+  crm: "Customers & pipeline",
+  email: "Inbox & outreach",
+  drive: "Files & knowledge",
+  artifact: "Docs & deliverables",
+  social: "Social presence",
+  calendar: "Scheduling",
+  investor: "Investor updates",
+  team: "People ops",
   research: "Research",
 };
 
@@ -668,6 +730,7 @@ function WhBandRow({ band }: { band: SimulationReport["workHoursForecast"][numbe
       {open && band.byCapability.length > 0 ? (
         <div className="ml-4 mt-0.5 space-y-0.5 border-l border-border pl-2">
           {band.byCapability
+            .filter((slice) => slice.domain !== "room_scope")
             .slice()
             .sort((a, b) => b.expectedWh - a.expectedWh)
             .map((slice) => (
@@ -689,6 +752,7 @@ function WhCapabilitySummary({ bands }: { bands: SimulationReport["workHoursFore
   const totals = new Map<string, number>();
   for (const band of bands) {
     for (const slice of band.byCapability) {
+      if (slice.domain === "room_scope") continue;
       totals.set(slice.domain, (totals.get(slice.domain) ?? 0) + slice.expectedWh);
     }
   }
@@ -698,7 +762,7 @@ function WhCapabilitySummary({ bands }: { bands: SimulationReport["workHoursFore
 
   return (
     <div>
-      <div className="mb-1.5 font-mono text-[10px] uppercase text-ink-3">Work Hours by capability (team-wide)</div>
+      <div className="mb-1.5 font-mono text-[10px] uppercase text-ink-3">Where the team spends capacity</div>
       <div className="space-y-1.5">
         {sorted.map(([domain, wh]) => (
           <div key={domain} className="space-y-0.5">
