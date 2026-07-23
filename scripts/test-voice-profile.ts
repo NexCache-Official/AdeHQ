@@ -4,8 +4,10 @@ import {
   cacheBridgeClip,
   getCachedBridgeClip,
   HybridLocalTurnDetector,
+  isLikelySttHallucination,
   normalizeEmployeeVoiceProfile,
   resolveProviderVoice,
+  transcriptHasUsableSpeech,
 } from "../src/lib/brain/voice";
 
 const first = normalizeEmployeeVoiceProfile("employee-a", {
@@ -51,6 +53,17 @@ async function main() {
         silenceDurationMs: 500,
         semanticCompletionConfidence: 0.8,
       })
+    ).commit,
+    false,
+    "500ms silence must not endpoint with the longer pause policy",
+  );
+  assert.equal(
+    (
+      await detector.evaluate({
+        speechDurationMs: 800,
+        silenceDurationMs: 1200,
+        semanticCompletionConfidence: 0.8,
+      })
     ).reason,
     "semantic_complete",
   );
@@ -58,12 +71,45 @@ async function main() {
     (
       await detector.evaluate({
         speechDurationMs: 800,
-        silenceDurationMs: 850,
+        silenceDurationMs: 1900,
         semanticCompletionConfidence: 0,
       })
     ).reason,
     "hard_timeout",
   );
+
+  assert.equal(
+    isLikelySttHallucination({
+      text: "Thank you.",
+      confidence: 0.4,
+      durationSeconds: 0.5,
+    }),
+    true,
+  );
+  assert.equal(
+    isLikelySttHallucination({
+      text: "Thanks for watching!",
+      durationSeconds: 1.2,
+    }),
+    true,
+  );
+  assert.equal(
+    transcriptHasUsableSpeech({
+      text: "Can you update the Dubai Shawarma deal?",
+      confidence: 0.8,
+      durationSeconds: 2.4,
+    }),
+    true,
+  );
+  assert.equal(
+    transcriptHasUsableSpeech({
+      text: "yes",
+      confidence: 0.9,
+      durationSeconds: 0.6,
+    }),
+    true,
+  );
+
   console.log("Voice profile and local turn detector contracts: PASS");
 }
 

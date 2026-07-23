@@ -36,6 +36,7 @@ import {
   normalizeSpeechLanguage,
   transcriptLooksLikeLanguageMismatch,
 } from "./transcript-language";
+import { transcriptHasUsableSpeech } from "./transcript-quality";
 import type {
   FinalTranscript,
   ServerCallEvent,
@@ -286,7 +287,45 @@ export async function executeEmployeeCallTurn(input: {
         routeContext: input.routeContext,
         speechContext,
       });
-  if (!stt.text) throw new Error("No speech was detected.");
+  const usableSpeech = transcriptHasUsableSpeech({
+    text: stt.text,
+    confidence: stt.confidence,
+    durationSeconds: input.durationSeconds,
+  });
+  if (!usableSpeech) {
+    // Soft-skip noise / Whisper silence hallucinations ("Thank you.") so the
+    // call stays in listening without surfacing a turn failure to the human.
+    await upsertCallTurn(input.client, {
+      workspaceId: input.workspaceId,
+      callId: input.callSessionId,
+      turnId,
+      sequence: input.sequence,
+      idempotencyKey,
+      state: "completed",
+      values: {
+        human_transcript: "",
+        completed_at: new Date().toISOString(),
+        metadata: {
+          skipped: true,
+          skipReason: stt.text?.trim()
+            ? "stt_hallucination_or_noise"
+            : "no_speech_detected",
+          rawTranscript: stt.text ?? "",
+          sttConfidence: stt.confidence ?? null,
+          durationSeconds: input.durationSeconds,
+        },
+      },
+    });
+    await input.emit({ type: "state.changed", turn: "listening" });
+    return {
+      turnId,
+      transcript: "",
+      reply: "",
+      sttWh: 0,
+      brainWh: 0,
+      ttsWh: 0,
+    };
+  }
 
   const sttLedger = await recordBrainUsage({
     client: input.client,

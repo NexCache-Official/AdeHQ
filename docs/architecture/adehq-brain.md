@@ -491,6 +491,12 @@ AudioWorklet + browser VAD
   interrupted provider work still records actual incurred platform cost.
 - Echo cancellation, noise suppression, sustained-speech barge-in, playback
   ducking, and post-playback suppression prevent employees from hearing themselves.
+- Local endpointing waits for a real pause (~1.1s semantic / ~1.8s hard fallback)
+  so mid-sentence silence and ambient spikes do not commit turns. Known silence
+  hallucinations (e.g. bare "Thank you.", "Thanks for watching.") are soft-skipped
+  before Brain so junk captions never become employee replies.
+- Call chrome exposes only call-like activity: Listening, Understanding, Working
+  (tools/research), and Speaking — not "Preparing voice" / "Thinking".
 
 Flags: `ADEHQ_LIVE_CALLS_V1=1`,
 `NEXT_PUBLIC_ADEHQ_LIVE_CALLS_V1=1`, and

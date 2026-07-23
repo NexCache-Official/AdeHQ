@@ -20,11 +20,15 @@ export interface LocalTurnDetector {
 }
 
 export const DEFAULT_TURN_DETECTION_POLICY = {
-  minimumSpeechMs: 250,
-  minimumSilenceMs: 250,
-  normalEndpointMs: 450,
-  hardTimeoutMs: 800,
-  completionThreshold: 0.55,
+  // Require sustained speech before a turn can open — short noise bursts
+  // (fan, keyboard, breath) should not become Brain utterances.
+  minimumSpeechMs: 450,
+  // Wait for a real pause. 250–450ms endpointing cuts people off mid-thought
+  // and also commits ambient spikes that Whisper turns into "Thank you."
+  minimumSilenceMs: 550,
+  normalEndpointMs: 1100,
+  hardTimeoutMs: 1800,
+  completionThreshold: 0.7,
 } as const;
 
 /**

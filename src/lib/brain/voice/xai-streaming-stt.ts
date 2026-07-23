@@ -108,7 +108,9 @@ export class XaiStreamingSttAdapter implements SpeechToTextAdapter {
       // AdeHQ local VAD + Smart Turn controls commits. A long provider endpoint
       // avoids fighting local floor control while still yielding partials.
       endpointing: "5000",
-      filler_words: "true",
+      // AdeHQ already owns endpointing. Filler-word captions inflate junk
+      // finals on breath/noise ("uh", "um") that should not become turns.
+      filler_words: "false",
       // Always pin a language. Unconstrained xAI STT can invent wrong-script
       // phrases (e.g. Russian "Продолжение следует..." for English speech).
       language: normalizeSpeechLanguage(context.language),
