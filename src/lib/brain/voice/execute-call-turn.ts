@@ -58,7 +58,12 @@ import {
   appendVoiceSessionTurn,
   buildVoiceSessionSnapshot,
   getVoiceSessionSnapshot,
+  markVoiceWorkHoursLowWarned,
 } from "./voice-session-snapshot";
+import {
+  isWorkHoursCapacityBlockReason,
+  pickWorkHoursCallNotice,
+} from "./work-hours-call-notices";
 import {
   createVoiceBrainLatencyTrace,
   logVoiceBrainLatency,
@@ -96,6 +101,153 @@ function isWeakVoiceReply(text: string): boolean {
 }
 
 type EmitCallEvent = (event: ServerCallEvent) => void | Promise<void>;
+
+async function speakWorkHoursExhaustedAndEnd(input: {
+  client: SupabaseClient;
+  workspaceId: string;
+  roomId: string;
+  humanUserId: string;
+  employeeId: string;
+  callSessionId: string;
+  turnId: string;
+  sequence: number;
+  idempotencyKey: string;
+  routeContext: SpeechRouteContext;
+  sttText: string;
+  sttWh: number;
+  emit: EmitCallEvent;
+  signal?: AbortSignal;
+}): Promise<{
+  turnId: string;
+  transcript: string;
+  reply: string;
+  sttWh: number;
+  brainWh: number;
+  ttsWh: number;
+}> {
+  const phrase = pickWorkHoursCallNotice("exhausted", input.turnId);
+  const voiceProfile = await loadEmployeeVoiceProfile(
+    input.client,
+    input.workspaceId,
+    input.employeeId,
+  );
+  const selected = selectSpeechRoutes(input.routeContext);
+  const primaryRouteId = selected.ttsRouteId;
+  const voiceProvider =
+    primaryRouteId === "route_call_tts_xai"
+      ? "xai"
+      : primaryRouteId === "route_call_tts_fish"
+        ? "fish"
+        : "siliconflow";
+  const premiumVoiceRequested = input.routeContext.premiumVoiceRequested;
+  const voiceQuality =
+    premiumVoiceRequested && input.routeContext.entitlements.premiumVoiceEnabled
+      ? "premium"
+      : "standard";
+  const providerVoice = resolveProviderVoice(
+    voiceProfile,
+    voiceProvider,
+    voiceQuality,
+  );
+
+  await input.emit({
+    type: "state.changed",
+    turn: "speaking",
+    activity: "speaking",
+  });
+  await input.emit({ type: "employee.text.delta", text: phrase });
+  await input.emit({ type: "employee.text.final", text: phrase });
+
+  try {
+    const spoken = `${phrase} `;
+    const generated = await selected.tts.synthesize({
+      text: phrase,
+      voice: providerVoice,
+      locale: voiceProfile.locale,
+      speed: voiceProfile.pace,
+      format: primaryRouteId === "route_call_tts_xai" ? "pcm" : "mp3",
+      signal: input.signal,
+    });
+    await input.emit({
+      type: "employee.audio.delta",
+      audio: Buffer.from(generated.bytes).toString("base64"),
+      sequence: 0,
+      mimeType: generated.mimeType,
+      sampleRate: primaryRouteId === "route_call_tts_xai" ? 24_000 : undefined,
+      channels: 1,
+    });
+    // Platform courtesy line — do not charge the workspace that just ran out.
+    await recordBrainUsage({
+      client: input.client,
+      workspaceId: input.workspaceId,
+      idempotencyKey: `${input.turnId}:tts:wh-exhausted`,
+      employeeId: input.employeeId,
+      userId: input.humanUserId,
+      roomId: input.roomId,
+      sourceType: "artifact",
+      routeId: generated.routeId,
+      usage:
+        primaryRouteId === "route_call_tts_xai"
+          ? { ttsCharacters: Array.from(spoken).length }
+          : { ttsUtf8Bytes: Buffer.byteLength(spoken, "utf8") },
+      status: "succeeded",
+      billableToWorkspace: false,
+      capability: "text_to_speech",
+      workType: "call_tts",
+      runtimeMode: "voice_call",
+      metadata: {
+        callId: input.callSessionId,
+        turnId: input.turnId,
+        notice: "work_hours_exhausted",
+      },
+    });
+  } catch (error) {
+    console.warn(
+      "[AdeHQ live-call] work-hours exhausted TTS failed",
+      error instanceof Error ? error.message : error,
+    );
+  }
+
+  await input.emit({ type: "employee.audio.end" });
+  await input.client.from("call_transcripts").insert({
+    workspace_id: input.workspaceId,
+    id: `${input.turnId}_employee`,
+    call_id: input.callSessionId,
+    speaker_id: input.employeeId,
+    speaker_name: "Employee",
+    text: phrase,
+  });
+  await upsertCallTurn(input.client, {
+    workspaceId: input.workspaceId,
+    callId: input.callSessionId,
+    turnId: input.turnId,
+    sequence: input.sequence,
+    idempotencyKey: input.idempotencyKey,
+    state: "completed",
+    values: {
+      employee_transcript: phrase,
+      spoken_text: phrase,
+      completed_at: new Date().toISOString(),
+      tts_wh: 0,
+      settled_wh: input.sttWh,
+      metadata: { endedReason: "work_hours_exhausted" },
+    },
+  });
+  await input.emit({
+    type: "session.ended",
+    reason: "work_hours_exhausted",
+    message: phrase,
+  });
+
+  return {
+    turnId: input.turnId,
+    transcript: input.sttText,
+    reply: phrase,
+    sttWh: input.sttWh,
+    brainWh: 0,
+    ttsWh: 0,
+  };
+}
 
 export function pcm16ToWav(
   pcm: Uint8Array,
@@ -459,8 +611,25 @@ export async function executeEmployeeCallTurn(input: {
       ? input.routeContext.entitlements.maxTurnWh
       : Math.max(0, capacity.remaining),
   );
-  if (!capacity.unlimited && reservedTurnWh <= 0) {
-    throw new Error("Not enough Work Hours remaining for this call turn.");
+  const workHoursExhausted =
+    !capacity.unlimited && (reservedTurnWh <= 0 || capacity.remaining <= 0);
+  if (workHoursExhausted) {
+    return speakWorkHoursExhaustedAndEnd({
+      client: input.client,
+      workspaceId: input.workspaceId,
+      roomId: input.roomId,
+      humanUserId: input.humanUserId,
+      employeeId: input.employeeId,
+      callSessionId: input.callSessionId,
+      turnId,
+      sequence: input.sequence,
+      idempotencyKey,
+      routeContext: input.routeContext,
+      sttText: stt.text,
+      sttWh,
+      emit: input.emit,
+      signal: input.signal,
+    });
   }
   const reservation = await reserveWorkHours(input.client, {
     workspaceId: input.workspaceId,
@@ -472,8 +641,25 @@ export async function executeEmployeeCallTurn(input: {
     unlimited: capacity.unlimited,
   });
   if (!reservation.ok) {
-    throw new Error("Not enough Work Hours remaining for this call turn.");
+    return speakWorkHoursExhaustedAndEnd({
+      client: input.client,
+      workspaceId: input.workspaceId,
+      roomId: input.roomId,
+      humanUserId: input.humanUserId,
+      employeeId: input.employeeId,
+      callSessionId: input.callSessionId,
+      turnId,
+      sequence: input.sequence,
+      idempotencyKey,
+      routeContext: input.routeContext,
+      sttText: stt.text,
+      sttWh,
+      emit: input.emit,
+      signal: input.signal,
+    });
   }
+  const workHoursLow =
+    !capacity.unlimited && capacity.warningLevel === "low";
   await upsertCallTurn(input.client, {
     workspaceId: input.workspaceId,
     callId: input.callSessionId,
@@ -722,6 +908,8 @@ export async function executeEmployeeCallTurn(input: {
       isMetaResearchInstruction(stt.text) ||
       isAffirmativeSearchFollowUp(stt.text, ctx.room.messages, humanMessage.id));
   let fillersStopped = false;
+  const shouldWarnLowWorkHours =
+    workHoursLow && !snapshot.workHoursLowWarnedAt;
   const speakBridgePhrase = (phrase: string, kind: "bridge" | "working") => {
     const cacheKey = bridgeClipKey({
       routeId: primaryRouteId,
@@ -808,6 +996,14 @@ export async function executeEmployeeCallTurn(input: {
     },
   });
   let delayedFillerTimer: ReturnType<typeof setTimeout> | null = null;
+  if (shouldWarnLowWorkHours) {
+    markVoiceWorkHoursLowWarned(input.callSessionId);
+    snapshot = getVoiceSessionSnapshot(input.callSessionId) ?? snapshot;
+    speakBridgePhrase(
+      pickWorkHoursCallNotice("low", `${turnId}:wh-low`),
+      "bridge",
+    );
+  }
   if (routeDecision.route === "work_full") {
     fillerScheduler.start(needsBridge ? "searching" : "thinking");
   } else if (routeDecision.route === "voice_fast") {
@@ -970,9 +1166,40 @@ export async function executeEmployeeCallTurn(input: {
           },
         },
       );
-      // Chat daily-token hard blocks should not end the live call. Fall back to
-      // the lean voice lane (already bypasses beginAiRun) so the caller still
-      // gets a spoken answer; WH capacity remains the call gate.
+      // Work Hours exhaustion mid-turn: speak a natural goodbye and end the call.
+      if (
+        response.aiMode === "blocked" &&
+        isWorkHoursCapacityBlockReason(response.reply)
+      ) {
+        stopFillers();
+        await ttsChain.catch(() => undefined);
+        const session = await ttsSessionPromise.catch(() => null);
+        await session?.interrupt("Work Hours exhausted.");
+        await audioConsumer.catch(() => undefined);
+        await settleReservation(input.client, {
+          reservationId: reservation.reservationId,
+          workspaceId: input.workspaceId,
+          settledWh: 0,
+        });
+        return speakWorkHoursExhaustedAndEnd({
+          client: input.client,
+          workspaceId: input.workspaceId,
+          roomId: input.roomId,
+          humanUserId: input.humanUserId,
+          employeeId: input.employeeId,
+          callSessionId: input.callSessionId,
+          turnId,
+          sequence: input.sequence,
+          idempotencyKey,
+          routeContext: input.routeContext,
+          sttText: stt.text,
+          sttWh,
+          emit: input.emit,
+          signal: input.signal,
+        });
+      }
+      // Legacy chat daily-token hard blocks should not end the live call.
+      // Voice beginAiRun skips those budgets; keep this as a safety net.
       const blockedByDailyBudget =
         response.aiMode === "blocked" &&
         /daily (token|cost) limit exceeded/i.test(response.reply);

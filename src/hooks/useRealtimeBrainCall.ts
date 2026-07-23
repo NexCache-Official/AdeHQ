@@ -132,6 +132,10 @@ export function useRealtimeBrainCall() {
   const turnDetectorRef = useRef(new HybridLocalTurnDetector());
   const turnDecisionPendingRef = useRef(false);
   const connectedChimePlayedRef = useRef(false);
+  const endAfterPlaybackRef = useRef(false);
+  const endAfterPlaybackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
 
   function send(event: object) {
     if (socketRef.current?.readyState === WebSocket.OPEN) {
@@ -163,6 +167,15 @@ export function useRealtimeBrainCall() {
     playbackActiveRef.current = false;
     playbackCursorRef.current = 0;
     playbackEndedAtRef.current = performance.now();
+    if (endAfterPlaybackRef.current) {
+      endAfterPlaybackRef.current = false;
+      if (endAfterPlaybackTimerRef.current) {
+        clearTimeout(endAfterPlaybackTimerRef.current);
+        endAfterPlaybackTimerRef.current = null;
+      }
+      void end();
+      return;
+    }
     setActivity("listening");
   }
 
@@ -531,6 +544,31 @@ export function useRealtimeBrainCall() {
         Number(components.ttsWh ?? 0);
       setSettledWh((current) => current + total);
       setEstimatedWh((current) => Math.max(current, total));
+      return;
+    }
+    if (type === "session.ended") {
+      const message = String(event.message ?? "Call ended.");
+      const reason = String(event.reason ?? "");
+      endAfterPlaybackRef.current = true;
+      if (reason === "work_hours_exhausted") {
+        setError(message);
+      }
+      // If audio already finished (or TTS failed), end shortly so we don't hang.
+      if (endAfterPlaybackTimerRef.current) {
+        clearTimeout(endAfterPlaybackTimerRef.current);
+      }
+      endAfterPlaybackTimerRef.current = setTimeout(() => {
+        if (!endAfterPlaybackRef.current) return;
+        if (
+          framedPlaybackActiveRef.current ||
+          playbackSourcesRef.current.size ||
+          playbackQueueRef.current.length
+        ) {
+          return;
+        }
+        endAfterPlaybackRef.current = false;
+        void end();
+      }, 800);
       return;
     }
     if (type === "error") {

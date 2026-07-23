@@ -93,4 +93,22 @@ const ignoreReserved = accumulateTodayUsage(
 );
 assert.equal(ignoreReserved.tokens, 0);
 
+import {
+  isWorkHoursCapacityBlockReason,
+  pickWorkHoursCallNotice,
+} from "../src/lib/brain/voice/work-hours-call-notices";
+
+const low = pickWorkHoursCallNotice("low", "seed-a");
+const exhausted = pickWorkHoursCallNotice("exhausted", "seed-b");
+assert.ok(low.includes("Work Hours"), "low notice mentions Work Hours");
+assert.ok(
+  /renew|top up|top-up|capacity/i.test(exhausted),
+  "exhausted notice asks to renew",
+);
+assert.ok(isWorkHoursCapacityBlockReason("Weekly AI Work Hours exhausted."));
+assert.equal(
+  isWorkHoursCapacityBlockReason("Employee daily token limit exceeded."),
+  false,
+);
+
 console.log("PASS  ai usage reservation budgeting");

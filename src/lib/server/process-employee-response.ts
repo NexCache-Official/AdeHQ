@@ -403,6 +403,8 @@ export async function processEmployeeResponse(
       maxOutputTokensOverride: options.voiceCall
         ? voiceMaxOutputTokens
         : undefined,
+      // Calls meter Work Hours; do not hard-block on chat daily token budgets.
+      skipDailyBudgets: Boolean(options.voiceCall),
     });
 
     if (!begun.ok) {

@@ -36,6 +36,11 @@ export type BeginAiRunContext = {
    * strand multi-k token reservations per turn.
    */
   maxOutputTokensOverride?: number;
+  /**
+   * Live calls are gated by workspace Work Hours. Skip legacy chat daily
+   * token/cost hard-blocks so a call cannot die on the employee token cap.
+   */
+  skipDailyBudgets?: boolean;
 };
 
 export type BeginAiRunResult =
@@ -99,28 +104,30 @@ export async function beginAiRun(ctx: BeginAiRunContext): Promise<BeginAiRunResu
     };
   }
 
-  // Drop abandoned reservations before budgeting so interrupted voice turns
-  // cannot permanently exhaust the employee daily token cap.
+  // Drop abandoned reservations before budgeting so interrupted turns cannot
+  // permanently exhaust chat daily token caps.
   await expireStaleReservedUsage(ctx.client, ctx.workspaceId, {
     employeeId: ctx.employeeId,
   });
 
-  const workspaceUsage = await sumTodayUsage(ctx.client, ctx.workspaceId, {
-    includeReserved: true,
-  });
-  if (workspaceUsage.tokens + estimate.tokens > settings.dailyTokenLimit) {
-    return { ok: false, reason: "Workspace daily token limit exceeded." };
-  }
-  if (workspaceUsage.cost + estimate.cost > settings.dailyCostLimitUsd) {
-    return { ok: false, reason: "Workspace daily cost limit exceeded." };
-  }
+  if (!ctx.skipDailyBudgets) {
+    const workspaceUsage = await sumTodayUsage(ctx.client, ctx.workspaceId, {
+      includeReserved: true,
+    });
+    if (workspaceUsage.tokens + estimate.tokens > settings.dailyTokenLimit) {
+      return { ok: false, reason: "Workspace daily token limit exceeded." };
+    }
+    if (workspaceUsage.cost + estimate.cost > settings.dailyCostLimitUsd) {
+      return { ok: false, reason: "Workspace daily cost limit exceeded." };
+    }
 
-  const employeeUsage = await sumTodayUsage(ctx.client, ctx.workspaceId, {
-    employeeId: ctx.employeeId,
-    includeReserved: true,
-  });
-  if (employeeUsage.tokens + estimate.tokens > settings.employeeDailyTokenLimit) {
-    return { ok: false, reason: "Employee daily token limit exceeded." };
+    const employeeUsage = await sumTodayUsage(ctx.client, ctx.workspaceId, {
+      employeeId: ctx.employeeId,
+      includeReserved: true,
+    });
+    if (employeeUsage.tokens + estimate.tokens > settings.employeeDailyTokenLimit) {
+      return { ok: false, reason: "Employee daily token limit exceeded." };
+    }
   }
 
   const runId = newAgentRunId();
