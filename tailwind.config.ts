@@ -60,15 +60,15 @@ const config: Config = {
         },
       },
       fontFamily: {
-        sans: ["var(--font-schibsted)", "system-ui", "sans-serif"],
+        sans: ["var(--font-geist-sans)", "system-ui", "sans-serif"],
         mono: ["var(--font-geist-mono)", "ui-monospace", "monospace"],
         serif: ["var(--font-newsreader)", "Georgia", "serif"],
       },
       boxShadow: {
-        glow: "0 4px 14px -6px rgba(47, 111, 237, 0.55)",
-        panel: "0 10px 30px -18px rgba(15, 23, 42, 0.32)",
-        card: "0 1px 3px rgba(15, 23, 42, 0.06)",
-        lift: "0 12px 30px -14px rgba(15, 23, 42, 0.22)",
+        glow: "0 4px 14px -6px rgba(36, 30, 26, 0.35)",
+        panel: "0 10px 30px -18px rgba(36, 30, 26, 0.18)",
+        card: "0 1px 3px rgba(36, 30, 26, 0.05)",
+        lift: "0 12px 30px -14px rgba(36, 30, 26, 0.16)",
       },
       borderRadius: {
         xl: "12px",

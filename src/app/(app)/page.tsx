@@ -6,30 +6,13 @@ import { useStore } from "@/lib/demo-store";
 import { partitionWorkforce } from "@/lib/maya-employee";
 import { MAYA_EMPLOYEE_NAME } from "@/lib/hiring/maya";
 import { getGroupRooms } from "@/lib/rooms";
-import { WORKFORCE_CALLS_ENABLED } from "@/lib/config/features";
 import { canManageAiEmployees } from "@/lib/workspace/permissions";
 import { canAccessMaya } from "@/lib/workspace/access";
 import { useShellUI } from "@/components/AppShell";
-import { PageContainer } from "@/components/Page";
 import { EmployeeCard } from "@/components/EmployeeCard";
-import { ProjectRoomCard } from "@/components/ProjectRoomCard";
-import { ApprovalCard } from "@/components/ApprovalCard";
-import { WorkLogTimeline } from "@/components/WorkLogTimeline";
+import { HomeActivityFeed } from "@/components/HomeActivityFeed";
 import { UnclaimedInboxBanner } from "@/components/inbox/UnclaimedInboxBanner";
-import { Card } from "@/components/ui";
-import {
-  ArrowRight,
-  Bot,
-  Brain,
-  CheckSquare,
-  ClipboardCheck,
-  Hash,
-  Phone,
-  Plus,
-  ScrollText,
-  UserPlus,
-  Wrench,
-} from "lucide-react";
+import { Bell, Plus, ScrollText, Settings, UserPlus } from "lucide-react";
 
 function greeting(): string {
   const h = new Date().getHours();
@@ -48,7 +31,6 @@ export default function HomePage() {
     router.push(`/rooms/${dm.id}`);
   };
 
-  const employees = state.employees;
   const pendingApprovals = state.approvals.filter((a) => a.status === "pending");
   const activeTasks = state.tasks.filter((t) => t.status !== "done");
   const recentLog = [...state.workLog]
@@ -56,19 +38,49 @@ export default function HomePage() {
     .slice(0, 6);
   const myRole = state.workspaceMembers.find((m) => m.userId === state.user?.id)?.role;
   const canHire = canManageAiEmployees(myRole);
-  const { hired, maya } = partitionWorkforce(employees);
+  const { hired, maya } = partitionWorkforce(state.employees);
   const visibleMaya = canAccessMaya(myRole) ? maya : [];
   const workingCount = hired.filter((e) => e.status === "working").length;
   const rooms = getGroupRooms(state.rooms);
   const firstName = state.user?.name?.split(" ")[0] ?? "there";
+  const workforcePreview = [...visibleMaya, ...hired].slice(0, 4);
 
+  const aiEmployeeCount = visibleMaya.length + hired.length;
   const stats = [
-    { label: "AI employees", value: hired.length, sub: visibleMaya.length ? `${MAYA_EMPLOYEE_NAME} included · ${workingCount} working` : `${workingCount} working now`, href: "/workforce" },
-    { label: "Rooms", value: rooms.length, sub: "Active workstreams", href: "/rooms" },
-    { label: "Open tasks", value: activeTasks.length, sub: "Across all rooms", href: "/tasks" },
-    { label: "Approvals", value: pendingApprovals.length, sub: pendingApprovals.length ? "Needs review" : "All clear", href: "/approvals", alert: pendingApprovals.length > 0 },
-    { label: "Memory", value: state.memory.length, sub: "Facts & decisions", href: "/memory" },
-    { label: "Work log", value: state.workLog.length, sub: "AI actions tracked", href: "/work-log" },
+    {
+      label: "AI employees",
+      value: String(aiEmployeeCount),
+      caption: visibleMaya.length
+        ? `${MAYA_EMPLOYEE_NAME} included · ${workingCount} working`
+        : `${workingCount} working now`,
+      href: "/workforce",
+    },
+    { label: "Rooms", value: String(rooms.length), caption: "Active workstreams", href: "/rooms" },
+    {
+      label: "Open tasks",
+      value: String(activeTasks.length),
+      caption: "Across all rooms",
+      href: "/tasks",
+    },
+    {
+      label: "Approvals",
+      value: String(pendingApprovals.length),
+      caption: pendingApprovals.length ? "Needs review" : "All clear",
+      href: "/approvals",
+      alert: pendingApprovals.length > 0,
+    },
+    {
+      label: "Memory",
+      value: String(state.memory.length),
+      caption: "Facts & decisions",
+      href: "/memory",
+    },
+    {
+      label: "Work log",
+      value: String(state.workLog.length),
+      caption: "AI actions tracked",
+      href: "/work-log",
+    },
   ];
 
   const heroSub =
@@ -77,139 +89,151 @@ export default function HomePage() {
       : `Your AI employees are working across ${rooms.length} room${rooms.length === 1 ? "" : "s"}. Give them a task, review their work, or jump on a call.`;
 
   return (
-    <PageContainer wide className="pb-16">
-      <UnclaimedInboxBanner />
-      {/* Command center hero */}
-      <div className="relative mb-[18px] overflow-hidden rounded-[22px] hero-dark p-8 text-white shadow-[0_20px_50px_-24px_rgba(40,30,15,0.5)] sm:p-8">
-        <div className="pointer-events-none absolute -right-16 -top-16 h-[280px] w-[280px] rounded-full bg-[radial-gradient(circle,var(--hero-glow),transparent_70%)] blur-[20px]" />
-        <div className="pointer-events-none absolute bottom-[-90px] right-[120px] h-[220px] w-[220px] rounded-full bg-[radial-gradient(circle,rgba(242,151,78,0.22),transparent_70%)] blur-[10px]" />
-        <div className="relative">
-          <div className="flex items-center gap-2 text-[12.5px] font-medium text-white/60">
-            <span className="h-[7px] w-[7px] rounded-full bg-green animate-glowpulse" />
-            Workforce online · {state.workspace.name}
-          </div>
-          <h1 className="mt-3 text-[30px] font-bold leading-tight tracking-tight sm:text-[32px]">
-            {greeting()}, {firstName}.
-            <br />
-            Your AI workforce is ready.
-          </h1>
-          <p className="mt-2 max-w-xl text-[14.5px] text-white/62">{heroSub}</p>
-          <div className="mt-5 flex flex-wrap gap-2.5">
-            {canHire && (
-              <button
-                type="button"
-                onClick={ui.openHire}
-                className="inline-flex items-center gap-2 rounded-xl bg-accent px-4 py-2.5 text-[13px] font-semibold text-white shadow-glow transition-all hover:brightness-105"
-              >
-                <UserPlus className="h-4 w-4" /> Hire AI Employee
-              </button>
-            )}
-            <button
-              type="button"
-              onClick={ui.openCreateRoom}
-              className="inline-flex items-center gap-2 rounded-xl border border-white/16 bg-white/[0.06] px-4 py-2.5 text-[13px] font-medium text-white transition-colors hover:bg-white/10"
-            >
-              <Plus className="h-4 w-4" /> Create room
-            </button>
-            <button
-              type="button"
-              onClick={() => router.push("/calls")}
-              className="inline-flex items-center gap-2 rounded-xl border border-white/16 bg-white/[0.06] px-4 py-2.5 text-[13px] font-medium text-white transition-colors hover:bg-white/10"
-            >
-              <Phone className="h-4 w-4" /> {WORKFORCE_CALLS_ENABLED ? "Start workforce call" : "Workforce calls — soon"}
-            </button>
-            <button
-              type="button"
-              onClick={() => router.push("/work-log")}
-              className="inline-flex items-center gap-2 rounded-xl border border-white/16 bg-white/[0.06] px-4 py-2.5 text-[13px] font-medium text-white transition-colors hover:bg-white/10"
-            >
-              <ScrollText className="h-4 w-4" /> Review work log
-            </button>
-          </div>
+    <div className="flex h-full min-h-0 flex-col">
+      {/* Home.dc top chrome */}
+      <header className="sticky top-0 z-10 flex h-14 shrink-0 items-center justify-between border-b border-border bg-canvas/80 px-8 backdrop-blur-sm">
+        <div className="flex items-center gap-2 font-mono text-[13.5px] tracking-[0.02em] text-ink-3">
+          <span>WORKSPACE</span>
+          <span className="text-[rgb(204_201_196)]">/</span>
+          <span className="text-ink">HOME</span>
         </div>
-      </div>
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={() => router.push("/settings/notifications")}
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-ink-3 transition-colors hover:bg-muted hover:text-ink"
+            aria-label="Notifications"
+          >
+            <Bell className="h-4 w-4" strokeWidth={2} />
+          </button>
+          <button
+            type="button"
+            onClick={() => router.push("/settings")}
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-ink-3 transition-colors hover:bg-muted hover:text-ink"
+            aria-label="Settings"
+          >
+            <Settings className="h-4 w-4" strokeWidth={2} />
+          </button>
+        </div>
+      </header>
 
-      {/* Stat strip */}
-      <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-6">
-        {stats.map((s) => (
-          <Link key={s.label} href={s.href}>
-            <Card hover className="p-4">
-              <div className="flex items-center justify-between">
-                <span className="text-[11.5px] font-semibold tracking-wide text-ink-2">{s.label}</span>
-                {s.alert && <span className="h-2 w-2 rounded-full bg-amber" />}
+      <div className="min-h-0 flex-1 overflow-y-auto px-8 pb-12 pt-7">
+        <div className="mx-auto flex w-full max-w-[1240px] flex-col gap-[22px]">
+          <UnclaimedInboxBanner />
+
+          {/* Hero */}
+          <div className="relative overflow-hidden rounded-[18px] bg-[var(--hero-grad)] px-10 py-[38px] text-white">
+            <div
+              className="pointer-events-none absolute -right-[8%] -top-[45%] h-[520px] w-[520px] rounded-full"
+              style={{
+                background: "radial-gradient(circle, var(--hero-glow), transparent 68%)",
+              }}
+            />
+            <div className="relative">
+              <div className="mb-[18px] flex items-center gap-2 font-mono text-[12.5px] tracking-[0.03em] text-[rgb(180_176_172)]">
+                <span className="h-[7px] w-[7px] rounded-full bg-[rgb(78_176_104)]" />
+                <span>Workforce online · {state.workspace.name}</span>
               </div>
-              <div className="mt-2 font-mono text-[26px] font-bold tracking-tight text-ink">{s.value}</div>
-              <div className="mt-0.5 text-[11px] text-ink-3">{s.sub}</div>
-            </Card>
-          </Link>
-        ))}
-      </div>
-
-      <div className="grid items-start gap-6 lg:grid-cols-[1.55fr_1fr] lg:gap-[22px]">
-        <div className="flex flex-col gap-6 lg:gap-6">
-          <section>
-            <SectionHeader title="Workforce status" href="/workforce" linkLabel="View all" />
-            <div className="grid gap-3 sm:grid-cols-2">
-              {employees.slice(0, 4).map((e) => (
-                <EmployeeCard key={e.id} employee={e} onMessage={(emp) => openEmployeeDm(emp.id)} />
-              ))}
+              <h1 className="max-w-[640px] text-[34px] font-semibold leading-[1.12] tracking-[-0.025em]">
+                {greeting()}, {firstName}.
+                <br />
+                Your AI workforce is ready.
+              </h1>
+              <p className="mt-3.5 max-w-[520px] text-[15px] leading-relaxed text-[rgb(180_176_172)]">
+                {heroSub}
+              </p>
+              <div className="mt-[26px] flex flex-wrap gap-2.5">
+                {canHire && (
+                  <button
+                    type="button"
+                    onClick={ui.openHire}
+                    className="inline-flex items-center gap-2 rounded-[9px] bg-white px-4 py-2.5 text-[13.5px] font-semibold text-[rgb(27_22_18)] transition-colors hover:bg-[rgb(230_228_226)]"
+                  >
+                    <UserPlus className="h-4 w-4" strokeWidth={2} />
+                    Hire AI employee
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={ui.openCreateRoom}
+                  className="inline-flex items-center gap-2 rounded-[9px] border border-white/16 px-[15px] py-2.5 text-[13.5px] font-semibold text-white transition-colors hover:bg-white/8"
+                >
+                  <Plus className="h-4 w-4" strokeWidth={2} />
+                  Create room
+                </button>
+                <button
+                  type="button"
+                  onClick={() => router.push("/work-log")}
+                  className="inline-flex items-center gap-2 rounded-[9px] border border-white/16 px-[15px] py-2.5 text-[13.5px] font-semibold text-white transition-colors hover:bg-white/8"
+                >
+                  <ScrollText className="h-4 w-4" strokeWidth={2} />
+                  Review work log
+                </button>
+              </div>
             </div>
-          </section>
+          </div>
 
-          <section>
-            <SectionHeader title="Active rooms" href="/rooms" linkLabel="All rooms" />
-            <div className="grid gap-3 sm:grid-cols-2">
-              {rooms.map((r) => (
-                <ProjectRoomCard key={r.id} room={r} />
-              ))}
-            </div>
-          </section>
+          {/* Stats */}
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-6">
+            {stats.map((s) => (
+              <Link
+                key={s.label}
+                href={s.href}
+                className="rounded-xl border border-border bg-surface px-4 pb-[17px] pt-[15px] transition-colors hover:bg-muted/50"
+              >
+                <div className="font-mono text-[10.5px] uppercase tracking-[0.1em] text-ink-3">
+                  {s.label}
+                </div>
+                <div className="my-[11px] text-[30px] font-semibold leading-none tracking-[-0.02em] text-ink">
+                  {s.value}
+                  {s.alert ? (
+                    <span className="ml-2 inline-block h-2 w-2 rounded-full bg-amber align-middle" />
+                  ) : null}
+                </div>
+                <div className="text-[11.5px] text-ink-3">{s.caption}</div>
+              </Link>
+            ))}
+          </div>
+
+          <div className="grid items-start gap-[22px] lg:grid-cols-[1.35fr_1fr]">
+            <section>
+              <div className="mb-3.5 flex items-center justify-between">
+                <h2 className="text-base font-semibold tracking-[-0.01em] text-ink">Workforce status</h2>
+                <Link
+                  href="/workforce"
+                  className="flex items-center gap-1 text-[12.5px] font-medium text-ink-2 transition-colors hover:text-ink"
+                >
+                  View all
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                    <path d="M5 12h14M13 6l6 6-6 6" />
+                  </svg>
+                </Link>
+              </div>
+              <div className="grid gap-3.5 sm:grid-cols-2">
+                {workforcePreview.map((e) => (
+                  <EmployeeCard key={e.id} employee={e} onMessage={(emp) => openEmployeeDm(emp.id)} />
+                ))}
+              </div>
+            </section>
+
+            <section>
+              <div className="mb-3.5 flex items-center justify-between">
+                <h2 className="text-base font-semibold tracking-[-0.01em] text-ink">Today&apos;s activity</h2>
+                <Link
+                  href="/work-log"
+                  className="flex items-center gap-1 text-[12.5px] font-medium text-ink-2 transition-colors hover:text-ink"
+                >
+                  Work log
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                    <path d="M5 12h14M13 6l6 6-6 6" />
+                  </svg>
+                </Link>
+              </div>
+              <HomeActivityFeed events={recentLog} />
+            </section>
+          </div>
         </div>
-
-        <div className="flex flex-col gap-6">
-          <section>
-            <SectionHeader title="Today&apos;s activity" href="/work-log" linkLabel="Work log" />
-            <Card className="px-4 py-2">
-              <WorkLogTimeline events={recentLog} compact />
-            </Card>
-          </section>
-
-          <section>
-            <SectionHeader title="Pending approvals" href="/approvals" linkLabel="All" />
-            <div className="space-y-3">
-              {pendingApprovals.length === 0 ? (
-                <Card className="border-dashed p-6 text-center text-sm text-ink-3">
-                  You&apos;re all caught up.
-                </Card>
-              ) : (
-                pendingApprovals.slice(0, 3).map((a) => <ApprovalCard key={a.id} approval={a} />)
-              )}
-            </div>
-          </section>
-        </div>
       </div>
-    </PageContainer>
-  );
-}
-
-function SectionHeader({
-  title,
-  href,
-  linkLabel,
-}: {
-  title: string;
-  href: string;
-  linkLabel: string;
-}) {
-  return (
-    <div className="mb-3.5 flex items-center justify-between">
-      <h2 className="text-base font-bold tracking-tight text-ink">{title}</h2>
-      <Link
-        href={href}
-        className="flex items-center gap-1 text-xs font-semibold text-accent hover:text-accent-d"
-      >
-        {linkLabel} <ArrowRight className="h-3.5 w-3.5" />
-      </Link>
     </div>
   );
 }

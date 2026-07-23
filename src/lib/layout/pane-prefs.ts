@@ -56,8 +56,8 @@ export function clamp(n: number, min: number, max: number): number {
 export const PANE_PRESETS = {
   appRail: {
     id: "app-rail",
-    defaultWidth: 240,
-    minWidth: 200,
+    defaultWidth: 260,
+    minWidth: 220,
     maxWidth: 340,
     collapsedWidth: 52,
   },
