@@ -235,6 +235,15 @@ export default function DrivePage() {
     setUploadBusy(true);
     setUploadProgress(null);
     setError(null);
+    let uploadedCount = 0;
+    const failures: string[] = [];
+    // Uploads always land in files (or evidence). Leave Artifacts/Exports so
+    // the list query actually includes the new rows.
+    const uploadingEvidence = section === "evidence" || activeSection === "evidence";
+    const listSection: DriveSection | "all" = uploadingEvidence ? "evidence" : "files";
+    if (!uploadingEvidence && activeSection !== "files" && activeSection !== "all") {
+      setSection("files");
+    }
     try {
       for (const [index, file] of fileList.entries()) {
         const progressMeta = {
@@ -242,20 +251,52 @@ export default function DrivePage() {
           total: fileList.length,
           onProgress: (progress: UploadProgress) => setUploadProgress(progress),
         };
-        if (section === "evidence" || activeSection === "evidence") {
-          await uploadEvidenceToDrive(file, { workspaceId, folderId }, progressMeta);
-        } else {
-          await uploadToDrive(file, { workspaceId, folderId }, progressMeta);
+        try {
+          if (uploadingEvidence) {
+            await uploadEvidenceToDrive(file, { workspaceId, folderId }, progressMeta);
+          } else {
+            await uploadToDrive(file, { workspaceId, folderId }, progressMeta);
+          }
+          uploadedCount += 1;
+        } catch (err) {
+          failures.push(
+            `${file.name}: ${err instanceof Error ? err.message : "Upload failed."}`,
+          );
         }
       }
-      try {
-        setQuota(await fetchDriveQuota(workspaceId));
-      } catch {
-        // list refresh below will still run
+      if (uploadedCount > 0) {
+        // Explicit reload with the section files land in — do not rely on the
+        // DRIVE_UPDATED listener alone (it can still close over artifacts/exports).
+        try {
+          const list = await fetchDriveList({
+            workspaceId,
+            section: listSection,
+            folderId,
+            query: query.trim() || undefined,
+            page: 1,
+            pageSize: DRIVE_PAGE_SIZE,
+          });
+          setPage(1);
+          setData(list);
+        } catch {
+          notifyDriveUpdated();
+        }
+        try {
+          setQuota(await fetchDriveQuota(workspaceId));
+        } catch {
+          // keep uploaded files visible even if quota refresh fails
+        }
+        notifyDriveUpdated();
       }
-      notifyDriveUpdated();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Upload failed.");
+      if (failures.length) {
+        const summary =
+          uploadedCount > 0
+            ? `${uploadedCount} uploaded. ${failures.length} failed — ${failures[0]}`
+            : failures.length === 1
+              ? failures[0]
+              : `${failures.length} uploads failed — ${failures[0]}`;
+        setError(summary);
+      }
     } finally {
       setUploadBusy(false);
       setUploadProgress(null);
@@ -443,12 +484,16 @@ export default function DrivePage() {
         <div className="mb-5 rounded-2xl border border-border bg-surface p-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <p className="text-sm font-medium text-ink">
-              Uploading {uploadProgress.fileName}
+              {uploadProgress.phase === "saving" ? "Saving" : "Uploading"} {uploadProgress.fileName}
               {uploadProgress.total > 1
                 ? ` (${uploadProgress.index} of ${uploadProgress.total})`
                 : ""}
             </p>
-            <span className="text-xs text-ink-3">{uploadProgress.percent}%</span>
+            <span className="text-xs text-ink-3">
+              {uploadProgress.phase === "saving" && uploadProgress.percent < 100
+                ? "Saving to Drive…"
+                : `${uploadProgress.percent}%`}
+            </span>
           </div>
           <div className="mt-3 h-2 overflow-hidden rounded-full bg-muted">
             <div

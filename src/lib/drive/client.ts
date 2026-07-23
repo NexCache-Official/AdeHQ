@@ -148,6 +148,8 @@ export type UploadProgress = {
   percent: number;
   index: number;
   total: number;
+  /** Transfer = browser sending bytes; saving = server persisting to Drive. */
+  phase: "transferring" | "saving";
 };
 
 function uploadFormWithProgress<T>(
@@ -169,11 +171,25 @@ function uploadFormWithProgress<T>(
 
       xhr.upload.addEventListener("progress", (event) => {
         if (!onProgress || !event.lengthComputable) return;
+        // Cap at 95% while bytes are in flight — 100% only after a 2xx response
+        // so the bar does not claim success before Drive has persisted the file.
+        const transferPct = Math.min(95, Math.round((event.loaded / event.total) * 95));
         onProgress({
           fileName: meta.fileName,
           index: meta.index,
           total: meta.total,
-          percent: Math.min(100, Math.round((event.loaded / event.total) * 100)),
+          percent: transferPct,
+          phase: event.loaded >= event.total ? "saving" : "transferring",
+        });
+      });
+
+      xhr.upload.addEventListener("load", () => {
+        onProgress?.({
+          fileName: meta.fileName,
+          index: meta.index,
+          total: meta.total,
+          percent: 95,
+          phase: "saving",
         });
       });
 
@@ -185,6 +201,13 @@ function uploadFormWithProgress<T>(
           payload = {};
         }
         if (xhr.status >= 200 && xhr.status < 300) {
+          onProgress?.({
+            fileName: meta.fileName,
+            index: meta.index,
+            total: meta.total,
+            percent: 100,
+            phase: "saving",
+          });
           resolve(payload as T);
           return;
         }

@@ -137,72 +137,96 @@ export async function POST(request: NextRequest) {
       entityId: fileId,
     }).catch((error) => console.warn("[AdeHQ drive upload] quota ledger failed", error));
 
-    const parsed = await parseUploadedFile(buffer, validation.extension);
+    // File is already in storage + workspace_files. Parse/chunk/embed failures
+    // must not turn a successful upload into a client-visible 500 — otherwise
+    // the progress bar finishes and Drive looks empty even though the row exists.
+    try {
+      const parsed = await parseUploadedFile(buffer, validation.extension);
 
-    const { data: updated, error: updateError } = await client
-      .from("workspace_files")
-      .update({
-        status: parsed.status,
-        parse_status: parsed.parseStatus,
-        extracted_text: parsed.extractedText,
-        text_preview: parsed.textPreview,
-        page_count: parsed.pageCount ?? null,
-        sheet_count: parsed.sheetCount ?? null,
-        row_count: parsed.rowCount ?? null,
-        source_metadata: {
-          ...(inserted.source_metadata ?? {}),
-          ...parsed.sourceMetadata,
-        },
-        error_message: parsed.errorMessage ?? null,
-      })
-      .eq("workspace_id", workspaceId)
-      .eq("id", fileId)
-      .select("*")
-      .single();
-    if (updateError) throw updateError;
+      const { data: updated, error: updateError } = await client
+        .from("workspace_files")
+        .update({
+          status: parsed.status,
+          parse_status: parsed.parseStatus,
+          extracted_text: parsed.extractedText,
+          text_preview: parsed.textPreview,
+          page_count: parsed.pageCount ?? null,
+          sheet_count: parsed.sheetCount ?? null,
+          row_count: parsed.rowCount ?? null,
+          source_metadata: {
+            ...(inserted.source_metadata ?? {}),
+            ...parsed.sourceMetadata,
+          },
+          error_message: parsed.errorMessage ?? null,
+        })
+        .eq("workspace_id", workspaceId)
+        .eq("id", fileId)
+        .select("*")
+        .single();
+      if (updateError) throw updateError;
 
-    if (parsed.chunks.length) {
-      const { data: insertedChunks, error: chunkError } = await client
-        .from("file_chunks")
-        .insert(
-          parsed.chunks.map((chunk) => ({
-            workspace_id: workspaceId,
-            file_id: fileId,
-            room_id: roomId,
-            topic_id: topicId,
-            chunk_index: chunk.chunkIndex,
-            content: chunk.content,
-            content_preview: chunk.contentPreview,
-            page_start: chunk.pageStart ?? null,
-            page_end: chunk.pageEnd ?? null,
-            sheet_name: chunk.sheetName ?? null,
-            row_start: chunk.rowStart ?? null,
-            row_end: chunk.rowEnd ?? null,
-            token_estimate: chunk.tokenEstimate,
-            metadata: chunk.metadata ?? {},
-          })),
-        )
-        .select("id, content");
-      if (chunkError) throw chunkError;
+      if (parsed.chunks.length) {
+        const { data: insertedChunks, error: chunkError } = await client
+          .from("file_chunks")
+          .insert(
+            parsed.chunks.map((chunk) => ({
+              workspace_id: workspaceId,
+              file_id: fileId,
+              room_id: roomId,
+              topic_id: topicId,
+              chunk_index: chunk.chunkIndex,
+              content: chunk.content,
+              content_preview: chunk.contentPreview,
+              page_start: chunk.pageStart ?? null,
+              page_end: chunk.pageEnd ?? null,
+              sheet_name: chunk.sheetName ?? null,
+              row_start: chunk.rowStart ?? null,
+              row_end: chunk.rowEnd ?? null,
+              token_estimate: chunk.tokenEstimate,
+              metadata: chunk.metadata ?? {},
+            })),
+          )
+          .select("id, content");
+        if (chunkError) throw chunkError;
 
-      if (parsed.status === "ready" && insertedChunks?.length) {
-        await embedFileChunks(
-          client,
-          workspaceId,
-          fileId,
-          (insertedChunks as Array<{ id: string; content: string }>).map((row) => ({
-            id: String(row.id),
-            content: String(row.content),
-          })),
-          { roomId: roomId ?? undefined, topicId: topicId ?? undefined },
-        ).catch((error) => console.warn("[AdeHQ drive upload] embedding failed", error));
+        if (parsed.status === "ready" && insertedChunks?.length) {
+          await embedFileChunks(
+            client,
+            workspaceId,
+            fileId,
+            (insertedChunks as Array<{ id: string; content: string }>).map((row) => ({
+              id: String(row.id),
+              content: String(row.content),
+            })),
+            { roomId: roomId ?? undefined, topicId: topicId ?? undefined },
+          ).catch((error) => console.warn("[AdeHQ drive upload] embedding failed", error));
+        }
       }
-    }
 
-    return NextResponse.json({
-      file: workspaceFileFromRow(updated as Record<string, unknown>),
-      chunksCreated: parsed.chunks.length,
-    });
+      return NextResponse.json({
+        file: workspaceFileFromRow(updated as Record<string, unknown>),
+        chunksCreated: parsed.chunks.length,
+      });
+    } catch (postPersistError) {
+      console.warn("[AdeHQ drive upload] post-persist processing failed", postPersistError);
+      await client
+        .from("workspace_files")
+        .update({
+          status: "ready",
+          parse_status: "failed",
+          error_message: "Uploaded, but text extraction failed. You can still download the file.",
+        })
+        .eq("workspace_id", workspaceId)
+        .eq("id", fileId)
+        .then(({ error }) => {
+          if (error) console.warn("[AdeHQ drive upload] status fallback failed", error);
+        });
+      return NextResponse.json({
+        file: workspaceFileFromRow(inserted as Record<string, unknown>),
+        chunksCreated: 0,
+        warning: "File saved, but indexing failed.",
+      });
+    }
   } catch (error) {
     if (error instanceof AuthError) {
       return NextResponse.json({ error: error.message }, { status: error.status });
