@@ -32,14 +32,24 @@ features default **OFF** behind platform/env flags.
 pass. Flags-default-off, seed DAG, renderer OOXML, WH receipts, private-DM
 scope helper, and in-memory e2e orchestration covered.
 
-**Rollout:** Enable per workspace via `ADEHQ_PLAYBOOK_RUNTIME_V1`,
+**Honest QA note:** The first browser pass used **demo mode** (sessionStorage
+progress). That is **not** a live production proof. Live path was then wired:
+`processPlaybookRunWave`, `/api/playbook-runs/:id/process`, inline first wave,
+real AI-employee role candidates, hard-fail `brain_run` wrap, RLS write policies
+(`20260723210000`). This agent could **not** complete a real signed-in Supabase
+owner session here (no production secrets in the environment). Use
+[`docs/ops/pr25-production-smoke.md`](../ops/pr25-production-smoke.md) on a
+deployed workspace with migrations + flags.
+
+**Rollout:** Enable via `ADEHQ_PLAYBOOK_RUNTIME_V1`,
 `ADEHQ_ARTIFACT_RUNTIME_V1`, `ADEHQ_PROCEDURE_RUNTIME_V1`,
 `NEXT_PUBLIC_ADEHQ_PLAYBOOKS_V1`, `NEXT_PUBLIC_ADEHQ_ARTIFACTS_V1` after
-migration `20260723200000`. Disabling flags blocks new runs/exports only.
+migrations `20260723200000` + `20260723210000`. Redeploy for public flags.
+Disabling flags blocks new runs/exports only.
 
-**Gaps / follow-ups:** LibreOffice conversion remains worker-only; Maya custom
-playbook builder gated (`ADEHQ_CUSTOM_PLAYBOOKS_V1`); visual QA gated; some
-extended procedures are deterministic stubs pending full Brain bridge wiring.
+**Gaps / follow-ups:** Reasoning/search steps are structured placeholders in V1;
+LibreOffice conversion remains worker-only; Maya custom playbook builder gated;
+visual QA gated.
 
 ---
 
