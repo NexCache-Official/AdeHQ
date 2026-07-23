@@ -104,8 +104,8 @@ export function SidebarCollapsibleSection({
           open ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0",
         )}
       >
-        <div className="overflow-hidden">
-          <div className="mb-0.5 max-h-[min(280px,38vh)] space-y-0.5 overflow-y-auto pl-1 pr-0.5">
+        <div className="min-w-0 overflow-hidden">
+          <div className="mb-0.5 max-h-[min(280px,38vh)] min-w-0 space-y-0.5 overflow-y-auto overflow-x-hidden pr-0.5">
             {children}
           </div>
         </div>
@@ -168,8 +168,7 @@ export function SidebarNestedButton({
       type="button"
       onClick={onClick}
       className={cn(
-        "flex w-full items-center gap-2.5 rounded-lg px-2 py-[5px] text-left text-[13.5px] transition-colors",
-        "ml-1",
+        "flex w-full min-w-0 max-w-full items-center gap-2 rounded-lg px-2 py-[5px] text-left text-[13.5px] transition-colors",
         active
           ? "bg-[var(--rail-active-bg)] font-medium text-[var(--rail-active-ink)]"
           : "text-[var(--rail-ink-2)] hover:bg-[var(--rail-hover)] hover:text-[var(--rail-ink)]",
@@ -179,7 +178,7 @@ export function SidebarNestedButton({
         {icon}
       </span>
       <span className="min-w-0 flex-1 truncate self-center">{label}</span>
-      {badge}
+      {badge ? <span className="min-w-0 shrink truncate">{badge}</span> : null}
     </button>
   );
 }

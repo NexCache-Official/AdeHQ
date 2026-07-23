@@ -493,7 +493,7 @@ export function ThreadReader({
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto">
-      <div className="mx-auto max-w-[760px] px-10 pb-10 pt-[30px]">
+      <div className="w-full px-6 pb-10 pt-[30px] sm:px-8">
         <h2 className="text-[22px] font-semibold tracking-[-0.02em] text-ink">
           {thread.subject}
         </h2>
