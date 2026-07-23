@@ -137,6 +137,7 @@
     "exa-js": "^2.14.0",
     "exceljs": "^4.4.0",
     "framer-motion": "^11.3.19",
+    "geist": "^1.7.2",
     "json-logic-js": "^2.0.5",
     "jszip": "^3.10.1",
     "lucide-react": "^0.417.0",
