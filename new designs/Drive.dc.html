@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  @keyframes softPulse { 0%,100% { opacity: 1; } 50% { opacity: 0.45; } }
+  @keyframes shimmer { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }
+  html, body { height: 100%; }
+  body { margin: 0; font-family: 'Geist', system-ui, sans-serif; background: oklch(0.985 0.0025 85); -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
+  * { box-sizing: border-box; }
+  ::placeholder { color: oklch(0.66 0.006 70); }
+  a { color: oklch(0.24 0.012 60); text-decoration: none; }
+  a:hover { color: oklch(0.42 0.01 60); }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-thumb { background: oklch(0.9 0.004 75); border-radius: 8px; border: 3px solid transparent; background-clip: content-box; }
+  ::-webkit-scrollbar-thumb:hover { background: oklch(0.82 0.005 75); background-clip: content-box; }
+</style>
+</helmet>
+
+<div style="display:flex; width:100%; height:100vh; overflow:hidden; background:oklch(0.985 0.0025 85); color:oklch(0.24 0.012 60);">
+
+  <div style="width:260px; flex-shrink:0; background:oklch(0.995 0.001 85); border-right:1px solid oklch(0.92 0.004 75); display:flex; flex-direction:column; height:100vh;">
+    <div style="padding:14px 12px 8px;">
+      <div style="display:flex; align-items:center; gap:10px; padding:7px 8px; border-radius:10px; cursor:pointer;" style-hover="background:oklch(0.965 0.003 80);">
+        <div style="width:30px; height:30px; border-radius:8px; background:oklch(0.24 0.012 60); display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.4" stroke-linecap="round"><path d="M12 3v18M4.2 7.5l15.6 9M19.8 7.5L4.2 16.5"/></svg>
+        </div>
+        <div style="flex:1; min-width:0;">
+          <div style="font-size:13.5px; font-weight:600; letter-spacing:-0.01em; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">AdeHQ</div>
+          <div style="font-size:11px; color:oklch(0.64 0.006 70); font-family:'Geist Mono',monospace; letter-spacing:0.02em;">PRO WORKSPACE</div>
+        </div>
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="oklch(0.66 0.006 70)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M8 9l4 4 4-4"/></svg>
+      </div>
+    </div>
+    <div style="padding:2px 12px 10px;">
+      <div style="border:1px solid oklch(0.93 0.004 75); border-radius:10px; padding:9px 11px; background:oklch(0.98 0.002 80);">
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
+          <span style="font-size:10.5px; font-family:'Geist Mono',monospace; letter-spacing:0.08em; color:oklch(0.5 0.008 70);">AI WORK HOURS</span>
+          <span style="font-size:11px; font-family:'Geist Mono',monospace; color:oklch(0.3 0.01 60); font-weight:500;">0.41 / 125.00</span>
+        </div>
+        <div style="height:4px; border-radius:3px; background:oklch(0.93 0.004 75); overflow:hidden;">
+          <div style="width:1%; height:100%; background:oklch(0.24 0.012 60); border-radius:3px;"></div>
+        </div>
+      </div>
+    </div>
+    <div style="padding:0 12px 12px;">
+      <div style="display:flex; align-items:center; gap:8px; background:oklch(0.975 0.002 80); border:1px solid oklch(0.93 0.004 75); border-radius:9px; padding:7px 10px; cursor:text;">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="oklch(0.62 0.006 70)" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+        <span style="font-size:13px; color:oklch(0.62 0.006 70); flex:1;">Search or command</span>
+        <span style="font-size:10.5px; color:oklch(0.6 0.006 70); font-family:'Geist Mono',monospace; background:oklch(0.995 0.001 85); border:1px solid oklch(0.92 0.004 75); border-radius:5px; padding:1px 5px;">&#8984;K</span>
+      </div>
+    </div>
+    <div style="flex:1; overflow-y:auto; padding:4px 10px 10px;">
+      <div style="font-family:'Geist Mono',monospace; font-size:10.5px; font-weight:500; letter-spacing:0.14em; color:oklch(0.68 0.006 70); padding:8px 8px;">WORKSPACE</div>
+      <sc-for list="{{ navItems }}" as="item" hint-placeholder-count="3">
+        <div onClick="{{ item.onClick }}" style="display:flex; align-items:center; gap:11px; padding:7px 8px; border-radius:8px; cursor:pointer; font-size:13.5px; font-weight:{{ item.weight }}; background:{{ item.bg }}; color:{{ item.color }};" style-hover="background:oklch(0.965 0.003 80);">
+          <span style="color:{{ item.iconColor }}; display:flex;" dangerouslySetInnerHTML="{{ item.iconHtml }}"></span>
+          <span>{{ item.label }}</span>
+        </div>
+      </sc-for>
+      <div style="display:flex; align-items:center; gap:8px; padding:9px 8px 5px; font-size:13.5px; font-weight:500; color:oklch(0.34 0.008 65); cursor:pointer;">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="oklch(0.6 0.006 70)" stroke-width="2.6"><path d="M8 9l4 4 4-4"/></svg>
+        <span style="flex:1;">Rooms</span>
+        <span style="font-size:10.5px; font-family:'Geist Mono',monospace; color:oklch(0.6 0.006 70); margin-right:2px;">1</span>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="oklch(0.55 0.008 70)" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+      </div>
+      <div style="padding:6px 8px 6px 27px; font-size:13.5px; color:oklch(0.4 0.008 65); border-radius:8px; cursor:pointer;" style-hover="background:oklch(0.965 0.003 80);"><span style="color:oklch(0.66 0.006 70); margin-right:6px;">#</span>Operations</div>
+      <div style="display:flex; align-items:center; gap:8px; padding:9px 8px 5px; font-size:13.5px; font-weight:500; color:oklch(0.34 0.008 65); cursor:pointer;">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="oklch(0.6 0.006 70)" stroke-width="2.6"><path d="M8 9l4 4 4-4"/></svg>
+        <span style="flex:1;">Direct messages</span>
+        <span style="font-size:10px; font-family:'Geist Mono',monospace; font-weight:500; background:oklch(0.24 0.012 60); color:white; border-radius:20px; padding:1px 6px;">4</span>
+      </div>
+      <sc-for list="{{ dms }}" as="p" hint-placeholder-count="4">
+        <div onClick="{{ p.onClick }}" style="display:flex; align-items:center; gap:10px; padding:5px 8px; margin-left:4px; border-radius:8px; cursor:pointer;" style-hover="background:oklch(0.965 0.003 80);">
+          <div style="width:20px; height:20px; border-radius:6px; background:{{ p.gradient }}; display:flex; align-items:center; justify-content:center; font-size:9px; font-weight:600; color:white; flex-shrink:0;">{{ p.initials }}</div>
+          <span style="font-size:13.5px; color:oklch(0.36 0.008 65);">{{ p.name }}</span>
+          <sc-if value="{{ p.hasTag }}" hint-placeholder-val="{{ false }}">
+            <span style="font-size:9px; font-family:'Geist Mono',monospace; letter-spacing:0.03em; color:oklch(0.52 0.008 70); background:oklch(0.96 0.003 80); border:1px solid oklch(0.92 0.004 75); border-radius:4px; padding:1px 5px; white-space:nowrap;">{{ p.tag }}</span>
+          </sc-if>
+        </div>
+      </sc-for>
+      <div onClick="{{ goCalls }}" style="margin-top:9px; display:flex; align-items:center; gap:11px; padding:8px 8px; border-radius:8px; cursor:pointer; color:oklch(0.34 0.008 65);" style-hover="background:oklch(0.965 0.003 80);">
+        <span style="display:flex; color:oklch(0.55 0.008 70);">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.68 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.32 1.85.55 2.81.68A2 2 0 0 1 22 16.92z"/></svg>
+        </span>
+        <span style="font-size:13.5px; font-weight:500; flex:1;">Calls</span>
+        <span style="font-size:9.5px; font-family:'Geist Mono',monospace; letter-spacing:0.08em; color:oklch(0.55 0.13 65); background:oklch(0.95 0.045 80); border-radius:5px; padding:2px 6px;">SOON</span>
+      </div>
+      <div style="font-family:'Geist Mono',monospace; font-size:10.5px; font-weight:500; letter-spacing:0.14em; color:oklch(0.68 0.006 70); padding:18px 8px 8px;">WORKFORCE</div>
+      <sc-for list="{{ workforceItems }}" as="item" hint-placeholder-count="9">
+        <div style="display:flex; align-items:center; gap:11px; padding:7px 8px; border-radius:8px; cursor:pointer; font-size:13.5px; font-weight:500; color:oklch(0.34 0.008 65);" style-hover="background:oklch(0.965 0.003 80);">
+          <span style="color:oklch(0.55 0.008 70); display:flex;" dangerouslySetInnerHTML="{{ item.iconHtml }}"></span>
+          <span style="flex:1;">{{ item.label }}</span>
+          <sc-if value="{{ item.hasBadge }}" hint-placeholder-val="{{ false }}">
+            <span style="font-size:10px; font-family:'Geist Mono',monospace; color:oklch(0.5 0.008 70); background:oklch(0.955 0.003 80); border-radius:20px; padding:1px 6px;">{{ item.badge }}</span>
+          </sc-if>
+        </div>
+      </sc-for>
+    </div>
+    <div style="padding:10px 12px;">
+      <div style="display:flex; align-items:center; gap:10px; border-radius:10px; padding:10px 12px; cursor:pointer; background:oklch(0.24 0.012 60);" style-hover="background:oklch(0.32 0.012 60);">
+        <span style="width:26px; height:26px; border-radius:7px; background:oklch(1 0 0 / 0.12); display:flex; align-items:center; justify-content:center; color:white; flex-shrink:0;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M20 8v6M23 11h-6"/></svg>
+        </span>
+        <div style="flex:1; min-width:0;">
+          <div style="font-size:13px; font-weight:600; line-height:1.3; letter-spacing:-0.01em; color:white;">Hire AI employee</div>
+          <div style="font-size:10.5px; color:oklch(0.78 0.01 70); font-family:'Geist Mono',monospace; letter-spacing:0.06em;">OPEN ROLE</div>
+        </div>
+      </div>
+    </div>
+    <div style="padding:10px 12px; border-top:1px solid oklch(0.93 0.004 75); display:flex; align-items:center; gap:10px;">
+      <div style="width:26px; height:26px; border-radius:7px; background:oklch(0.55 0.11 285); display:flex; align-items:center; justify-content:center; font-size:10px; font-weight:600; color:white;">SK</div>
+      <div style="flex:1;">
+        <div style="font-size:13px; font-weight:600; letter-spacing:-0.01em;">Shubham Kumar</div>
+        <div style="font-size:11px; color:oklch(0.64 0.006 70);">Admin</div>
+      </div>
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="oklch(0.62 0.006 70)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 15l-6-6-6 6"/></svg>
+    </div>
+  </div>
+
+  <div style="width:236px; flex-shrink:0; background:oklch(0.99 0.001 85); border-right:1px solid oklch(0.92 0.004 75); display:flex; flex-direction:column; height:100vh;">
+    <div style="padding:16px 16px 12px;">
+      <div style="display:flex; align-items:center; gap:10px;">
+        <div style="width:32px; height:32px; border-radius:9px; background:oklch(0.24 0.012 60); display:flex; align-items:center; justify-content:center; color:white; flex-shrink:0;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12H2M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>
+        </div>
+        <div style="min-width:0;">
+          <div style="font-size:14px; font-weight:600; letter-spacing:-0.01em;">Drive</div>
+          <div style="font-size:11px; font-family:'Geist Mono',monospace; color:oklch(0.62 0.006 70);">28 ITEMS</div>
+        </div>
+      </div>
+    </div>
+    <div style="flex:1; overflow-y:auto; padding:4px 12px 12px;">
+      <div style="font-family:'Geist Mono',monospace; font-size:10.5px; font-weight:500; letter-spacing:0.14em; color:oklch(0.68 0.006 70); padding:6px 8px;">LIBRARY</div>
+      <sc-for list="{{ library }}" as="l" hint-placeholder-count="4">
+        <div onClick="{{ l.onClick }}" style="display:flex; align-items:center; gap:11px; padding:8px 10px; border-radius:9px; cursor:pointer; font-size:13.5px; font-weight:{{ l.weight }}; background:{{ l.bg }}; color:{{ l.color }};" style-hover="background:oklch(0.965 0.003 80);">
+          <span style="display:flex; color:{{ l.iconColor }};" dangerouslySetInnerHTML="{{ l.iconHtml }}"></span>
+          <span style="flex:1;">{{ l.label }}</span>
+          <span style="font-size:11px; font-family:'Geist Mono',monospace; color:oklch(0.6 0.006 70);">{{ l.count }}</span>
+        </div>
+      </sc-for>
+
+      <div style="font-family:'Geist Mono',monospace; font-size:10.5px; font-weight:500; letter-spacing:0.14em; color:oklch(0.68 0.006 70); padding:18px 8px 6px;">AI WORKSPACE</div>
+      <sc-for list="{{ aiWorkspace }}" as="l" hint-placeholder-count="2">
+        <div style="display:flex; align-items:center; gap:11px; padding:8px 10px; border-radius:9px; cursor:pointer; font-size:13.5px; font-weight:500; color:oklch(0.36 0.008 65);" style-hover="background:oklch(0.965 0.003 80);">
+          <span style="display:flex; color:oklch(0.55 0.008 70);" dangerouslySetInnerHTML="{{ l.iconHtml }}"></span>
+          <span style="flex:1;">{{ l.label }}</span>
+          <span style="font-size:11px; font-family:'Geist Mono',monospace; color:oklch(0.6 0.006 70);">{{ l.count }}</span>
+        </div>
+      </sc-for>
+
+      <div style="font-family:'Geist Mono',monospace; font-size:10.5px; font-weight:500; letter-spacing:0.14em; color:oklch(0.68 0.006 70); padding:18px 8px 6px;">FILE TYPES</div>
+      <sc-for list="{{ typeChips }}" as="t" hint-placeholder-count="5">
+        <div style="display:flex; align-items:center; gap:10px; padding:6px 10px; border-radius:8px; cursor:pointer; font-size:13px; color:oklch(0.4 0.008 65);" style-hover="background:oklch(0.965 0.003 80);">
+          <span style="width:16px; height:16px; border-radius:4px; background:{{ t.color }}; flex-shrink:0;"></span>
+          <span style="flex:1;">{{ t.label }}</span>
+          <span style="font-size:11px; font-family:'Geist Mono',monospace; color:oklch(0.66 0.006 70);">{{ t.count }}</span>
+        </div>
+      </sc-for>
+    </div>
+
+    <div style="padding:14px 16px; border-top:1px solid oklch(0.93 0.004 75);">
+      <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:9px;">
+        <span style="font-size:11px; font-family:'Geist Mono',monospace; letter-spacing:0.06em; color:oklch(0.55 0.008 70);">STORAGE</span>
+        <span style="font-size:11px; font-family:'Geist Mono',monospace; color:oklch(0.3 0.01 60);">0.34 / 1 GB</span>
+      </div>
+      <div style="height:5px; border-radius:3px; background:oklch(0.93 0.004 75); overflow:hidden;">
+        <div style="width:34%; height:100%; background:oklch(0.24 0.012 60); border-radius:3px;"></div>
+      </div>
+      <div style="font-size:11.5px; color:oklch(0.6 0.008 70); margin-top:8px;">Human files are free. AI artifacts count toward storage.</div>
+    </div>
+  </div>
+
+  <div style="flex:1; min-width:0; display:flex; flex-direction:column; height:100vh; background:oklch(0.99 0.0015 85);">
+    <div style="height:56px; flex-shrink:0; display:flex; align-items:center; justify-content:space-between; padding:0 28px; border-bottom:1px solid oklch(0.93 0.004 75); background:oklch(0.99 0.0015 85);">
+      <div style="display:flex; align-items:center; gap:9px; font-size:13.5px; font-family:'Geist Mono',monospace; letter-spacing:0.02em;">
+        <span style="color:oklch(0.55 0.008 70);">DRIVE</span>
+        <span style="color:oklch(0.8 0.005 75);">/</span>
+        <span style="color:oklch(0.28 0.01 60);">MY DRIVE</span>
+      </div>
+      <div style="display:flex; align-items:center; gap:8px;">
+        <div style="display:flex; align-items:center; gap:8px; padding:9px 14px; border-radius:9px; border:1px solid oklch(0.9 0.004 75); background:oklch(0.995 0.001 85); font-size:13.5px; font-weight:500; color:oklch(0.3 0.01 60); cursor:pointer;" style-hover="background:oklch(0.97 0.003 80); border-color:oklch(0.86 0.005 75);">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="oklch(0.3 0.01 60)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/><path d="M12 11v6M9 14h6"/></svg>
+          <span>New folder</span>
+        </div>
+        <div style="display:flex; align-items:center; gap:8px; padding:9px 15px; border-radius:9px; background:oklch(0.24 0.012 60); color:white; font-size:13.5px; font-weight:600; cursor:pointer; box-shadow:0 1px 2px oklch(0.2 0.02 60 / 0.25);" style-hover="background:oklch(0.32 0.012 60);">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M17 8l-5-5-5 5M12 3v12"/></svg>
+          <span>Upload</span>
+        </div>
+      </div>
+    </div>
+
+    <div style="flex:1; overflow-y:auto; padding:24px 28px 40px;">
+      <div style="max-width:1180px; margin:0 auto;">
+
+        <div style="position:relative; overflow:hidden; border-radius:16px; border:1px solid oklch(0.9 0.008 265); background:oklch(0.975 0.012 265); padding:18px 20px;">
+          <div style="display:flex; align-items:center; gap:14px;">
+            <div style="width:38px; height:38px; border-radius:11px; background:oklch(0.24 0.012 60); display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/></svg>
+            </div>
+            <div style="flex:1;">
+              <div style="font-size:15px; color:oklch(0.4 0.02 265);">Ask your Drive &mdash; <span style="color:oklch(0.34 0.03 265);">&ldquo;find the latest Tesla financial model&rdquo;</span> or <span style="color:oklch(0.34 0.03 265);">&ldquo;summarize the Q3 deck&rdquo;</span></div>
+            </div>
+            <div style="display:flex; align-items:center; gap:6px; padding:8px 14px; border-radius:9px; background:oklch(0.24 0.012 60); color:white; font-size:13px; font-weight:600; cursor:pointer;" style-hover="background:oklch(0.32 0.012 60);">
+              <span>Ask</span>
+              <span style="font-size:11px; font-family:'Geist Mono',monospace; opacity:0.7;">&#9166;</span>
+            </div>
+          </div>
+        </div>
+
+        <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; margin-top:22px;">
+          <div style="flex:1; max-width:360px; display:flex; align-items:center; gap:9px; background:oklch(0.995 0.001 85); border:1px solid oklch(0.9 0.004 75); border-radius:9px; padding:8px 12px;">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="oklch(0.6 0.006 70)" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+            <span style="font-size:13.5px; color:oklch(0.6 0.006 70);">Search in Drive</span>
+          </div>
+          <div style="display:flex; align-items:center; gap:10px;">
+            <div style="display:flex; align-items:center; gap:6px; padding:7px 12px; border-radius:8px; border:1px solid oklch(0.9 0.004 75); background:oklch(0.995 0.001 85); font-size:13px; font-weight:500; color:oklch(0.4 0.008 65); cursor:pointer;" style-hover="background:oklch(0.97 0.003 80);">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="oklch(0.55 0.008 70)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M7 12h10M11 18h2"/></svg>
+              <span>Recent</span>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="oklch(0.55 0.008 70)" stroke-width="2.2" stroke-linecap="round"><path d="M8 9l4 4 4-4"/></svg>
+            </div>
+            <div style="display:flex; gap:2px; background:oklch(0.955 0.003 80); border:1px solid oklch(0.93 0.004 75); border-radius:9px; padding:3px;">
+              <div style="width:30px; height:28px; border-radius:6px; background:oklch(0.995 0.001 85); box-shadow:0 1px 2px oklch(0.3 0.02 60 / 0.1); display:flex; align-items:center; justify-content:center; color:oklch(0.28 0.01 60); cursor:pointer;">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+              </div>
+              <div style="width:30px; height:28px; border-radius:6px; display:flex; align-items:center; justify-content:center; color:oklch(0.6 0.006 70); cursor:pointer;">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-top:26px; margin-bottom:14px;">
+          <div style="font-family:'Geist Mono',monospace; font-size:11px; font-weight:500; letter-spacing:0.14em; color:oklch(0.66 0.006 70);">FOLDERS</div>
+          <div style="font-family:'Geist Mono',monospace; font-size:11px; color:oklch(0.7 0.006 70);">4</div>
+        </div>
+        <div style="display:grid; grid-template-columns:repeat(4, 1fr); gap:14px;">
+          <sc-for list="{{ folders }}" as="fd" hint-placeholder-count="4">
+            <div style="border:1px solid oklch(0.92 0.004 75); border-radius:13px; background:oklch(0.995 0.001 85); padding:15px 16px; cursor:pointer; transition:border-color 0.12s;" style-hover="border-color:oklch(0.8 0.005 75); background:oklch(0.998 0.001 85);">
+              <div style="display:flex; align-items:center; justify-content:space-between;">
+                <span style="width:38px; height:38px; border-radius:10px; background:{{ fd.tint }}; display:flex; align-items:center; justify-content:center; color:{{ fd.ink }};" dangerouslySetInnerHTML="{{ fd.iconHtml }}"></span>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="oklch(0.7 0.006 70)" stroke="none"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg>
+              </div>
+              <div style="font-size:14px; font-weight:600; letter-spacing:-0.01em; margin-top:14px;">{{ fd.name }}</div>
+              <div style="font-size:12px; color:oklch(0.6 0.008 70); margin-top:3px;">{{ fd.meta }}</div>
+            </div>
+          </sc-for>
+        </div>
+
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-top:30px; margin-bottom:14px;">
+          <div style="font-family:'Geist Mono',monospace; font-size:11px; font-weight:500; letter-spacing:0.14em; color:oklch(0.66 0.006 70);">FILES</div>
+          <div style="font-family:'Geist Mono',monospace; font-size:11px; color:oklch(0.7 0.006 70);">8</div>
+        </div>
+        <div style="display:grid; grid-template-columns:repeat(4, 1fr); gap:14px;">
+          <sc-for list="{{ files }}" as="f" hint-placeholder-count="8">
+            <div style="border:1px solid oklch(0.92 0.004 75); border-radius:13px; background:oklch(0.995 0.001 85); overflow:hidden; cursor:pointer; transition:border-color 0.12s, box-shadow 0.12s;" style-hover="border-color:oklch(0.82 0.005 75); box-shadow:0 4px 16px oklch(0.3 0.02 60 / 0.06);">
+              <div style="position:relative; height:112px; background:{{ f.previewBg }}; display:flex; align-items:center; justify-content:center; border-bottom:1px solid oklch(0.94 0.003 80); overflow:hidden;">
+                <div style="position:relative; width:56px; height:70px; border-radius:6px; background:oklch(0.995 0.001 85); box-shadow:0 3px 10px oklch(0.3 0.02 60 / 0.12); display:flex; align-items:flex-end; justify-content:center; padding-bottom:9px;">
+                  <div style="position:absolute; top:0; right:0; width:16px; height:16px; background:{{ f.foldColor }}; clip-path:polygon(0 0, 100% 100%, 0 100%); border-bottom-left-radius:3px;"></div>
+                  <div style="position:absolute; top:0; right:0; width:16px; height:16px; background:oklch(0.985 0.003 80); clip-path:polygon(0 0, 100% 0, 100% 100%);"></div>
+                  <span style="font-family:'Geist Mono',monospace; font-size:10px; font-weight:600; letter-spacing:0.04em; color:white; background:{{ f.tag.bg }}; border-radius:4px; padding:2px 6px;">{{ f.tag.label }}</span>
+                </div>
+                <sc-if value="{{ f.aiTagged }}" hint-placeholder-val="{{ false }}">
+                  <div style="position:absolute; top:10px; left:10px; display:inline-flex; align-items:center; gap:4px; font-size:9.5px; font-weight:600; font-family:'Geist Mono',monospace; letter-spacing:0.04em; color:oklch(0.4 0.03 265); background:oklch(0.96 0.02 265); border:1px solid oklch(0.88 0.02 265); border-radius:20px; padding:2px 7px 2px 5px;">
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="oklch(0.5 0.05 265)" stroke="none"><path d="M12 2l2.2 5.8L20 10l-5.8 2.2L12 18l-2.2-5.8L4 10l5.8-2.2z"/></svg>AI
+                  </div>
+                </sc-if>
+              </div>
+              <div style="padding:12px 14px 13px;">
+                <div style="font-size:13.5px; font-weight:600; letter-spacing:-0.01em; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{{ f.name }}</div>
+                <div style="display:flex; align-items:center; gap:7px; margin-top:5px;">
+                  <span style="font-size:11.5px; font-family:'Geist Mono',monospace; color:oklch(0.6 0.008 70);">{{ f.size }}</span>
+                  <span style="width:3px; height:3px; border-radius:50%; background:oklch(0.8 0.005 75);"></span>
+                  <span style="font-size:11.5px; color:oklch(0.6 0.008 70);">{{ f.time }}</span>
+                </div>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+const ICONS = {
+  home: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M9 22V12h6v10"/></svg>',
+  inbox: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 8l9 6 9-6"/></svg>',
+  drive: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12H2M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>',
+  workforce: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="8" width="16" height="12" rx="2"/><path d="M9 8V5a3 3 0 0 1 6 0v3"/><circle cx="9" cy="14" r="1"/><circle cx="15" cy="14" r="1"/></svg>',
+  crm: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>',
+  calendar: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>',
+  investors: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M23 6l-9.5 9.5-5-5L1 18"/><path d="M17 6h6v6"/></svg>',
+  tasks: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>',
+  memory: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 2a3 3 0 0 0-3 3 3 3 0 0 0-2 5.2A3 3 0 0 0 5 16a3 3 0 0 0 4.5 2.6V2z"/><path d="M14.5 2a3 3 0 0 1 3 3 3 3 0 0 1 2 5.2A3 3 0 0 1 19 16a3 3 0 0 1-4.5 2.6V2z"/></svg>',
+  approvals: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M9 4H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-2"/><path d="M9 14l2 2 4-4"/></svg>',
+  worklog: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/></svg>',
+  tools: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18v3h3l6.3-6.3a4 4 0 0 0 5.4-5.4l-2.3 2.3-2-2 2.3-2.3z"/></svg>'
+};
+
+const LIB = {
+  mydrive: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h5l2 3h7a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>',
+  starred: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>',
+  shared: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>',
+  recent: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>',
+  trash: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>',
+  artifacts: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><path d="M3.27 6.96L12 12.01l8.73-5.05M12 22.08V12"/></svg>',
+  knowledge: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 2a3 3 0 0 0-3 3 3 3 0 0 0-2 5.2A3 3 0 0 0 5 16a3 3 0 0 0 4.5 2.6V2z"/><path d="M14.5 2a3 3 0 0 1 3 3 3 3 0 0 1 2 5.2A3 3 0 0 1 19 16a3 3 0 0 1-4.5 2.6V2z"/></svg>'
+};
+
+const AV = { maya: 'oklch(0.6 0.1 220)', priya: 'oklch(0.58 0.11 285)', hayden: 'oklch(0.65 0.11 45)', blake: 'oklch(0.6 0.1 300)' };
+
+const T = {
+  xls: { label: 'XLSX', bg: 'oklch(0.52 0.13 150)', tint: 'oklch(0.95 0.03 150)' },
+  doc: { label: 'DOCX', bg: 'oklch(0.5 0.12 250)', tint: 'oklch(0.95 0.025 250)' },
+  pdf: { label: 'PDF', bg: 'oklch(0.55 0.19 25)', tint: 'oklch(0.95 0.03 30)' },
+  md: { label: 'MD', bg: 'oklch(0.32 0.012 60)', tint: 'oklch(0.955 0.003 80)' },
+  ppt: { label: 'PPTX', bg: 'oklch(0.62 0.15 55)', tint: 'oklch(0.96 0.035 65)' },
+  img: { label: 'PNG', bg: 'oklch(0.55 0.13 300)', tint: 'oklch(0.95 0.025 300)' },
+  csv: { label: 'CSV', bg: 'oklch(0.5 0.1 190)', tint: 'oklch(0.95 0.025 190)' },
+  fig: { label: 'FIG', bg: 'oklch(0.58 0.14 20)', tint: 'oklch(0.96 0.03 25)' }
+};
+
+class Component extends DCLogic {
+  goCalls = () => { window.location.href = 'Calls.dc.html'; };
+  goHome = () => { window.location.href = 'Home.dc.html'; };
+  goInbox = () => { window.location.href = 'Inbox.dc.html'; };
+  goChat = () => { window.location.href = 'Chat.dc.html'; };
+
+  renderVals() {
+    const ink = 'oklch(0.24 0.012 60)';
+
+    const navDefs = [
+      { label: 'Home', icon: ICONS.home, active: false, onClick: this.goHome },
+      { label: 'Inbox', icon: ICONS.inbox, active: false, onClick: this.goInbox },
+      { label: 'AdeHQ Drive', icon: ICONS.drive, active: true, onClick: () => {} }
+    ];
+    const navItems = navDefs.map(d => ({
+      label: d.label, iconHtml: { __html: d.icon }, onClick: d.onClick,
+      bg: d.active ? 'oklch(0.955 0.003 80)' : 'transparent',
+      color: d.active ? ink : 'oklch(0.34 0.008 65)',
+      iconColor: d.active ? ink : 'oklch(0.55 0.008 70)',
+      weight: d.active ? '600' : '500'
+    }));
+
+    const wfDefs = [
+      { label: 'Workforce', icon: ICONS.workforce }, { label: 'CRM', icon: ICONS.crm },
+      { label: 'Calendar', icon: ICONS.calendar }, { label: 'Investors', icon: ICONS.investors },
+      { label: 'Tasks', icon: ICONS.tasks, badge: '2' }, { label: 'Memory', icon: ICONS.memory },
+      { label: 'Approvals', icon: ICONS.approvals }, { label: 'Work Log', icon: ICONS.worklog },
+      { label: 'Tools', icon: ICONS.tools }
+    ];
+    const workforceItems = wfDefs.map(d => ({ label: d.label, iconHtml: { __html: d.icon }, hasBadge: !!d.badge, badge: d.badge || '' }));
+
+    const dms = [
+      { name: 'Maya', initials: 'MA', gradient: AV.maya, hasTag: true, tag: 'Workforce manager', onClick: () => {} },
+      { name: 'Hayden Kim', initials: 'HK', gradient: AV.hayden, hasTag: false, tag: '', onClick: this.goChat },
+      { name: 'Priya Carter', initials: 'PC', gradient: AV.priya, hasTag: false, tag: '', onClick: () => {} },
+      { name: 'Blake Fleming', initials: 'BF', gradient: AV.blake, hasTag: false, tag: '', onClick: () => {} }
+    ];
+
+    const libDefs = [
+      { key: 'mydrive', label: 'My Drive', icon: LIB.mydrive, count: '12', active: true },
+      { key: 'recent', label: 'Recent', icon: LIB.recent, count: '6', active: false },
+      { key: 'starred', label: 'Starred', icon: LIB.starred, count: '3', active: false },
+      { key: 'shared', label: 'Shared with me', icon: LIB.shared, count: '4', active: false },
+      { key: 'trash', label: 'Trash', icon: LIB.trash, count: '', active: false }
+    ];
+    const library = libDefs.map(l => ({
+      label: l.label, iconHtml: { __html: l.icon }, count: l.count, onClick: () => {},
+      bg: l.active ? 'oklch(0.955 0.003 80)' : 'transparent',
+      color: l.active ? ink : 'oklch(0.36 0.008 65)',
+      iconColor: l.active ? ink : 'oklch(0.55 0.008 70)',
+      weight: l.active ? '600' : '500'
+    }));
+
+    const aiWorkspace = [
+      { label: 'AI Artifacts', icon: LIB.artifacts, count: '8' },
+      { label: 'Knowledge base', icon: LIB.knowledge, count: '2' }
+    ].map(l => ({ label: l.label, iconHtml: { __html: l.icon }, count: l.count }));
+
+    const typeChips = [
+      { label: 'Spreadsheets', color: T.xls.bg, count: '3' },
+      { label: 'Documents', color: T.doc.bg, count: '4' },
+      { label: 'PDFs', color: T.pdf.bg, count: '2' },
+      { label: 'Markdown', color: T.md.bg, count: '3' },
+      { label: 'Images', color: T.img.bg, count: '5' }
+    ];
+
+    const folderIcon = { __html: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 3h8a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>' };
+    const folders = [
+      { name: 'Financials', meta: '9 files \u00b7 24 MB', tint: T.xls.tint, ink: T.xls.bg, iconHtml: folderIcon },
+      { name: 'Research', meta: '12 files \u00b7 41 MB', tint: T.doc.tint, ink: T.doc.bg, iconHtml: folderIcon },
+      { name: 'Investor docs', meta: '5 files \u00b7 18 MB', tint: T.pdf.tint, ink: T.pdf.bg, iconHtml: folderIcon },
+      { name: 'AI Artifacts', meta: '8 files \u00b7 6 MB', tint: 'oklch(0.96 0.02 265)', ink: 'oklch(0.45 0.05 265)', iconHtml: { __html: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/></svg>' } }
+    ];
+
+    const mk = (name, t, size, time, ai) => ({
+      name, tag: { label: T[t].label, bg: T[t].bg }, foldColor: T[t].bg,
+      previewBg: T[t].tint, size, time, aiTagged: !!ai
+    });
+    const files = [
+      mk('Tesla Q2-2026 Model', 'xls', '2.4 MB', '2h ago', false),
+      mk('Tesla Financial Summary', 'md', '18 KB', '2h ago', true),
+      mk('Market Research Brief', 'doc', '340 KB', 'Yesterday', true),
+      mk('Investor Update v3', 'pdf', '1.1 MB', 'Mon', false),
+      mk('Q3 Board Deck', 'ppt', '8.7 MB', 'Mon', false),
+      mk('Competitor Landscape', 'csv', '92 KB', 'Jul 18', true),
+      mk('Brand Screenshot', 'img', '640 KB', 'Jul 17', false),
+      mk('Product Wireframes', 'fig', '3.2 MB', 'Jul 15', false)
+    ];
+
+    return { navItems, workforceItems, dms, goCalls: this.goCalls, library, aiWorkspace, typeChips, folders, files };
+  }
+}
+</script>
+</body>
+</html>

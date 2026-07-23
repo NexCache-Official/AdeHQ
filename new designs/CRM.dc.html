@@ -1,0 +1,737 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  @keyframes softPulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+  html, body { height: 100%; }
+  body { margin: 0; font-family: 'Geist', system-ui, sans-serif; background: oklch(0.985 0.0025 85); -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
+  * { box-sizing: border-box; }
+  ::placeholder { color: oklch(0.66 0.006 70); }
+  a { color: oklch(0.24 0.012 60); text-decoration: none; }
+  a:hover { color: oklch(0.42 0.01 60); }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-thumb { background: oklch(0.9 0.004 75); border-radius: 8px; border: 3px solid transparent; background-clip: content-box; }
+  ::-webkit-scrollbar-thumb:hover { background: oklch(0.82 0.005 75); background-clip: content-box; }
+</style>
+</helmet>
+
+<div style="display:flex; width:100%; height:100vh; overflow:hidden; background:oklch(0.985 0.0025 85); color:oklch(0.24 0.012 60);">
+
+  <div style="width:260px; flex-shrink:0; background:oklch(0.995 0.001 85); border-right:1px solid oklch(0.92 0.004 75); display:flex; flex-direction:column; height:100vh;">
+    <div style="padding:14px 12px 8px;">
+      <div style="display:flex; align-items:center; gap:10px; padding:7px 8px; border-radius:10px; cursor:pointer;" style-hover="background:oklch(0.965 0.003 80);">
+        <div style="width:30px; height:30px; border-radius:8px; background:oklch(0.24 0.012 60); display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.4" stroke-linecap="round"><path d="M12 3v18M4.2 7.5l15.6 9M19.8 7.5L4.2 16.5"/></svg>
+        </div>
+        <div style="flex:1; min-width:0;">
+          <div style="font-size:13.5px; font-weight:600; letter-spacing:-0.01em; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">AdeHQ</div>
+          <div style="font-size:11px; color:oklch(0.64 0.006 70); font-family:'Geist Mono',monospace; letter-spacing:0.02em;">PRO WORKSPACE</div>
+        </div>
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="oklch(0.66 0.006 70)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M8 9l4 4 4-4"/></svg>
+      </div>
+    </div>
+    <div style="padding:2px 12px 10px;">
+      <div style="border:1px solid oklch(0.93 0.004 75); border-radius:10px; padding:9px 11px; background:oklch(0.98 0.002 80);">
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
+          <span style="font-size:10.5px; font-family:'Geist Mono',monospace; letter-spacing:0.08em; color:oklch(0.5 0.008 70);">AI WORK HOURS</span>
+          <span style="font-size:11px; font-family:'Geist Mono',monospace; color:oklch(0.3 0.01 60); font-weight:500;">1.53 / 125.00</span>
+        </div>
+        <div style="height:4px; border-radius:3px; background:oklch(0.93 0.004 75); overflow:hidden;">
+          <div style="width:2%; height:100%; background:oklch(0.24 0.012 60); border-radius:3px;"></div>
+        </div>
+      </div>
+    </div>
+    <div style="padding:0 12px 12px;">
+      <div style="display:flex; align-items:center; gap:8px; background:oklch(0.975 0.002 80); border:1px solid oklch(0.93 0.004 75); border-radius:9px; padding:7px 10px; cursor:text;">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="oklch(0.62 0.006 70)" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+        <span style="font-size:13px; color:oklch(0.62 0.006 70); flex:1;">Search or command</span>
+        <span style="font-size:10.5px; color:oklch(0.6 0.006 70); font-family:'Geist Mono',monospace; background:oklch(0.995 0.001 85); border:1px solid oklch(0.92 0.004 75); border-radius:5px; padding:1px 5px;">&#8984;K</span>
+      </div>
+    </div>
+    <div style="flex:1; overflow-y:auto; padding:4px 10px 10px;">
+      <div style="font-family:'Geist Mono',monospace; font-size:10.5px; font-weight:500; letter-spacing:0.14em; color:oklch(0.68 0.006 70); padding:8px 8px;">WORKSPACE</div>
+      <sc-for list="{{ navItems }}" as="item" hint-placeholder-count="3">
+        <div onClick="{{ item.onClick }}" style="display:flex; align-items:center; gap:11px; padding:7px 8px; border-radius:8px; cursor:pointer; font-size:13.5px; font-weight:{{ item.weight }}; background:{{ item.bg }}; color:{{ item.color }};" style-hover="background:oklch(0.965 0.003 80);">
+          <span style="color:{{ item.iconColor }}; display:flex;" dangerouslySetInnerHTML="{{ item.iconHtml }}"></span>
+          <span>{{ item.label }}</span>
+        </div>
+      </sc-for>
+      <div style="display:flex; align-items:center; gap:8px; padding:9px 8px 5px; font-size:13.5px; font-weight:500; color:oklch(0.34 0.008 65); cursor:pointer;">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="oklch(0.6 0.006 70)" stroke-width="2.6"><path d="M8 9l4 4 4-4"/></svg>
+        <span style="flex:1;">Rooms</span>
+        <span style="font-size:10.5px; font-family:'Geist Mono',monospace; color:oklch(0.6 0.006 70); margin-right:2px;">1</span>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="oklch(0.55 0.008 70)" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+      </div>
+      <div style="padding:6px 8px 6px 27px; font-size:13.5px; color:oklch(0.4 0.008 65); border-radius:8px; cursor:pointer;" style-hover="background:oklch(0.965 0.003 80);"><span style="color:oklch(0.66 0.006 70); margin-right:6px;">#</span>Operations</div>
+      <div style="display:flex; align-items:center; gap:8px; padding:9px 8px 5px; font-size:13.5px; font-weight:500; color:oklch(0.34 0.008 65); cursor:pointer;">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="oklch(0.6 0.006 70)" stroke-width="2.6"><path d="M8 9l4 4 4-4"/></svg>
+        <span style="flex:1;">Direct messages</span>
+        <span style="font-size:10px; font-family:'Geist Mono',monospace; font-weight:500; background:oklch(0.24 0.012 60); color:white; border-radius:20px; padding:1px 6px;">4</span>
+      </div>
+      <sc-for list="{{ dms }}" as="p" hint-placeholder-count="4">
+        <div onClick="{{ p.onClick }}" style="display:flex; align-items:center; gap:10px; padding:5px 8px; margin-left:4px; border-radius:8px; cursor:pointer;" style-hover="background:oklch(0.965 0.003 80);">
+          <div style="width:20px; height:20px; border-radius:6px; background:{{ p.gradient }}; display:flex; align-items:center; justify-content:center; font-size:9px; font-weight:600; color:white; flex-shrink:0;">{{ p.initials }}</div>
+          <span style="font-size:13.5px; color:oklch(0.36 0.008 65);">{{ p.name }}</span>
+          <sc-if value="{{ p.hasTag }}" hint-placeholder-val="{{ false }}">
+            <span style="font-size:9px; font-family:'Geist Mono',monospace; letter-spacing:0.03em; color:oklch(0.52 0.008 70); background:oklch(0.96 0.003 80); border:1px solid oklch(0.92 0.004 75); border-radius:4px; padding:1px 5px; white-space:nowrap;">{{ p.tag }}</span>
+          </sc-if>
+        </div>
+      </sc-for>
+      <div onClick="{{ goCalls }}" style="margin-top:9px; display:flex; align-items:center; gap:11px; padding:8px 8px; border-radius:8px; cursor:pointer; color:oklch(0.34 0.008 65);" style-hover="background:oklch(0.965 0.003 80);">
+        <span style="display:flex; color:oklch(0.55 0.008 70);">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.68 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.32 1.85.55 2.81.68A2 2 0 0 1 22 16.92z"/></svg>
+        </span>
+        <span style="font-size:13.5px; font-weight:500; flex:1;">Calls</span>
+        <span style="font-size:9.5px; font-family:'Geist Mono',monospace; letter-spacing:0.08em; color:oklch(0.55 0.13 65); background:oklch(0.95 0.045 80); border-radius:5px; padding:2px 6px;">SOON</span>
+      </div>
+      <div style="font-family:'Geist Mono',monospace; font-size:10.5px; font-weight:500; letter-spacing:0.14em; color:oklch(0.68 0.006 70); padding:18px 8px 8px;">WORKFORCE</div>
+      <sc-for list="{{ workforceItems }}" as="item" hint-placeholder-count="9">
+        <div onClick="{{ item.onClick }}" style="display:flex; align-items:center; gap:11px; padding:7px 8px; border-radius:8px; cursor:pointer; font-size:13.5px; font-weight:{{ item.weight }}; background:{{ item.bg }}; color:{{ item.color }};" style-hover="background:oklch(0.965 0.003 80);">
+          <span style="color:{{ item.iconColor }}; display:flex;" dangerouslySetInnerHTML="{{ item.iconHtml }}"></span>
+          <span style="flex:1;">{{ item.label }}</span>
+          <sc-if value="{{ item.hasBadge }}" hint-placeholder-val="{{ false }}">
+            <span style="font-size:10px; font-family:'Geist Mono',monospace; color:oklch(0.5 0.008 70); background:oklch(0.955 0.003 80); border-radius:20px; padding:1px 6px;">{{ item.badge }}</span>
+          </sc-if>
+        </div>
+      </sc-for>
+    </div>
+    <div style="padding:10px 12px;">
+      <div style="display:flex; align-items:center; gap:10px; border-radius:10px; padding:10px 12px; cursor:pointer; background:oklch(0.24 0.012 60);" style-hover="background:oklch(0.32 0.012 60);">
+        <span style="width:26px; height:26px; border-radius:7px; background:oklch(1 0 0 / 0.12); display:flex; align-items:center; justify-content:center; color:white; flex-shrink:0;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M20 8v6M23 11h-6"/></svg>
+        </span>
+        <div style="flex:1; min-width:0;">
+          <div style="font-size:13px; font-weight:600; line-height:1.3; letter-spacing:-0.01em; color:white;">Hire AI employee</div>
+          <div style="font-size:10.5px; color:oklch(0.78 0.01 70); font-family:'Geist Mono',monospace; letter-spacing:0.06em;">OPEN ROLE</div>
+        </div>
+      </div>
+    </div>
+    <div style="padding:10px 12px; border-top:1px solid oklch(0.93 0.004 75); display:flex; align-items:center; gap:10px;">
+      <div style="width:26px; height:26px; border-radius:7px; background:oklch(0.55 0.11 285); display:flex; align-items:center; justify-content:center; font-size:10px; font-weight:600; color:white;">SK</div>
+      <div style="flex:1;">
+        <div style="font-size:13px; font-weight:600; letter-spacing:-0.01em;">Shubham Kumar</div>
+        <div style="font-size:11px; color:oklch(0.64 0.006 70);">Admin</div>
+      </div>
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="oklch(0.62 0.006 70)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 15l-6-6-6 6"/></svg>
+    </div>
+  </div>
+
+  <div style="flex:1; min-width:0; display:flex; flex-direction:column; height:100vh; background:oklch(0.99 0.0015 85);">
+
+    <div style="height:56px; flex-shrink:0; display:flex; align-items:center; justify-content:space-between; padding:0 24px; border-bottom:1px solid oklch(0.93 0.004 75); background:oklch(0.99 0.0015 85);">
+      <div style="display:flex; align-items:center; gap:16px;">
+        <div style="display:flex; align-items:center; gap:9px; font-size:13.5px; font-family:'Geist Mono',monospace; letter-spacing:0.02em;">
+          <span style="color:oklch(0.55 0.008 70);">CRM</span>
+          <span style="color:oklch(0.8 0.005 75);">/</span>
+          <span style="color:oklch(0.28 0.01 60);">PIPELINE</span>
+        </div>
+        <div style="display:flex; align-items:center; gap:6px; padding:3px 9px 3px 7px; border-radius:20px; background:oklch(0.965 0.02 255); border:1px solid oklch(0.9 0.03 255);">
+          <span style="width:6px; height:6px; border-radius:50%; background:oklch(0.55 0.13 255); animation:softPulse 2s infinite;"></span>
+          <span style="font-size:11px; font-family:'Geist Mono',monospace; letter-spacing:0.04em; color:oklch(0.45 0.1 255);">2 AI EMPLOYEES ACTIVE</span>
+        </div>
+      </div>
+      <div style="display:flex; align-items:center; gap:8px;">
+        <div style="display:flex; align-items:center; gap:8px; padding:8px 12px; border-radius:9px; border:1px solid oklch(0.9 0.004 75); background:oklch(0.995 0.001 85); font-size:13px; font-weight:500; color:oklch(0.4 0.008 65); cursor:pointer;" style-hover="background:oklch(0.97 0.003 80);">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="oklch(0.5 0.008 70)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h7l-1 8 10-12h-7z"/></svg>
+          <span>Automations</span>
+        </div>
+        <div style="display:flex; align-items:center; gap:8px; padding:8px 13px; border-radius:9px; border:1px solid oklch(0.88 0.03 255); background:oklch(0.97 0.02 255); font-size:13px; font-weight:600; color:oklch(0.42 0.11 255); cursor:pointer;" style-hover="background:oklch(0.95 0.03 255);">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="oklch(0.5 0.11 255)" stroke="none"><path d="M12 2l2.2 5.8L20 10l-5.8 2.2L12 18l-2.2-5.8L4 10l5.8-2.2z"/></svg>
+          <span>Ask AI</span>
+        </div>
+        <div style="display:flex; align-items:center; gap:7px; padding:8px 14px; border-radius:9px; background:oklch(0.24 0.012 60); color:white; font-size:13px; font-weight:600; cursor:pointer; box-shadow:0 1px 2px oklch(0.2 0.02 60 / 0.25);" style-hover="background:oklch(0.32 0.012 60);">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+          <span>Add deal</span>
+        </div>
+      </div>
+    </div>
+
+    <div style="flex:1; min-height:0; display:flex;">
+
+      <div style="flex:1; min-width:0; display:flex; flex-direction:column; overflow-y:auto;">
+        <div style="padding:22px 24px 8px;">
+
+          <div style="position:relative; overflow:hidden; border-radius:14px; border:1px solid oklch(0.9 0.028 255); background:oklch(0.975 0.018 255); padding:14px 16px;">
+            <div style="display:flex; align-items:center; gap:13px;">
+              <div style="width:34px; height:34px; border-radius:10px; background:oklch(0.24 0.012 60); display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/></svg>
+              </div>
+              <div style="flex:1; min-width:0;">
+                <div style="font-size:14.5px; color:oklch(0.4 0.03 255);">Ask your CRM &mdash; <span style="color:oklch(0.35 0.05 255);">&ldquo;which deals slip this quarter?&rdquo;</span> or <span style="color:oklch(0.35 0.05 255);">&ldquo;draft follow-ups for everything stalled&rdquo;</span></div>
+              </div>
+              <div style="display:flex; align-items:center; gap:6px; padding:8px 14px; border-radius:9px; background:oklch(0.24 0.012 60); color:white; font-size:13px; font-weight:600; cursor:pointer; flex-shrink:0;" style-hover="background:oklch(0.32 0.012 60);">
+                <span>Ask</span>
+                <span style="font-size:11px; font-family:'Geist Mono',monospace; opacity:0.7;">&#9166;</span>
+              </div>
+            </div>
+            <div style="display:flex; align-items:center; gap:8px; margin-top:11px; flex-wrap:wrap;">
+              <sc-for list="{{ prompts }}" as="pr" hint-placeholder-count="4">
+                <div style="display:flex; align-items:center; gap:6px; padding:5px 10px; border-radius:20px; background:oklch(0.99 0.006 255); border:1px solid oklch(0.9 0.02 255); font-size:12px; color:oklch(0.42 0.05 255); cursor:pointer;" style-hover="background:oklch(0.965 0.02 255);">
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="oklch(0.55 0.09 255)" stroke="none"><path d="M12 2l2.2 5.8L20 10l-5.8 2.2L12 18l-2.2-5.8L4 10l5.8-2.2z"/></svg>
+                  <span>{{ pr }}</span>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+
+          <div style="display:grid; grid-template-columns:repeat(4, 1fr); gap:13px; margin-top:16px;">
+            <sc-for list="{{ metrics }}" as="m" hint-placeholder-count="4">
+              <div style="border:1px solid {{ m.border }}; border-radius:13px; background:{{ m.bg }}; padding:14px 15px;">
+                <div style="display:flex; align-items:center; justify-content:space-between;">
+                  <span style="width:30px; height:30px; border-radius:8px; background:{{ m.iconBg }}; display:flex; align-items:center; justify-content:center; color:{{ m.iconColor }};" dangerouslySetInnerHTML="{{ m.iconHtml }}"></span>
+                  <span style="display:flex; align-items:center; gap:3px; font-size:11px; font-family:'Geist Mono',monospace; font-weight:500; color:{{ m.trendColor }};" dangerouslySetInnerHTML="{{ m.trendHtml }}"></span>
+                </div>
+                <div style="font-size:24px; font-weight:700; letter-spacing:-0.02em; margin-top:13px;">{{ m.value }}</div>
+                <div style="font-size:12.5px; font-weight:500; color:oklch(0.32 0.01 60); margin-top:2px;">{{ m.label }}</div>
+                <div style="font-size:11.5px; color:{{ m.subColor }}; margin-top:4px;">{{ m.sub }}</div>
+              </div>
+            </sc-for>
+          </div>
+
+          <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; margin-top:20px;">
+            <div style="display:flex; align-items:center; gap:3px; background:oklch(0.955 0.003 80); border:1px solid oklch(0.93 0.004 75); border-radius:10px; padding:3px;">
+              <sc-for list="{{ tabs }}" as="t" hint-placeholder-count="3">
+                <div onClick="{{ t.onClick }}" style="display:flex; align-items:center; gap:7px; padding:6px 13px; border-radius:8px; font-size:13px; font-weight:{{ t.weight }}; color:{{ t.color }}; background:{{ t.bg }}; box-shadow:{{ t.shadow }}; cursor:pointer;">
+                  <span style="display:flex; color:{{ t.iconColor }};" dangerouslySetInnerHTML="{{ t.iconHtml }}"></span>
+                  <span>{{ t.label }}</span>
+                  <span style="font-size:11px; font-family:'Geist Mono',monospace; color:{{ t.countColor }};">{{ t.count }}</span>
+                </div>
+              </sc-for>
+            </div>
+            <div style="display:flex; align-items:center; gap:8px;">
+              <div style="display:flex; align-items:center; gap:8px; width:220px; background:oklch(0.995 0.001 85); border:1px solid oklch(0.9 0.004 75); border-radius:9px; padding:7px 11px;">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="oklch(0.6 0.006 70)" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+                <span style="font-size:13px; color:oklch(0.6 0.006 70);">Search deals</span>
+              </div>
+              <div style="display:flex; align-items:center; gap:6px; padding:7px 12px; border-radius:9px; border:1px solid oklch(0.9 0.004 75); background:oklch(0.995 0.001 85); font-size:13px; font-weight:500; color:oklch(0.4 0.008 65); cursor:pointer;" style-hover="background:oklch(0.97 0.003 80);">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="oklch(0.55 0.008 70)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 3H2l8 9.46V19l4 2v-8.54z"/></svg>
+                <span>Filter</span>
+              </div>
+              <div style="display:flex; align-items:center; gap:7px; padding:7px 11px; border-radius:9px; border:1px solid oklch(0.9 0.004 75); background:oklch(0.995 0.001 85); font-size:13px; font-weight:500; color:oklch(0.4 0.008 65); cursor:pointer;" style-hover="background:oklch(0.97 0.003 80);">
+                <div style="width:22px; height:22px; border-radius:6px; background:oklch(0.6 0.11 45); display:flex; align-items:center; justify-content:center; font-size:9px; font-weight:600; color:white;">PC</div>
+                <span>Priya</span>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="oklch(0.55 0.008 70)" stroke-width="2.2" stroke-linecap="round"><path d="M8 9l4 4 4-4"/></svg>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <sc-if value="{{ showPipeline }}" hint-placeholder-val="{{ true }}">
+        <div style="flex:1; min-height:0; overflow-x:auto; padding:8px 24px 28px;">
+          <div style="display:flex; gap:14px; align-items:flex-start; min-width:min-content;">
+            <sc-for list="{{ stages }}" as="st" hint-placeholder-count="5">
+              <div style="width:286px; flex-shrink:0;">
+                <div style="display:flex; align-items:center; gap:8px; padding:2px 4px 12px;">
+                  <span style="width:9px; height:9px; border-radius:50%; background:{{ st.color }};"></span>
+                  <span style="font-size:11px; font-family:'Geist Mono',monospace; font-weight:600; letter-spacing:0.1em; color:oklch(0.34 0.008 65);">{{ st.name }}</span>
+                  <span style="font-size:10.5px; font-family:'Geist Mono',monospace; color:oklch(0.55 0.008 70); background:oklch(0.955 0.003 80); border:1px solid oklch(0.93 0.004 75); border-radius:20px; padding:1px 7px;">{{ st.count }}</span>
+                  <span style="flex:1;"></span>
+                  <span style="font-size:13px; font-weight:700; letter-spacing:-0.01em; color:oklch(0.3 0.01 60);">{{ st.total }}</span>
+                </div>
+                <div style="display:flex; align-items:center; gap:6px; margin:-6px 4px 12px; padding:6px 9px; border-radius:8px; background:{{ st.likeBg }};">
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="{{ st.color }}" stroke="none"><path d="M12 2l2.2 5.8L20 10l-5.8 2.2L12 18l-2.2-5.8L4 10l5.8-2.2z"/></svg>
+                  <span style="font-size:11px; color:{{ st.likeText }}; font-weight:500;">{{ st.likeLabel }}</span>
+                </div>
+                <div style="display:flex; flex-direction:column; gap:10px;">
+                  <sc-for list="{{ st.deals }}" as="d" hint-placeholder-count="2">
+                    <div style="border:1px solid oklch(0.91 0.004 75); border-radius:12px; background:oklch(0.998 0.001 85); padding:12px 13px 11px; cursor:grab; box-shadow:0 1px 2px oklch(0.3 0.02 60 / 0.04); transition:border-color 0.12s, box-shadow 0.12s;" style-hover="border-color:oklch(0.82 0.005 75); box-shadow:0 6px 18px oklch(0.3 0.02 60 / 0.08);">
+                      <div style="display:flex; align-items:center; gap:8px;">
+                        <div style="width:24px; height:24px; border-radius:7px; background:{{ d.monoColor }}; display:flex; align-items:center; justify-content:center; font-size:9.5px; font-weight:600; color:white; flex-shrink:0;">{{ d.mono }}</div>
+                        <span style="font-size:11px; font-family:'Geist Mono',monospace; color:oklch(0.55 0.008 70); flex:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{{ d.company }}</span>
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="oklch(0.72 0.006 70)" stroke="none"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg>
+                      </div>
+                      <div style="font-size:13.5px; font-weight:600; letter-spacing:-0.01em; margin-top:9px; line-height:1.3;">{{ d.title }}</div>
+                      <div style="display:flex; align-items:center; justify-content:space-between; margin-top:8px;">
+                        <span style="font-size:16px; font-weight:700; letter-spacing:-0.02em;">{{ d.value }}</span>
+                        <span style="display:inline-flex; align-items:center; gap:5px; padding:3px 8px 3px 7px; border-radius:20px; background:{{ d.healthBg }}; border:1px solid {{ d.healthBorder }};">
+                          <span style="width:6px; height:6px; border-radius:50%; background:{{ d.healthDot }};"></span>
+                          <span style="font-size:10.5px; font-weight:600; color:{{ d.healthText }};">{{ d.healthLabel }}</span>
+                        </span>
+                      </div>
+                      <div style="display:flex; align-items:center; gap:8px; margin-top:9px;">
+                        <span style="font-size:9.5px; font-family:'Geist Mono',monospace; color:oklch(0.58 0.008 70); width:52px;">AI SCORE</span>
+                        <div style="flex:1; height:5px; border-radius:3px; background:oklch(0.93 0.004 75); overflow:hidden;">
+                          <div style="width:{{ d.scorePct }}; height:100%; background:{{ d.healthDot }}; border-radius:3px;"></div>
+                        </div>
+                        <span style="font-size:11px; font-family:'Geist Mono',monospace; font-weight:600; color:{{ d.healthText }};">{{ d.score }}</span>
+                      </div>
+                      <div style="display:flex; align-items:flex-start; gap:7px; margin-top:10px; padding:8px 9px; border-radius:9px; background:oklch(0.968 0.016 255); border:1px solid oklch(0.92 0.02 255);">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="oklch(0.5 0.11 255)" stroke="none" style="flex-shrink:0; margin-top:1px;"><path d="M12 2l2.2 5.8L20 10l-5.8 2.2L12 18l-2.2-5.8L4 10l5.8-2.2z"/></svg>
+                        <div style="min-width:0;">
+                          <div style="font-size:9px; font-family:'Geist Mono',monospace; letter-spacing:0.06em; color:oklch(0.55 0.09 255);">NEXT BEST ACTION</div>
+                          <div style="font-size:12px; font-weight:500; color:oklch(0.36 0.05 255); line-height:1.35; margin-top:2px;">{{ d.action }}</div>
+                        </div>
+                      </div>
+                      <div style="display:flex; align-items:center; gap:8px; margin-top:11px; padding-top:10px; border-top:1px solid oklch(0.94 0.003 80);">
+                        <div style="width:19px; height:19px; border-radius:6px; background:{{ d.ownerColor }}; display:flex; align-items:center; justify-content:center; font-size:8.5px; font-weight:600; color:white; flex-shrink:0;">{{ d.ownerInit }}</div>
+                        <span style="font-size:11px; color:oklch(0.5 0.008 70); flex:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{{ d.owner }}</span>
+                        <sc-if value="{{ d.hasSignals }}" hint-placeholder-val="{{ false }}">
+                          <span style="display:inline-flex; align-items:center; gap:3px; font-size:10px; font-family:'Geist Mono',monospace; color:oklch(0.5 0.1 150);">
+                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="oklch(0.5 0.11 150)" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M18 15l-6-6-6 6"/></svg>{{ d.signals }}
+                          </span>
+                        </sc-if>
+                        <span style="display:inline-flex; align-items:center; gap:3px; font-size:10px; font-family:'Geist Mono',monospace; color:{{ d.daysColor }};">
+                          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>{{ d.days }}
+                        </span>
+                      </div>
+                    </div>
+                  </sc-for>
+                  <div style="display:flex; align-items:center; justify-content:center; gap:7px; padding:9px; border-radius:10px; border:1px dashed oklch(0.86 0.005 75); font-size:12.5px; font-weight:500; color:oklch(0.55 0.008 70); cursor:pointer;" style-hover="background:oklch(0.975 0.002 80); border-color:oklch(0.78 0.005 75);">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+                    <span>Add deal</span>
+                  </div>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+        </sc-if>
+
+        <sc-if value="{{ showContacts }}" hint-placeholder-val="{{ false }}">
+        <div style="padding:8px 24px 28px;">
+          <div style="border:1px solid oklch(0.91 0.004 75); border-radius:13px; background:oklch(0.998 0.001 85); overflow:hidden;">
+            <div style="display:grid; grid-template-columns:2.3fr 1.5fr 1.7fr 1fr 1.3fr 1.2fr 40px; gap:14px; padding:11px 18px; background:oklch(0.984 0.002 80); border-bottom:1px solid oklch(0.93 0.004 75); font-family:'Geist Mono',monospace; font-size:10px; font-weight:600; letter-spacing:0.1em; color:oklch(0.58 0.006 70);">
+              <span>CONTACT</span><span>COMPANY</span><span>AI INTENT &amp; NEXT TOUCH</span><span>DEALS</span><span>LAST ACTIVITY</span><span>OWNER</span><span></span>
+            </div>
+            <sc-for list="{{ contacts }}" as="c" hint-placeholder-count="6">
+              <div style="display:grid; grid-template-columns:2.3fr 1.5fr 1.7fr 1fr 1.3fr 1.2fr 40px; gap:14px; padding:13px 18px; border-bottom:1px solid oklch(0.95 0.003 80); align-items:center; cursor:pointer;" style-hover="background:oklch(0.985 0.002 80);">
+                <div style="display:flex; align-items:center; gap:11px; min-width:0;">
+                  <div style="width:32px; height:32px; border-radius:9px; background:{{ c.avatar }}; display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:600; color:white; flex-shrink:0;">{{ c.init }}</div>
+                  <div style="min-width:0;">
+                    <div style="font-size:13px; font-weight:600; letter-spacing:-0.01em; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{{ c.name }}</div>
+                    <div style="font-size:11.5px; color:oklch(0.58 0.008 70); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{{ c.title }}</div>
+                  </div>
+                </div>
+                <div style="display:flex; align-items:center; gap:8px; min-width:0;">
+                  <div style="width:20px; height:20px; border-radius:6px; background:{{ c.companyColor }}; display:flex; align-items:center; justify-content:center; font-size:8.5px; font-weight:600; color:white; flex-shrink:0;">{{ c.companyMono }}</div>
+                  <span style="font-size:12.5px; color:oklch(0.36 0.008 65); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{{ c.company }}</span>
+                </div>
+                <div style="min-width:0;">
+                  <span style="display:inline-flex; align-items:center; gap:5px; padding:3px 8px 3px 7px; border-radius:20px; background:{{ c.intentBg }}; border:1px solid {{ c.intentBorder }};">
+                    <span style="width:6px; height:6px; border-radius:50%; background:{{ c.intentDot }};"></span>
+                    <span style="font-size:10.5px; font-weight:600; color:{{ c.intentText }};">{{ c.intentLabel }}</span>
+                    <span style="font-size:10px; font-family:'Geist Mono',monospace; color:{{ c.intentText }}; opacity:0.85;">{{ c.score }}</span>
+                  </span>
+                  <div style="display:flex; align-items:center; gap:5px; margin-top:6px; min-width:0;">
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="oklch(0.5 0.11 255)" stroke="none" style="flex-shrink:0;"><path d="M12 2l2.2 5.8L20 10l-5.8 2.2L12 18l-2.2-5.8L4 10l5.8-2.2z"/></svg>
+                    <span style="font-size:11px; color:oklch(0.5 0.05 255); flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{{ c.aiNote }}</span>
+                  </div>
+                </div>
+                <div>
+                  <div style="font-size:13px; font-weight:600; letter-spacing:-0.01em;">{{ c.dealValue }}</div>
+                  <div style="font-size:11px; color:oklch(0.6 0.008 70);">{{ c.dealSub }}</div>
+                </div>
+                <div>
+                  <div style="font-size:12.5px; color:oklch(0.36 0.008 65);">{{ c.lastAct }}</div>
+                  <div style="font-size:11px; font-family:'Geist Mono',monospace; color:oklch(0.62 0.006 70);">{{ c.lastTime }}</div>
+                </div>
+                <div style="display:flex; align-items:center; gap:8px;">
+                  <div style="width:22px; height:22px; border-radius:7px; background:{{ c.ownerColor }}; display:flex; align-items:center; justify-content:center; font-size:9px; font-weight:600; color:white; flex-shrink:0;">{{ c.ownerInit }}</div>
+                  <span style="font-size:12px; color:oklch(0.4 0.008 65);">{{ c.owner }}</span>
+                </div>
+                <div style="display:flex; justify-content:flex-end;">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="oklch(0.72 0.006 70)" stroke="none"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+        </sc-if>
+
+        <sc-if value="{{ showCompanies }}" hint-placeholder-val="{{ false }}">
+        <div style="padding:8px 24px 28px;">
+          <div style="border:1px solid oklch(0.91 0.004 75); border-radius:13px; background:oklch(0.998 0.001 85); overflow:hidden;">
+            <div style="display:grid; grid-template-columns:2.1fr 1.4fr 1.1fr 0.7fr 0.9fr 1.1fr 1.2fr 40px; gap:14px; padding:11px 18px; background:oklch(0.984 0.002 80); border-bottom:1px solid oklch(0.93 0.004 75); font-family:'Geist Mono',monospace; font-size:10px; font-weight:600; letter-spacing:0.1em; color:oklch(0.58 0.006 70);">
+              <span>COMPANY</span><span>INDUSTRY</span><span>PIPELINE</span><span>DEALS</span><span>CONTACTS</span><span>HEALTH</span><span>OWNER</span><span></span>
+            </div>
+            <sc-for list="{{ companies }}" as="co" hint-placeholder-count="6">
+              <div style="display:grid; grid-template-columns:2.1fr 1.4fr 1.1fr 0.7fr 0.9fr 1.1fr 1.2fr 40px; gap:14px; padding:13px 18px; border-bottom:1px solid oklch(0.95 0.003 80); align-items:center; cursor:pointer;" style-hover="background:oklch(0.985 0.002 80);">
+                <div style="display:flex; align-items:center; gap:11px; min-width:0;">
+                  <div style="width:34px; height:34px; border-radius:9px; background:{{ co.monoColor }}; display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:600; color:white; flex-shrink:0;">{{ co.mono }}</div>
+                  <div style="min-width:0;">
+                    <div style="display:flex; align-items:center; gap:6px; min-width:0;">
+                      <span style="font-size:13px; font-weight:600; letter-spacing:-0.01em; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{{ co.name }}</span>
+                      <sc-if value="{{ co.enriched }}" hint-placeholder-val="{{ false }}">
+                        <span style="display:inline-flex; align-items:center; gap:3px; font-size:8.5px; font-family:'Geist Mono',monospace; letter-spacing:0.04em; color:oklch(0.48 0.09 255); background:oklch(0.96 0.02 255); border:1px solid oklch(0.9 0.02 255); border-radius:5px; padding:1px 5px 1px 4px; white-space:nowrap; flex-shrink:0;">
+                          <svg width="8" height="8" viewBox="0 0 24 24" fill="oklch(0.5 0.09 255)" stroke="none"><path d="M12 2l2.2 5.8L20 10l-5.8 2.2L12 18l-2.2-5.8L4 10l5.8-2.2z"/></svg>AI
+                        </span>
+                      </sc-if>
+                    </div>
+                    <div style="font-size:11.5px; font-family:'Geist Mono',monospace; color:oklch(0.6 0.006 70); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{{ co.domain }}</div>
+                  </div>
+                </div>
+                <div>
+                  <div style="font-size:12.5px; color:oklch(0.36 0.008 65);">{{ co.industry }}</div>
+                  <div style="font-size:11px; color:oklch(0.6 0.008 70);">{{ co.size }}</div>
+                </div>
+                <div>
+                  <div style="font-size:13px; font-weight:600; letter-spacing:-0.01em;">{{ co.pipeline }}</div>
+                  <div style="font-size:11px; color:oklch(0.6 0.008 70);">{{ co.pipeSub }}</div>
+                </div>
+                <div style="font-size:13px; font-weight:500; color:oklch(0.34 0.008 65);">{{ co.deals }}</div>
+                <div style="font-size:13px; font-weight:500; color:oklch(0.34 0.008 65);">{{ co.contactsN }}</div>
+                <div>
+                  <span style="display:inline-flex; align-items:center; gap:5px; padding:3px 8px 3px 7px; border-radius:20px; background:{{ co.healthBg }}; border:1px solid {{ co.healthBorder }};">
+                    <span style="width:6px; height:6px; border-radius:50%; background:{{ co.healthDot }};"></span>
+                    <span style="font-size:10.5px; font-weight:600; color:{{ co.healthText }};">{{ co.healthLabel }}</span>
+                  </span>
+                </div>
+                <div style="display:flex; align-items:center; gap:8px;">
+                  <div style="width:22px; height:22px; border-radius:7px; background:{{ co.ownerColor }}; display:flex; align-items:center; justify-content:center; font-size:9px; font-weight:600; color:white; flex-shrink:0;">{{ co.ownerInit }}</div>
+                  <span style="font-size:12px; color:oklch(0.4 0.008 65);">{{ co.owner }}</span>
+                </div>
+                <div style="display:flex; justify-content:flex-end;">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="oklch(0.72 0.006 70)" stroke="none"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+        </sc-if>
+      </div>
+
+      <div style="width:340px; flex-shrink:0; border-left:1px solid oklch(0.92 0.004 75); background:oklch(0.992 0.0015 85); display:flex; flex-direction:column; height:100%;">
+        <div style="height:56px; flex-shrink:0; display:flex; align-items:center; gap:9px; padding:0 18px; border-bottom:1px solid oklch(0.93 0.004 75);">
+          <div style="width:26px; height:26px; border-radius:8px; background:oklch(0.24 0.012 60); display:flex; align-items:center; justify-content:center;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/></svg>
+          </div>
+          <div style="flex:1;">
+            <div style="font-size:13.5px; font-weight:600; letter-spacing:-0.01em;">AI Copilot</div>
+          </div>
+          <span style="display:flex; align-items:center; gap:5px; font-size:10px; font-family:'Geist Mono',monospace; color:oklch(0.5 0.1 150);">
+            <span style="width:6px; height:6px; border-radius:50%; background:oklch(0.55 0.13 150); animation:softPulse 2s infinite;"></span>LIVE
+          </span>
+        </div>
+
+        <div style="flex:1; overflow-y:auto; padding:16px 16px 24px;">
+
+          <div style="border:1px solid oklch(0.91 0.004 75); border-radius:13px; background:oklch(0.998 0.001 85); padding:15px 16px;">
+            <div style="display:flex; align-items:center; justify-content:space-between;">
+              <span style="font-size:10.5px; font-family:'Geist Mono',monospace; letter-spacing:0.1em; color:oklch(0.55 0.008 70);">WEIGHTED FORECAST &middot; Q3</span>
+              <span style="font-size:10.5px; font-family:'Geist Mono',monospace; color:oklch(0.5 0.1 150);">88%</span>
+            </div>
+            <div style="display:flex; align-items:baseline; gap:8px; margin-top:11px;">
+              <span style="font-size:27px; font-weight:700; letter-spacing:-0.02em;">$467K</span>
+              <span style="font-size:12px; color:oklch(0.55 0.008 70);">/ $530K goal</span>
+            </div>
+            <div style="height:7px; border-radius:4px; background:oklch(0.93 0.004 75); overflow:hidden; margin-top:11px;">
+              <div style="width:88%; height:100%; background:linear-gradient(90deg, oklch(0.55 0.13 150), oklch(0.6 0.13 165)); border-radius:4px;"></div>
+            </div>
+            <div style="display:flex; align-items:center; gap:6px; margin-top:10px; font-size:11.5px; color:oklch(0.45 0.1 150);">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M23 6l-9.5 9.5-5-5L1 18"/><path d="M17 6h6v6"/></svg>
+              <span>On track &middot; +$54K vs last quarter</span>
+            </div>
+          </div>
+
+          <div style="font-family:'Geist Mono',monospace; font-size:10.5px; font-weight:500; letter-spacing:0.14em; color:oklch(0.6 0.006 70); padding:20px 2px 10px; display:flex; align-items:center; justify-content:space-between;">
+            <span>NEEDS YOUR ATTENTION</span>
+            <span style="color:oklch(0.55 0.18 25); background:oklch(0.95 0.04 30); border-radius:20px; padding:1px 7px; letter-spacing:0.04em;">3</span>
+          </div>
+          <div style="display:flex; flex-direction:column; gap:8px;">
+            <sc-for list="{{ attention }}" as="a" hint-placeholder-count="3">
+              <div style="display:flex; gap:10px; padding:11px 12px; border-radius:11px; background:oklch(0.998 0.001 85); border:1px solid oklch(0.91 0.004 75); cursor:pointer;" style-hover="border-color:oklch(0.82 0.005 75);">
+                <span style="width:26px; height:26px; border-radius:8px; background:{{ a.tint }}; display:flex; align-items:center; justify-content:center; color:{{ a.ink }}; flex-shrink:0;" dangerouslySetInnerHTML="{{ a.iconHtml }}"></span>
+                <div style="flex:1; min-width:0;">
+                  <div style="font-size:12.5px; font-weight:600; letter-spacing:-0.01em;">{{ a.title }}</div>
+                  <div style="font-size:11.5px; color:oklch(0.55 0.008 70); margin-top:2px; line-height:1.35;">{{ a.desc }}</div>
+                </div>
+                <span style="font-size:11.5px; font-weight:600; color:{{ a.ink }}; align-self:center; white-space:nowrap;">{{ a.cta }}</span>
+              </div>
+            </sc-for>
+          </div>
+
+          <div style="font-family:'Geist Mono',monospace; font-size:10.5px; font-weight:500; letter-spacing:0.14em; color:oklch(0.6 0.006 70); padding:20px 2px 10px;">SUGGESTED BY AI</div>
+          <div style="display:flex; flex-direction:column; gap:8px;">
+            <sc-for list="{{ suggestions }}" as="s" hint-placeholder-count="3">
+              <div style="display:flex; align-items:center; gap:10px; padding:10px 12px; border-radius:11px; background:oklch(0.968 0.016 255); border:1px solid oklch(0.92 0.02 255);">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="oklch(0.5 0.11 255)" stroke="none" style="flex-shrink:0;"><path d="M12 2l2.2 5.8L20 10l-5.8 2.2L12 18l-2.2-5.8L4 10l5.8-2.2z"/></svg>
+                <span style="flex:1; font-size:12.5px; font-weight:500; color:oklch(0.34 0.04 255); line-height:1.35;">{{ s }}</span>
+                <span style="font-size:11.5px; font-weight:600; color:white; background:oklch(0.48 0.11 255); border-radius:7px; padding:4px 11px; cursor:pointer; white-space:nowrap;" style-hover="background:oklch(0.42 0.11 255);">Apply</span>
+              </div>
+            </sc-for>
+          </div>
+
+          <div style="font-family:'Geist Mono',monospace; font-size:10.5px; font-weight:500; letter-spacing:0.14em; color:oklch(0.6 0.006 70); padding:20px 2px 12px;">RECENT AI ACTIVITY</div>
+          <div style="display:flex; flex-direction:column;">
+            <sc-for list="{{ activity }}" as="ev" hint-placeholder-count="4">
+              <div style="display:flex; gap:11px;">
+                <div style="display:flex; flex-direction:column; align-items:center; flex-shrink:0;">
+                  <div style="width:22px; height:22px; border-radius:7px; background:{{ ev.color }}; display:flex; align-items:center; justify-content:center; font-size:8.5px; font-weight:600; color:white;">{{ ev.init }}</div>
+                  <sc-if value="{{ ev.line }}" hint-placeholder-val="{{ true }}">
+                    <div style="width:1.5px; flex:1; background:oklch(0.92 0.004 75); margin:3px 0;"></div>
+                  </sc-if>
+                </div>
+                <div style="padding-bottom:16px; min-width:0;">
+                  <div style="font-size:12.5px; color:oklch(0.34 0.008 65); line-height:1.4;"><span style="font-weight:600; color:oklch(0.26 0.01 60);">{{ ev.who }}</span> {{ ev.text }}</div>
+                  <div style="font-size:10.5px; font-family:'Geist Mono',monospace; color:oklch(0.62 0.006 70); margin-top:3px;">{{ ev.time }}</div>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+const ICONS = {
+  home: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M9 22V12h6v10"/></svg>',
+  inbox: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 8l9 6 9-6"/></svg>',
+  drive: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12H2M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>',
+  workforce: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="8" width="16" height="12" rx="2"/><path d="M9 8V5a3 3 0 0 1 6 0v3"/><circle cx="9" cy="14" r="1"/><circle cx="15" cy="14" r="1"/></svg>',
+  crm: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>',
+  calendar: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>',
+  investors: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M23 6l-9.5 9.5-5-5L1 18"/><path d="M17 6h6v6"/></svg>',
+  tasks: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>',
+  memory: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 2a3 3 0 0 0-3 3 3 3 0 0 0-2 5.2A3 3 0 0 0 5 16a3 3 0 0 0 4.5 2.6V2z"/><path d="M14.5 2a3 3 0 0 1 3 3 3 3 0 0 1 2 5.2A3 3 0 0 1 19 16a3 3 0 0 1-4.5 2.6V2z"/></svg>',
+  approvals: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M9 4H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-2"/><path d="M9 14l2 2 4-4"/></svg>',
+  worklog: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/></svg>',
+  tools: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18v3h3l6.3-6.3a4 4 0 0 0 5.4-5.4l-2.3 2.3-2-2 2.3-2.3z"/></svg>',
+  dollar: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>',
+  target: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/></svg>',
+  trophy: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0z"/><path d="M7 4H4v2a3 3 0 0 0 3 3M17 4h3v2a3 3 0 0 1-3 3"/></svg>',
+  alert: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>',
+  clock: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>',
+  mail: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M2 6l10 7 10-7"/></svg>',
+  file: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>'
+};
+
+const AV = { maya: 'oklch(0.6 0.1 220)', priya: 'oklch(0.6 0.11 45)', hayden: 'oklch(0.65 0.11 45)', blake: 'oklch(0.55 0.1 285)' };
+
+const HEALTH = {
+  hot:     { dot: 'oklch(0.55 0.13 255)', bg: 'oklch(0.96 0.03 255)', border: 'oklch(0.9 0.03 255)', text: 'oklch(0.45 0.12 255)', label: 'Hot' },
+  healthy: { dot: 'oklch(0.55 0.13 150)', bg: 'oklch(0.95 0.04 150)', border: 'oklch(0.88 0.05 150)', text: 'oklch(0.42 0.1 150)', label: 'Healthy' },
+  risk:    { dot: 'oklch(0.68 0.14 70)',  bg: 'oklch(0.96 0.05 82)',  border: 'oklch(0.9 0.06 82)',  text: 'oklch(0.52 0.11 65)', label: 'At risk' },
+  stalled: { dot: 'oklch(0.58 0.18 25)',  bg: 'oklch(0.96 0.04 30)',  border: 'oklch(0.9 0.05 30)',  text: 'oklch(0.52 0.16 25)', label: 'Stalled' }
+};
+
+class Component extends DCLogic {
+  state = { tab: 'pipeline' };
+  setTab = (k) => () => this.setState({ tab: k });
+  goHome = () => { window.location.href = 'Home.dc.html'; };
+  goInbox = () => { window.location.href = 'Inbox.dc.html'; };
+  goDrive = () => { window.location.href = 'Drive.dc.html'; };
+  goChat = () => { window.location.href = 'Chat.dc.html'; };
+  goCalls = () => { window.location.href = 'Calls.dc.html'; };
+
+  renderVals() {
+    const ink = 'oklch(0.24 0.012 60)';
+
+    const navDefs = [
+      { label: 'Home', icon: ICONS.home, active: false, onClick: this.goHome },
+      { label: 'Inbox', icon: ICONS.inbox, active: false, onClick: this.goInbox },
+      { label: 'AdeHQ Drive', icon: ICONS.drive, active: false, onClick: this.goDrive }
+    ];
+    const styleItem = (d) => ({
+      label: d.label, iconHtml: { __html: d.icon }, onClick: d.onClick || (() => {}),
+      hasBadge: !!d.badge, badge: d.badge || '',
+      bg: d.active ? 'oklch(0.955 0.003 80)' : 'transparent',
+      color: d.active ? ink : 'oklch(0.34 0.008 65)',
+      iconColor: d.active ? ink : 'oklch(0.55 0.008 70)',
+      weight: d.active ? '600' : '500'
+    });
+    const navItems = navDefs.map(styleItem);
+
+    const wfDefs = [
+      { label: 'Workforce', icon: ICONS.workforce }, { label: 'CRM', icon: ICONS.crm, active: true },
+      { label: 'Calendar', icon: ICONS.calendar }, { label: 'Investors', icon: ICONS.investors },
+      { label: 'Tasks', icon: ICONS.tasks, badge: '2' }, { label: 'Memory', icon: ICONS.memory },
+      { label: 'Approvals', icon: ICONS.approvals }, { label: 'Work Log', icon: ICONS.worklog },
+      { label: 'Tools', icon: ICONS.tools }
+    ];
+    const workforceItems = wfDefs.map(styleItem);
+
+    const dms = [
+      { name: 'Maya', initials: 'MA', gradient: AV.maya, hasTag: true, tag: 'Workforce manager', onClick: () => {} },
+      { name: 'Hayden Kim', initials: 'HK', gradient: AV.hayden, hasTag: false, tag: '', onClick: this.goChat },
+      { name: 'Priya Carter', initials: 'PC', gradient: AV.priya, hasTag: false, tag: '', onClick: () => {} },
+      { name: 'Blake Fleming', initials: 'BF', gradient: AV.blake, hasTag: false, tag: '', onClick: () => {} }
+    ];
+
+    const prompts = ['Which deals slip this quarter?', 'Draft follow-ups for stalled deals', 'Find upsell opportunities', 'Rescore all leads'];
+
+    const up = (t) => ({ __html: '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M18 15l-6-6-6 6"/></svg><span>' + t + '</span>' });
+    const flat = (t) => ({ __html: '<span>' + t + '</span>' });
+    const metrics = [
+      { value: '$707K', label: 'Open pipeline', sub: '8 open deals', subColor: 'oklch(0.6 0.008 70)',
+        iconHtml: { __html: ICONS.dollar }, iconBg: 'oklch(0.955 0.003 80)', iconColor: ink,
+        border: 'oklch(0.91 0.004 75)', bg: 'oklch(0.998 0.001 85)',
+        trendHtml: up('12%'), trendColor: 'oklch(0.5 0.1 150)' },
+      { value: '$355K', label: 'Weighted forecast', sub: 'AI-adjusted \u00b7 82% confidence', subColor: 'oklch(0.5 0.05 255)',
+        iconHtml: { __html: ICONS.target }, iconBg: 'oklch(0.94 0.03 255)', iconColor: 'oklch(0.48 0.12 255)',
+        border: 'oklch(0.9 0.028 255)', bg: 'oklch(0.983 0.014 255)',
+        trendHtml: flat('AI'), trendColor: 'oklch(0.5 0.1 255)' },
+      { value: '34%', label: 'Win rate', sub: 'Up from 28% last Q', subColor: 'oklch(0.6 0.008 70)',
+        iconHtml: { __html: ICONS.trophy }, iconBg: 'oklch(0.955 0.003 80)', iconColor: ink,
+        border: 'oklch(0.91 0.004 75)', bg: 'oklch(0.998 0.001 85)',
+        trendHtml: up('6pt'), trendColor: 'oklch(0.5 0.1 150)' },
+      { value: '2', label: 'Deals at risk', sub: '$109K \u00b7 needs attention', subColor: 'oklch(0.55 0.11 60)',
+        iconHtml: { __html: ICONS.alert }, iconBg: 'oklch(0.95 0.05 82)', iconColor: 'oklch(0.55 0.13 70)',
+        border: 'oklch(0.9 0.045 82)', bg: 'oklch(0.99 0.02 90)',
+        trendHtml: flat('FLAGGED'), trendColor: 'oklch(0.55 0.11 60)' }
+    ];
+
+    const activeTab = this.state.tab;
+    const tabDefs = [
+      { key: 'pipeline', label: 'Pipeline', icon: ICONS.crm, count: '10' },
+      { key: 'contacts', label: 'Contacts', icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>', count: '148' },
+      { key: 'companies', label: 'Companies', icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="2" width="16" height="20" rx="2"/><path d="M9 22v-4h6v4M9 6h.01M15 6h.01M9 10h.01M15 10h.01M9 14h.01M15 14h.01"/></svg>', count: '52' }
+    ];
+    const tabs = tabDefs.map(t => {
+      const active = activeTab === t.key;
+      return {
+        label: t.label, iconHtml: { __html: t.icon }, count: t.count, onClick: this.setTab(t.key),
+        weight: active ? '600' : '500',
+        color: active ? ink : 'oklch(0.45 0.008 65)',
+        iconColor: active ? ink : 'oklch(0.58 0.008 70)',
+        countColor: active ? 'oklch(0.5 0.008 70)' : 'oklch(0.62 0.006 70)',
+        bg: active ? 'oklch(0.998 0.001 85)' : 'transparent',
+        shadow: active ? '0 1px 2px oklch(0.3 0.02 60 / 0.1)' : 'none'
+      };
+    });
+
+    const money = (n) => '$' + Math.round(n / 1000) + 'K';
+    const mkDeal = (o) => {
+      const h = HEALTH[o.health];
+      return {
+        company: o.company, mono: o.mono, monoColor: o.monoColor, title: o.title,
+        value: money(o.val), score: String(o.score), scorePct: o.score + '%',
+        healthLabel: h.label, healthDot: h.dot, healthBg: h.bg, healthBorder: h.border, healthText: h.text,
+        action: o.action, owner: o.owner, ownerInit: o.ownerInit, ownerColor: o.ownerColor,
+        hasSignals: !!o.signals, signals: o.signals ? (o.signals + ' signals') : '',
+        days: o.days, daysColor: o.daysWarn ? 'oklch(0.55 0.14 40)' : 'oklch(0.6 0.006 70)'
+      };
+    };
+
+    const stageDefs = [
+      { name: 'LEAD', color: 'oklch(0.62 0.03 255)', likeBg: 'oklch(0.965 0.004 255)', likeText: 'oklch(0.5 0.02 255)', likeLabel: '15% avg close likelihood',
+        deals: [
+          mkDeal({ company: 'Northwind Trading', mono: 'NT', monoColor: 'oklch(0.55 0.1 220)', title: 'Fleet electrification', val: 52000, health: 'risk', score: 61, action: 'Qualify budget & timeline before Fri.', owner: 'Priya \u00b7 Sales AI', ownerInit: 'PC', ownerColor: AV.priya, days: '1d', signals: 3 }),
+          mkDeal({ company: 'Kepler Labs', mono: 'KL', monoColor: 'oklch(0.55 0.1 285)', title: 'Analytics platform', val: 28000, health: 'healthy', score: 78, action: 'Book discovery call \u2014 warm intro.', owner: 'Priya \u00b7 Sales AI', ownerInit: 'PC', ownerColor: AV.priya, days: '2d', signals: 1 })
+        ] },
+      { name: 'QUALIFIED', color: 'oklch(0.55 0.13 255)', likeBg: 'oklch(0.965 0.02 255)', likeText: 'oklch(0.45 0.08 255)', likeLabel: '35% avg close likelihood',
+        deals: [
+          mkDeal({ company: 'Vertex Manufacturing', mono: 'VM', monoColor: 'oklch(0.5 0.09 200)', title: 'ERP migration', val: 124000, health: 'healthy', score: 74, action: 'Send technical brief to Marco.', owner: 'Blake \u00b7 Sales AI', ownerInit: 'BF', ownerColor: AV.blake, days: '4d', signals: 2 }),
+          mkDeal({ company: 'Halcyon Media', mono: 'HM', monoColor: 'oklch(0.55 0.11 320)', title: 'Brand refresh', val: 46000, health: 'risk', score: 55, action: 'Re-engage \u2014 no reply in 6 days.', owner: 'Priya \u00b7 Sales AI', ownerInit: 'PC', ownerColor: AV.priya, days: '6d', daysWarn: true })
+        ] },
+      { name: 'PROPOSAL', color: 'oklch(0.52 0.14 285)', likeBg: 'oklch(0.965 0.02 285)', likeText: 'oklch(0.45 0.08 285)', likeLabel: '55% avg close likelihood',
+        deals: [
+          mkDeal({ company: 'Tesla', mono: 'TE', monoColor: 'oklch(0.55 0.19 25)', title: 'Financial modeling suite', val: 210000, health: 'hot', score: 84, action: 'Address pricing objection from call.', owner: 'Priya \u00b7 Sales AI', ownerInit: 'PC', ownerColor: AV.priya, days: '3d', signals: 4 }),
+          mkDeal({ company: 'Brightpath Health', mono: 'BH', monoColor: 'oklch(0.52 0.11 160)', title: 'Compliance automation', val: 88000, health: 'healthy', score: 68, action: 'Attach SOC 2 security addendum.', owner: 'Blake \u00b7 Sales AI', ownerInit: 'BF', ownerColor: AV.blake, days: '5d', signals: 1 })
+        ] },
+      { name: 'NEGOTIATION', color: 'oklch(0.65 0.14 70)', likeBg: 'oklch(0.97 0.03 82)', likeText: 'oklch(0.5 0.09 65)', likeLabel: '75% avg close likelihood',
+        deals: [
+          mkDeal({ company: 'Orion Freight', mono: 'OF', monoColor: 'oklch(0.5 0.09 240)', title: 'Route optimization', val: 96000, health: 'healthy', score: 76, action: 'Confirm redline terms with legal.', owner: 'Blake \u00b7 Sales AI', ownerInit: 'BF', ownerColor: AV.blake, days: '2d', signals: 2 }),
+          mkDeal({ company: 'Summit Retail', mono: 'SR', monoColor: 'oklch(0.5 0.1 30)', title: 'POS rollout', val: 63000, health: 'stalled', score: 42, action: 'Escalate \u2014 stuck in legal 9 days.', owner: 'Priya \u00b7 Sales AI', ownerInit: 'PC', ownerColor: AV.priya, days: '9d', daysWarn: true })
+        ] },
+      { name: 'CLOSED WON', color: 'oklch(0.55 0.13 150)', likeBg: 'oklch(0.96 0.04 150)', likeText: 'oklch(0.42 0.09 150)', likeLabel: '$112K won this quarter',
+        deals: [
+          mkDeal({ company: 'Aster Bio', mono: 'AB', monoColor: 'oklch(0.52 0.11 150)', title: 'Lab data platform', val: 74000, health: 'healthy', score: 100, action: 'Send onboarding kit + schedule QBR.', owner: 'Blake \u00b7 Sales AI', ownerInit: 'BF', ownerColor: AV.blake, days: '2d' }),
+          mkDeal({ company: 'Lumen Studios', mono: 'LS', monoColor: 'oklch(0.55 0.11 300)', title: 'Creative ops', val: 38000, health: 'healthy', score: 100, action: 'Draft renewal offer for next cycle.', owner: 'Priya \u00b7 Sales AI', ownerInit: 'PC', ownerColor: AV.priya, days: 'Jul 20' })
+        ] }
+    ];
+    const stages = stageDefs.map(s => {
+      const total = s.deals.reduce((a, d) => a + 0, 0);
+      return {
+        name: s.name, color: s.color, count: String(s.deals.length),
+        total: s.totalOverride || (s.name === 'CLOSED WON' ? '$112K' : ({ LEAD: '$80K', QUALIFIED: '$170K', PROPOSAL: '$298K', NEGOTIATION: '$159K' }[s.name] || '')),
+        likeBg: s.likeBg, likeText: s.likeText, likeLabel: s.likeLabel, deals: s.deals
+      };
+    });
+
+    const attention = [
+      { title: 'Summit Retail stalled', desc: 'No movement 9 days \u00b7 stuck in legal review', cta: 'Escalate', tint: 'oklch(0.96 0.04 30)', ink: 'oklch(0.52 0.16 25)',
+        iconHtml: { __html: ICONS.alert } },
+      { title: 'Halcyon Media went quiet', desc: 'No reply to 2 emails \u00b7 close date at risk', cta: 'Follow up', tint: 'oklch(0.96 0.05 82)', ink: 'oklch(0.52 0.12 65)',
+        iconHtml: { __html: ICONS.mail } },
+      { title: 'Tesla pricing objection', desc: 'Detected on call \u00b7 needs a revised quote', cta: 'Review', tint: 'oklch(0.95 0.03 255)', ink: 'oklch(0.45 0.12 255)',
+        iconHtml: { __html: ICONS.dollar } }
+    ];
+
+    const suggestions = [
+      'Send Tesla a revised pricing proposal (v2)',
+      'Draft re-engagement email to Halcyon Media',
+      'Book a QBR with Orion Freight for next week'
+    ];
+
+    const activity = [
+      { who: 'Priya', text: 'drafted 5 follow-up emails across stalled deals.', time: '12 min ago', init: 'PC', color: AV.priya, line: true },
+      { who: 'Maya', text: 'scored 8 new leads and flagged 2 as at-risk.', time: '40 min ago', init: 'MA', color: AV.maya, line: true },
+      { who: 'Blake', text: 'enriched Vertex Manufacturing \u2014 added 4 contacts.', time: '1 hr ago', init: 'BF', color: AV.blake, line: true },
+      { who: 'Priya', text: 'moved Tesla to Proposal after the discovery call.', time: '2 hr ago', init: 'PC', color: AV.priya, line: false }
+    ];
+
+    const INTENT = {
+      hot:      { dot: 'oklch(0.55 0.13 255)', bg: 'oklch(0.96 0.03 255)', border: 'oklch(0.9 0.03 255)', text: 'oklch(0.45 0.12 255)' },
+      warm:     { dot: 'oklch(0.55 0.13 150)', bg: 'oklch(0.95 0.04 150)', border: 'oklch(0.88 0.05 150)', text: 'oklch(0.42 0.1 150)' },
+      cooling:  { dot: 'oklch(0.68 0.14 70)',  bg: 'oklch(0.96 0.05 82)',  border: 'oklch(0.9 0.06 82)',  text: 'oklch(0.52 0.11 65)' },
+      cold:     { dot: 'oklch(0.58 0.18 25)',  bg: 'oklch(0.96 0.04 30)',  border: 'oklch(0.9 0.05 30)',  text: 'oklch(0.52 0.16 25)' },
+      customer: { dot: 'oklch(0.55 0.13 150)', bg: 'oklch(0.95 0.04 150)', border: 'oklch(0.88 0.05 150)', text: 'oklch(0.42 0.1 150)' }
+    };
+    const mkC = (o) => {
+      const p = INTENT[o.intent];
+      return {
+        name: o.name, title: o.title, init: o.init, avatar: o.avatar,
+        company: o.company, companyMono: o.companyMono, companyColor: o.companyColor,
+        intentDot: p.dot, intentBg: p.bg, intentBorder: p.border, intentText: p.text,
+        intentLabel: o.intentLabel, score: String(o.score), scorePct: o.score + '%', aiNote: o.aiNote,
+        dealValue: o.dealValue, dealSub: o.dealSub, lastAct: o.lastAct, lastTime: o.lastTime,
+        owner: o.owner, ownerInit: o.ownerInit, ownerColor: o.ownerColor
+      };
+    };
+    const contacts = [
+      mkC({ name: 'Dana Lowe', title: 'VP Operations', init: 'DL', avatar: 'oklch(0.55 0.1 220)', company: 'Northwind Trading', companyMono: 'NT', companyColor: 'oklch(0.55 0.1 220)', intent: 'hot', intentLabel: 'Hot', score: 88, aiNote: 'Opened proposal 3\u00d7 \u2014 send pricing follow-up', dealValue: '$52K', dealSub: '1 open', lastAct: 'Opened proposal', lastTime: '2h ago', owner: 'Priya', ownerInit: 'PC', ownerColor: AV.priya }),
+      mkC({ name: 'James Whitman', title: 'Chief Financial Officer', init: 'JW', avatar: 'oklch(0.55 0.19 25)', company: 'Tesla', companyMono: 'TE', companyColor: 'oklch(0.55 0.19 25)', intent: 'hot', intentLabel: 'Hot', score: 91, aiNote: 'Raised pricing objection \u2014 send revised quote', dealValue: '$210K', dealSub: '1 open', lastAct: 'On discovery call', lastTime: '3h ago', owner: 'Priya', ownerInit: 'PC', ownerColor: AV.priya }),
+      mkC({ name: 'Marco Reyes', title: 'Chief Technology Officer', init: 'MR', avatar: 'oklch(0.5 0.09 200)', company: 'Vertex Manufacturing', companyMono: 'VM', companyColor: 'oklch(0.5 0.09 200)', intent: 'warm', intentLabel: 'Warm', score: 72, aiNote: 'Replied to brief \u2014 schedule technical demo', dealValue: '$124K', dealSub: '1 open', lastAct: 'Replied to brief', lastTime: '1d ago', owner: 'Blake', ownerInit: 'BF', ownerColor: AV.blake }),
+      mkC({ name: 'Lena Chen', title: 'Procurement Lead', init: 'LC', avatar: 'oklch(0.5 0.09 240)', company: 'Orion Freight', companyMono: 'OF', companyColor: 'oklch(0.5 0.09 240)', intent: 'warm', intentLabel: 'Warm', score: 70, aiNote: 'Reviewing redlines \u2014 confirm final terms', dealValue: '$96K', dealSub: '1 open', lastAct: 'Reviewing redlines', lastTime: '1d ago', owner: 'Blake', ownerInit: 'BF', ownerColor: AV.blake }),
+      mkC({ name: 'Sam Ortiz', title: 'Head of Data', init: 'SO', avatar: 'oklch(0.55 0.1 285)', company: 'Kepler Labs', companyMono: 'KL', companyColor: 'oklch(0.55 0.1 285)', intent: 'warm', intentLabel: 'Warm', score: 66, aiNote: 'Booked discovery call \u2014 prep tailored deck', dealValue: '$28K', dealSub: '1 open', lastAct: 'Booked call', lastTime: '5h ago', owner: 'Priya', ownerInit: 'PC', ownerColor: AV.priya }),
+      mkC({ name: 'Rohan Patel', title: 'Lab Director', init: 'RP', avatar: 'oklch(0.52 0.11 150)', company: 'Aster Bio', companyMono: 'AB', companyColor: 'oklch(0.52 0.11 150)', intent: 'customer', intentLabel: 'Customer', score: 100, aiNote: 'Deal won \u2014 send onboarding kit + book QBR', dealValue: '$74K', dealSub: 'Won', lastAct: 'Signed contract', lastTime: '2d ago', owner: 'Blake', ownerInit: 'BF', ownerColor: AV.blake }),
+      mkC({ name: 'Elena Fox', title: 'Marketing Director', init: 'EF', avatar: 'oklch(0.55 0.11 320)', company: 'Halcyon Media', companyMono: 'HM', companyColor: 'oklch(0.55 0.11 320)', intent: 'cooling', intentLabel: 'Cooling', score: 48, aiNote: 'No reply in 6 days \u2014 re-engage now', dealValue: '$46K', dealSub: '1 open', lastAct: 'No reply', lastTime: '6d ago', owner: 'Priya', ownerInit: 'PC', ownerColor: AV.priya }),
+      mkC({ name: 'Tom Barrett', title: 'Operations Manager', init: 'TB', avatar: 'oklch(0.5 0.1 30)', company: 'Summit Retail', companyMono: 'SR', companyColor: 'oklch(0.5 0.1 30)', intent: 'cold', intentLabel: 'Cold', score: 40, aiNote: 'Silent 9 days \u2014 escalate to account exec', dealValue: '$63K', dealSub: '1 open', lastAct: 'Went silent', lastTime: '9d ago', owner: 'Priya', ownerInit: 'PC', ownerColor: AV.priya })
+    ];
+
+    const mkCo = (o) => {
+      const h = HEALTH[o.health];
+      return {
+        name: o.name, mono: o.mono, monoColor: o.monoColor, domain: o.domain, enriched: !!o.enriched,
+        industry: o.industry, size: o.size, pipeline: o.pipeline, pipeSub: o.pipeSub,
+        deals: o.deals, contactsN: o.contactsN,
+        healthLabel: h.label, healthDot: h.dot, healthBg: h.bg, healthBorder: h.border, healthText: h.text,
+        owner: o.owner, ownerInit: o.ownerInit, ownerColor: o.ownerColor
+      };
+    };
+    const companies = [
+      mkCo({ name: 'Tesla', mono: 'TE', monoColor: 'oklch(0.55 0.19 25)', domain: 'tesla.com', enriched: true, industry: 'Automotive', size: '140k emp', pipeline: '$210K', pipeSub: 'open', deals: '1', contactsN: '4', health: 'hot', owner: 'Priya', ownerInit: 'PC', ownerColor: AV.priya }),
+      mkCo({ name: 'Vertex Manufacturing', mono: 'VM', monoColor: 'oklch(0.5 0.09 200)', domain: 'vertexmfg.com', enriched: true, industry: 'Industrial', size: '3.2k emp', pipeline: '$124K', pipeSub: 'open', deals: '1', contactsN: '6', health: 'healthy', owner: 'Blake', ownerInit: 'BF', ownerColor: AV.blake }),
+      mkCo({ name: 'Orion Freight', mono: 'OF', monoColor: 'oklch(0.5 0.09 240)', domain: 'orionfreight.io', enriched: true, industry: 'Logistics', size: '850 emp', pipeline: '$96K', pipeSub: 'open', deals: '1', contactsN: '3', health: 'healthy', owner: 'Blake', ownerInit: 'BF', ownerColor: AV.blake }),
+      mkCo({ name: 'Brightpath Health', mono: 'BH', monoColor: 'oklch(0.52 0.11 160)', domain: 'brightpath.health', enriched: true, industry: 'Healthcare', size: '1.1k emp', pipeline: '$88K', pipeSub: 'open', deals: '1', contactsN: '2', health: 'healthy', owner: 'Blake', ownerInit: 'BF', ownerColor: AV.blake }),
+      mkCo({ name: 'Aster Bio', mono: 'AB', monoColor: 'oklch(0.52 0.11 150)', domain: 'asterbio.com', enriched: true, industry: 'Biotech', size: '420 emp', pipeline: '$74K', pipeSub: 'won', deals: '1', contactsN: '5', health: 'healthy', owner: 'Blake', ownerInit: 'BF', ownerColor: AV.blake }),
+      mkCo({ name: 'Northwind Trading', mono: 'NT', monoColor: 'oklch(0.55 0.1 220)', domain: 'northwind.co', enriched: true, industry: 'Retail', size: '2.4k emp', pipeline: '$52K', pipeSub: 'open', deals: '1', contactsN: '3', health: 'risk', owner: 'Priya', ownerInit: 'PC', ownerColor: AV.priya }),
+      mkCo({ name: 'Halcyon Media', mono: 'HM', monoColor: 'oklch(0.55 0.11 320)', domain: 'halcyon.media', enriched: false, industry: 'Media', size: '260 emp', pipeline: '$46K', pipeSub: 'open', deals: '1', contactsN: '2', health: 'risk', owner: 'Priya', ownerInit: 'PC', ownerColor: AV.priya }),
+      mkCo({ name: 'Summit Retail', mono: 'SR', monoColor: 'oklch(0.5 0.1 30)', domain: 'summitretail.com', enriched: true, industry: 'Retail', size: '5.6k emp', pipeline: '$63K', pipeSub: 'open', deals: '1', contactsN: '4', health: 'stalled', owner: 'Priya', ownerInit: 'PC', ownerColor: AV.priya })
+    ];
+
+    return {
+      navItems, workforceItems, dms, goCalls: this.goCalls, prompts, metrics, tabs, stages, attention, suggestions, activity,
+      contacts, companies,
+      showPipeline: activeTab === 'pipeline', showContacts: activeTab === 'contacts', showCompanies: activeTab === 'companies'
+    };
+  }
+}
+</script>
+</body>
+</html>

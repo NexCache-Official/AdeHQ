@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  @keyframes softPulse { 0%,100% { opacity: 1; } 50% { opacity: 0.45; } }
+  @keyframes composeUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+  html, body { height: 100%; }
+  body { margin: 0; font-family: 'Geist', system-ui, sans-serif; background: oklch(0.985 0.0025 85); -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
+  * { box-sizing: border-box; }
+  ::placeholder { color: oklch(0.66 0.006 70); }
+  a { color: oklch(0.24 0.012 60); text-decoration: none; }
+  a:hover { color: oklch(0.42 0.01 60); }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-thumb { background: oklch(0.9 0.004 75); border-radius: 8px; border: 3px solid transparent; background-clip: content-box; }
+  ::-webkit-scrollbar-thumb:hover { background: oklch(0.82 0.005 75); background-clip: content-box; }
+</style>
+</helmet>
+
+<div style="display:flex; width:100%; height:100vh; overflow:hidden; background:oklch(0.985 0.0025 85); color:oklch(0.24 0.012 60);">
+
+  <div style="width:260px; flex-shrink:0; background:oklch(0.995 0.001 85); border-right:1px solid oklch(0.92 0.004 75); display:flex; flex-direction:column; height:100vh;">
+    <div style="padding:14px 12px 8px;">
+      <div style="display:flex; align-items:center; gap:10px; padding:7px 8px; border-radius:10px; cursor:pointer;" style-hover="background:oklch(0.965 0.003 80);">
+        <div style="width:30px; height:30px; border-radius:8px; background:oklch(0.24 0.012 60); display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.4" stroke-linecap="round"><path d="M12 3v18M4.2 7.5l15.6 9M19.8 7.5L4.2 16.5"/></svg>
+        </div>
+        <div style="flex:1; min-width:0;">
+          <div style="font-size:13.5px; font-weight:600; letter-spacing:-0.01em; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">AdeHQ</div>
+          <div style="font-size:11px; color:oklch(0.64 0.006 70); font-family:'Geist Mono',monospace; letter-spacing:0.02em;">PRO WORKSPACE</div>
+        </div>
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="oklch(0.66 0.006 70)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M8 9l4 4 4-4"/></svg>
+      </div>
+    </div>
+    <div style="padding:2px 12px 10px;">
+      <div style="border:1px solid oklch(0.93 0.004 75); border-radius:10px; padding:9px 11px; background:oklch(0.98 0.002 80);">
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
+          <span style="font-size:10.5px; font-family:'Geist Mono',monospace; letter-spacing:0.08em; color:oklch(0.5 0.008 70);">AI WORK HOURS</span>
+          <span style="font-size:11px; font-family:'Geist Mono',monospace; color:oklch(0.3 0.01 60); font-weight:500;">0.41 / 125.00</span>
+        </div>
+        <div style="height:4px; border-radius:3px; background:oklch(0.93 0.004 75); overflow:hidden;">
+          <div style="width:1%; height:100%; background:oklch(0.24 0.012 60); border-radius:3px;"></div>
+        </div>
+      </div>
+    </div>
+    <div style="padding:0 12px 12px;">
+      <div style="display:flex; align-items:center; gap:8px; background:oklch(0.975 0.002 80); border:1px solid oklch(0.93 0.004 75); border-radius:9px; padding:7px 10px; cursor:text;">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="oklch(0.62 0.006 70)" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+        <span style="font-size:13px; color:oklch(0.62 0.006 70); flex:1;">Search or command</span>
+        <span style="font-size:10.5px; color:oklch(0.6 0.006 70); font-family:'Geist Mono',monospace; background:oklch(0.995 0.001 85); border:1px solid oklch(0.92 0.004 75); border-radius:5px; padding:1px 5px;">&#8984;K</span>
+      </div>
+    </div>
+    <div style="flex:1; overflow-y:auto; padding:4px 10px 10px;">
+      <div style="font-family:'Geist Mono',monospace; font-size:10.5px; font-weight:500; letter-spacing:0.14em; color:oklch(0.68 0.006 70); padding:8px 8px;">WORKSPACE</div>
+      <sc-for list="{{ navItems }}" as="item" hint-placeholder-count="3">
+        <div onClick="{{ item.onClick }}" style="display:flex; align-items:center; gap:11px; padding:7px 8px; border-radius:8px; cursor:pointer; font-size:13.5px; font-weight:{{ item.weight }}; background:{{ item.bg }}; color:{{ item.color }};" style-hover="background:oklch(0.965 0.003 80);">
+          <span style="color:{{ item.iconColor }}; display:flex;" dangerouslySetInnerHTML="{{ item.iconHtml }}"></span>
+          <span>{{ item.label }}</span>
+        </div>
+      </sc-for>
+      <div style="display:flex; align-items:center; gap:8px; padding:9px 8px 5px; font-size:13.5px; font-weight:500; color:oklch(0.34 0.008 65); cursor:pointer;">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="oklch(0.6 0.006 70)" stroke-width="2.6"><path d="M8 9l4 4 4-4"/></svg>
+        <span style="flex:1;">Rooms</span>
+        <span style="font-size:10.5px; font-family:'Geist Mono',monospace; color:oklch(0.6 0.006 70); margin-right:2px;">1</span>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="oklch(0.55 0.008 70)" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+      </div>
+      <div style="padding:6px 8px 6px 27px; font-size:13.5px; color:oklch(0.4 0.008 65); border-radius:8px; cursor:pointer;" style-hover="background:oklch(0.965 0.003 80);"><span style="color:oklch(0.66 0.006 70); margin-right:6px;">#</span>Operations</div>
+      <div style="display:flex; align-items:center; gap:8px; padding:9px 8px 5px; font-size:13.5px; font-weight:500; color:oklch(0.34 0.008 65); cursor:pointer;">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="oklch(0.6 0.006 70)" stroke-width="2.6"><path d="M8 9l4 4 4-4"/></svg>
+        <span style="flex:1;">Direct messages</span>
+        <span style="font-size:10px; font-family:'Geist Mono',monospace; font-weight:500; background:oklch(0.24 0.012 60); color:white; border-radius:20px; padding:1px 6px;">4</span>
+      </div>
+      <sc-for list="{{ dms }}" as="p" hint-placeholder-count="4">
+        <div style="display:flex; align-items:center; gap:10px; padding:5px 8px; margin-left:4px; border-radius:8px; cursor:pointer;" style-hover="background:oklch(0.965 0.003 80);">
+          <div style="width:20px; height:20px; border-radius:6px; background:{{ p.gradient }}; display:flex; align-items:center; justify-content:center; font-size:9px; font-weight:600; color:white; flex-shrink:0;">{{ p.initials }}</div>
+          <span style="font-size:13.5px; color:oklch(0.36 0.008 65);">{{ p.name }}</span>
+          <sc-if value="{{ p.hasTag }}" hint-placeholder-val="{{ false }}">
+            <span style="font-size:9px; font-family:'Geist Mono',monospace; letter-spacing:0.03em; color:oklch(0.52 0.008 70); background:oklch(0.96 0.003 80); border:1px solid oklch(0.92 0.004 75); border-radius:4px; padding:1px 5px; white-space:nowrap;">{{ p.tag }}</span>
+          </sc-if>
+        </div>
+      </sc-for>
+      <div onClick="{{ goCalls }}" style="margin-top:9px; display:flex; align-items:center; gap:11px; padding:8px 8px; border-radius:8px; cursor:pointer; color:oklch(0.34 0.008 65);" style-hover="background:oklch(0.965 0.003 80);">
+        <span style="display:flex; color:oklch(0.55 0.008 70);">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.68 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.32 1.85.55 2.81.68A2 2 0 0 1 22 16.92z"/></svg>
+        </span>
+        <span style="font-size:13.5px; font-weight:500; flex:1;">Calls</span>
+        <span style="font-size:9.5px; font-family:'Geist Mono',monospace; letter-spacing:0.08em; color:oklch(0.55 0.13 65); background:oklch(0.95 0.045 80); border-radius:5px; padding:2px 6px;">SOON</span>
+      </div>
+      <div style="font-family:'Geist Mono',monospace; font-size:10.5px; font-weight:500; letter-spacing:0.14em; color:oklch(0.68 0.006 70); padding:18px 8px 8px;">WORKFORCE</div>
+      <sc-for list="{{ workforceItems }}" as="item" hint-placeholder-count="9">
+        <div style="display:flex; align-items:center; gap:11px; padding:7px 8px; border-radius:8px; cursor:pointer; font-size:13.5px; font-weight:500; color:oklch(0.34 0.008 65);" style-hover="background:oklch(0.965 0.003 80);">
+          <span style="color:oklch(0.55 0.008 70); display:flex;" dangerouslySetInnerHTML="{{ item.iconHtml }}"></span>
+          <span style="flex:1;">{{ item.label }}</span>
+          <sc-if value="{{ item.hasBadge }}" hint-placeholder-val="{{ false }}">
+            <span style="font-size:10px; font-family:'Geist Mono',monospace; color:oklch(0.5 0.008 70); background:oklch(0.955 0.003 80); border-radius:20px; padding:1px 6px;">{{ item.badge }}</span>
+          </sc-if>
+        </div>
+      </sc-for>
+    </div>
+    <div style="padding:10px 12px;">
+      <div style="display:flex; align-items:center; gap:10px; border-radius:10px; padding:10px 12px; cursor:pointer; background:oklch(0.24 0.012 60);" style-hover="background:oklch(0.32 0.012 60);">
+        <span style="width:26px; height:26px; border-radius:7px; background:oklch(1 0 0 / 0.12); display:flex; align-items:center; justify-content:center; color:white; flex-shrink:0;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M20 8v6M23 11h-6"/></svg>
+        </span>
+        <div style="flex:1; min-width:0;">
+          <div style="font-size:13px; font-weight:600; line-height:1.3; letter-spacing:-0.01em; color:white;">Hire AI employee</div>
+          <div style="font-size:10.5px; color:oklch(0.78 0.01 70); font-family:'Geist Mono',monospace; letter-spacing:0.06em;">OPEN ROLE</div>
+        </div>
+      </div>
+    </div>
+    <div style="padding:10px 12px; border-top:1px solid oklch(0.93 0.004 75); display:flex; align-items:center; gap:10px;">
+      <div style="width:26px; height:26px; border-radius:7px; background:oklch(0.55 0.11 285); display:flex; align-items:center; justify-content:center; font-size:10px; font-weight:600; color:white;">SK</div>
+      <div style="flex:1;">
+        <div style="font-size:13px; font-weight:600; letter-spacing:-0.01em;">Shubham Kumar</div>
+        <div style="font-size:11px; color:oklch(0.64 0.006 70);">Admin</div>
+      </div>
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="oklch(0.62 0.006 70)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 15l-6-6-6 6"/></svg>
+    </div>
+  </div>
+
+  <div style="width:216px; flex-shrink:0; background:oklch(0.99 0.001 85); border-right:1px solid oklch(0.92 0.004 75); display:flex; flex-direction:column; height:100vh;">
+    <div style="padding:14px 14px 10px;">
+      <div onClick="{{ openCompose }}" style="display:flex; align-items:center; justify-content:center; gap:8px; padding:10px; border-radius:10px; background:oklch(0.24 0.012 60); color:white; font-size:13.5px; font-weight:600; cursor:pointer; box-shadow:0 1px 2px oklch(0.2 0.02 60 / 0.25);" style-hover="background:oklch(0.32 0.012 60);">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>
+        <span>Compose</span>
+      </div>
+    </div>
+    <div style="padding:0 14px 12px; border-bottom:1px solid oklch(0.93 0.004 75);">
+      <div style="border:1px solid oklch(0.93 0.004 75); border-radius:12px; background:oklch(0.995 0.001 85); padding:12px 12px 12px; overflow:hidden;">
+        <div style="font-size:13.5px; font-weight:600; letter-spacing:-0.01em;">Good morning</div>
+        <div style="font-size:11.5px; color:oklch(0.6 0.008 70); margin-top:1px;">Your inbox pulse</div>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:7px; margin-top:11px;">
+          <sc-for list="{{ pulse }}" as="ps" hint-placeholder-count="4">
+            <div style="border:1px solid oklch(0.93 0.004 75); border-radius:9px; padding:8px 10px; background:oklch(0.985 0.002 80);">
+              <div style="font-size:19px; font-weight:600; letter-spacing:-0.02em; line-height:1;">{{ ps.value }}</div>
+              <div style="font-size:10.5px; font-family:'Geist Mono',monospace; letter-spacing:0.04em; color:oklch(0.6 0.008 70); margin-top:5px;">{{ ps.label }}</div>
+            </div>
+          </sc-for>
+        </div>
+        <div style="display:flex; align-items:center; gap:6px; margin-top:11px; font-size:11px; font-family:'Geist Mono',monospace; color:oklch(0.55 0.008 70);">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="oklch(0.6 0.006 70)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 8l9 6 9-6"/></svg>
+          <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">helloade@inbox.adehq.com</span>
+        </div>
+      </div>
+    </div>
+    <div style="flex:1; overflow-y:auto; padding:10px 10px;">
+      <sc-for list="{{ folders }}" as="f" hint-placeholder-count="11">
+        <div onClick="{{ f.onClick }}" style="display:flex; align-items:center; gap:11px; padding:8px 10px; border-radius:9px; cursor:pointer; font-size:13.5px; font-weight:{{ f.weight }}; background:{{ f.bg }}; color:{{ f.color }};" style-hover="background:oklch(0.965 0.003 80);">
+          <span style="display:flex; color:{{ f.iconColor }};" dangerouslySetInnerHTML="{{ f.iconHtml }}"></span>
+          <span style="flex:1;">{{ f.label }}</span>
+          <sc-if value="{{ f.hasCount }}" hint-placeholder-val="{{ false }}">
+            <span style="font-size:10.5px; font-family:'Geist Mono',monospace; color:oklch(0.55 0.008 70);">{{ f.count }}</span>
+          </sc-if>
+        </div>
+      </sc-for>
+    </div>
+    <div style="padding:10px 12px; border-top:1px solid oklch(0.93 0.004 75);">
+      <div style="display:flex; align-items:center; gap:10px; padding:7px 8px; border-radius:8px; cursor:pointer; font-size:13px; color:oklch(0.4 0.008 65);" style-hover="background:oklch(0.965 0.003 80);">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="oklch(0.55 0.008 70)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="2" y1="14" x2="6" y2="14"/><line x1="10" y1="8" x2="14" y2="8"/><line x1="18" y1="16" x2="22" y2="16"/></svg>
+        <span>AI settings</span>
+      </div>
+    </div>
+  </div>
+
+  <div style="width:300px; flex-shrink:0; background:oklch(0.995 0.001 85); border-right:1px solid oklch(0.92 0.004 75); display:flex; flex-direction:column; height:100vh;">
+    <div style="height:52px; flex-shrink:0; display:flex; align-items:center; justify-content:space-between; padding:0 18px; border-bottom:1px solid oklch(0.93 0.004 75);">
+      <span style="font-size:14px; font-weight:600; letter-spacing:-0.01em;">Sent</span>
+      <span style="font-size:11.5px; font-family:'Geist Mono',monospace; color:oklch(0.66 0.006 70);">1</span>
+    </div>
+    <div style="flex:1; overflow-y:auto;">
+      <div style="padding:14px 18px; border-bottom:1px solid oklch(0.94 0.003 80); background:oklch(0.955 0.003 80); cursor:pointer; border-left:2px solid oklch(0.24 0.012 60);">
+        <div style="display:flex; align-items:center; justify-content:space-between; gap:8px;">
+          <span style="font-size:13px; font-weight:600; color:oklch(0.28 0.01 60); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">To: skumar@nexcache.com</span>
+          <span style="font-size:11px; font-family:'Geist Mono',monospace; color:oklch(0.66 0.006 70); flex-shrink:0;">now</span>
+        </div>
+        <div style="font-size:13.5px; font-weight:600; letter-spacing:-0.01em; margin-top:5px;">This is the subject</div>
+        <div style="font-size:12.5px; color:oklch(0.58 0.008 70); margin-top:3px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">This is the body — Best, Shubham</div>
+        <div style="display:flex; align-items:center; gap:7px; margin-top:9px;">
+          <span style="display:inline-flex; align-items:center; gap:5px; font-size:10px; font-weight:500; font-family:'Geist Mono',monospace; letter-spacing:0.05em; color:oklch(0.5 0.11 150); background:oklch(0.95 0.03 150); border-radius:20px; padding:2px 8px;"><span style="width:5px; height:5px; border-radius:50%; background:oklch(0.6 0.12 150);"></span>AWAITING REPLY</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div style="flex:1; min-width:0; position:relative; display:flex; flex-direction:column; height:100vh; background:oklch(0.99 0.0015 85);">
+    <div style="height:52px; flex-shrink:0; display:flex; align-items:center; justify-content:space-between; padding:0 20px; border-bottom:1px solid oklch(0.93 0.004 75);">
+      <div style="width:32px; height:32px; border-radius:8px; display:flex; align-items:center; justify-content:center; color:oklch(0.5 0.008 70); cursor:pointer;" style-hover="background:oklch(0.955 0.003 80);">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="9" y1="4" x2="9" y2="20"/></svg>
+      </div>
+      <div style="display:flex; align-items:center; gap:4px;">
+        <sc-for list="{{ mailActions }}" as="ma" hint-placeholder-count="4">
+          <div style="display:flex; align-items:center; gap:7px; padding:7px 12px; border-radius:8px; font-size:13px; font-weight:500; color:oklch(0.38 0.008 65); cursor:pointer;" style-hover="background:oklch(0.955 0.003 80);">
+            <span style="display:flex; color:oklch(0.5 0.008 70);" dangerouslySetInnerHTML="{{ ma.iconHtml }}"></span>
+            <span>{{ ma.label }}</span>
+          </div>
+        </sc-for>
+        <div style="width:32px; height:32px; border-radius:8px; display:flex; align-items:center; justify-content:center; color:oklch(0.5 0.008 70); cursor:pointer; margin-left:4px;" style-hover="background:oklch(0.955 0.003 80);">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+        </div>
+      </div>
+    </div>
+
+    <div style="flex:1; overflow-y:auto; padding:30px 40px;">
+      <div style="max-width:760px;">
+        <div style="font-size:22px; font-weight:600; letter-spacing:-0.02em;">This is the subject</div>
+        <div style="display:inline-flex; align-items:center; gap:6px; margin-top:12px; font-size:11px; font-weight:500; font-family:'Geist Mono',monospace; letter-spacing:0.05em; color:oklch(0.5 0.11 150); background:oklch(0.95 0.03 150); border-radius:20px; padding:3px 10px;"><span style="width:5px; height:5px; border-radius:50%; background:oklch(0.6 0.12 150);"></span>AWAITING REPLY</div>
+
+        <div style="display:flex; gap:24px; margin-top:24px; border-bottom:1px solid oklch(0.92 0.004 75);">
+          <sc-for list="{{ tabs }}" as="tb" hint-placeholder-count="3">
+            <div style="padding:0 0 12px; font-size:13.5px; font-weight:{{ tb.weight }}; color:{{ tb.color }}; border-bottom:2px solid {{ tb.border }}; margin-bottom:-1px; cursor:pointer;">{{ tb.label }}</div>
+          </sc-for>
+        </div>
+
+        <div style="margin-top:22px;">
+          <div style="display:flex; align-items:center; gap:8px; font-family:'Geist Mono',monospace; font-size:11px; font-weight:500; letter-spacing:0.12em; color:oklch(0.6 0.006 70); margin-bottom:10px;">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M20 8v6M23 11h-6"/></svg>
+            <span>ASSIGN</span>
+          </div>
+          <div style="display:flex; gap:8px;">
+            <div style="flex:1; display:flex; align-items:center; justify-content:space-between; border:1px solid oklch(0.9 0.004 75); border-radius:9px; padding:11px 14px; background:oklch(0.995 0.001 85); font-size:13.5px; color:oklch(0.35 0.01 60); cursor:pointer;" style-hover="border-color:oklch(0.82 0.005 75);">
+              <span>Unassigned</span>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="oklch(0.55 0.008 70)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+            </div>
+            <div style="padding:11px 18px; border-radius:9px; background:oklch(0.955 0.003 80); color:oklch(0.62 0.006 70); font-size:13px; font-weight:600;">Save</div>
+            <div style="padding:11px 16px; border-radius:9px; color:oklch(0.5 0.008 70); font-size:13px; font-weight:500; cursor:pointer;" style-hover="background:oklch(0.955 0.003 80);">Cancel</div>
+          </div>
+        </div>
+
+        <div style="margin-top:28px; padding-top:22px; border-top:1px solid oklch(0.93 0.004 75);">
+          <div style="display:flex; align-items:flex-start; gap:12px;">
+            <div style="width:38px; height:38px; border-radius:10px; background:oklch(0.24 0.012 60); display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.4" stroke-linecap="round"><path d="M12 3v18M4.2 7.5l15.6 9M19.8 7.5L4.2 16.5"/></svg>
+            </div>
+            <div style="flex:1; min-width:0;">
+              <div style="display:flex; align-items:baseline; justify-content:space-between; gap:12px;">
+                <div style="display:flex; align-items:baseline; gap:8px; flex-wrap:wrap;">
+                  <span style="font-size:14.5px; font-weight:600; letter-spacing:-0.01em;">AdeHQ Headquarters</span>
+                  <span style="font-size:12.5px; font-family:'Geist Mono',monospace; color:oklch(0.62 0.006 70);">helloade@inbox.adehq.com</span>
+                </div>
+                <span style="font-size:12px; font-family:'Geist Mono',monospace; color:oklch(0.62 0.006 70); flex-shrink:0;">Sent &middot; 23 Jul, 12:33</span>
+              </div>
+              <div style="font-size:12.5px; color:oklch(0.58 0.008 70); margin-top:3px;">To: skumar@nexcache.com</div>
+              <div style="font-size:15px; line-height:1.7; color:oklch(0.28 0.01 60); margin-top:18px; white-space:pre-line;">This is the body
+
+Best,
+Shubham</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <sc-if value="{{ composeOpen }}" hint-placeholder-val="{{ true }}">
+      <div style="position:absolute; left:24px; right:24px; bottom:0; height:432px; background:oklch(0.995 0.001 85); border:1px solid oklch(0.9 0.004 75); border-bottom:none; border-radius:16px 16px 0 0; box-shadow:0 -8px 40px oklch(0.2 0.02 60 / 0.14); display:flex; flex-direction:column; animation:composeUp 0.28s ease; z-index:20;">
+        <div style="display:flex; align-items:center; justify-content:space-between; padding:14px 18px; border-bottom:1px solid oklch(0.93 0.004 75);">
+          <span style="font-size:14px; font-weight:600; letter-spacing:-0.01em;">New message</span>
+          <div style="display:flex; align-items:center; gap:12px;">
+            <span style="font-size:11.5px; font-family:'Geist Mono',monospace; color:oklch(0.58 0.11 150);">Draft saved</span>
+            <div onClick="{{ closeCompose }}" style="width:26px; height:26px; border-radius:7px; display:flex; align-items:center; justify-content:center; color:oklch(0.5 0.008 70); cursor:pointer;" style-hover="background:oklch(0.955 0.003 80);">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+            </div>
+          </div>
+        </div>
+        <div style="display:flex; align-items:center; gap:14px; padding:12px 18px; border-bottom:1px solid oklch(0.95 0.003 80);">
+          <span style="font-size:12.5px; font-family:'Geist Mono',monospace; color:oklch(0.58 0.008 70); width:52px;">To</span>
+          <span style="flex:1; font-size:14px; color:oklch(0.28 0.01 60);">skumar@nexcache.com</span>
+          <span style="font-size:12.5px; color:oklch(0.55 0.008 70); cursor:pointer;">Cc/Bcc</span>
+        </div>
+        <div style="display:flex; align-items:center; gap:14px; padding:12px 18px; border-bottom:1px solid oklch(0.95 0.003 80);">
+          <span style="font-size:12.5px; font-family:'Geist Mono',monospace; color:oklch(0.58 0.008 70); width:52px;">Subject</span>
+          <span style="flex:1; font-size:14px; font-weight:500; color:oklch(0.28 0.01 60);">This is the subject</span>
+        </div>
+        <div style="display:flex; align-items:center; gap:2px; padding:8px 14px; border-bottom:1px solid oklch(0.95 0.003 80); color:oklch(0.5 0.008 70);">
+          <sc-for list="{{ toolbar }}" as="tl" hint-placeholder-count="9">
+            <div style="width:30px; height:30px; border-radius:7px; display:flex; align-items:center; justify-content:center; cursor:pointer;" style-hover="background:oklch(0.955 0.003 80);" dangerouslySetInnerHTML="{{ tl.iconHtml }}"></div>
+          </sc-for>
+        </div>
+        <div style="flex:1; overflow-y:auto; padding:18px; font-size:15px; line-height:1.7; color:oklch(0.28 0.01 60); white-space:pre-line;">This is the body
+
+Best,
+Shubham</div>
+        <div style="display:flex; align-items:center; justify-content:space-between; padding:14px 18px; border-top:1px solid oklch(0.93 0.004 75);">
+          <div style="display:flex; align-items:center; gap:8px; padding:10px 18px; border-radius:9px; background:oklch(0.24 0.012 60); color:white; font-size:13.5px; font-weight:600; cursor:pointer;" style-hover="background:oklch(0.32 0.012 60);">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+            <span>Send</span>
+          </div>
+          <div onClick="{{ closeCompose }}" style="font-size:13px; font-weight:500; color:oklch(0.55 0.008 70); cursor:pointer; padding:8px 6px;" style-hover="color:oklch(0.57 0.19 25);">Discard</div>
+        </div>
+      </div>
+    </sc-if>
+  </div>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+const ICONS = {
+  home: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M9 22V12h6v10"/></svg>',
+  inbox: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>',
+  drive: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M2 11h20"/></svg>',
+  workforce: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="8" width="16" height="12" rx="2"/><path d="M9 8V5a3 3 0 0 1 6 0v3"/><circle cx="9" cy="14" r="1"/><circle cx="15" cy="14" r="1"/></svg>',
+  crm: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>',
+  calendar: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>',
+  investors: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M23 6l-9.5 9.5-5-5L1 18"/><path d="M17 6h6v6"/></svg>',
+  tasks: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>',
+  memory: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 2a3 3 0 0 0-3 3 3 3 0 0 0-2 5.2A3 3 0 0 0 5 16a3 3 0 0 0 4.5 2.6V2z"/><path d="M14.5 2a3 3 0 0 1 3 3 3 3 0 0 1 2 5.2A3 3 0 0 1 19 16a3 3 0 0 1-4.5 2.6V2z"/></svg>',
+  approvals: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M9 4H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-2"/><path d="M9 14l2 2 4-4"/></svg>',
+  worklog: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/></svg>',
+  tools: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18v3h3l6.3-6.3a4 4 0 0 0 5.4-5.4l-2.3 2.3-2-2 2.3-2.3z"/></svg>'
+};
+
+const F = {
+  inbox: ICONS.inbox,
+  allmail: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 8l9 6 9-6"/></svg>',
+  assigned: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 11l-3 3-1.5-1.5"/></svg>',
+  aiworking: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/></svg>',
+  needsinput: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/><path d="M12 8v4M12 15.5v.01"/></svg>',
+  needsapproval: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M8 12l3 3 5-5"/></svg>',
+  awaiting: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>',
+  sent: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>',
+  drafts: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>',
+  archived: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="5" rx="1"/><path d="M4 9v9a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9"/><line x1="10" y1="13" x2="14" y2="13"/></svg>',
+  spam: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l8 3v6c0 5-3.5 8.5-8 11-4.5-2.5-8-6-8-11V5z"/></svg>'
+};
+
+const AV = { maya: 'oklch(0.6 0.1 220)', priya: 'oklch(0.58 0.11 285)', hayden: 'oklch(0.65 0.11 45)', blake: 'oklch(0.6 0.1 300)' };
+
+class Component extends DCLogic {
+  state = { composeOpen: true, folder: 'sent' };
+  goCalls = () => { window.location.href = 'Calls.dc.html'; };
+  goHome = () => { window.location.href = 'Home.dc.html'; };
+  openCompose = () => this.setState({ composeOpen: true });
+  closeCompose = () => this.setState({ composeOpen: false });
+  setFolder = (k) => this.setState({ folder: k });
+
+  renderVals() {
+    const s = this.state;
+    const ink = 'oklch(0.24 0.012 60)';
+
+    const navDefs = [
+      { label: 'Home', icon: ICONS.home, active: false, onClick: this.goHome },
+      { label: 'Inbox', icon: ICONS.inbox, active: true, onClick: () => {} },
+      { label: 'AdeHQ Drive', icon: ICONS.drive, active: false, onClick: () => {} }
+    ];
+    const navItems = navDefs.map(d => ({
+      label: d.label, iconHtml: { __html: d.icon }, onClick: d.onClick,
+      bg: d.active ? 'oklch(0.955 0.003 80)' : 'transparent',
+      color: d.active ? ink : 'oklch(0.34 0.008 65)',
+      iconColor: d.active ? ink : 'oklch(0.55 0.008 70)',
+      weight: d.active ? '600' : '500'
+    }));
+
+    const wfDefs = [
+      { label: 'Workforce', icon: ICONS.workforce }, { label: 'CRM', icon: ICONS.crm },
+      { label: 'Calendar', icon: ICONS.calendar }, { label: 'Investors', icon: ICONS.investors },
+      { label: 'Tasks', icon: ICONS.tasks, badge: '2' }, { label: 'Memory', icon: ICONS.memory },
+      { label: 'Approvals', icon: ICONS.approvals }, { label: 'Work Log', icon: ICONS.worklog },
+      { label: 'Tools', icon: ICONS.tools }
+    ];
+    const workforceItems = wfDefs.map(d => ({ label: d.label, iconHtml: { __html: d.icon }, hasBadge: !!d.badge, badge: d.badge || '' }));
+
+    const dms = [
+      { name: 'Maya', initials: 'MA', gradient: AV.maya, hasTag: true, tag: 'Workforce manager' },
+      { name: 'Hayden Kim', initials: 'HK', gradient: AV.hayden, hasTag: false, tag: '' },
+      { name: 'Priya Carter', initials: 'PC', gradient: AV.priya, hasTag: false, tag: '' },
+      { name: 'Blake Fleming', initials: 'BF', gradient: AV.blake, hasTag: false, tag: '' }
+    ];
+
+    const pulse = [
+      { value: '0', label: 'NEW' }, { value: '0', label: 'APPROVAL' },
+      { value: '0', label: 'HIGH' }, { value: '0', label: 'ASSIGNED' }
+    ];
+
+    const folderDefs = [
+      { key: 'inbox', label: 'Inbox', icon: F.inbox }, { key: 'allmail', label: 'All mail', icon: F.allmail },
+      { key: 'assigned', label: 'Assigned to me', icon: F.assigned }, { key: 'aiworking', label: 'AI working', icon: F.aiworking },
+      { key: 'needsinput', label: 'Needs your input', icon: F.needsinput }, { key: 'needsapproval', label: 'Needs approval', icon: F.needsapproval },
+      { key: 'awaiting', label: 'Awaiting reply', icon: F.awaiting }, { key: 'sent', label: 'Sent', icon: F.sent },
+      { key: 'drafts', label: 'Drafts', icon: F.drafts }, { key: 'archived', label: 'Archived', icon: F.archived },
+      { key: 'spam', label: 'Spam', icon: F.spam }
+    ];
+    const folders = folderDefs.map(f => {
+      const active = s.folder === f.key;
+      return {
+        label: f.label, iconHtml: { __html: f.icon }, onClick: () => this.setFolder(f.key),
+        bg: active ? 'oklch(0.955 0.003 80)' : 'transparent',
+        color: active ? ink : 'oklch(0.36 0.008 65)',
+        iconColor: active ? ink : 'oklch(0.55 0.008 70)',
+        weight: active ? '600' : '500', hasCount: false, count: ''
+      };
+    });
+
+    const mailActionDefs = [
+      { label: 'Reply', icon: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 17 4 12 9 7"/><path d="M20 18v-2a4 4 0 0 0-4-4H4"/></svg>' },
+      { label: 'Mark unread', icon: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 8l9 6 9-6"/></svg>' },
+      { label: 'Archive', icon: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="5" rx="1"/><path d="M4 9v9a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9"/><line x1="10" y1="13" x2="14" y2="13"/></svg>' },
+      { label: 'Spam', icon: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l8 3v6c0 5-3.5 8.5-8 11-4.5-2.5-8-6-8-11V5z"/></svg>' }
+    ];
+    const mailActions = mailActionDefs.map(m => ({ label: m.label, iconHtml: { __html: m.icon } }));
+
+    const tabDefs = [
+      { label: 'Messages', active: true }, { label: 'Internal', active: false }, { label: 'Context', active: false }
+    ];
+    const tabs = tabDefs.map(t => ({
+      label: t.label, weight: t.active ? '600' : '500',
+      color: t.active ? ink : 'oklch(0.55 0.008 70)',
+      border: t.active ? ink : 'transparent'
+    }));
+
+    const tb = (svg) => ({ __html: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' + svg + '</svg>' });
+    const toolbar = [
+      { iconHtml: { __html: '<span style="font-size:15px;font-weight:700;font-family:Geist,sans-serif;">B</span>' } },
+      { iconHtml: { __html: '<span style="font-size:15px;font-style:italic;font-family:Geist,sans-serif;">I</span>' } },
+      { iconHtml: { __html: '<span style="font-size:14px;text-decoration:underline;font-family:Geist,sans-serif;">U</span>' } },
+      { iconHtml: tb('<line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><circle cx="3.5" cy="6" r="1"/><circle cx="3.5" cy="12" r="1"/><circle cx="3.5" cy="18" r="1"/>') },
+      { iconHtml: tb('<line x1="10" y1="6" x2="21" y2="6"/><line x1="10" y1="12" x2="21" y2="12"/><line x1="10" y1="18" x2="21" y2="18"/><path d="M4 6h1v4M4 10h2"/><path d="M6 18H4c0-1 2-2 2-3s-1-1.5-2-1"/>') },
+      { iconHtml: tb('<path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.5 1.5"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.5-1.5"/>') },
+      { iconHtml: tb('<circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/>') },
+      { iconHtml: tb('<path d="M4 7V4h16v3"/><path d="M9 20h6"/><path d="M12 4v16"/><line x1="18" y1="15" x2="22" y2="19"/><line x1="22" y1="15" x2="18" y2="19"/>') },
+      { iconHtml: tb('<path d="M21.44 11.05l-9.19 9.19a5 5 0 0 1-7.07-7.07l9.19-9.19a3.5 3.5 0 0 1 4.95 4.95L10.12 18.31a2 2 0 0 1-2.83-2.83l8.49-8.48"/>') }
+    ];
+
+    return {
+      navItems, workforceItems, dms, goCalls: this.goCalls,
+      pulse, folders, mailActions, tabs, toolbar,
+      composeOpen: s.composeOpen, openCompose: this.openCompose, closeCompose: this.closeCompose
+    };
+  }
+}
+</script>
+</body>
+</html>

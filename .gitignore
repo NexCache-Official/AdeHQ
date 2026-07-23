@@ -56,3 +56,5 @@ AdeHQ.dc*.html
 /AdeHQ*.dc.html
 *.dc.html
 !docs/design-system/mocks/**
+!new designs/
+!new designs/**

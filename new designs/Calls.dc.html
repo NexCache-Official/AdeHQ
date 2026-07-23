@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  @keyframes ringPulse { 0% { box-shadow: 0 0 0 0 oklch(0.55 0.01 70 / 0.28); } 70% { box-shadow: 0 0 0 26px oklch(0.55 0.01 70 / 0); } 100% { box-shadow: 0 0 0 0 oklch(0.55 0.01 70 / 0); } }
+  @keyframes softPulse { 0%,100% { opacity: 1; } 50% { opacity: 0.45; } }
+  @keyframes slideUp { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: translateY(0); } }
+  @keyframes popIn { from { opacity: 0; transform: translateY(10px) scale(0.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
+  body { margin: 0; font-family: 'Geist', system-ui, sans-serif; background: oklch(0.985 0.0025 85); -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
+  * { box-sizing: border-box; }
+  ::placeholder { color: oklch(0.66 0.006 70); }
+  a { color: oklch(0.24 0.012 60); text-decoration: none; }
+  a:hover { color: oklch(0.42 0.01 60); }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-thumb { background: oklch(0.9 0.004 75); border-radius: 8px; border: 3px solid transparent; background-clip: content-box; }
+  ::-webkit-scrollbar-thumb:hover { background: oklch(0.82 0.005 75); background-clip: content-box; }
+</style>
+</helmet>
+
+<div style="display:flex; width:100%; min-height:100vh; background:oklch(0.985 0.0025 85); color:oklch(0.24 0.012 60);">
+
+  <div style="width:260px; flex-shrink:0; background:oklch(0.995 0.001 85); border-right:1px solid oklch(0.92 0.004 75); display:flex; flex-direction:column; height:100vh; position:sticky; top:0;">
+
+    <div style="padding:14px 12px 10px;">
+      <div style="display:flex; align-items:center; gap:10px; padding:7px 8px; border-radius:10px; cursor:pointer;" style-hover="background:oklch(0.965 0.003 80);">
+        <div style="width:30px; height:30px; border-radius:8px; background:oklch(0.24 0.012 60); display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.4" stroke-linecap="round"><path d="M12 3v18M4.2 7.5l15.6 9M19.8 7.5L4.2 16.5"/></svg>
+        </div>
+        <div style="flex:1; min-width:0;">
+          <div style="font-size:13.5px; font-weight:600; letter-spacing:-0.01em; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">AdeHQ</div>
+          <div style="font-size:11px; color:oklch(0.64 0.006 70); font-family:'Geist Mono',monospace; letter-spacing:0.02em;">PRO WORKSPACE</div>
+        </div>
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="oklch(0.66 0.006 70)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M8 9l4 4 4-4"/></svg>
+      </div>
+    </div>
+
+    <div style="padding:2px 12px 12px;">
+      <div style="display:flex; align-items:center; gap:8px; background:oklch(0.975 0.002 80); border:1px solid oklch(0.93 0.004 75); border-radius:9px; padding:7px 10px; cursor:text;">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="oklch(0.62 0.006 70)" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+        <span style="font-size:13px; color:oklch(0.62 0.006 70); flex:1;">Search</span>
+        <span style="font-size:10.5px; color:oklch(0.6 0.006 70); font-family:'Geist Mono',monospace; background:oklch(0.995 0.001 85); border:1px solid oklch(0.92 0.004 75); border-radius:5px; padding:1px 5px;">&#8984;K</span>
+      </div>
+    </div>
+
+    <div style="flex:1; overflow-y:auto; padding:4px 10px 10px;">
+      <div style="font-family:'Geist Mono',monospace; font-size:10.5px; font-weight:500; letter-spacing:0.14em; color:oklch(0.68 0.006 70); padding:8px 8px 8px;">WORKSPACE</div>
+      <sc-for list="{{ navItems }}" as="item" hint-placeholder-count="3">
+        <div style="display:flex; align-items:center; gap:11px; padding:7px 8px; border-radius:8px; cursor:pointer; font-size:13.5px; font-weight:500; color:oklch(0.34 0.008 65);" style-hover="background:oklch(0.965 0.003 80);">
+          <span style="color:oklch(0.55 0.008 70); display:flex;" dangerouslySetInnerHTML="{{ item.iconHtml }}"></span>
+          <span>{{ item.label }}</span>
+        </div>
+      </sc-for>
+
+      <div style="display:flex; align-items:center; gap:8px; padding:8px 8px 5px; font-size:13.5px; font-weight:500; color:oklch(0.34 0.008 65); cursor:pointer;">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="oklch(0.6 0.006 70)" stroke-width="2.6"><path d="M8 9l4 4 4-4"/></svg>
+        <span style="flex:1;">Rooms</span>
+        <span style="font-size:10.5px; font-family:'Geist Mono',monospace; color:oklch(0.6 0.006 70);">1</span>
+      </div>
+      <div style="padding:6px 8px 6px 27px; font-size:13.5px; color:oklch(0.4 0.008 65); border-radius:8px; cursor:pointer;" style-hover="background:oklch(0.965 0.003 80);"><span style="color:oklch(0.66 0.006 70); margin-right:6px;">#</span>Operations</div>
+
+      <div style="display:flex; align-items:center; gap:8px; padding:9px 8px 5px; font-size:13.5px; font-weight:500; color:oklch(0.34 0.008 65); cursor:pointer;">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="oklch(0.6 0.006 70)" stroke-width="2.6"><path d="M8 9l4 4 4-4"/></svg>
+        <span style="flex:1;">Direct messages</span>
+        <span style="font-size:10px; font-family:'Geist Mono',monospace; font-weight:500; background:oklch(0.24 0.012 60); color:white; border-radius:20px; padding:1px 6px;">4</span>
+      </div>
+      <sc-for list="{{ dms }}" as="p" hint-placeholder-count="4">
+        <div style="display:flex; align-items:center; gap:10px; padding:5px 8px; margin-left:4px; border-radius:8px; cursor:pointer;" style-hover="background:oklch(0.965 0.003 80);">
+          <div style="width:20px; height:20px; border-radius:6px; background:{{ p.gradient }}; display:flex; align-items:center; justify-content:center; font-size:9px; font-weight:600; color:white; flex-shrink:0;">{{ p.initials }}</div>
+          <span style="font-size:13.5px; color:oklch(0.36 0.008 65);">{{ p.name }}</span>
+        </div>
+      </sc-for>
+
+      <div style="margin-top:9px; display:flex; align-items:center; gap:11px; padding:8px 8px; border-radius:8px; background:oklch(0.955 0.003 80); cursor:pointer;">
+        <span style="color:oklch(0.24 0.012 60); display:flex;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.68 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.32 1.85.55 2.81.68A2 2 0 0 1 22 16.92z"/></svg>
+        </span>
+        <span style="font-size:13.5px; font-weight:600; color:oklch(0.24 0.012 60); flex:1;">Calls</span>
+        <span style="width:6px; height:6px; border-radius:50%; background:oklch(0.6 0.12 150);"></span>
+      </div>
+
+      <div style="font-family:'Geist Mono',monospace; font-size:10.5px; font-weight:500; letter-spacing:0.14em; color:oklch(0.68 0.006 70); padding:18px 8px 8px;">WORKFORCE</div>
+      <sc-for list="{{ workforceItems }}" as="item" hint-placeholder-count="4">
+        <div style="display:flex; align-items:center; gap:11px; padding:7px 8px; border-radius:8px; cursor:pointer; font-size:13.5px; font-weight:500; color:oklch(0.34 0.008 65);" style-hover="background:oklch(0.965 0.003 80);">
+          <span style="color:oklch(0.55 0.008 70); display:flex;" dangerouslySetInnerHTML="{{ item.iconHtml }}"></span>
+          <span>{{ item.label }}</span>
+        </div>
+      </sc-for>
+    </div>
+
+    <div style="padding:10px 12px;">
+      <div style="display:flex; align-items:center; gap:10px; border:1px solid oklch(0.9 0.004 75); border-radius:10px; padding:9px 11px; cursor:pointer; background:oklch(0.995 0.001 85);" style-hover="background:oklch(0.97 0.003 80); border-color:oklch(0.86 0.005 75);">
+        <span style="width:26px; height:26px; border-radius:7px; background:oklch(0.96 0.003 80); display:flex; align-items:center; justify-content:center; color:oklch(0.3 0.01 60); flex-shrink:0;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M20 8v6M23 11h-6"/></svg>
+        </span>
+        <div style="flex:1; min-width:0;">
+          <div style="font-size:13px; font-weight:600; line-height:1.3; letter-spacing:-0.01em;">Hire AI employee</div>
+          <div style="font-size:10.5px; color:oklch(0.64 0.006 70); font-family:'Geist Mono',monospace; letter-spacing:0.04em;">OPEN ROLE</div>
+        </div>
+      </div>
+    </div>
+
+    <div style="padding:10px 12px; border-top:1px solid oklch(0.93 0.004 75); display:flex; align-items:center; gap:10px;">
+      <div style="width:26px; height:26px; border-radius:7px; background:oklch(0.55 0.11 285); display:flex; align-items:center; justify-content:center; font-size:10px; font-weight:600; color:white;">SK</div>
+      <div style="flex:1;">
+        <div style="font-size:13px; font-weight:600; letter-spacing:-0.01em;">Shubham Kumar</div>
+        <div style="font-size:11px; color:oklch(0.64 0.006 70);">Admin</div>
+      </div>
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="oklch(0.62 0.006 70)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>
+    </div>
+  </div>
+
+  <div style="flex:1; position:relative; min-height:100vh; display:flex; flex-direction:column;">
+
+    <div style="height:56px; flex-shrink:0; border-bottom:1px solid oklch(0.93 0.004 75); display:flex; align-items:center; justify-content:space-between; padding:0 32px; background:oklch(0.985 0.0025 85 / 0.8); backdrop-filter:blur(8px); position:sticky; top:0; z-index:10;">
+      <div style="display:flex; align-items:center; gap:9px; font-size:13.5px; color:oklch(0.55 0.008 70); font-family:'Geist Mono',monospace; letter-spacing:0.02em;">
+        <span>WORKSPACE</span>
+        <span style="color:oklch(0.8 0.005 75);">/</span>
+        <span style="color:oklch(0.28 0.01 60);">CALLS</span>
+      </div>
+      <div style="display:flex; align-items:center; gap:6px;">
+        <div onClick="{{ toggleRinging }}" style="display:flex; align-items:center; gap:7px; padding:6px 10px; border-radius:8px; font-size:12.5px; font-weight:500; color:oklch(0.4 0.008 65); cursor:pointer;" style-hover="background:oklch(0.955 0.003 80);">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="{{ ringingBellFill }}" stroke="oklch(0.4 0.008 65)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+          <span>Ringing {{ ringingWord }}</span>
+        </div>
+        <div style="width:32px; height:32px; border-radius:8px; display:flex; align-items:center; justify-content:center; color:oklch(0.5 0.008 70); cursor:pointer;" style-hover="background:oklch(0.955 0.003 80);">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        </div>
+      </div>
+    </div>
+
+    <div style="flex:1; padding:32px 32px 48px; position:relative;">
+
+    <sc-if value="{{ isList }}" hint-placeholder-val="{{ true }}">
+      <div style="max-width:1080px; margin:0 auto;">
+
+        <div style="display:flex; flex-wrap:wrap; align-items:flex-end; justify-content:space-between; gap:20px; margin-bottom:30px;">
+          <div>
+            <div style="font-size:30px; font-weight:600; letter-spacing:-0.025em; line-height:1;">Calls</div>
+            <div style="font-size:14px; color:oklch(0.52 0.008 70); max-width:460px; line-height:1.55; margin-top:10px;">Talk with your team and hired AI employees. Human media is included &mdash; AI work is metered separately.</div>
+          </div>
+          <div style="display:flex; flex-wrap:wrap; align-items:center; gap:8px; flex-shrink:0;">
+            <div style="display:flex; align-items:center; gap:8px; padding:9px 14px; border-radius:9px; border:1px solid oklch(0.9 0.004 75); background:oklch(0.995 0.001 85); font-size:13.5px; font-weight:500; color:oklch(0.3 0.01 60); cursor:pointer;" style-hover="background:oklch(0.97 0.003 80); border-color:oklch(0.86 0.005 75);">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="oklch(0.3 0.01 60)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+              <span>Start huddle</span>
+            </div>
+            <div onClick="{{ simulateIncoming }}" style="display:flex; align-items:center; gap:8px; padding:9px 15px; border-radius:9px; background:oklch(0.24 0.012 60); color:white; font-size:13.5px; font-weight:600; cursor:pointer; box-shadow:0 1px 2px oklch(0.2 0.02 60 / 0.25);" style-hover="background:oklch(0.32 0.012 60);">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.68 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.32 1.85.55 2.81.68A2 2 0 0 1 22 16.92z"/></svg>
+              <span>New call</span>
+            </div>
+          </div>
+        </div>
+
+        <div style="display:flex; align-items:center; gap:10px; margin-bottom:26px;">
+          <div style="flex:1; max-width:320px; display:flex; align-items:center; gap:9px; background:oklch(0.995 0.001 85); border:1px solid oklch(0.9 0.004 75); border-radius:9px; padding:8px 12px;">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="oklch(0.6 0.006 70)" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+            <input value="{{ search }}" onChange="{{ onSearch }}" placeholder="Search people" style="border:none; outline:none; font-size:13.5px; font-family:inherit; flex:1; background:transparent; color:oklch(0.24 0.012 60);"/>
+          </div>
+          <div style="display:flex; gap:2px; background:oklch(0.955 0.003 80); border:1px solid oklch(0.93 0.004 75); border-radius:10px; padding:3px;">
+            <sc-for list="{{ filterTabs }}" as="tab" hint-placeholder-count="4">
+              <div onClick="{{ tab.onClick }}" style="padding:6px 13px; border-radius:7px; font-size:13px; font-weight:500; cursor:pointer; background:{{ tab.bg }}; color:{{ tab.color }}; box-shadow:{{ tab.shadow }}; transition:color 0.12s;">{{ tab.label }}</div>
+            </sc-for>
+          </div>
+        </div>
+
+        <sc-if value="{{ hasRecents }}" hint-placeholder-val="{{ false }}">
+          <div style="font-family:'Geist Mono',monospace; font-size:11px; font-weight:500; letter-spacing:0.14em; color:oklch(0.66 0.006 70); margin-bottom:12px;">RECENT</div>
+          <div style="display:flex; gap:10px; overflow-x:auto; padding-bottom:6px; margin-bottom:28px;">
+            <sc-for list="{{ recents }}" as="r" hint-placeholder-count="3">
+              <div onClick="{{ r.onCall }}" style="display:flex; align-items:center; gap:11px; padding:11px 14px; border-radius:11px; background:oklch(0.995 0.001 85); border:1px solid oklch(0.92 0.004 75); cursor:pointer; flex-shrink:0; min-width:200px;" style-hover="border-color:oklch(0.82 0.005 75); background:oklch(0.998 0.001 85);">
+                <div style="width:34px; height:34px; border-radius:9px; background:{{ r.gradient }}; display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:600; color:white; flex-shrink:0;">{{ r.initials }}</div>
+                <div style="min-width:0; flex:1;">
+                  <div style="font-size:13.5px; font-weight:500; letter-spacing:-0.01em; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{{ r.name }}</div>
+                  <div style="font-size:11.5px; color:oklch(0.62 0.006 70); font-family:'Geist Mono',monospace;">{{ r.time }}</div>
+                </div>
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="oklch(0.6 0.006 70)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.68 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.32 1.85.55 2.81.68A2 2 0 0 1 22 16.92z"/></svg>
+              </div>
+            </sc-for>
+          </div>
+
+          <div style="font-family:'Geist Mono',monospace; font-size:11px; font-weight:500; letter-spacing:0.14em; color:oklch(0.66 0.006 70); margin-bottom:12px;">LIVE HUDDLE</div>
+          <div style="display:flex; align-items:center; gap:14px; padding:14px 16px; border-radius:12px; background:oklch(0.995 0.001 85); border:1px solid oklch(0.92 0.004 75); margin-bottom:30px;">
+            <div style="display:flex;">
+              <div style="width:30px; height:30px; border-radius:8px; background:oklch(0.6 0.1 220); display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:600; color:white; box-shadow:0 0 0 2px oklch(0.995 0.001 85);">MA</div>
+              <div style="width:30px; height:30px; border-radius:8px; background:oklch(0.65 0.11 45); display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:600; color:white; box-shadow:0 0 0 2px oklch(0.995 0.001 85); margin-left:-8px;">HK</div>
+            </div>
+            <div style="flex:1;">
+              <div style="font-size:13.5px; font-weight:600; letter-spacing:-0.01em; display:flex; align-items:center; gap:8px;"><span style="color:oklch(0.66 0.006 70);">#</span>Operations
+                <span style="display:inline-flex; align-items:center; gap:5px; font-size:10.5px; font-weight:500; font-family:'Geist Mono',monospace; letter-spacing:0.06em; color:oklch(0.52 0.11 150); background:oklch(0.95 0.03 150); border-radius:20px; padding:2px 8px;"><span style="width:5px; height:5px; border-radius:50%; background:oklch(0.6 0.12 150); animation:softPulse 1.6s infinite;"></span>LIVE</span>
+              </div>
+              <div style="font-size:12.5px; color:oklch(0.58 0.008 70); margin-top:3px;">Maya, Hayden Kim &middot; 12:04 elapsed</div>
+            </div>
+            <div style="padding:8px 15px; border-radius:8px; background:oklch(0.24 0.012 60); color:white; font-size:13px; font-weight:600; cursor:pointer;" style-hover="background:oklch(0.32 0.012 60);">Join</div>
+          </div>
+        </sc-if>
+
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px;">
+          <div style="font-family:'Geist Mono',monospace; font-size:11px; font-weight:500; letter-spacing:0.14em; color:oklch(0.66 0.006 70);">DIRECTORY</div>
+          <div style="font-family:'Geist Mono',monospace; font-size:11px; color:oklch(0.7 0.006 70);">{{ contactCount }}</div>
+        </div>
+        <div style="background:oklch(0.995 0.001 85); border:1px solid oklch(0.92 0.004 75); border-radius:12px; overflow:hidden;">
+          <sc-for list="{{ filteredContacts }}" as="c" hint-placeholder-count="6">
+            <div style="display:flex; align-items:center; gap:14px; padding:13px 18px; border-top:1px solid oklch(0.95 0.003 80);" style-hover="background:oklch(0.98 0.002 80);">
+              <div style="position:relative; flex-shrink:0;">
+                <div style="width:38px; height:38px; border-radius:10px; background:{{ c.gradient }}; display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:600; color:white;">{{ c.initials }}</div>
+                <div style="position:absolute; bottom:-2px; right:-2px; width:12px; height:12px; border-radius:50%; background:{{ c.statusColor }}; box-shadow:0 0 0 2.5px oklch(0.995 0.001 85);"></div>
+              </div>
+              <div style="flex:1; min-width:0;">
+                <div style="display:flex; align-items:center; gap:8px;">
+                  <span style="font-size:14.5px; font-weight:600; letter-spacing:-0.01em;">{{ c.name }}</span>
+                  <sc-if value="{{ c.isAi }}" hint-placeholder-val="{{ false }}">
+                    <span style="font-size:9.5px; font-weight:500; font-family:'Geist Mono',monospace; letter-spacing:0.08em; color:oklch(0.5 0.008 70); background:oklch(0.96 0.003 80); border:1px solid oklch(0.92 0.004 75); border-radius:5px; padding:1.5px 5px;">AI</span>
+                  </sc-if>
+                </div>
+                <div style="font-size:13px; color:oklch(0.58 0.008 70); margin-top:2px;">{{ c.role }}</div>
+              </div>
+              <div style="display:flex; align-items:center; gap:7px; margin-right:10px; flex-shrink:0;">
+                <span style="width:6px; height:6px; border-radius:50%; background:{{ c.statusColor }};"></span>
+                <span style="font-size:12px; color:oklch(0.56 0.008 70); font-family:'Geist Mono',monospace; letter-spacing:0.02em;">{{ c.statusLabel }}</span>
+              </div>
+              <div onClick="{{ c.onCall }}" style="display:flex; align-items:center; gap:7px; padding:7px 14px; border-radius:8px; border:1px solid oklch(0.9 0.004 75); background:oklch(0.995 0.001 85); font-size:13px; font-weight:500; color:oklch(0.3 0.01 60); cursor:pointer; flex-shrink:0;" style-hover="background:oklch(0.24 0.012 60); color:white; border-color:oklch(0.24 0.012 60);">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.68 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.32 1.85.55 2.81.68A2 2 0 0 1 22 16.92z"/></svg>
+                <span>Call</span>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ isOutgoing }}" hint-placeholder-val="{{ false }}">
+      <div style="position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:24px; animation:slideUp 0.35s ease;">
+        <div style="font-family:'Geist Mono',monospace; font-size:12px; font-weight:500; letter-spacing:0.18em; color:oklch(0.6 0.006 70);">CALLING</div>
+        <div style="width:116px; height:116px; border-radius:26px; background:{{ activeContact.gradient }}; display:flex; align-items:center; justify-content:center; font-size:38px; font-weight:600; color:white; animation:ringPulse 1.8s infinite; box-shadow:0 12px 30px oklch(0.3 0.02 60 / 0.12);">{{ activeContact.initials }}</div>
+        <div style="text-align:center;">
+          <div style="font-size:22px; font-weight:600; letter-spacing:-0.02em;">{{ activeContact.name }}</div>
+          <div style="font-size:14px; color:oklch(0.56 0.008 70); margin-top:5px;">{{ activeContact.role }}</div>
+        </div>
+        <div onClick="{{ cancelCall }}" style="width:56px; height:56px; border-radius:50%; background:oklch(0.57 0.19 25); display:flex; align-items:center; justify-content:center; cursor:pointer; box-shadow:0 6px 16px oklch(0.57 0.19 25 / 0.3); margin-top:6px;" style-hover="background:oklch(0.52 0.19 25);">
+          <svg width="23" height="23" viewBox="0 0 24 24" fill="white" stroke="none"><path d="M12 9c-1.6 0-3.15.25-4.6.72a1 1 0 0 0-.5 1.5l1.2 1.6a1 1 0 0 0 1.2.35 8 8 0 0 1 5.4 0 1 1 0 0 0 1.2-.35l1.2-1.6a1 1 0 0 0-.5-1.5A15 15 0 0 0 12 9z" transform="rotate(135 12 12)"/></svg>
+        </div>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ isActive }}" hint-placeholder-val="{{ false }}">
+      <div style="position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:22px; animation:slideUp 0.35s ease;">
+        <div style="display:flex; align-items:center; gap:8px; font-family:'Geist Mono',monospace; font-size:13px; font-weight:500; color:oklch(0.52 0.11 150); letter-spacing:0.06em;">
+          <span style="width:7px; height:7px; border-radius:50%; background:oklch(0.6 0.12 150); animation:softPulse 1.6s infinite;"></span>
+          <span>{{ elapsedLabel }}</span>
+        </div>
+        <div style="width:116px; height:116px; border-radius:26px; background:{{ activeContact.gradient }}; display:flex; align-items:center; justify-content:center; font-size:38px; font-weight:600; color:white; box-shadow:0 12px 30px oklch(0.3 0.02 60 / 0.12);">{{ activeContact.initials }}</div>
+        <div style="text-align:center;">
+          <div style="font-size:22px; font-weight:600; letter-spacing:-0.02em;">{{ activeContact.name }}</div>
+          <div style="font-size:14px; color:oklch(0.56 0.008 70); margin-top:5px;">{{ activeContact.role }}</div>
+        </div>
+        <div style="display:flex; align-items:center; gap:8px; margin-top:8px; padding:8px; background:oklch(0.995 0.001 85); border:1px solid oklch(0.92 0.004 75); border-radius:60px; box-shadow:0 4px 18px oklch(0.3 0.02 60 / 0.08);">
+          <div onClick="{{ toggleMute }}" style="width:48px; height:48px; border-radius:50%; background:{{ muteBg }}; display:flex; align-items:center; justify-content:center; cursor:pointer;" style-hover="background:oklch(0.955 0.003 80);">
+            <sc-if value="{{ muted }}" hint-placeholder-val="{{ false }}">
+              <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 1l22 22"/><path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6"/><path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23"/><path d="M12 19v3"/></svg>
+            </sc-if>
+            <sc-if value="{{ notMuted }}" hint-placeholder-val="{{ true }}">
+              <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="oklch(0.3 0.01 60)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><path d="M12 19v3"/></svg>
+            </sc-if>
+          </div>
+          <div onClick="{{ toggleSpeaker }}" style="width:48px; height:48px; border-radius:50%; background:{{ speakerBg }}; display:flex; align-items:center; justify-content:center; cursor:pointer;" style-hover="background:oklch(0.955 0.003 80);">
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="{{ speakerStroke }}" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5L6 9H2v6h4l5 4V5z"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
+          </div>
+          <div style="width:48px; height:48px; border-radius:50%; background:oklch(0.995 0.001 85); display:flex; align-items:center; justify-content:center; cursor:pointer;" style-hover="background:oklch(0.955 0.003 80);">
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="oklch(0.3 0.01 60)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg>
+          </div>
+          <div onClick="{{ endCall }}" style="width:48px; height:48px; border-radius:50%; background:oklch(0.57 0.19 25); display:flex; align-items:center; justify-content:center; cursor:pointer;" style-hover="background:oklch(0.52 0.19 25);">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="white" stroke="none"><path d="M12 9c-1.6 0-3.15.25-4.6.72a1 1 0 0 0-.5 1.5l1.2 1.6a1 1 0 0 0 1.2.35 8 8 0 0 1 5.4 0 1 1 0 0 0 1.2-.35l1.2-1.6a1 1 0 0 0-.5-1.5A15 15 0 0 0 12 9z" transform="rotate(135 12 12)"/></svg>
+          </div>
+        </div>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ showIncoming }}" hint-placeholder-val="{{ false }}">
+      <div style="position:fixed; bottom:28px; right:32px; width:320px; background:oklch(0.995 0.001 85); border-radius:16px; box-shadow:0 16px 48px oklch(0.2 0.02 60 / 0.18); border:1px solid oklch(0.9 0.004 75); padding:18px; animation:popIn 0.3s ease; z-index:50;">
+        <div style="display:flex; align-items:center; gap:12px; margin-bottom:16px;">
+          <div style="width:46px; height:46px; border-radius:12px; background:{{ incomingContact.gradient }}; display:flex; align-items:center; justify-content:center; font-size:15px; font-weight:600; color:white; animation:ringPulse 1.6s infinite;">{{ incomingContact.initials }}</div>
+          <div style="flex:1; min-width:0;">
+            <div style="font-size:14.5px; font-weight:600; letter-spacing:-0.01em;">{{ incomingContact.name }}</div>
+            <div style="font-size:12px; color:oklch(0.52 0.11 150); font-weight:500; font-family:'Geist Mono',monospace; letter-spacing:0.03em; margin-top:2px;">INCOMING CALL</div>
+          </div>
+        </div>
+        <div style="display:flex; gap:9px;">
+          <div onClick="{{ declineIncoming }}" style="flex:1; text-align:center; padding:10px; border-radius:9px; background:oklch(0.965 0.003 80); color:oklch(0.57 0.19 25); font-weight:600; font-size:13.5px; cursor:pointer;" style-hover="background:oklch(0.94 0.005 80);">Decline</div>
+          <div onClick="{{ acceptIncoming }}" style="flex:1; text-align:center; padding:10px; border-radius:9px; background:oklch(0.55 0.13 150); color:white; font-weight:600; font-size:13.5px; cursor:pointer;" style-hover="background:oklch(0.5 0.13 150);">Accept</div>
+        </div>
+      </div>
+    </sc-if>
+
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+const ICONS = {
+  home: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M9 22V12h6v10"/></svg>',
+  inbox: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 8l9 6 9-6"/></svg>',
+  drive: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M2 11h20"/></svg>',
+  workforce: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/></svg>',
+  crm: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>',
+  calendar: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>',
+  investors: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M23 6l-9.5 9.5-5-5L1 18"/><path d="M17 6h6v6"/></svg>'
+};
+
+const CONTACTS = [
+  { id: 'maya', name: 'Maya', role: 'Workforce Manager', isAi: false, status: 'online', statusLabel: 'Online', statusColor: 'oklch(0.6 0.12 150)', initials: 'MA', gradient: 'oklch(0.6 0.1 220)' },
+  { id: 'priya', name: 'Priya Carter', role: 'Market Research Analyst', isAi: true, status: 'online', statusLabel: 'Online', statusColor: 'oklch(0.6 0.12 150)', initials: 'PC', gradient: 'oklch(0.58 0.11 285)' },
+  { id: 'hayden', name: 'Hayden Kim', role: 'Market Research Analyst', isAi: true, status: 'busy', statusLabel: 'In a meeting', statusColor: 'oklch(0.68 0.14 55)', initials: 'HK', gradient: 'oklch(0.65 0.11 45)' },
+  { id: 'blake', name: 'Blake Fleming', role: 'Market Research Analyst', isAi: true, status: 'online', statusLabel: 'Online', statusColor: 'oklch(0.6 0.12 150)', initials: 'BF', gradient: 'oklch(0.6 0.1 300)' },
+  { id: 'jordan', name: 'Jordan Lee', role: 'Sales Lead', isAi: false, status: 'away', statusLabel: 'Away', statusColor: 'oklch(0.72 0.12 85)', initials: 'JL', gradient: 'oklch(0.58 0.1 155)' },
+  { id: 'ava', name: 'Ava Chen', role: 'Customer Support', isAi: false, status: 'offline', statusLabel: 'Offline', statusColor: 'oklch(0.78 0.004 75)', initials: 'AC', gradient: 'oklch(0.62 0.12 20)' }
+];
+
+class Component extends DCLogic {
+  state = {
+    view: 'list', search: '', filter: 'all',
+    activeContact: null, incomingContact: null,
+    muted: false, speakerOn: false, elapsed: 0, ringingEnabled: true
+  };
+
+  componentWillUnmount() { this._clearTimer(); }
+  _clearTimer() { if (this._timer) { clearInterval(this._timer); this._timer = null; } }
+
+  startCall = (contact) => {
+    this._clearTimer();
+    this.setState({ view: 'outgoing', activeContact: contact, elapsed: 0, muted: false, speakerOn: false });
+    this._outgoingTimeout = setTimeout(() => {
+      this.setState({ view: 'active' });
+      this._timer = setInterval(() => this.setState(s => ({ elapsed: s.elapsed + 1 })), 1000);
+    }, 2200);
+  };
+
+  cancelCall = () => { clearTimeout(this._outgoingTimeout); this.setState({ view: 'list', activeContact: null }); };
+  endCall = () => { this._clearTimer(); this.setState({ view: 'list', activeContact: null, elapsed: 0 }); };
+  toggleMute = () => this.setState(s => ({ muted: !s.muted }));
+  toggleSpeaker = () => this.setState(s => ({ speakerOn: !s.speakerOn }));
+  toggleRinging = () => this.setState(s => ({ ringingEnabled: !s.ringingEnabled }));
+  onSearch = (e) => this.setState({ search: e.target.value });
+  setFilter = (f) => this.setState({ filter: f });
+
+  simulateIncoming = () => {
+    const c = CONTACTS.find(c => c.id === 'jordan');
+    this.setState({ incomingContact: c });
+  };
+  declineIncoming = () => this.setState({ incomingContact: null });
+  acceptIncoming = () => {
+    const c = this.state.incomingContact;
+    this._clearTimer();
+    this.setState({ incomingContact: null, view: 'active', activeContact: c, elapsed: 0 });
+    this._timer = setInterval(() => this.setState(s => ({ elapsed: s.elapsed + 1 })), 1000);
+  };
+
+  renderVals() {
+    const s = this.state;
+    const q = s.search.trim().toLowerCase();
+    let list = CONTACTS.filter(c => {
+      if (q && !c.name.toLowerCase().includes(q) && !c.role.toLowerCase().includes(q)) return false;
+      if (s.filter === 'people') return !c.isAi;
+      if (s.filter === 'ai') return c.isAi;
+      if (s.filter === 'online') return c.status === 'online';
+      return true;
+    }).map(c => ({ ...c, onCall: () => this.startCall(c) }));
+
+    const tabDefs = [
+      { key: 'all', label: 'All' },
+      { key: 'online', label: 'Online' },
+      { key: 'people', label: 'People' },
+      { key: 'ai', label: 'AI' }
+    ];
+    const filterTabs = tabDefs.map(t => {
+      const sel = s.filter === t.key;
+      return {
+        label: t.label, onClick: () => this.setFilter(t.key),
+        bg: sel ? 'oklch(0.995 0.001 85)' : 'transparent',
+        color: sel ? 'oklch(0.24 0.012 60)' : 'oklch(0.52 0.008 70)',
+        shadow: sel ? '0 1px 2px oklch(0.3 0.02 60 / 0.1), 0 0 0 1px oklch(0.92 0.004 75)' : 'none'
+      };
+    });
+
+    const recentsData = [
+      { name: 'Priya Carter', initials: 'PC', gradient: CONTACTS[1].gradient, time: '2h ago', contact: CONTACTS[1] },
+      { name: 'Maya', initials: 'MA', gradient: CONTACTS[0].gradient, time: 'Yesterday', contact: CONTACTS[0] },
+      { name: 'Blake Fleming', initials: 'BF', gradient: CONTACTS[3].gradient, time: 'Mon', contact: CONTACTS[3] }
+    ].map(r => ({ ...r, onCall: () => this.startCall(r.contact) }));
+
+    const mm = Math.floor(s.elapsed / 60), ss = s.elapsed % 60;
+    const elapsedLabel = `${mm < 10 ? '0' : ''}${mm}:${ss < 10 ? '0' : ''}${ss}`;
+
+    const navItems = [
+      { label: 'Home', iconHtml: { __html: ICONS.home } },
+      { label: 'Inbox', iconHtml: { __html: ICONS.inbox } },
+      { label: 'AdeHQ Drive', iconHtml: { __html: ICONS.drive } }
+    ];
+    const workforceItems = [
+      { label: 'Workforce', iconHtml: { __html: ICONS.workforce } },
+      { label: 'CRM', iconHtml: { __html: ICONS.crm } },
+      { label: 'Calendar', iconHtml: { __html: ICONS.calendar } },
+      { label: 'Investors', iconHtml: { __html: ICONS.investors } }
+    ];
+    const dms = [
+      { name: 'Maya', initials: 'MA', gradient: CONTACTS[0].gradient },
+      { name: 'Hayden Kim', initials: 'HK', gradient: CONTACTS[2].gradient },
+      { name: 'Priya Carter', initials: 'PC', gradient: CONTACTS[1].gradient },
+      { name: 'Blake Fleming', initials: 'BF', gradient: CONTACTS[3].gradient }
+    ];
+
+    const n = list.length;
+    const contactCount = `${n} ${n === 1 ? 'PERSON' : 'PEOPLE'}`;
+
+    return {
+      navItems, workforceItems, dms,
+      isList: s.view === 'list', isOutgoing: s.view === 'outgoing', isActive: s.view === 'active',
+      search: s.search, onSearch: this.onSearch, filterTabs,
+      hasRecents: !q && s.filter === 'all', recents: recentsData,
+      filteredContacts: list, contactCount,
+      activeContact: s.activeContact || { name: '', role: '', initials: '', gradient: 'oklch(0.6 0.1 260)' },
+      cancelCall: this.cancelCall, endCall: this.endCall,
+      elapsedLabel, muted: s.muted, notMuted: !s.muted, toggleMute: this.toggleMute,
+      muteBg: s.muted ? 'oklch(0.57 0.19 25)' : 'oklch(0.995 0.001 85)',
+      toggleSpeaker: this.toggleSpeaker,
+      speakerBg: s.speakerOn ? 'oklch(0.24 0.012 60)' : 'oklch(0.995 0.001 85)',
+      speakerStroke: s.speakerOn ? 'white' : 'oklch(0.3 0.01 60)',
+      toggleRinging: this.toggleRinging,
+      ringingBellFill: s.ringingEnabled ? 'oklch(0.3 0.01 60)' : 'none',
+      ringingWord: s.ringingEnabled ? 'on' : 'off',
+      simulateIncoming: this.simulateIncoming,
+      showIncoming: !!s.incomingContact,
+      incomingContact: s.incomingContact || { name: '', initials: '', gradient: 'oklch(0.6 0.1 260)' },
+      declineIncoming: this.declineIncoming, acceptIncoming: this.acceptIncoming
+    };
+  }
+}
+</script>
+</body>
+</html>
