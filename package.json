@@ -1,6 +1,6 @@
 {
   "name": "adehq",
-  "version": "20.1.5",
+  "version": "20.2.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -34,7 +34,11 @@
     "benchmark:voice-worker": "tsx -r dotenv/config scripts/benchmark-voice-worker-pipeline.ts dotenv_config_path=.env.local",
     "benchmark:voice-brain": "tsx -r dotenv/config scripts/benchmark-voice-brain.ts dotenv_config_path=.env.local",
     "test:voice-brain-fast-path": "tsx scripts/test-voice-brain-fast-path.ts",
-    "test:brain:gauntlet": "npm run verify:release && npm run test:brain:reliability && npm run test:brain:steward-shadow && npm run test:brain:steward-execution && npm run test:brain:voice && npm run test:brain && npm run test:workspace-access",
+    "test:brain:gauntlet": "npm run verify:release && npm run test:brain:reliability && npm run test:brain:steward-shadow && npm run test:brain:steward-execution && npm run test:brain:voice && npm run test:brain && npm run test:workspace-access && npm run test:pr25",
+    "test:pr25": "tsx scripts/test-pr25-playbook-contracts.ts && tsx scripts/test-pr25-playbook-execution.ts && tsx scripts/test-pr25-playbook-idempotency.ts && tsx scripts/test-pr25-playbook-cancel.ts && tsx scripts/test-pr25-artifact-schemas.ts && tsx scripts/test-pr25-artifact-renderers.ts && tsx scripts/test-pr25-artifact-provenance.ts && tsx scripts/test-pr25-artifact-rls.ts && tsx scripts/test-pr25-procedure-registry.ts && tsx scripts/test-pr25-work-hours.ts && tsx scripts/test-pr25-golden-playbooks.ts && tsx scripts/test-pr25-e2e.ts && tsx scripts/test-pr25-flags-default-off.ts",
+    "test:pr25:gauntlet": "npm run test:pr25",
+    "test:pr25:contracts": "tsx scripts/test-pr25-playbook-contracts.ts",
+    "test:pr25:renderers": "tsx scripts/test-pr25-artifact-renderers.ts",
     "test:brain": "tsx scripts/test-brain-catalog-invariants.ts && tsx scripts/test-brain-metering-matrix.ts && tsx scripts/test-brain-intensity-invariant.ts && tsx scripts/test-brain-steward-facade.ts && tsx scripts/test-brain-no-customer-media-cta.ts && tsx scripts/test-brain-auto-ux.ts && tsx scripts/test-brain-search-exa-first.ts && tsx scripts/test-brain-vision.ts && tsx scripts/test-brain-image.ts && tsx scripts/test-brain-video.ts && tsx scripts/test-brain-reliability-foundation.ts && tsx scripts/test-brain-steward-shadow.ts && tsx scripts/test-brain-steward-execution.ts && tsx scripts/test-brain-voice.ts",
     "test:brain:search": "tsx scripts/test-brain-search-exa-first.ts && tsx scripts/test-search-routing.ts && tsx scripts/test-search-citations.ts",
     "test:brain:vision": "tsx scripts/test-brain-vision.ts",
@@ -139,6 +143,7 @@
     "exa-js": "^2.14.0",
     "exceljs": "^4.4.0",
     "framer-motion": "^11.3.19",
+    "geist": "^1.7.2",
     "json-logic-js": "^2.0.5",
     "jszip": "^3.10.1",
     "lucide-react": "^0.417.0",

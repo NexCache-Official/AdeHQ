@@ -77,37 +77,49 @@ export function WorkspaceSwitcher({
         type="button"
         onClick={() => setOpen((v) => !v)}
         className={cn(
-          "flex w-full items-center gap-2.5 rounded-[13px] border text-left transition-colors",
+          "flex w-full items-center gap-2.5 text-left transition-colors",
           isRail
-            ? "border-[var(--rail-border)] bg-[var(--rail-fill)] px-2.5 py-2 hover:bg-[var(--rail-hover)]"
-            : "h-9 border-border bg-surface px-3 text-sm hover:border-accent/40",
+            ? "rounded-[10px] px-2 py-[7px] hover:bg-[var(--rail-hover)]"
+            : "h-9 rounded-[13px] border border-border bg-surface px-3 text-sm hover:border-accent/40",
         )}
       >
         {isRail ? (
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[9px] text-accent">
-            <BrandMark size={22} />
+          <div className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-lg bg-[var(--rail-ink)] text-white">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden>
+              <path d="M12 3v18M4.2 7.5l15.6 9M19.8 7.5L4.2 16.5" />
+            </svg>
           </div>
         ) : (
-          <span className="h-2 w-2 rounded-full bg-green" />
+          <span className="flex h-6 w-6 shrink-0 items-center justify-center text-accent">
+            <BrandMark size={18} />
+          </span>
         )}
         <div className="min-w-0 flex-1">
           <div
             className={cn(
-              "truncate font-semibold",
+              "truncate font-semibold tracking-[-0.01em]",
               isRail ? "text-[13.5px] text-[var(--rail-ink)]" : "text-ink",
             )}
           >
             {state.workspace.name || "Workspace"}
           </div>
           {isRail ? (
-            <div className="truncate text-[11px] text-[var(--rail-ink-3)]">
-              {[state.workspace.planDisplayName ?? state.workspace.planSlug ?? state.workspace.plan, myRoleLabel]
-                .filter(Boolean)
-                .join(" · ")}
+            <div className="truncate font-mono text-[11px] tracking-[0.02em] text-[var(--rail-ink-3)]">
+              {(
+                state.workspace.planDisplayName ??
+                state.workspace.planSlug ??
+                state.workspace.plan ??
+                "Workspace"
+              )
+                .toString()
+                .toUpperCase()}{" "}
+              WORKSPACE
             </div>
           ) : (
             <div className="truncate text-[11px] text-ink-3">
-              {state.workspace.planDisplayName ?? state.workspace.planSlug ?? state.workspace.plan}
+              {[state.workspace.planDisplayName ?? state.workspace.planSlug ?? state.workspace.plan, myRoleLabel]
+                .filter(Boolean)
+                .join(" · ")}
             </div>
           )}
         </div>
@@ -117,7 +129,8 @@ export function WorkspaceSwitcher({
           </span>
         ) : null}
         <ChevronDown
-          className={cn("h-3.5 w-3.5 shrink-0", isRail ? "text-[var(--rail-ink-2)]" : "text-ink-3")}
+          className={cn("h-[13px] w-[13px] shrink-0", isRail ? "text-[var(--rail-ink-3)]" : "text-ink-3")}
+          strokeWidth={2.4}
         />
       </button>
 

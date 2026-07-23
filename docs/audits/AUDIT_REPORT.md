@@ -16,6 +16,30 @@ until Brain TTFT is fixed.
 `VoiceSessionSnapshot`, latency waterfall on `call_turns.metadata`, async effect
 compiler (post-speech), interim STT prefetch, `npm run benchmark:voice-brain`.
 TTS policy unchanged: xAI standard, CosyVoice fallback, Cartesia premium/benchmark only.
+Also folded from the call-response latency pass (TTS-harness itself not shipped):
+instant-answer deltas on voice, CosyVoice HTTP chunk forward, and listen-state
+race fix when playback is still queued.
+
+
+## Session 2026-07-23 — PR-25 Playbook / Artifact / Procedure Runtime
+
+**Scope:** Slice 25.0–25.9 foundations: architecture audit docs, additive migration,
+contracts, procedure backpack, artifact schemas/renderers, playbook runtime,
+Steward role matching hooks, product + admin UX, gauntlet tests. All customer
+features default **OFF** behind platform/env flags.
+
+**Verification:** `npx tsc --noEmit`, `npm run test:pr25`, `npm run verify:release`
+pass. Flags-default-off, seed DAG, renderer OOXML, WH receipts, private-DM
+scope helper, and in-memory e2e orchestration covered.
+
+**Rollout:** Enable per workspace via `ADEHQ_PLAYBOOK_RUNTIME_V1`,
+`ADEHQ_ARTIFACT_RUNTIME_V1`, `ADEHQ_PROCEDURE_RUNTIME_V1`,
+`NEXT_PUBLIC_ADEHQ_PLAYBOOKS_V1`, `NEXT_PUBLIC_ADEHQ_ARTIFACTS_V1` after
+migration `20260723200000`. Disabling flags blocks new runs/exports only.
+
+**Gaps / follow-ups:** LibreOffice conversion remains worker-only; Maya custom
+playbook builder gated (`ADEHQ_CUSTOM_PLAYBOOKS_V1`); visual QA gated; some
+extended procedures are deterministic stubs pending full Brain bridge wiring.
 
 ---
 

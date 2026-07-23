@@ -114,6 +114,11 @@ export async function processEmployeeResponse(
   });
 
   if (instant) {
+    // Live calls need spoken audio immediately — stream the instant reply
+    // through the same delta path the SpeechChunker/TTS session already use.
+    if (options.voiceCall && options.onReplyDelta) {
+      options.onReplyDelta(instant.reply);
+    }
     const aiMessage =
       options.persistToRoom === false
         ? { id: `private:${employee.id}:${Date.now()}` }

@@ -27,15 +27,21 @@ export type ReleaseManifest = {
     voiceV1: boolean;
     /** PR-19 collaborative execution rollout state. */
     stewardV1: boolean;
+    /** PR-25 playbook runtime — default OFF. */
+    playbookRuntimeV1: boolean;
+    /** PR-25 artifact runtime — default OFF. */
+    artifactRuntimeV1: boolean;
+    /** PR-25 procedure backpack — default OFF. */
+    procedureRuntimeV1: boolean;
   };
   notes: string[];
 };
 
 export const RELEASE_MANIFEST: ReleaseManifest = {
-  releaseId: "baseline-pr181-live-calls-alpha",
-  appVersion: "20.1.5",
-  catalogVersion: 7,
-  requiredMigrationVersion: "20260717192753",
+  releaseId: "baseline-pr25-playbook-artifact-runtime",
+  appVersion: "20.2.0",
+  catalogVersion: 8,
+  requiredMigrationVersion: "20260723200000",
   baselineCommits: {
     pr14Search: "49b8c5a444624d2152e833aeac9baa95ae283f9c",
     pr15Vision: "3ea98a1ef6b7458cbaf1c8d4839a043ce371e463",
@@ -53,8 +59,13 @@ export const RELEASE_MANIFEST: ReleaseManifest = {
     videoV1: true,
     voiceV1: true,
     stewardV1: true,
+    playbookRuntimeV1: false,
+    artifactRuntimeV1: false,
+    procedureRuntimeV1: false,
   },
   notes: [
+    "PR-25 Playbook / Artifact / Procedure runtime ships behind flags (default OFF): ADEHQ_PLAYBOOK_RUNTIME_V1, ADEHQ_ARTIFACT_RUNTIME_V1, ADEHQ_PROCEDURE_RUNTIME_V1.",
+    "PR-25 migration 20260723200000 adds playbook/procedure tables and structured artifact columns; customer surfaces stay gated until flags are enabled.",
     "PR-19 Steward collaborative execution is live; ADEHQ_BRAIN_STEWARD_V1 remains the production kill switch.",
     "PR-19 media collaboration routes ideation/review findings to exactly one terminal image or video creator.",
     "PR-18.1 Realtime Brain Calls alpha: ADEHQ_LIVE_CALLS_V1=1 with Groq STT + SiliconFlow/xAI TTS.",

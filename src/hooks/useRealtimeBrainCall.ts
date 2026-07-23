@@ -427,9 +427,12 @@ export function useRealtimeBrainCall() {
       return;
     }
     if (type === "employee.audio.end") {
-      if (!playbackActiveRef.current && !playbackQueueRef.current.length) {
-        setActivity("listening");
+      // finishPlayback() owns the return-to-listening transition once queued
+      // audio has started. Only fall back here when the turn produced no audio.
+      if (playbackActiveRef.current || playbackQueueRef.current.length > 0) {
+        return;
       }
+      setActivity("listening");
       return;
     }
     if (type === "transcript.partial") {

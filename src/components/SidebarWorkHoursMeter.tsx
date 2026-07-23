@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { useStore } from "@/lib/demo-store";
 import { useWorkspaceUsage } from "@/hooks/useWorkspaceUsage";
-import { cn } from "@/lib/utils";
 
 /** Compact pooled Work Hours meter for the left rail (under workspace name). */
 export function SidebarWorkHoursMeter() {
@@ -11,46 +10,45 @@ export function SidebarWorkHoursMeter() {
   const workspaceId = backend === "supabase" ? state.workspace?.id ?? null : null;
   const { data, loading } = useWorkspaceUsage(workspaceId);
 
-  if (!workspaceId) return null;
-
+  // Demo mode has no usage API — still render the meter so the rail matches Home.dc.html.
+  const isDemo = backend !== "supabase" || !workspaceId;
   const cap = data?.capacity;
-  const unlimited = cap?.unlimited ?? false;
-  // Same period total as Settings → Usage (floored ledger rollup).
-  const used = data?.totalWorkHours ?? cap?.used ?? 0;
-  const allowance = cap?.allowance ?? 0;
+  const unlimited = isDemo ? false : (cap?.unlimited ?? false);
+  const used = isDemo ? 0.41 : (data?.totalWorkHours ?? cap?.used ?? 0);
+  const allowance = isDemo ? 125 : (cap?.allowance ?? 0);
   const pct = unlimited || allowance <= 0 ? 0 : Math.min(100, (used / allowance) * 100);
-  const warn = cap?.warningLevel === "low" || cap?.warningLevel === "exhausted";
+  const warn = !isDemo && (cap?.warningLevel === "low" || cap?.warningLevel === "exhausted");
+  const href = isDemo ? "/settings" : "/settings/usage";
 
   return (
     <Link
-      href="/settings/usage"
-      className="block rounded-[11px] border border-[var(--rail-border)] bg-[var(--rail-fill)] px-2.5 py-2 transition-colors hover:bg-[var(--rail-hover)]"
+      href={href}
+      className="block rounded-[10px] border border-[var(--rail-border)] bg-[var(--rail-fill)] px-[11px] py-[9px] transition-colors hover:bg-[var(--rail-hover)]"
       title="Hired AI employees only · Maya is free · rolling 7-day usage clock"
     >
-      <div className="flex min-w-0 items-center justify-between gap-2 text-[10.5px] text-[var(--rail-ink-2)]">
-        <span className="min-w-0 truncate font-medium text-[var(--rail-ink)]">AI Work Hours</span>
-        <span className="min-w-0 shrink truncate text-right tabular-nums text-[var(--rail-ink-3)]">
-          {loading
-            ? "…"
-            : unlimited
-              ? "Unlimited"
-              : `${used.toFixed(2)} / ${allowance.toFixed(2)}`}
+      <div className="mb-2 flex min-w-0 items-center justify-between gap-2">
+        <span className="min-w-0 truncate font-mono text-[10.5px] tracking-[0.08em] text-[var(--rail-badge-ink)]">
+          AI WORK HOURS
+        </span>
+        <span className="min-w-0 shrink truncate text-right font-mono text-[11px] font-medium tabular-nums text-[var(--rail-ink)]">
+          {isDemo
+            ? `${used.toFixed(2)} / ${allowance.toFixed(2)}`
+            : loading
+              ? "…"
+              : unlimited
+                ? "Unlimited"
+                : `${used.toFixed(2)} / ${allowance.toFixed(2)}`}
         </span>
       </div>
       {!unlimited && (
-        <div className="mt-1.5 flex min-w-0 items-center gap-2">
-          <div className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-[var(--rail-border)]">
-            <div
-              className={cn(
-                "h-full rounded-full transition-all",
-                warn ? "bg-amber-500" : "bg-emerald-500",
-              )}
-              style={{ width: `${pct}%` }}
-            />
-          </div>
-          <span className="shrink-0 font-mono text-[10px] tabular-nums text-[var(--rail-ink-3)]">
-            {loading ? "—" : `${Math.round(pct)}%`}
-          </span>
+        <div className="h-1 overflow-hidden rounded-[3px] bg-[var(--rail-border)]">
+          <div
+            className="h-full rounded-[3px] transition-all"
+            style={{
+              width: `${Math.max(pct, pct > 0 ? 1 : 0)}%`,
+              background: warn ? "rgb(var(--c-amber))" : "var(--rail-ink)",
+            }}
+          />
         </div>
       )}
     </Link>

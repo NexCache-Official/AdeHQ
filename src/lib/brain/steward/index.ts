@@ -35,6 +35,15 @@ export {
   formatFindingsBoard,
 } from "./findings";
 export {
+  matchPlaybookRoles,
+  matchStewardPlaybookRoles,
+} from "./playbook-roles";
+export type {
+  PlaybookRoleAssignment,
+  PlaybookRoleCandidate,
+  PlaybookRoleRequirement,
+} from "./playbook-roles";
+export {
   buildInitialProgress,
   updateStepProgress,
   formatCoordinationLine,

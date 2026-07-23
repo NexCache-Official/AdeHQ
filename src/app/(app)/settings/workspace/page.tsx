@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useStore } from "@/lib/demo-store";
-import { ENABLE_DEMO_MODE } from "@/lib/config/features";
+import { ARTIFACTS_V1, ENABLE_DEMO_MODE } from "@/lib/config/features";
 import { canManageWorkspaceSettings } from "@/lib/workspace/permissions";
+import { authHeaders } from "@/lib/api/auth-client";
 import { PageHeader } from "@/components/Page";
 import { AccountDangerZone } from "@/components/AccountDangerZone";
 import { Card, Button, Toggle } from "@/components/ui";
@@ -15,11 +16,36 @@ export default function SettingsWorkspacePage() {
   const router = useRouter();
   const [workspace, setWorkspace] = useState(state.workspace.name);
   const [saved, setSaved] = useState(false);
+  const [brandKitCount, setBrandKitCount] = useState<number | null>(null);
+  const [defaultBrandName, setDefaultBrandName] = useState<string | null>(null);
 
   const myRole = state.workspaceMembers.find((m) => m.userId === state.user?.id)?.role ?? "member";
   const isWorkspaceOwner = myRole === "admin";
   const canManage = canManageWorkspaceSettings(myRole);
   const isRealWorkspace = state.workspace.workspaceMode !== "demo";
+
+  useEffect(() => {
+    if (!ARTIFACTS_V1 || !state.workspace?.id) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const headers = await authHeaders(state.workspace.id);
+        const res = await fetch(
+          `/api/settings/brand-kits?workspaceId=${encodeURIComponent(state.workspace.id)}`,
+          { headers },
+        );
+        const body = await res.json();
+        if (!res.ok || cancelled) return;
+        setBrandKitCount((body.brandKits ?? []).length);
+        setDefaultBrandName(body.defaultKit?.name ?? "AdeHQ Default");
+      } catch {
+        /* optional card */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [state.workspace?.id]);
 
   const saveWorkspace = () => {
     actions.updateProfile({ workspaceName: workspace });
@@ -104,6 +130,19 @@ export default function SettingsWorkspacePage() {
             </div>
           )}
         </Card>
+
+        {ARTIFACTS_V1 && (
+          <Card className="p-6">
+            <h2 className="mb-1 text-sm font-semibold text-ink">Brand kits</h2>
+            <p className="text-sm text-ink-3">
+              Tokens applied when exporting structured artifacts. Default kit:{" "}
+              {defaultBrandName ?? "AdeHQ Default"}.
+            </p>
+            <p className="mt-2 font-mono text-xs text-ink-3">
+              Workspace kits: {brandKitCount ?? "—"}
+            </p>
+          </Card>
+        )}
 
         {ENABLE_DEMO_MODE && (
           <Card className="p-6">

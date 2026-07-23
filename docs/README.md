@@ -10,7 +10,7 @@ This folder is the **engineering companion** for AI agents and contributors work
 
 | Path | What belongs here |
 |------|-------------------|
-| [`architecture/`](./architecture/) | Living system design (inbox foundation, email, intelligence, [AdeHQ Brain](./architecture/adehq-brain.md), [human/hybrid calls](./architecture/human-hybrid-calls.md), [CPU voice worker](./architecture/voice-worker.md), [voice benchmark](./architecture/voice-benchmark.md), [voice Brain fast path](./architecture/voice-brain-fast-path.md), [Maya Workforce Studio](./architecture/workforce-studio.md), known issues) |
+| [`architecture/`](./architecture/) | Living system design (inbox foundation, email, intelligence, [AdeHQ Brain](./architecture/adehq-brain.md), [human/hybrid calls](./architecture/human-hybrid-calls.md), [CPU voice worker](./architecture/voice-worker.md), [voice benchmark](./architecture/voice-benchmark.md), [voice Brain fast path](./architecture/voice-brain-fast-path.md), [Maya Workforce Studio](./architecture/workforce-studio.md), [PR-25 playbook/artifact audit](./architecture/pr25-playbook-artifact-audit.md) + [runtime](./architecture/pr25-playbook-artifact-runtime.md), known issues) |
 | [`product/`](./product/) | Product plans and feature-gap notes not yet in Mintlify |
 | [`design-system/`](./design-system/) | How UI tokens + components work in this codebase |
 | [`inbox/`](./inbox/) | Inbox-specific proof / slice notes |

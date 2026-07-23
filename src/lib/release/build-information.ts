@@ -13,6 +13,9 @@ import {
   isBrainStewardV1Enabled,
   isBrainVoiceV1Enabled,
 } from "@/lib/brain/flags";
+import { isPlaybookRuntimeV1Enabled } from "@/lib/playbooks/flags";
+import { isArtifactRuntimeV1Enabled } from "@/lib/artifacts/flags";
+import { isProcedureRuntimeV1Enabled } from "@/lib/procedures/flags";
 import { RELEASE_MANIFEST, type ReleaseManifest } from "@/lib/release/manifest";
 
 export type BuildEnvironment = "local" | "preview" | "production";
@@ -35,6 +38,9 @@ export type BuildInformation = {
     videoV1: boolean;
     voiceV1: boolean;
     stewardV1: boolean;
+    playbookRuntimeV1: boolean;
+    artifactRuntimeV1: boolean;
+    procedureRuntimeV1: boolean;
   };
   release: ReleaseManifest;
   mismatches: string[];
@@ -79,6 +85,9 @@ export function getBuildInformation(opts?: {
     videoV1: isBrainVideoV1Enabled(),
     voiceV1: isBrainVoiceV1Enabled(),
     stewardV1: isBrainStewardV1Enabled(),
+    playbookRuntimeV1: isPlaybookRuntimeV1Enabled(),
+    artifactRuntimeV1: isArtifactRuntimeV1Enabled(),
+    procedureRuntimeV1: isProcedureRuntimeV1Enabled(),
   };
 
   const migrationVersion = opts?.migrationVersion ?? REQUIRED_MIGRATION_VERSION;

@@ -13,7 +13,12 @@ import {
 import { isMayaEmployee, partitionWorkforce } from "@/lib/maya-employee";
 import { MAYA_WORKFORCE_BADGE } from "@/lib/hiring/maya";
 import { useStore } from "@/lib/demo-store";
-import { ENABLE_DEMO_MODE, WORKFORCE_CALLS_ENABLED } from "@/lib/config/features";
+import {
+  ARTIFACTS_V1,
+  ENABLE_DEMO_MODE,
+  PLAYBOOKS_V1,
+  WORKFORCE_CALLS_ENABLED,
+} from "@/lib/config/features";
 import { useShellUI } from "./AppShell";
 import { useDebugTrace } from "./DebugProvider";
 import { WorkspaceSwitcher } from "./WorkspaceSwitcher";
@@ -41,12 +46,11 @@ import {
   Wrench,
   Phone,
   Home,
-  Hash,
+  BookOpen,
+  FileStack,
   HardDrive,
   Mail,
-  MessageSquare,
   Plus,
-  Search,
   Settings,
   LogOut,
   RotateCcw,
@@ -81,7 +85,7 @@ export function Sidebar() {
 
   useEffect(() => {
     const workspaceId = state.workspace?.id;
-    if (!workspaceId) {
+    if (!workspaceId || backend === "demo") {
       setInboxUnread(0);
       return;
     }
@@ -103,7 +107,7 @@ export function Sidebar() {
       cancelled = true;
       clearInterval(timer);
     };
-  }, [state.workspace?.id, pathname]);
+  }, [state.workspace?.id, pathname, backend]);
 
   const myRole = state.workspaceMembers.find((m) => m.userId === state.user?.id)?.role;
   const canHire = canManageAiEmployees(myRole);
@@ -120,6 +124,7 @@ export function Sidebar() {
   const dmRooms = getDirectMessages(state.rooms);
   const hasDmUnread = dmRooms.some((r) => r.unread > 0);
   const sidebarDmCount = sidebarDmEmployees.length + humanPeers.length;
+  const dmUnreadTotal = dmRooms.reduce((sum, r) => sum + (r.unread || 0), 0);
 
   const activeRoomId = pathname.match(/^\/rooms\/([^/]+)/)?.[1];
   const activeRoom = useMemo(
@@ -144,30 +149,35 @@ export function Sidebar() {
 
   const unreadBadge = (count: number) =>
     count > 0 ? (
-      <span className="ml-auto shrink-0 rounded-full bg-accent px-1.5 font-mono text-[9.5px] font-semibold text-white">
+      <span className="ml-auto shrink-0 rounded-full bg-[var(--rail-ink)] px-1.5 font-mono text-[10px] font-medium text-white">
         {count}
       </span>
     ) : null;
 
   return (
     <aside className="flex h-full w-full min-w-0 flex-col border-r border-[var(--rail-edge)] bg-rail">
-      {/* Fixed: workspace → search */}
-      <div className="shrink-0 space-y-2 border-b border-[var(--rail-edge)]/70 px-3 pb-2.5 pt-3.5">
+      {/* Fixed: workspace → work hours → search */}
+      <div className="shrink-0 px-3 pb-0 pt-3.5">
         <WorkspaceSwitcher
           variant="rail"
           onCreateWorkspace={() => router.push("/workspaces/new")}
         />
-        <SidebarWorkHoursMeter />
+        <div className="mt-2 px-0 pb-2.5 pt-0.5">
+          <SidebarWorkHoursMeter />
+        </div>
 
-        <div className="relative">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-[15px] w-[15px] -translate-y-1/2 text-[var(--rail-ink-3)]" />
+        <div className="pb-3">
           <button
             type="button"
             onClick={ui.openCommand}
-            className="flex w-full items-center justify-between rounded-[11px] border border-[var(--rail-border)] bg-[var(--rail-fill)] py-2 pl-9 pr-2.5 text-left text-[12.5px] text-[var(--rail-ink-2)] transition-colors hover:bg-[var(--rail-hover)] hover:text-[var(--rail-ink)]"
+            className="flex w-full items-center gap-2 rounded-[9px] border border-[var(--rail-border)] bg-[var(--rail-fill)] px-2.5 py-[7px] text-left text-[13px] text-[var(--rail-ink-3)] transition-colors hover:bg-[var(--rail-hover)] hover:text-[var(--rail-ink)]"
           >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden className="shrink-0 opacity-80">
+              <circle cx="11" cy="11" r="7" />
+              <path d="M21 21l-4.3-4.3" />
+            </svg>
             <span className="min-w-0 flex-1 truncate">Search or command</span>
-            <span className="shrink-0 rounded-[5px] border border-[var(--rail-border)] px-1.5 py-px font-mono text-[10px] text-[var(--rail-ink-3)]">
+            <span className="shrink-0 rounded-[5px] border border-[var(--rail-edge)] bg-[var(--rail)] px-[5px] py-px font-mono text-[10.5px] text-[var(--rail-ink-3)]">
               ⌘K
             </span>
           </button>
@@ -175,30 +185,47 @@ export function Sidebar() {
       </div>
 
       {/* Scrollable middle nav */}
-      <div className="rail-scroll flex min-h-0 flex-1 flex-col gap-[3px] overflow-y-auto overflow-x-hidden px-3 py-2.5">
-        <p className="px-2.5 pb-1 pt-1 text-[10.5px] font-semibold uppercase tracking-[0.08em] text-[var(--rail-ink-3)]">
-          Workspace
-        </p>
+      <div className="rail-scroll flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto overflow-x-hidden px-2.5 pb-2.5 pt-1">
+        <p className="rail-section-label">Workspace</p>
         <Link href="/" className={cn("nav-link", isActive("/", true) && "nav-link-active")}>
-          <Home className="h-[17px] w-[17px]" strokeWidth={1.8} />
+          <Home className="h-4 w-4" strokeWidth={1.9} />
           <span className="flex-1 truncate">Home</span>
         </Link>
 
         <Link href="/inbox" className={cn("nav-link", isActive("/inbox") && "nav-link-active")}>
-          <Mail className="h-[17px] w-[17px]" strokeWidth={1.8} />
+          <Mail className="h-4 w-4" strokeWidth={1.9} />
           <span className="flex-1 truncate">Inbox</span>
           {unreadBadge(inboxUnread)}
         </Link>
 
+        {PLAYBOOKS_V1 && (
+          <Link
+            href="/playbooks"
+            className={cn("nav-link", isActive("/playbooks") && "nav-link-active")}
+          >
+            <BookOpen className="h-4 w-4" strokeWidth={1.9} />
+            <span className="flex-1 truncate">Playbooks</span>
+          </Link>
+        )}
+
+        {ARTIFACTS_V1 && (
+          <Link
+            href="/artifacts"
+            className={cn("nav-link", isActive("/artifacts") && "nav-link-active")}
+          >
+            <FileStack className="h-4 w-4" strokeWidth={1.9} />
+            <span className="flex-1 truncate">Artifacts</span>
+          </Link>
+        )}
+
         <Link href="/drive" className={cn("nav-link", isActive("/drive") && "nav-link-active")}>
-          <HardDrive className="h-[17px] w-[17px]" strokeWidth={1.8} />
+          <HardDrive className="h-4 w-4" strokeWidth={1.9} />
           <span className="flex-1 truncate">AdeHQ Drive</span>
         </Link>
 
         <SidebarCollapsibleSection
           storageKey="adehq.sidebar.rooms"
           label="Rooms"
-          icon={Hash}
           href="/rooms"
           count={rooms.length}
           isSectionActive={pathname === "/rooms" || !!onGroupRoom}
@@ -208,21 +235,20 @@ export function Sidebar() {
               type="button"
               onClick={ui.openCreateRoom}
               title="Create room"
-              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-[var(--rail-ink-3)] transition-colors hover:bg-[var(--rail-hover)] hover:text-[var(--rail-ink)]"
+              className="flex h-[14px] w-[14px] shrink-0 items-center justify-center text-[var(--rail-icon)] transition-colors hover:text-[var(--rail-ink)]"
             >
               <Plus className="h-3.5 w-3.5" strokeWidth={2.2} />
             </button>
           }
         >
           {rooms.length === 0 ? (
-            <p className="px-2 py-1.5 text-[11px] leading-relaxed text-[var(--rail-ink-3)]">No rooms yet</p>
+            <p className="px-2 py-1.5 pl-[27px] text-[11px] leading-relaxed text-[var(--rail-ink-3)]">No rooms yet</p>
           ) : (
             rooms.slice(0, MAX_SIDEBAR_ITEMS).map((room) => (
               <SidebarNestedLink
                 key={room.id}
                 href={`/rooms/${room.id}`}
                 active={activeRoomId === room.id}
-                icon={<Hash className="h-3.5 w-3.5" strokeWidth={2} />}
                 label={room.name}
                 badge={unreadBadge(room.unread)}
               />
@@ -231,7 +257,6 @@ export function Sidebar() {
           {rooms.length > MAX_SIDEBAR_ITEMS && (
             <SidebarNestedLink
               href="/rooms"
-              icon={<Hash className="h-3.5 w-3.5 opacity-50" strokeWidth={2} />}
               label={`+${rooms.length - MAX_SIDEBAR_ITEMS} more`}
             />
           )}
@@ -240,15 +265,14 @@ export function Sidebar() {
         <SidebarCollapsibleSection
           storageKey="adehq.sidebar.dms"
           label="Direct messages"
-          icon={MessageSquare}
           href="/dm"
-          count={sidebarDmCount}
-          showUnreadDot={hasDmUnread}
+          count={dmUnreadTotal > 0 ? dmUnreadTotal : sidebarDmCount}
+          countVariant={dmUnreadTotal > 0 || hasDmUnread ? "pill" : "muted"}
           isSectionActive={pathname === "/dm" || !!onDmRoom}
           forceOpen={!!onDmRoom}
         >
           {sidebarDmCount === 0 ? (
-            <p className="px-2 py-1.5 text-[11px] leading-relaxed text-[var(--rail-ink-3)]">
+            <p className="px-2 py-1.5 pl-[27px] text-[11px] leading-relaxed text-[var(--rail-ink-3)]">
               {showMaya
                 ? "Maya will appear here once your workspace loads"
                 : "Message teammates and AI employees here"}
@@ -304,7 +328,7 @@ export function Sidebar() {
                       label={employee.name}
                       badge={
                         isMaya ? (
-                          <span className="ml-auto shrink-0 rounded-full bg-[var(--rail-badge-bg)] px-1.5 font-mono text-[9px] text-[var(--rail-badge-ink)]">
+                          <span className="ml-auto shrink-0 whitespace-nowrap rounded border border-[var(--rail-edge)] bg-[var(--rail-badge-bg)] px-[5px] py-px font-mono text-[9px] tracking-[0.03em] text-[var(--rail-badge-ink)]">
                             {MAYA_WORKFORCE_BADGE}
                           </span>
                         ) : dm ? (
@@ -319,25 +343,22 @@ export function Sidebar() {
           {sidebarDmCount > MAX_SIDEBAR_ITEMS && (
             <SidebarNestedLink
               href="/dm"
-              icon={<MessageSquare className="h-3.5 w-3.5" strokeWidth={2} />}
               label={`+${sidebarDmCount - MAX_SIDEBAR_ITEMS} more`}
             />
           )}
         </SidebarCollapsibleSection>
 
-        <Link href="/calls" className={cn("nav-link", isActive("/calls") && "nav-link-active")}>
-          <Phone className="h-[17px] w-[17px]" strokeWidth={1.8} />
+        <Link href="/calls" className={cn("nav-link mt-1", isActive("/calls") && "nav-link-active")}>
+          <Phone className="h-4 w-4" strokeWidth={1.9} />
           <span className="flex-1 truncate">Calls</span>
           {!WORKFORCE_CALLS_ENABLED && (
-            <span className="rounded-full bg-amber-500/10 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-amber-700">
+            <span className="rounded-[5px] bg-amber-soft px-1.5 py-0.5 font-mono text-[9.5px] font-medium uppercase tracking-[0.08em] text-amber">
               Soon
             </span>
           )}
         </Link>
 
-        <p className="px-2.5 pb-1 pt-3.5 text-[10.5px] font-semibold uppercase tracking-[0.08em] text-[var(--rail-ink-3)]">
-          Workforce
-        </p>
+        <p className="rail-section-label !pt-[18px]">Workforce</p>
         {WORKFORCE_NAV.map((item) => {
           const active = isActive(item.href);
           const badge =
@@ -348,17 +369,10 @@ export function Sidebar() {
                 : 0;
           return (
             <Link key={item.href} href={item.href} className={cn("nav-link", active && "nav-link-active")}>
-              <item.icon className="h-[17px] w-[17px]" strokeWidth={1.8} />
+              <item.icon className="h-4 w-4" strokeWidth={1.9} />
               <span className="flex-1 truncate">{item.label}</span>
               {badge > 0 && (
-                <span
-                  className={cn(
-                    "rounded-md px-1.5 py-px font-mono text-[10.5px]",
-                    item.badgeKey === "approvals"
-                      ? "bg-accent text-white"
-                      : "bg-[var(--rail-badge-bg)] text-[var(--rail-badge-ink)]",
-                  )}
-                >
+                <span className="rounded-full bg-[var(--rail-badge-bg)] px-1.5 py-px font-mono text-[10px] text-[var(--rail-badge-ink)]">
                   {badge}
                 </span>
               )}
@@ -368,66 +382,72 @@ export function Sidebar() {
       </div>
 
       {/* Fixed: hire + profile */}
-      <div className="relative shrink-0 space-y-2 border-t border-[var(--rail-edge)] px-3 pb-3 pt-3">
+      <div className="relative shrink-0">
         {workingCount > 0 && (
-          <div className="flex min-w-0 items-center gap-1.5 rounded-[10px] border border-green/20 bg-green-soft px-2.5 py-1.5 text-[11px] font-medium text-green">
+          <div className="mx-3 mb-1 flex min-w-0 items-center gap-1.5 rounded-[10px] border border-green/20 bg-green-soft px-2.5 py-1.5 text-[11px] font-medium text-green">
             <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-green animate-glowpulse" />
             <span className="min-w-0 truncate">{workingCount} working now</span>
           </div>
         )}
 
         {canHire && (
-          <button
-            type="button"
-            onClick={ui.openHire}
-            className="group flex w-full min-w-0 flex-col items-center gap-0.5 rounded-[11px] bg-accent px-2.5 py-2.5 text-white shadow-glow transition-all hover:brightness-105 active:scale-[0.99]"
-          >
-            <span className="flex min-w-0 items-center justify-center gap-2 text-[12.5px] font-semibold">
-              <UserPlus className="h-4 w-4 shrink-0" strokeWidth={2} />
-              <span className="min-w-0 truncate">Hire AI Employee</span>
-            </span>
-            <span className="font-mono text-[9px] uppercase tracking-[0.1em] text-white/70">
-              Open role
-            </span>
-          </button>
+          <div className="px-3 pb-2.5 pt-2.5">
+            <button
+              type="button"
+              onClick={ui.openHire}
+              className="group flex w-full min-w-0 items-center gap-2.5 rounded-[10px] border border-[var(--rail-edge)] bg-[var(--rail-ink)] px-3 py-2.5 text-left text-white transition-colors hover:bg-[rgb(56_50_45)]"
+            >
+              <span className="flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-[7px] bg-white/12">
+                <UserPlus className="h-3.5 w-3.5" strokeWidth={2.2} />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-[13px] font-semibold leading-tight tracking-[-0.01em]">
+                  Hire AI employee
+                </span>
+                <span className="mt-0.5 block font-mono text-[10.5px] uppercase tracking-[0.06em] text-[rgb(188_182_177)]">
+                  Open role
+                </span>
+              </span>
+            </button>
+          </div>
         )}
 
-        <button
-          type="button"
-          onClick={() => setProfileOpen((v) => !v)}
-          className={cn(
-            "flex w-full items-center gap-2.5 rounded-xl border p-2 text-left transition-colors",
-            profileOpen
-              ? "border-[var(--rail-border)] bg-[var(--rail-hover)]"
-              : "border-[var(--rail-border)] hover:bg-[var(--rail-hover)]",
-          )}
-          aria-expanded={profileOpen}
-          aria-haspopup="menu"
-        >
-          <HumanAvatar
-            name={state.user?.name ?? "You"}
-            userId={state.user?.id}
-            src={state.user?.avatar}
-            size="sm"
-          />
-          <div className="min-w-0 flex-1">
-            <div className="truncate text-[12.5px] font-semibold text-[var(--rail-ink)]">
-              {state.user?.name ?? "You"}
-            </div>
-            <div className="truncate text-[11px] text-[var(--rail-ink-3)]">
-              {roleLabel(
-                state.workspaceMembers.find((m) => m.userId === state.user?.id)?.role,
-              )}
-            </div>
-          </div>
-          <ChevronUp
+        <div className="border-t border-[var(--rail-border)] px-3 py-2.5">
+          <button
+            type="button"
+            onClick={() => setProfileOpen((v) => !v)}
             className={cn(
-              "h-4 w-4 shrink-0 text-[var(--rail-ink-3)] transition-transform duration-200",
-              profileOpen && "rotate-180",
+              "flex w-full items-center gap-2.5 rounded-[10px] p-0.5 text-left transition-colors",
+              profileOpen ? "bg-[var(--rail-hover)]" : "hover:bg-[var(--rail-hover)]",
             )}
-            strokeWidth={2}
-          />
-        </button>
+            aria-expanded={profileOpen}
+            aria-haspopup="menu"
+          >
+            <HumanAvatar
+              name={state.user?.name ?? "You"}
+              userId={state.user?.id}
+              src={state.user?.avatar}
+              size="sm"
+            />
+            <div className="min-w-0 flex-1">
+              <div className="truncate text-[13px] font-semibold tracking-[-0.01em] text-[var(--rail-ink)]">
+                {state.user?.name ?? "You"}
+              </div>
+              <div className="truncate text-[11px] text-[var(--rail-ink-3)]">
+                {roleLabel(
+                  state.workspaceMembers.find((m) => m.userId === state.user?.id)?.role,
+                )}
+              </div>
+            </div>
+            <ChevronUp
+              className={cn(
+                "h-[15px] w-[15px] shrink-0 text-[var(--rail-ink-3)] transition-transform duration-200",
+                profileOpen && "rotate-180",
+              )}
+              strokeWidth={2.2}
+            />
+          </button>
+        </div>
 
         <AnimatePresence>
           {profileOpen && (
@@ -438,7 +458,7 @@ export function Sidebar() {
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: 8, scale: 0.97 }}
                 transition={{ duration: 0.15 }}
-                className="absolute bottom-full left-0 right-0 z-40 mb-2 overflow-hidden rounded-xl border border-border bg-surface shadow-lift"
+                className="absolute bottom-full left-2 right-2 z-40 mb-2 overflow-hidden rounded-xl border border-border bg-surface shadow-lift"
               >
                 <div className="border-b border-border-2 px-3 py-2.5">
                   <div className="truncate text-sm font-medium text-ink">{state.user?.name}</div>

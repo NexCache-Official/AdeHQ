@@ -5,40 +5,42 @@
 :root {
   color-scheme: light;
 
-  /* AdeHQ — Onyx Blue, Light mode (white rail).
-     Channel tokens hold "R G B" so Tailwind can do rgb(var(--c-x) / <alpha-value>). */
-  --c-canvas: 255 255 255;
-  --c-surface: 255 255 255;
-  --c-muted: 235 234 235;
-  --c-border: 225 228 234;
-  --c-border-2: 235 237 241;
-  --c-ink: 11 13 18;
-  --c-ink-2: 83 90 102;
-  --c-ink-3: 134 140 153;
-  --c-accent: 47 111 237;
-  --c-accent-d: 37 87 199;
-  --c-accent-soft: 231 239 254;
-  --c-accent-2: 95 160 255;
-  --c-accent-50: 231 239 254;
-  --c-accent-100: 219 231 253;
-  --c-accent-200: 188 210 251;
-  --c-accent-300: 143 180 247;
-  --c-accent-400: 95 160 255;
-  --c-accent-500: 47 111 237;
-  --c-accent-600: 37 87 199;
-  --c-accent-700: 31 71 163;
-  --c-accent-800: 28 60 133;
-  --c-accent-900: 26 53 110;
-  --c-green: 27 166 114;
-  --c-green-soft: 227 244 235;
-  --c-amber: 203 138 27;
-  --c-amber-soft: 251 239 214;
+  /* AdeHQ — Warm Neutral (Home.dc / platform overhaul).
+     Channel tokens hold "R G B" so Tailwind can do rgb(var(--c-x) / <alpha-value>).
+     Source: new designs/*.dc.html (oklch → sRGB). */
+  --c-canvas: 251 250 248;
+  --c-surface: 254 253 253;
+  --c-muted: 244 243 241;
+  --c-border: 230 228 226;
+  --c-border-2: 233 231 229;
+  --c-ink: 36 30 26;
+  --c-ink-2: 59 55 52;
+  --c-ink-3: 143 140 136;
+  /* Primary actions use warm charcoal (not blue). */
+  --c-accent: 36 30 26;
+  --c-accent-d: 27 22 18;
+  --c-accent-soft: 241 240 238;
+  --c-accent-2: 117 113 109;
+  --c-accent-50: 249 248 247;
+  --c-accent-100: 244 243 241;
+  --c-accent-200: 233 231 229;
+  --c-accent-300: 188 182 177;
+  --c-accent-400: 117 113 109;
+  --c-accent-500: 36 30 26;
+  --c-accent-600: 27 22 18;
+  --c-accent-700: 27 22 18;
+  --c-accent-800: 27 22 18;
+  --c-accent-900: 27 22 18;
+  --c-green: 67 148 88;
+  --c-green-soft: 225 245 228;
+  --c-amber: 164 94 0;
+  --c-amber-soft: 255 236 205;
   --c-danger: 217 72 59;
   --c-danger-soft: 251 227 224;
-  --c-info: 47 111 237;
-  --c-info-soft: 229 237 253;
-  --c-rail: 255 255 255;
-  --c-rail-2: 247 248 250;
+  --c-info: 65 79 93;
+  --c-info-soft: 241 240 238;
+  --c-rail: 254 253 253;
+  --c-rail-2: 249 248 247;
 
   /* Hex-form aliases consumed directly via var(--x). These reference the channel
      tokens. The platform is light-theme only. */
@@ -60,27 +62,29 @@
   --info: rgb(var(--c-info));
   --rail: rgb(var(--c-rail));
 
-  /* Rail chrome — white in light mode, so ink is dark. */
-  --rail-edge: #e6e8ee;
-  --rail-ink: #15171d;
-  --rail-ink-2: #565d6c;
-  --rail-ink-3: #8b909e;
-  --rail-border: #e8eaf0;
-  --rail-fill: #f4f5f8;
-  --rail-hover: #ebeaeb;
-  --rail-active-bg: #e7effe;
-  --rail-active-ink: #2557c7;
-  --rail-badge-bg: #ebeaeb;
-  --rail-badge-ink: #565d6c;
+  /* Rail chrome — warm near-white surface, charcoal ink. */
+  --rail-edge: #e6e4e2;
+  --rail-ink: #241e1a;
+  --rail-ink-2: #3b3734;
+  --rail-ink-3: #8f8c88;
+  --rail-border: #e9e7e5;
+  --rail-fill: #f9f8f7;
+  --rail-hover: #f4f3f1;
+  --rail-active-bg: #f1f0ee;
+  --rail-active-ink: #241e1a;
+  --rail-badge-bg: #f3f1ef;
+  --rail-badge-ink: #66625e;
+  --rail-icon: #75716d;
+  --rail-section: #9b9894;
 
   /* Effects / gradients (literal per theme). */
-  --accent-glow: rgba(47, 111, 237, 0.5);
-  --sel: rgba(47, 111, 237, 0.16);
-  --hero-grad: linear-gradient(135deg, #000000, #10141c 60%, #0b1830);
-  --hero-glow: rgba(47, 111, 237, 0.4);
-  --hero-glow2: rgba(34, 211, 238, 0.18);
-  --logo-grad: linear-gradient(140deg, #000000, #2f6fed);
-  --row-hover: rgba(0, 0, 0, 0.035);
+  --accent-glow: rgba(36, 30, 26, 0.35);
+  --sel: rgba(36, 30, 26, 0.12);
+  --hero-grad: #1b1612;
+  --hero-glow: rgba(65, 79, 93, 0.45);
+  --hero-glow2: rgba(36, 30, 26, 0.08);
+  --logo-grad: linear-gradient(140deg, #1b1612, #3b3734);
+  --row-hover: rgba(36, 30, 26, 0.035);
 }
 
 html,
@@ -170,24 +174,40 @@ body {
     @apply inline-flex items-center gap-1.5 rounded-full border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1 text-xs font-medium text-[var(--ink-2)];
   }
   .nav-link {
-    @apply flex w-full min-w-0 items-center gap-[11px] rounded-[11px] border-0 px-[11px] py-2 text-left text-[13.5px] font-medium transition-all duration-150;
+    @apply flex w-full min-w-0 items-center gap-[11px] rounded-lg border-0 px-2 py-[7px] text-left text-[13.5px] font-medium transition-all duration-150;
     color: var(--rail-ink-2);
   }
   .nav-link > svg:first-child,
   .nav-link > .lucide {
     @apply shrink-0;
+    color: var(--rail-icon);
   }
   .nav-link:hover {
     background: var(--rail-hover);
+    color: var(--rail-ink);
+  }
+  .nav-link:hover > svg:first-child,
+  .nav-link:hover > .lucide {
     color: var(--rail-ink);
   }
   .nav-link-active,
   .nav-link-active:hover {
     background: var(--rail-active-bg);
     color: var(--rail-active-ink);
+    font-weight: 600;
+  }
+  .nav-link-active > svg:first-child,
+  .nav-link-active > .lucide,
+  .nav-link-active:hover > svg:first-child,
+  .nav-link-active:hover > .lucide {
+    color: var(--rail-active-ink);
+  }
+  .rail-section-label {
+    @apply px-2 pb-2 pt-2 font-mono text-[10.5px] font-medium uppercase tracking-[0.14em];
+    color: var(--rail-section);
   }
   .section-title {
-    @apply text-[10.5px] font-bold uppercase tracking-[0.07em] text-[var(--ink-3)];
+    @apply text-[10.5px] font-medium uppercase tracking-[0.1em] text-[var(--ink-3)] font-mono;
   }
   .lift {
     @apply transition-all duration-200;
