@@ -17,3 +17,19 @@ export * from "./receipts";
 export * from "./provenance";
 export * from "./seeds";
 export * from "./api-helpers";
+export {
+  processPlaybookRunWave,
+  selectReadyStepKeys,
+  applyStepResult,
+  simulateProcessWave,
+  resolveMaxParallel,
+  canReclaimStepLease,
+  getPlaybookWorkerMode,
+  PLAYBOOK_RUNTIME_LEASE_OWNER,
+} from "./runtime/process-run";
+export { loadPlaybookRoleCandidates, employeeRowToPlaybookCandidate } from "./runtime/load-candidates";
+export {
+  composePlaybookArtifact,
+  buildCanonicalForStep,
+  canonicalToMarkdown,
+} from "./runtime/compose-artifact";

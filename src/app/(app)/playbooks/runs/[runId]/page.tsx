@@ -73,6 +73,16 @@ export default function PlaybookRunPage() {
     }
     if (!workspaceId) return;
     const headers = await authHeaders(workspaceId);
+    // Live: nudge one process wave, then read status (errors ignored so UI still polls).
+    try {
+      await fetch(`/api/playbook-runs/${params.runId}/process`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({}),
+      });
+    } catch {
+      /* ignore process errors — GET still reflects truth */
+    }
     const res = await fetch(`/api/playbook-runs/${params.runId}`, { headers });
     const body = await res.json();
     if (!res.ok) throw new Error(body?.error ?? "Failed to load run");

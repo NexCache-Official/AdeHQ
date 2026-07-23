@@ -26,6 +26,11 @@ import type {
 } from "@/lib/playbooks/contracts";
 import { createBrainRun } from "@/lib/brain/decisions/persist";
 import { createSupabaseSecretClient } from "@/lib/supabase/server";
+import { loadPlaybookRoleCandidates } from "@/lib/playbooks/runtime/load-candidates";
+import {
+  getPlaybookWorkerMode,
+  processPlaybookRunWave,
+} from "@/lib/playbooks/runtime/process-run";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -144,18 +149,26 @@ export async function POST(
     const resolved = await ensureDbPlaybook(client, params.playbookId, user.id);
     const definition = resolved.definition;
 
+    let candidates: PlaybookRoleCandidate[] = body.candidates ?? [];
+    if (!body.roleAssignments?.length && !candidates.length) {
+      candidates = await loadPlaybookRoleCandidates(client, {
+        workspaceId: body.workspaceId,
+        employeeIds: body.selectedEmployeeIds?.length
+          ? body.selectedEmployeeIds
+          : undefined,
+      });
+    } else if (!body.roleAssignments?.length && body.selectedEmployeeIds?.length && !body.candidates?.length) {
+      // Selected IDs without tags — enrich from workspace roster.
+      candidates = await loadPlaybookRoleCandidates(client, {
+        workspaceId: body.workspaceId,
+        employeeIds: body.selectedEmployeeIds,
+      });
+    }
+
     const roleAssignments =
       body.roleAssignments?.length
         ? body.roleAssignments
-        : matchPlaybookRoles(
-            definition.roleRequirements,
-            body.candidates ??
-              (body.selectedEmployeeIds ?? []).map((employeeId) => ({
-                employeeId,
-                capabilityTags: [],
-                roleTags: [],
-              })),
-          );
+        : matchPlaybookRoles(definition.roleRequirements, candidates);
 
     const inputPayload = body.inputPayload ?? {};
     const envelope = createPlaybookRunEnvelope({
@@ -186,26 +199,20 @@ export async function POST(
       return NextResponse.json({ ok: true, run: loaded?.run, steps: loaded?.steps ?? [], reused: true });
     }
 
-    // Prefer linking a brain_run; fall back to null if Brain insert is unavailable.
-    let brainRunId: string | null = null;
-    try {
-      brainRunId = await createBrainRun(client, {
-        workspaceId: body.workspaceId,
-        employeeId: roleAssignments[0]?.employeeId ?? null,
-        roomId: body.roomId ?? null,
-        topicId: body.topicId ?? null,
-        intensity: body.intensity === "high" ? "deep" : body.intensity === "low" ? "fast" : "standard",
-        metadata: {
-          playbookId: resolved.playbookId,
-          playbookKey: definition.key,
-          source: "playbook_run",
-        },
-      });
-    } catch (err) {
-      // TODO(PR-25): ensure createBrainRun always succeeds for playbook wraps; keep structure ready.
-      console.warn("[AdeHQ playbook run] createBrainRun failed; continuing with null brain_run_id", err);
-      brainRunId = null;
-    }
+    // Live integrity: brain_run wrap is required.
+    const service = createSupabaseSecretClient();
+    const brainRunId = await createBrainRun(service, {
+      workspaceId: body.workspaceId,
+      employeeId: roleAssignments[0]?.employeeId ?? null,
+      roomId: body.roomId ?? null,
+      topicId: body.topicId ?? null,
+      intensity: body.intensity === "high" ? "deep" : body.intensity === "low" ? "fast" : "standard",
+      metadata: {
+        playbookId: resolved.playbookId,
+        playbookKey: definition.key,
+        source: "playbook_run",
+      },
+    });
 
     const selectedEmployeeIds = [
       ...new Set([
@@ -214,7 +221,9 @@ export async function POST(
       ]),
     ];
 
-    const run = await createPlaybookRun(client, {
+    // Persist with service role after auth/scope checks — avoids RLS write gaps
+    // on playbook_run_steps and keeps live runs reliable in production.
+    const run = await createPlaybookRun(service, {
       workspaceId: body.workspaceId,
       playbookId: resolved.playbookId,
       playbookVersionId: resolved.versionId,
@@ -236,7 +245,7 @@ export async function POST(
     const steps = [];
     for (const step of envelope.steps) {
       steps.push(
-        await upsertPlaybookRunStep(client, {
+        await upsertPlaybookRunStep(service, {
           playbookRunId: run.id,
           stepKey: step.stepKey,
           status: step.status,
@@ -245,6 +254,16 @@ export async function POST(
           estimatedWh: step.estimatedWh,
         }),
       );
+    }
+
+    // Inline first wave when not in queue mode (default: inline).
+    if (getPlaybookWorkerMode() !== "queue" && envelope.status === "queued") {
+      void processPlaybookRunWave(service, {
+        runId: run.id,
+        serviceClient: service,
+      }).catch((err) => {
+        console.error("[AdeHQ playbook run] inline process wave failed", err);
+      });
     }
 
     return NextResponse.json({

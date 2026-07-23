@@ -12,6 +12,11 @@ produce real work product (documents, briefs, decks). It is NOT a workflow
 builder, not an MCP client, not a Slack clone — see
 [docs/adehq-positioning] memory / repo docs if that framing ever comes up.
 
+**PR-25 Playbooks / Artifacts:** Do **not** treat “Continue as Demo Founder”
+as production proof. For live owner testing follow
+[`docs/ops/pr25-production-smoke.md`](./pr25-production-smoke.md) against a
+real Supabase workspace with migrations + runtime flags enabled.
+
 ## 2. Test credentials
 
 - URL: `http://localhost:3000` (start the dev server first — see `.claude/launch.json` / `npm run dev`)
