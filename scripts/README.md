@@ -22,6 +22,7 @@ Runnable tooling for AdeHQ. Prefer **npm scripts** from the repo root (`package.
 | Realtime Brain Calls | `npm run test:brain:voice:live-benchmark` (PR-18.1 routing, Groq minimum billing, chunking, PCM transport) |
 | CPU voice worker | `npm run test:voice-worker` (runtime E2E, auth, interruption, readiness) + `npm run test:voice-worker:app` (token and safe transport fallback) |
 | Voice pipeline candidates | `npm run test:voice-benchmark` (no-credentials contract), `npm run benchmark:voice-worker -- --list` (registry), or `npm run benchmark:voice-worker` (configured whole-pipeline run; see [protocol](../docs/architecture/voice-benchmark.md)) |
+| Voice Brain fast path | `npm run test:voice-brain-fast-path` (router/snapshot/latency contracts), `npm run benchmark:voice-brain` (Brain TTFT ablations; see [voice-brain-fast-path](../docs/architecture/voice-brain-fast-path.md)) |
 | Human/hybrid calls | `npm run test:calls:human` (canonical state, SFU secret boundary, push, consent, WH voice path) |
 | Group Call Steward | `npm run test:calls:steward` (participation, attribution, floor, council, billing metadata) |
 | Cloudflare Realtime live | `vercel env run -- npm run test:calls:cloudflare-live` (real session, publish, subscribe, echo; uses server env) |

@@ -32,6 +32,8 @@
     "typecheck:voice-benchmark": "tsc --noEmit --strict --target ES2022 --module commonjs --moduleResolution node --esModuleInterop --skipLibCheck scripts/benchmark-voice-worker-pipeline.ts scripts/voice-benchmark-candidates.ts scripts/test-voice-benchmark-contract.ts",
     "test:voice-benchmark": "tsx scripts/test-voice-benchmark-contract.ts",
     "benchmark:voice-worker": "tsx -r dotenv/config scripts/benchmark-voice-worker-pipeline.ts dotenv_config_path=.env.local",
+    "benchmark:voice-brain": "tsx -r dotenv/config scripts/benchmark-voice-brain.ts dotenv_config_path=.env.local",
+    "test:voice-brain-fast-path": "tsx scripts/test-voice-brain-fast-path.ts",
     "test:brain:gauntlet": "npm run verify:release && npm run test:brain:reliability && npm run test:brain:steward-shadow && npm run test:brain:steward-execution && npm run test:brain:voice && npm run test:brain && npm run test:workspace-access",
     "test:brain": "tsx scripts/test-brain-catalog-invariants.ts && tsx scripts/test-brain-metering-matrix.ts && tsx scripts/test-brain-intensity-invariant.ts && tsx scripts/test-brain-steward-facade.ts && tsx scripts/test-brain-no-customer-media-cta.ts && tsx scripts/test-brain-auto-ux.ts && tsx scripts/test-brain-search-exa-first.ts && tsx scripts/test-brain-vision.ts && tsx scripts/test-brain-image.ts && tsx scripts/test-brain-video.ts && tsx scripts/test-brain-reliability-foundation.ts && tsx scripts/test-brain-steward-shadow.ts && tsx scripts/test-brain-steward-execution.ts && tsx scripts/test-brain-voice.ts",
     "test:brain:search": "tsx scripts/test-brain-search-exa-first.ts && tsx scripts/test-search-routing.ts && tsx scripts/test-search-citations.ts",

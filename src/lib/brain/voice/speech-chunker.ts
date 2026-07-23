@@ -8,10 +8,10 @@ export type SpeechChunkPolicy = {
 };
 
 export const DEFAULT_SPEECH_CHUNK_POLICY: SpeechChunkPolicy = {
-  // First spoken audio should start as soon as a short phrase is ready.
-  preferredMinCharacters: 18,
-  maximumCharacters: 140,
-  maximumWaitMs: 220,
+  // First phrase: ~5–12 words at a natural clause boundary, then longer later.
+  preferredMinCharacters: 16,
+  maximumCharacters: 120,
+  maximumWaitMs: 180,
   breakOn: [".", "!", "?", ";", ",", "—"],
 };
 

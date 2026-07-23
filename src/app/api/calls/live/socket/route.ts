@@ -8,10 +8,15 @@ import { NextRequest, NextResponse } from "next/server";
 import { createSupabaseSecretClient } from "@/lib/supabase/server";
 import {
   buildCallVocabulary,
+  buildVoiceSessionSnapshot,
+  clearVoicePrefetchState,
+  clearVoiceSessionSnapshot,
   executeEmployeeCallTurn,
+  getVoiceSessionSnapshot,
   isSilenceHallucinationPhrase,
   loadEmployeeVoiceProfile,
   normalizeSpeechLanguage,
+  prefetchFromInterimTranscript,
   resolveLiveCallEntitlements,
   selectSpeechRoutes,
   setCallSessionState,
@@ -22,6 +27,7 @@ import {
   type ServerCallEvent,
   type StreamingTranscriptionSession,
 } from "@/lib/brain/voice";
+import { ensureGeneralTopic } from "@/lib/server/topic-helpers";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -246,6 +252,12 @@ export async function GET(request: NextRequest) {
                   if (isSilenceHallucinationPhrase(transcriptEvent.text)) {
                     continue;
                   }
+                  // PR-18.2A10 — prefetch route/context while the human is still
+                  // speaking. Never start the LLM from interim text.
+                  prefetchFromInterimTranscript({
+                    callId: payload.callId,
+                    partialText: transcriptEvent.text,
+                  });
                   send(ws, {
                     type: "transcript.partial",
                     text: transcriptEvent.text,
@@ -276,6 +288,26 @@ export async function GET(request: NextRequest) {
         callId: payload.callId,
         state: "active",
       });
+      if (!getVoiceSessionSnapshot(payload.callId)) {
+        try {
+          const topic = await ensureGeneralTopic(
+            orchestrationClient,
+            payload.workspaceId,
+            String(call.room_id),
+          );
+          await buildVoiceSessionSnapshot({
+            client: orchestrationClient,
+            callId: payload.callId,
+            workspaceId: payload.workspaceId,
+            roomId: String(call.room_id),
+            topicId: topic.id,
+            humanUserId,
+            employeeId: String(call.primary_employee_id),
+          });
+        } catch {
+          // Snapshot warm is best-effort; turn path rebuilds if needed.
+        }
+      }
       send(ws, {
         type: "session.ready",
         callSessionId: payload.callId,
@@ -514,6 +546,8 @@ export async function GET(request: NextRequest) {
           turnAbort?.abort(new Error("Call ended."));
           streamAbort.abort(new Error("Call ended."));
           void streamingSession?.close().catch(() => undefined);
+          clearVoicePrefetchState(payload.callId);
+          clearVoiceSessionSnapshot(payload.callId);
           void setCallSessionState(orchestrationClient, {
             workspaceId: payload.workspaceId,
             callId: payload.callId,
