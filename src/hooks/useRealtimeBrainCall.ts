@@ -2,6 +2,9 @@
 
 import { useEffect, useRef, useState } from "react";
 import { authHeaders } from "@/lib/api/auth-client";
+import { playCallChime } from "@/lib/brain/voice/call-chimes";
+import { LIVE_STT_MEDIA_BOUNDARY } from "@/lib/brain/voice/live-stt-config";
+import { HybridLocalTurnDetector } from "@/lib/brain/voice/turn-detector";
 
 export type LiveCallActivity =
   | "connecting"
@@ -105,14 +108,30 @@ export function useRealtimeBrainCall() {
   const lastVoiceRef = useRef(0);
   const pendingPcmRef = useRef<Uint8Array[]>([]);
   const pendingSamplesRef = useRef(0);
+  const preRollPcmRef = useRef<Uint8Array[]>([]);
+  const preRollBytesRef = useRef(0);
   const frameSequenceRef = useRef(0);
   const employeeDeltaRef = useRef("");
-  const playbackQueueRef = useRef<Array<{ bytes: Uint8Array; mimeType: string }>>([]);
+  const playbackQueueRef = useRef<
+    Array<{
+      bytes: Uint8Array;
+      mimeType: string;
+      sampleRate?: number;
+      channels?: number;
+    }>
+  >([]);
   const playbackActiveRef = useRef(false);
   const playbackSourceRef = useRef<AudioBufferSourceNode | null>(null);
+  const playbackSourcesRef = useRef(new Set<AudioBufferSourceNode>());
+  const framedPlaybackActiveRef = useRef(false);
+  const playbackCursorRef = useRef(0);
+  const pcmRemainderRef = useRef(new Uint8Array(0));
   const playbackEndedAtRef = useRef(0);
   const bargeInStartedRef = useRef(0);
   const lastLevelPaintRef = useRef(0);
+  const turnDetectorRef = useRef(new HybridLocalTurnDetector());
+  const turnDecisionPendingRef = useRef(false);
+  const connectedChimePlayedRef = useRef(false);
 
   function send(event: object) {
     if (socketRef.current?.readyState === WebSocket.OPEN) {
@@ -122,19 +141,76 @@ export function useRealtimeBrainCall() {
 
   function clearPlayback(interrupt = false) {
     playbackQueueRef.current = [];
-    playbackSourceRef.current?.stop();
+    for (const source of playbackSourcesRef.current) source.stop();
+    playbackSourcesRef.current.clear();
     playbackSourceRef.current = null;
+    framedPlaybackActiveRef.current = false;
     playbackActiveRef.current = false;
+    playbackCursorRef.current = 0;
+    pcmRemainderRef.current = new Uint8Array(0);
     playbackEndedAtRef.current = performance.now();
     if (interrupt) send({ type: "interrupt" });
   }
 
+  function markPlaybackEndedIfIdle() {
+    if (
+      framedPlaybackActiveRef.current ||
+      playbackSourcesRef.current.size ||
+      playbackQueueRef.current.length
+    ) {
+      return;
+    }
+    playbackActiveRef.current = false;
+    playbackCursorRef.current = 0;
+    playbackEndedAtRef.current = performance.now();
+    setActivity("listening");
+  }
+
+  function schedulePcm(
+    context: AudioContext,
+    bytes: Uint8Array,
+    sampleRate = 24_000,
+    channels = 1,
+  ) {
+    const pending = pcmRemainderRef.current;
+    const combined = new Uint8Array(pending.byteLength + bytes.byteLength);
+    combined.set(pending);
+    combined.set(bytes, pending.byteLength);
+    const frameBytes = Math.max(1, channels) * 2;
+    const usableBytes = combined.byteLength - (combined.byteLength % frameBytes);
+    pcmRemainderRef.current = combined.slice(usableBytes);
+    if (!usableBytes) return;
+
+    const frameCount = usableBytes / frameBytes;
+    const audioBuffer = context.createBuffer(channels, frameCount, sampleRate);
+    const view = new DataView(combined.buffer, combined.byteOffset, usableBytes);
+    for (let channel = 0; channel < channels; channel += 1) {
+      const output = audioBuffer.getChannelData(channel);
+      for (let frame = 0; frame < frameCount; frame += 1) {
+        output[frame] =
+          view.getInt16((frame * channels + channel) * 2, true) / 32_768;
+      }
+    }
+    const source = context.createBufferSource();
+    source.buffer = audioBuffer;
+    source.connect(context.destination);
+    const startsAt = Math.max(context.currentTime + 0.015, playbackCursorRef.current);
+    playbackCursorRef.current = startsAt + audioBuffer.duration;
+    playbackSourcesRef.current.add(source);
+    playbackActiveRef.current = true;
+    setActivity("speaking");
+    source.onended = () => {
+      playbackSourcesRef.current.delete(source);
+      markPlaybackEndedIfIdle();
+    };
+    source.start(startsAt);
+  }
+
   async function playNext() {
-    if (playbackActiveRef.current) return;
+    if (framedPlaybackActiveRef.current) return;
     const item = playbackQueueRef.current.shift();
     if (!item) {
-      playbackEndedAtRef.current = performance.now();
-      if (activity === "speaking") setActivity("listening");
+      markPlaybackEndedIfIdle();
       return;
     }
     const context = contextRef.current;
@@ -144,6 +220,12 @@ export function useRealtimeBrainCall() {
       setAudioSuspended(true);
       return;
     }
+    if (item.mimeType === "audio/pcm") {
+      schedulePcm(context, item.bytes, item.sampleRate, item.channels);
+      void playNext();
+      return;
+    }
+    framedPlaybackActiveRef.current = true;
     playbackActiveRef.current = true;
     setActivity("speaking");
     try {
@@ -154,14 +236,18 @@ export function useRealtimeBrainCall() {
       source.buffer = buffer;
       source.connect(context.destination);
       playbackSourceRef.current = source;
+      playbackSourcesRef.current.add(source);
+      const startsAt = Math.max(context.currentTime + 0.015, playbackCursorRef.current);
+      playbackCursorRef.current = startsAt + buffer.duration;
       source.onended = () => {
-        playbackActiveRef.current = false;
+        playbackSourcesRef.current.delete(source);
+        framedPlaybackActiveRef.current = false;
         playbackSourceRef.current = null;
         void playNext();
       };
-      source.start();
+      source.start(startsAt);
     } catch {
-      playbackActiveRef.current = false;
+      framedPlaybackActiveRef.current = false;
       setError("A voice segment could not be played. The transcript is still available.");
       void playNext();
     }
@@ -173,10 +259,29 @@ export function useRealtimeBrainCall() {
     send({ type: "audio.commit", durationSeconds, mimeType: "audio/pcm" });
     pendingPcmRef.current = [];
     pendingSamplesRef.current = 0;
+    preRollPcmRef.current = [];
+    preRollBytesRef.current = 0;
     speakingRef.current = false;
     speechStartedRef.current = 0;
     lastVoiceRef.current = 0;
     setActivity("transcribing");
+  }
+
+  function rememberPreRoll(pcm: Uint8Array) {
+    const maximumBytes =
+      (LIVE_STT_MEDIA_BOUNDARY.sampleRate *
+        LIVE_STT_MEDIA_BOUNDARY.channels *
+        2 *
+        LIVE_STT_MEDIA_BOUNDARY.preRollMs) /
+      1000;
+    preRollPcmRef.current.push(pcm);
+    preRollBytesRef.current += pcm.byteLength;
+    while (
+      preRollBytesRef.current > maximumBytes &&
+      preRollPcmRef.current.length > 1
+    ) {
+      preRollBytesRef.current -= preRollPcmRef.current.shift()?.byteLength ?? 0;
+    }
   }
 
   function flushPcm() {
@@ -227,9 +332,20 @@ export function useRealtimeBrainCall() {
     if (voice && !speakingRef.current) {
       speakingRef.current = true;
       speechStartedRef.current = now;
+      // Include only a short local pre-roll so initial consonants are not
+      // clipped. Idle room audio is never forwarded to the provider stream.
+      for (const frame of preRollPcmRef.current) {
+        pendingPcmRef.current.push(frame);
+        pendingSamplesRef.current += frame.byteLength / 2;
+      }
+      preRollPcmRef.current = [];
+      preRollBytesRef.current = 0;
       setActivity("listening");
     }
-    if (!speakingRef.current) return;
+    if (!speakingRef.current) {
+      rememberPreRoll(pcm);
+      return;
+    }
     pendingPcmRef.current.push(pcm);
     pendingSamplesRef.current += pcm.byteLength / 2;
     if (voice) lastVoiceRef.current = now;
@@ -237,9 +353,30 @@ export function useRealtimeBrainCall() {
 
     const sustainedSpeechMs = now - speechStartedRef.current;
     const silenceMs = lastVoiceRef.current ? now - lastVoiceRef.current : 0;
-    if (!pttRef.current && sustainedSpeechMs >= 250 && silenceMs >= 650) {
-      flushPcm();
-      commitUtterance();
+    if (
+      !pttRef.current &&
+      sustainedSpeechMs >= 250 &&
+      silenceMs >= 250 &&
+      !turnDecisionPendingRef.current
+    ) {
+      turnDecisionPendingRef.current = true;
+      void turnDetectorRef.current
+        .evaluate({
+          speechDurationMs: sustainedSpeechMs,
+          silenceDurationMs: silenceMs,
+          // The CPU ONNX worker supplies semantic confidence after transport
+          // migration. Until then, local VAD commits at a natural 450ms pause
+          // with an 800ms hard fallback.
+          semanticCompletionConfidence: silenceMs >= 450 ? 0.6 : 0,
+        })
+        .then((decision) => {
+          if (!decision.commit || !speakingRef.current) return;
+          flushPcm();
+          commitUtterance();
+        })
+        .finally(() => {
+          turnDecisionPendingRef.current = false;
+        });
     }
   }
 
@@ -250,6 +387,10 @@ export function useRealtimeBrainCall() {
       socketReadyRef.current = true;
       reconnectDelayRef.current = 1000;
       setActivity("listening");
+      if (contextRef.current && !connectedChimePlayedRef.current) {
+        connectedChimePlayedRef.current = true;
+        playCallChime(contextRef.current, "connected");
+      }
       return;
     }
     if (type === "state.changed") {
@@ -278,13 +419,25 @@ export function useRealtimeBrainCall() {
       }
       return;
     }
+    if (type === "transcript.partial") {
+      setTranscript((current) => [
+        ...current.filter((line) => line.id !== "human-draft"),
+        {
+          id: "human-draft",
+          speaker: "human",
+          text: String(event.text ?? ""),
+          final: false,
+        },
+      ]);
+      return;
+    }
     if (type === "transcript.final") {
       debugCall("transcript.final", {
         text: event.text,
         source: event.source,
       });
       setTranscript((current) => [
-        ...current,
+        ...current.filter((line) => line.id !== "human-draft"),
         {
           id: `human-${Date.now()}`,
           speaker: "human",
@@ -327,6 +480,9 @@ export function useRealtimeBrainCall() {
       playbackQueueRef.current.push({
         bytes: base64ToBytes(String(event.audio ?? "")),
         mimeType: String(event.mimeType ?? "audio/mpeg"),
+        sampleRate:
+          typeof event.sampleRate === "number" ? event.sampleRate : undefined,
+        channels: typeof event.channels === "number" ? event.channels : undefined,
       });
       // Reveal buffered employee text as soon as the first audio chunk arrives.
       if (employeeDeltaRef.current) {
@@ -440,9 +596,15 @@ export function useRealtimeBrainCall() {
     setAudioSuspended(false);
     setActivity("connecting");
     intentionalCloseRef.current = false;
+    connectedChimePlayedRef.current = false;
     workspaceRef.current = input.workspaceId;
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
+      debugCall("creating session", {
+        conversationId: input.conversationId,
+        employeeId: input.employeeId,
+        voice: input.voice,
+      });
+      const mediaPromise = navigator.mediaDevices.getUserMedia({
         audio: {
           channelCount: 1,
           echoCancellation: true,
@@ -450,24 +612,28 @@ export function useRealtimeBrainCall() {
           autoGainControl: true,
         },
       });
-      streamRef.current = stream;
-      const headers = await authHeaders(input.workspaceId);
-      debugCall("creating session", {
-        conversationId: input.conversationId,
-        employeeId: input.employeeId,
-        voice: input.voice,
-      });
-      const response = await fetch("/api/calls/live/session", {
-        method: "POST",
-        headers,
-        body: JSON.stringify({
-          conversationType: "human_ai_dm",
-          conversationId: input.conversationId,
-          employeeId: input.employeeId,
-          sttMode: "fast_turn",
-          voice: input.voice,
+      const sessionPromise = authHeaders(input.workspaceId).then((headers) =>
+        fetch("/api/calls/live/session", {
+          method: "POST",
+          headers,
+          body: JSON.stringify({
+            conversationType: "human_ai_dm",
+            conversationId: input.conversationId,
+            employeeId: input.employeeId,
+            sttMode: "live_streaming",
+            voice: input.voice,
+          }),
         }),
-      });
+      );
+      const [mediaResult, sessionResult] = await Promise.allSettled([
+        mediaPromise,
+        sessionPromise,
+      ]);
+      if (mediaResult.status === "rejected") throw mediaResult.reason;
+      const stream = mediaResult.value;
+      streamRef.current = stream;
+      if (sessionResult.status === "rejected") throw sessionResult.reason;
+      const response = sessionResult.value;
       const data = (await response.json()) as SessionResponse & { error?: string };
       if (!response.ok) throw new Error(data.error ?? "Could not start call.");
       callIdRef.current = data.callId;
@@ -526,6 +692,9 @@ export function useRealtimeBrainCall() {
     workletRef.current?.disconnect();
     sourceRef.current?.disconnect();
     streamRef.current?.getTracks().forEach((track) => track.stop());
+    if (contextRef.current) playCallChime(contextRef.current, "disconnected");
+    connectedChimePlayedRef.current = false;
+    await new Promise((resolve) => setTimeout(resolve, 190));
     await contextRef.current?.close();
     await endSessionQuietly();
     callIdRef.current = null;
@@ -534,6 +703,15 @@ export function useRealtimeBrainCall() {
 
   function setMuted(next: boolean) {
     mutedRef.current = next;
+    if (next) {
+      pendingPcmRef.current = [];
+      pendingSamplesRef.current = 0;
+      preRollPcmRef.current = [];
+      preRollBytesRef.current = 0;
+      speakingRef.current = false;
+      speechStartedRef.current = 0;
+      lastVoiceRef.current = 0;
+    }
     setMutedState(next);
     send({ type: "mute", muted: next });
   }

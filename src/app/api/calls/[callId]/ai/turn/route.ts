@@ -13,7 +13,11 @@ import { processEmployeeResponse } from "@/lib/server/process-employee-response"
 import { executeTextToSpeech } from "@/lib/brain/voice/execute";
 import { persistTtsArtifact } from "@/lib/brain/voice/persist";
 import { loadWhReceipt } from "@/lib/brain/receipts/load-wh-receipt";
-import { getCall } from "@/lib/calls";
+import {
+  createCallBillingMetadata,
+  decideParticipation,
+  getCall,
+} from "@/lib/calls";
 import { uid } from "@/lib/utils";
 
 export const runtime = "nodejs";
@@ -25,6 +29,7 @@ const schema = z.object({
   speak: z.boolean().default(false),
   privateSidecar: z.boolean().default(false),
   kind: z.enum(["request", "delegation"]).default("request"),
+  stewardRequestId: z.string().min(1).max(200).optional(),
 });
 
 export async function POST(
@@ -50,6 +55,15 @@ export async function POST(
     if (parsed.data.speak && ai.participationMode === "silent_observer") {
       throw new AuthError("Silent observers cannot speak in the call.", 409);
     }
+    const participation = await decideParticipation({
+      utterance: parsed.data.content,
+      mode: ai.participationMode ?? "on_request",
+      candidate: {
+        employeeId: parsed.data.employeeId,
+        isLead: true,
+      },
+      explicitMentionedEmployeeIds: [parsed.data.employeeId],
+    });
     await assertCanSendRoomMessage(client, workspaceId, call.roomId, user.id, role);
     await assertEffectiveAiAccess(
       client,
@@ -99,6 +113,9 @@ export async function POST(
         privateSidecar: parsed.data.privateSidecar,
         requestedBy: user.id,
         kind: parsed.data.kind,
+        stewardRequestId: parsed.data.stewardRequestId ?? null,
+        participation,
+        billing: createCallBillingMetadata([]),
       },
     });
     const context = await loadRoomContext(client, workspaceId, call.roomId);
@@ -163,6 +180,13 @@ export async function POST(
     }
     const settledWh =
       textWorkHours + Number(voice?.estimatedWh ?? 0);
+    const billing = createCallBillingMetadata([
+      {
+        employeeId: parsed.data.employeeId,
+        workHours: settledWh,
+        contribution: "single_turn",
+      },
+    ]);
     await service
       .from("call_ai_turns")
       .update({
@@ -181,6 +205,9 @@ export async function POST(
           agentRunId: response.agentRunId ?? null,
           aiMessageId: response.aiMessageId ?? null,
           whReceipt: receipt,
+          stewardRequestId: parsed.data.stewardRequestId ?? null,
+          participation,
+          billing,
         },
       })
       .eq("workspace_id", workspaceId)
@@ -234,6 +261,8 @@ export async function POST(
         settled: settledWh,
         receipt,
       },
+      participation,
+      billing,
       sidecarArtifactId,
     });
   } catch (error) {

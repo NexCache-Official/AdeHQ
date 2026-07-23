@@ -18,8 +18,12 @@ Runnable tooling for AdeHQ. Prefer **npm scripts** from the repo root (`package.
 | Steward shadow | `npm run test:brain:steward-shadow` (PR-19 plan-only golden scenarios) |
 | Steward execution | `npm run test:brain:steward-execution` (PR-19 leases/findings/receipts/DAG) |
 | Brain voice | `npm run test:brain:voice` (PR-18 STT/TTS routes, policy, metering) |
+| Voice billing | `npm run test:voice-billing` (PR-18.2E allowances, treatments, idempotency/RLS contract) |
 | Realtime Brain Calls | `npm run test:brain:voice:live-benchmark` (PR-18.1 routing, Groq minimum billing, chunking, PCM transport) |
+| CPU voice worker | `npm run test:voice-worker` (runtime E2E, auth, interruption, readiness) + `npm run test:voice-worker:app` (token and safe transport fallback) |
+| Voice pipeline candidates | `npm run test:voice-benchmark` (no-credentials contract), `npm run benchmark:voice-worker -- --list` (registry), or `npm run benchmark:voice-worker` (configured whole-pipeline run; see [protocol](../docs/architecture/voice-benchmark.md)) |
 | Human/hybrid calls | `npm run test:calls:human` (canonical state, SFU secret boundary, push, consent, WH voice path) |
+| Group Call Steward | `npm run test:calls:steward` (participation, attribution, floor, council, billing metadata) |
 | Cloudflare Realtime live | `vercel env run -- npm run test:calls:cloudflare-live` (real session, publish, subscribe, echo; uses server env) |
 | Human call API E2E | `npm run test:calls:e2e` (two humans, idempotency, atomic accept, leases, consent, artifacts, cleanup) |
 | Hiring brief edits | `npm run test:hiring:brief-edit` (Maya must rewrite the job brief, not append chat instructions as bullets) |

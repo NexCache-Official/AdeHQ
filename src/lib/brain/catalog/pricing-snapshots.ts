@@ -220,6 +220,7 @@ export const SEEDED_PRICING_SNAPSHOTS: BrainPricingSnapshot[] = [
   ttsSnap("ps_tts_indextts2_2026-07-16", "route_tts_indextts2", 0.00715),
   ttsSnap("ps_tts_fish_speech_2026-07-16", "route_tts_fish_speech", 0.015),
   ttsCharacterSnap("ps_call_tts_xai_2026-07-20", "route_call_tts_xai", 0.015),
+  ttsSnap("ps_call_tts_fish_2026-07-23", "route_call_tts_fish", 0.015),
   // STT — provisional per-second rates pending live reconciliation
   sttSnap("ps_stt_fast_2026-07-17", "route_stt_fast", 0.00006),
   sttSnap("ps_stt_accurate_2026-07-17", "route_stt_accurate", 0.00012),
@@ -233,6 +234,11 @@ export const SEEDED_PRICING_SNAPSHOTS: BrainPricingSnapshot[] = [
     "ps_call_stt_groq_accurate_2026-07-20",
     "route_call_stt_groq_accurate",
     0.111 / 3600,
+  ),
+  sttSnap(
+    "ps_call_stt_xai_stream_2026-07-23",
+    "route_call_stt_streaming",
+    0.2 / 3600,
   ),
 
   // Evaluation

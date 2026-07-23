@@ -31,7 +31,7 @@ function check(name: string, ok: boolean, detail = "") {
 
 console.log("\n=== PR-18 Voice foundation ===\n");
 
-check("catalog version is 7", CATALOG_VERSION === "7");
+check("catalog version is 8", CATALOG_VERSION === "8");
 
 check(
   "TTS default route is CosyVoice label route",

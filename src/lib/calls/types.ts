@@ -53,6 +53,11 @@ export type CallSessionSummary = {
   startedAt: string | null;
   answeredAt: string | null;
   endedAt: string | null;
+  durationSeconds: number | null;
+  liveCallMinutes: number;
+  aiWorkHours: number;
+  transcriptIncluded: boolean;
+  captionsIncluded: boolean;
   createdAt: string;
   participants: CallParticipantSummary[];
   entitlements?: HumanCallEntitlements;

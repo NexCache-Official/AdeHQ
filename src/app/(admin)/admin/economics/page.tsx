@@ -18,10 +18,13 @@ import {
 } from "@/components/admin/AdminUsageCharts";
 import type { EconomicsRange, EconomicsSummary } from "@/lib/admin/queries/economics";
 import { Download, FileText, TrendingUp } from "lucide-react";
+import Link from "next/link";
+import { usePlatformAdmin } from "@/components/admin/AdminShell";
 
 const RANGES: EconomicsRange[] = ["1d", "7d", "30d", "90d", "ytd"];
 
 export default function AdminEconomicsPage() {
+  const admin = usePlatformAdmin();
   const [range, setRange] = useState<EconomicsRange>("30d");
   const { data, loading, error } = useAdminData<EconomicsSummary>(
     `/api/admin/economics?range=${range}`,
@@ -80,10 +83,18 @@ export default function AdminEconomicsPage() {
     <div className="space-y-6">
       <AdminPageHeader
         title="Economics"
-        subtitle="Revenue, AI COGS, and gross profit — statement export for any range."
+        subtitle="Revenue and general AI COGS. Voice subsidy and call-minute economics are separated into the superadmin Voice Economics ledger."
         icon={<TrendingUp className="h-5 w-5" />}
         actions={
           <div className="flex flex-wrap items-center gap-2">
+            {admin.role === "super_admin" ? (
+              <Link
+                href="/admin/voice-economics"
+                className="rounded-xl border border-border bg-surface px-3 py-2 text-sm font-medium text-ink-2"
+              >
+                Voice economics
+              </Link>
+            ) : null}
             <Button
               variant="secondary"
               onClick={() => {

@@ -323,7 +323,7 @@ const APPROVED: Array<{
 ];
 
 function main() {
-  assert(CATALOG_VERSION === "7", "CATALOG_VERSION must be 7 after PR-18 voice");
+  assert(CATALOG_VERSION === "8", "CATALOG_VERSION must be 8 after PR-18.2 realtime voice");
 
   const ids = BRAIN_ROUTES.map((r) => r.id);
   assert(new Set(ids).size === ids.length, "route ids must be unique");

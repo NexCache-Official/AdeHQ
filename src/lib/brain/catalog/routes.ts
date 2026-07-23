@@ -19,6 +19,7 @@ export type BrainProvider =
   | "siliconflow"
   | "groq"
   | "xai"
+  | "fish_audio"
   | "vercel_gateway"
   | "tavily"
   | "perplexity"
@@ -38,6 +39,7 @@ export type CapabilityRoute = {
     | "siliconflow_direct"
     | "groq_direct"
     | "xai_direct"
+    | "fish_audio_direct"
     | "vercel_gateway"
     | "mock"
     | null;
@@ -445,6 +447,20 @@ export const BRAIN_ROUTES: CapabilityRoute[] = [
     label: "Premium voice",
     fallbackForRouteId: "route_tts_cosyvoice2",
     notes: "PR-18.1 premium/fallback TTS. Direct xAI endpoint; never Gateway TTS.",
+  },
+  {
+    id: "route_call_tts_fish",
+    capability: "text_to_speech",
+    provider: "fish_audio",
+    providerRoute: "fish_audio_direct",
+    model: "s2.1-pro",
+    unitType: "utf8_bytes",
+    environment: "shadow",
+    enabled: true,
+    label: "Standard voice candidate",
+    fallbackForRouteId: "route_call_tts_xai",
+    notes:
+      "PR-18.2 managed Fish Audio streaming candidate. Promote only after whole-pipeline blind tests.",
   },
 
   // ─── Evaluation — never auto-scored ──────────────────────────────

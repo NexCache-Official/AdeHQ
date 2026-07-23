@@ -99,6 +99,10 @@ export async function POST(
           source: "live_transcription",
           estimatedWh: result.estimatedWh,
           language: result.language,
+          stewardListening: {
+            sharedSttStreamCount: 1,
+            perAiListeningStreams: 0,
+          },
         },
       });
       if (observers.length) {
@@ -150,6 +154,10 @@ export async function POST(
                   privateSidecar: true,
                   observer: true,
                   agentRunId: response.agentRunId ?? null,
+                  stewardListening: {
+                    sharedSttStreamCount: 1,
+                    perAiListeningStreams: 0,
+                  },
                 },
               });
               await service.from("call_artifacts").insert({

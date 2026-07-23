@@ -72,6 +72,10 @@ export class SpeechChunker {
     private readonly policy: SpeechChunkPolicy = DEFAULT_SPEECH_CHUNK_POLICY,
   ) {}
 
+  get maximumWaitMs(): number {
+    return this.policy.maximumWaitMs;
+  }
+
   push(delta: string, now = Date.now()): string[] {
     this.buffer += delta;
     this.lastPushAt = now;
@@ -102,8 +106,12 @@ export class SpeechChunker {
       if (index < 0 && !force) break;
       if (index < 0) {
         if (this.buffer.length < this.policy.preferredMinCharacters) break;
-        const forced = this.buffer.lastIndexOf(" ", this.policy.maximumCharacters);
-        const end = forced > 0 ? forced : Math.min(this.buffer.length, this.policy.maximumCharacters);
+        const forced =
+          this.buffer.length <= this.policy.maximumCharacters
+            ? this.buffer.length
+            : this.buffer.lastIndexOf(" ", this.policy.maximumCharacters);
+        const end =
+          forced > 0 ? forced : Math.min(this.buffer.length, this.policy.maximumCharacters);
         const chunk = sanitizeTextForSpeech(this.buffer.slice(0, end));
         this.buffer = this.buffer.slice(end).trimStart();
         if (chunk) chunks.push(chunk);

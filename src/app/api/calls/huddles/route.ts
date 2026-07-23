@@ -11,6 +11,7 @@ import { createSupabaseSecretClient } from "@/lib/supabase/server";
 import { getCall, resolveHumanCallEntitlements, sendIncomingCallPush } from "@/lib/calls";
 import { uid } from "@/lib/utils";
 import { upsertWorkGraphEdge } from "@/lib/inbox/work-graph";
+import { checkMonthlyLiveCallMinutes } from "@/lib/billing/voice/usage";
 
 export const runtime = "nodejs";
 
@@ -35,6 +36,26 @@ export async function POST(request: NextRequest) {
     const entitlements = await resolveHumanCallEntitlements(service, workspaceId);
     if (!entitlements.groupCallsEnabled) {
       throw new AuthError("Group huddles are not enabled for this workspace.", 403);
+    }
+    const { data: existingCall, error: existingCallError } = await service
+      .from("call_sessions")
+      .select("id")
+      .eq("workspace_id", workspaceId)
+      .eq("idempotency_key", parsed.data.idempotencyKey)
+      .maybeSingle();
+    if (existingCallError) throw existingCallError;
+    if (existingCall) {
+      return NextResponse.json({
+        ...(await getCall(service, workspaceId, String(existingCall.id))),
+        entitlements,
+      });
+    }
+    const monthlyUsage = await checkMonthlyLiveCallMinutes(service, workspaceId);
+    if (!monthlyUsage.allowed) {
+      throw new AuthError(
+        "This workspace has used its included live-call minutes for this month.",
+        429,
+      );
     }
     const invitees = [...new Set(parsed.data.inviteeUserIds)].filter((id) => id !== user.id);
     if (invitees.length + 1 > entitlements.maxParticipants) {

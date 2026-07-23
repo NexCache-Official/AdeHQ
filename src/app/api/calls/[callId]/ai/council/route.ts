@@ -10,7 +10,11 @@ import { assertEffectiveAiAccess } from "@/lib/server/room-access";
 import { createSupabaseSecretClient } from "@/lib/supabase/server";
 import { loadRoomContext } from "@/lib/server/room-messages";
 import { processEmployeeResponse } from "@/lib/server/process-employee-response";
-import { getCall } from "@/lib/calls";
+import {
+  createCallBillingMetadata,
+  getCall,
+  planCouncil,
+} from "@/lib/calls";
 import { uid } from "@/lib/utils";
 import { upsertWorkGraphEdge } from "@/lib/inbox/work-graph";
 
@@ -55,12 +59,25 @@ export async function POST(
       throw new AuthError("Call not found.", 404);
     }
     const ids = [...new Set(parsed.data.employeeIds)];
+    if (ids.length < 2) {
+      throw new AuthError("Choose at least two distinct invited employees.", 400);
+    }
     const participants = ids.map((employeeId) =>
       call.participants.find((participant) => participant.employeeId === employeeId),
     );
     if (participants.some((participant) => !participant)) {
       throw new AuthError("Every council member must be invited to the call.", 422);
     }
+    const councilPlan = planCouncil(
+      ids.map((employeeId, index) => ({
+        employeeId,
+        participationMode: participants[index]!.participationMode,
+      })),
+    );
+    const selectedIds = [
+      councilPlan.leadEmployeeId,
+      ...councilPlan.collaboratorEmployeeIds,
+    ];
     const humans = call.participants.filter((participant) => participant.userId);
     const { data: consentRows, error: consentError } = await service
       .from("call_consents")
@@ -75,7 +92,7 @@ export async function POST(
       throw new AuthError("Every human participant must consent before the council works.", 409);
     }
     await Promise.all(
-      ids.map((employeeId) =>
+      selectedIds.map((employeeId) =>
         assertEffectiveAiAccess(
           client,
           workspaceId,
@@ -88,7 +105,7 @@ export async function POST(
     );
     const context = await loadRoomContext(client, workspaceId, call.roomId);
     const findings = await Promise.all(
-      ids.map(async (employeeId) => {
+      selectedIds.map(async (employeeId) => {
         const response = await processEmployeeResponse(
           client,
           context,
@@ -107,11 +124,7 @@ export async function POST(
         };
       }),
     );
-    const spokespersonParticipant =
-      participants.find((participant) => participant?.participationMode === "facilitator") ??
-      participants.find((participant) => participant?.participationMode === "on_request") ??
-      participants[0]!;
-    const spokespersonEmployeeId = spokespersonParticipant!.employeeId!;
+    const spokespersonEmployeeId = councilPlan.leadEmployeeId;
     const synthesis = await processEmployeeResponse(
       client,
       context,
@@ -149,7 +162,22 @@ export async function POST(
           estimated_wh: finding.settledWh,
           settled_wh: finding.settledWh,
           completed_at: new Date().toISOString(),
-          metadata: { council: true, spokesperson: false },
+          metadata: {
+            council: true,
+            spokesperson: false,
+            collaborationRole:
+              finding.employeeId === spokespersonEmployeeId
+                ? "lead_input"
+                : "silent_collaborator",
+            sharedListening: councilPlan.sharedListening,
+            billing: createCallBillingMetadata([
+              {
+                employeeId: finding.employeeId,
+                workHours: finding.settledWh,
+                contribution: "specialist",
+              },
+            ]),
+          },
         });
         await service.from("call_artifacts").insert({
           workspace_id: workspaceId,
@@ -162,11 +190,30 @@ export async function POST(
           content: finding.response.reply,
           owner_id: ownerId,
           source_employee_id: finding.employeeId,
-          metadata: { turnId, council: true },
+          metadata: {
+            turnId,
+            council: true,
+            collaborationRole:
+              finding.employeeId === spokespersonEmployeeId
+                ? "lead_input"
+                : "silent_collaborator",
+          },
         });
       }),
     );
     const artifactId = uid("call_art");
+    const billing = createCallBillingMetadata([
+      ...findings.map((finding) => ({
+        employeeId: finding.employeeId,
+        workHours: finding.settledWh,
+        contribution: "specialist" as const,
+      })),
+      {
+        employeeId: spokespersonEmployeeId,
+        workHours: synthesisWh,
+        contribution: "lead_synthesis" as const,
+      },
+    ]);
     await service.from("call_artifacts").insert({
       workspace_id: workspaceId,
       id: artifactId,
@@ -182,6 +229,11 @@ export async function POST(
         council: true,
         spokespersonEmployeeId,
         policy: "facilitator_then_on_request",
+        stewardPolicy: "call_steward_lead_synthesis",
+        collaboratorEmployeeIds: councilPlan.collaboratorEmployeeIds,
+        omittedEmployeeIds: councilPlan.omittedEmployeeIds,
+        sharedListening: councilPlan.sharedListening,
+        billing,
       },
     });
     await upsertWorkGraphEdge(service, {
@@ -201,6 +253,8 @@ export async function POST(
       artifactId,
       settledWh,
       specialistCount: findings.length,
+      councilPlan,
+      billing,
     });
   } catch (error) {
     if (error instanceof AuthError) {

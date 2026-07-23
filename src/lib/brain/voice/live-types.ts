@@ -56,6 +56,8 @@ export type SpeechAudioChunk = {
   sequence: number;
   bytes: Uint8Array;
   mimeType: string;
+  sampleRate?: number;
+  channels?: number;
 };
 
 export type SpeechSynthesisResult = {
@@ -67,6 +69,15 @@ export type SpeechSynthesisResult = {
   routeId: LiveTtsRouteId;
 };
 
+export interface RealtimeTtsSession {
+  appendText(text: string): Promise<void>;
+  flush(): Promise<void>;
+  interrupt(reason?: string): Promise<void>;
+  close(): Promise<void>;
+  chunks: AsyncIterable<SpeechAudioChunk>;
+}
+
+/** @deprecated Use RealtimeTtsSession. */
 export interface StreamingSpeechSession {
   chunks: AsyncIterable<SpeechAudioChunk>;
   cancel(reason?: string): Promise<void>;
@@ -84,6 +95,10 @@ export interface SpeechToTextAdapter {
 export interface TextToSpeechAdapter {
   mode: TtsAdapterMode;
   synthesize(input: SpeechSynthesisInput): Promise<SpeechSynthesisResult>;
+  openRealtimeSession?(
+    input: Omit<SpeechSynthesisInput, "text">,
+  ): Promise<RealtimeTtsSession>;
+  /** @deprecated Compatibility for callers that synthesize one text input. */
   openStream?(input: SpeechSynthesisInput): Promise<StreamingSpeechSession>;
 }
 
@@ -95,7 +110,8 @@ export type LiveSttRouteId =
 
 export type LiveTtsRouteId =
   | "route_tts_cosyvoice2"
-  | "route_call_tts_xai";
+  | "route_call_tts_xai"
+  | "route_call_tts_fish";
 
 export type CallUsageOutcome =
   | "success"
@@ -173,6 +189,8 @@ export type ServerCallEvent =
       audio: string;
       sequence: number;
       mimeType: string;
+      sampleRate?: number;
+      channels?: number;
     }
   | { type: "employee.audio.end" }
   | { type: "usage.estimate"; wh: number }

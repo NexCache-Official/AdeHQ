@@ -59,8 +59,13 @@ export { scoreSttRouteSelection, STT_BENCHMARK_CASES } from "./benchmark";
 
 export * from "./live-types";
 export * from "./live-adapters";
+export * from "./xai-streaming-stt";
+export * from "./live-stt-config";
 export * from "./speech-router";
 export * from "./speech-chunker";
+export * from "./turn-detector";
+export * from "./voice-profile";
+export * from "./bridge-clips";
 export * from "./vocabulary";
 export * from "./call-session";
 export * from "./call-transport";

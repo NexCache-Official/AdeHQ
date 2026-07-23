@@ -67,6 +67,32 @@ choice.
 - Summaries create call artifacts and materialize decisions/tasks into Work Graph
   edges; tasks also appear in the canonical Tasks surface.
 
+### Group Call Steward foundation
+
+`src/lib/calls/steward/` is the provider-independent policy boundary for group
+participation. It resolves deterministic signals before any optional ambiguity
+classifier: explicit employee mention, directed role, current owner/workstream,
+requested group opinion, human-only context, and critical correction. Classifier
+failure is fail-quiet. Product modes map onto the existing persisted values:
+Quiet → `silent_observer`, Smart assist → `on_request`, Active → `active`, and
+Council → `facilitator`.
+
+The floor controller gives humans priority, permits one AI speaker, queues other
+requests by priority, suppresses duplicate segment/employee requests, and
+interrupts the AI immediately when a human starts speaking. Council work uses a
+capped set of silent collaborators and exactly one lead synthesis. Collaborators
+consume the shared call transcript; they do not create separate listening or STT
+streams.
+
+Speaker attribution prefers native WebRTC provider-session plus track identity.
+Known multichannel inputs are used only up to the provider's declared channel
+limit. Diarization is reserved for unknown, mixed external audio.
+
+Call Steward metadata states the customer billing contract without writing a new
+ledger: one call-minute stream per call, never multiplied by invited AI, and Work
+Hours itemized only for AI employees that actually produced a specialist, lead,
+or single-turn contribution.
+
 ## Optimization and enterprise privacy
 
 Direct P2P is off by default and gated by `NEXT_PUBLIC_ADEHQ_P2P_CALLS_V1=1`.

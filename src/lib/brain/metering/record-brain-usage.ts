@@ -43,6 +43,22 @@ export type BrainUsageInput = {
   catalogVersion?: string;
 };
 
+/** PR-18.2E: call STT and standard TTS are plan-included customer usage. */
+export function isIncludedLiveCallSpeech(input: {
+  runtimeMode?: string | null;
+  capability?: string | null;
+  routeId: string;
+  metadata?: Record<string, unknown>;
+}): boolean {
+  if (input.runtimeMode !== "voice_call") return false;
+  return (
+    input.capability === "speech_to_text" ||
+    (input.capability === "text_to_speech" &&
+      input.metadata?.voiceTier === "standard") ||
+    input.routeId === "route_tts_cosyvoice2"
+  );
+}
+
 /**
  * Single Brain metering spine. Wraps recordCostEvent — does not fork the ledger.
  * Always records when a provider was called (defect I); billable flag is separate.
@@ -73,6 +89,9 @@ export async function recordBrainUsage(input: BrainUsageInput): Promise<CostLedg
   const inputTokens = Math.max(0, input.usage.inputTokens ?? 0);
   const cachedInputTokens = Math.max(0, input.usage.cachedInputTokens ?? 0);
   const outputTokens = Math.max(0, input.usage.outputTokens ?? 0);
+  const includedCallSpeech = isIncludedLiveCallSpeech(input);
+  const billableToWorkspace =
+    input.billableToWorkspace && !includedCallSpeech;
 
   const event: CostEventInput = {
     workspaceId: input.workspaceId,
@@ -101,8 +120,8 @@ export async function recordBrainUsage(input: BrainUsageInput): Promise<CostLedg
     actualCostUsd: computed.costUsd,
     estimatedCostUsd: computed.costSource === "estimated" ? computed.costUsd : computed.costUsd,
     costSource: computed.costSource,
-    billableToWorkspace: input.billableToWorkspace,
-    platformOverhead: input.platformOverhead ?? !input.billableToWorkspace,
+    billableToWorkspace,
+    platformOverhead: input.platformOverhead ?? !billableToWorkspace,
     status: input.status,
     pricingSnapshotId: computed.pricingSnapshotId,
     idempotencyKey: input.idempotencyKey,

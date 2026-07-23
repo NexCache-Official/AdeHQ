@@ -14,7 +14,6 @@ import {
 } from "@/lib/server/room-messages";
 import { processEmployeeResponse } from "@/lib/server/process-employee-response";
 import { callSiliconFlowStt } from "./adapter";
-import { XaiTtsAdapter } from "./live-adapters";
 import { persistPrivateAudio } from "./persist";
 import { buildCallVocabulary } from "./vocabulary";
 import {
@@ -23,6 +22,15 @@ import {
 } from "./speech-router";
 import { SpeechChunker } from "./speech-chunker";
 import { settleCallComponent, upsertCallTurn } from "./call-session";
+import {
+  loadEmployeeVoiceProfile,
+  resolveProviderVoice,
+} from "./voice-profile";
+import {
+  bridgeClipKey,
+  cacheBridgeClip,
+  getCachedBridgeClip,
+} from "./bridge-clips";
 import type {
   FinalTranscript,
   ServerCallEvent,
@@ -144,6 +152,7 @@ export async function executeEmployeeCallTurn(input: {
   pcm16: Uint8Array;
   durationSeconds: number;
   routeContext: SpeechRouteContext;
+  finalTranscript?: FinalTranscript;
   saveRecording?: boolean;
   emit: EmitCallEvent;
   signal?: AbortSignal;
@@ -169,12 +178,6 @@ export async function executeEmployeeCallTurn(input: {
   });
   await input.emit({ type: "state.changed", turn: "transcribing" });
 
-  const vocabularyPrompt = await buildCallVocabulary(input.client, {
-    workspaceId: input.workspaceId,
-    conversationId: input.roomId,
-    humanUserId: input.humanUserId,
-    employeeId: input.employeeId,
-  });
   const wav = pcm16ToWav(input.pcm16);
   if (input.saveRecording) {
     await persistPrivateAudio({
@@ -189,27 +192,34 @@ export async function executeEmployeeCallTurn(input: {
       kind: "voice_note",
     });
   }
-  const stt = await transcribeWithFallback({
-    client: input.client,
-    workspaceId: input.workspaceId,
-    userId: input.humanUserId,
-    employeeId: input.employeeId,
-    roomId: input.roomId,
-    callId: input.callSessionId,
-    turnId,
-    sequence: input.sequence,
-    audioBytes: wav,
-    durationSeconds: input.durationSeconds,
-    routeContext: input.routeContext,
-    speechContext: {
+  const stt =
+    input.finalTranscript ??
+    (await transcribeWithFallback({
+      client: input.client,
       workspaceId: input.workspaceId,
-      conversationId: input.roomId,
-      humanUserId: input.humanUserId,
+      userId: input.humanUserId,
       employeeId: input.employeeId,
-      vocabularyPrompt,
-      signal: input.signal,
-    },
-  });
+      roomId: input.roomId,
+      callId: input.callSessionId,
+      turnId,
+      sequence: input.sequence,
+      audioBytes: wav,
+      durationSeconds: input.durationSeconds,
+      routeContext: input.routeContext,
+      speechContext: {
+        workspaceId: input.workspaceId,
+        conversationId: input.roomId,
+        humanUserId: input.humanUserId,
+        employeeId: input.employeeId,
+        vocabularyPrompt: await buildCallVocabulary(input.client, {
+          workspaceId: input.workspaceId,
+          conversationId: input.roomId,
+          humanUserId: input.humanUserId,
+          employeeId: input.employeeId,
+        }),
+        signal: input.signal,
+      },
+    }));
   if (!stt.text) throw new Error("No speech was detected.");
 
   const sttLedger = await recordBrainUsage({
@@ -223,7 +233,9 @@ export async function executeEmployeeCallTurn(input: {
     routeId: stt.routeId,
     usage: { audioSeconds: stt.billableAudioSeconds },
     status: "succeeded",
-    billableToWorkspace: true,
+    // Captions/transcription are part of the call platform envelope. Provider
+    // cost is recorded, but it must not consume customer Work Hours.
+    billableToWorkspace: false,
     capability: "speech_to_text",
     workType: "call_stt",
     runtimeMode: "voice_call",
@@ -276,7 +288,16 @@ export async function executeEmployeeCallTurn(input: {
       brain_started_at: new Date().toISOString(),
     },
   });
-  await input.emit({ type: "transcript.final", text: stt.text, source: stt.routeId.startsWith("route_call_stt_groq") ? "groq" : "fallback" });
+  await input.emit({
+    type: "transcript.final",
+    text: stt.text,
+    source:
+      stt.routeId === "route_call_stt_streaming"
+        ? "streaming_stt"
+        : stt.routeId.startsWith("route_call_stt_groq")
+          ? "groq"
+          : "fallback",
+  });
   await input.emit({ type: "state.changed", turn: "thinking", activity: "thinking" });
 
   const capacity = await getWorkspaceCapacity(input.client, input.workspaceId);
@@ -332,83 +353,131 @@ export async function executeEmployeeCallTurn(input: {
   );
 
   const chunker = new SpeechChunker();
-  const selected = selectSpeechRoutes(input.routeContext);
+  const voiceProfile = await loadEmployeeVoiceProfile(
+    input.client,
+    input.workspaceId,
+    input.employeeId,
+  );
+  // The call-session policy is canonical for billing. A durable employee
+  // preference must never silently upgrade a standard call to a paid route.
+  const premiumVoiceRequested = input.routeContext.premiumVoiceRequested;
+  const selected = selectSpeechRoutes({
+    ...input.routeContext,
+    premiumVoiceRequested,
+  });
+  const primaryRouteId = selected.ttsRouteId;
+  const voiceProvider =
+    primaryRouteId === "route_call_tts_xai"
+      ? "xai"
+      : primaryRouteId === "route_call_tts_fish"
+        ? "fish"
+        : "siliconflow";
+  const voiceQuality =
+    premiumVoiceRequested && input.routeContext.entitlements.premiumVoiceEnabled
+      ? "premium"
+      : "standard";
+  const providerVoice = resolveProviderVoice(
+    voiceProfile,
+    voiceProvider,
+    voiceQuality,
+  );
+  const ttsSessionPromise = selected.tts.openRealtimeSession
+    ? selected.tts.openRealtimeSession({
+        signal: input.signal,
+        format: primaryRouteId === "route_call_tts_xai" ? "pcm" : "wav",
+        voice: providerVoice,
+        locale: voiceProfile.locale,
+        speed: voiceProfile.pace,
+      })
+    : Promise.reject(new Error("Selected TTS adapter has no realtime session."));
   let ttsChain = Promise.resolve();
   let audioSequence = 0;
+  let textSequence = 0;
   let ttsWh = 0;
   let ttsHadFailure = false;
   let ttsHadSuccess = false;
+  let speechStateStarted = false;
   let firstTokenAt: string | null = null;
   let firstAudioAt: string | null = null;
   let usedTools = false;
+  let streamedReplyText = "";
   const spokenChunks: string[] = [];
+
+  const audioConsumer = ttsSessionPromise.then(async (session) => {
+    try {
+      for await (const chunk of session.chunks) {
+        if (input.signal?.aborted) {
+          await session.interrupt("User interrupted.");
+          break;
+        }
+        if (!firstAudioAt) firstAudioAt = new Date().toISOString();
+        await input.emit({
+          type: "employee.audio.delta",
+          audio: Buffer.from(chunk.bytes).toString("base64"),
+          sequence: audioSequence++,
+          mimeType: chunk.mimeType,
+          sampleRate: chunk.sampleRate,
+          channels: chunk.channels,
+        });
+        if (speechStateStarted) {
+          await input.emit({
+            type: "state.changed",
+            turn: "speaking",
+            activity: "speaking",
+          });
+          speechStateStarted = false;
+        }
+      }
+    } catch {
+      ttsHadFailure = true;
+    }
+  });
 
   const enqueueSpeech = (text: string) => {
     ttsChain = ttsChain.then(async () => {
-      if (input.signal?.aborted) return;
-      await input.emit({ type: "state.changed", turn: "synthesizing" });
-      const primaryRouteId =
-        input.routeContext.premiumVoiceRequested &&
-        input.routeContext.entitlements.premiumVoiceEnabled
-          ? "route_call_tts_xai"
-          : "route_tts_cosyvoice2";
+      const normalized = text.trim();
+      if (input.signal?.aborted || ttsHadFailure || !normalized) return;
+      if (!speechStateStarted && !ttsHadSuccess) {
+        speechStateStarted = true;
+        await input.emit({
+          type: "state.changed",
+          turn: "synthesizing",
+          activity: "speaking",
+        });
+      }
+      const appendedSequence = textSequence++;
+      const appendedText = `${normalized} `;
       try {
-        const session = selected.tts.openStream
-          ? await selected.tts.openStream({ text, signal: input.signal })
-          : null;
-        if (session) {
-          const sentenceAudio: Buffer[] = [];
-          let sentenceMimeType = "audio/mpeg";
-          for await (const chunk of session.chunks) {
-            if (input.signal?.aborted) {
-              await session.cancel("User interrupted.");
-              break;
-            }
-            sentenceMimeType = chunk.mimeType;
-            sentenceAudio.push(Buffer.from(chunk.bytes));
-          }
-          if (!input.signal?.aborted && sentenceAudio.length) {
-            if (!firstAudioAt) firstAudioAt = new Date().toISOString();
-            await input.emit({
-              type: "employee.audio.delta",
-              audio: Buffer.concat(sentenceAudio).toString("base64"),
-              sequence: audioSequence++,
-              mimeType: sentenceMimeType,
-            });
-          }
-        } else {
-          const result = await selected.tts.synthesize({ text, signal: input.signal });
-          if (!firstAudioAt) firstAudioAt = new Date().toISOString();
-          await input.emit({
-            type: "employee.audio.delta",
-            audio: result.bytes.toString("base64"),
-            sequence: audioSequence++,
-            mimeType: result.mimeType,
-          });
-        }
-        spokenChunks.push(text);
+        const session = await ttsSessionPromise;
+        await session.appendText(appendedText);
+        spokenChunks.push(normalized);
         ttsHadSuccess = true;
-        const routeId = primaryRouteId;
         const usage =
-          routeId === "route_call_tts_xai"
-            ? { ttsCharacters: Array.from(text).length }
-            : { ttsUtf8Bytes: Buffer.byteLength(text, "utf8") };
+          primaryRouteId === "route_call_tts_xai"
+            ? { ttsCharacters: Array.from(appendedText).length }
+            : { ttsUtf8Bytes: Buffer.byteLength(appendedText, "utf8") };
         const ledger = await recordBrainUsage({
           client: input.client,
           workspaceId: input.workspaceId,
-          idempotencyKey: `${turnId}:tts:${audioSequence}`,
+          idempotencyKey: `${turnId}:tts:text:${appendedSequence}`,
           employeeId: input.employeeId,
           userId: input.humanUserId,
           roomId: input.roomId,
           sourceType: "artifact",
-          routeId,
+          routeId: primaryRouteId,
           usage,
           status: "succeeded",
           billableToWorkspace: true,
           capability: "text_to_speech",
           workType: "call_tts",
           runtimeMode: "voice_call",
-          metadata: { callId: input.callSessionId, turnId, textCharacters: text.length },
+          metadata: {
+            callId: input.callSessionId,
+            turnId,
+            textCharacters: Array.from(appendedText).length,
+            appendedSequence,
+            voiceTier: voiceQuality,
+          },
         });
         ttsWh += ledger?.workHoursCharged ?? 0;
         await input.emit({ type: "usage.estimate", wh: sttWh + ttsWh });
@@ -416,12 +485,12 @@ export async function executeEmployeeCallTurn(input: {
         ttsHadFailure = true;
         const failedUsage =
           primaryRouteId === "route_call_tts_xai"
-            ? { ttsCharacters: Array.from(text).length }
-            : { ttsUtf8Bytes: Buffer.byteLength(text, "utf8") };
+            ? { ttsCharacters: Array.from(appendedText).length }
+            : { ttsUtf8Bytes: Buffer.byteLength(appendedText, "utf8") };
         const failedLedger = await recordBrainUsage({
           client: input.client,
           workspaceId: input.workspaceId,
-          idempotencyKey: `${turnId}:tts:failed:${audioSequence}:${primaryRouteId}`,
+          idempotencyKey: `${turnId}:tts:failed:${appendedSequence}:${primaryRouteId}`,
           employeeId: input.employeeId,
           userId: input.humanUserId,
           roomId: input.roomId,
@@ -438,56 +507,10 @@ export async function executeEmployeeCallTurn(input: {
             turnId,
             outcome: input.signal?.aborted ? "cancelled" : "failed_provider_billed",
             error: error instanceof Error ? error.message : String(error),
+            voiceTier: voiceQuality,
           },
         });
         ttsWh += failedLedger?.workHoursCharged ?? 0;
-        if (
-          !input.signal?.aborted &&
-          primaryRouteId === "route_tts_cosyvoice2" &&
-          input.routeContext.entitlements.premiumVoiceEnabled &&
-          process.env.XAI_API_KEY?.trim()
-        ) {
-          try {
-            const fallback = await new XaiTtsAdapter().synthesize({
-              text,
-              signal: input.signal,
-            });
-            if (!firstAudioAt) firstAudioAt = new Date().toISOString();
-            await input.emit({
-              type: "employee.audio.delta",
-              audio: fallback.bytes.toString("base64"),
-              sequence: audioSequence++,
-              mimeType: fallback.mimeType,
-            });
-            spokenChunks.push(text);
-            ttsHadSuccess = true;
-            const ledger = await recordBrainUsage({
-              client: input.client,
-              workspaceId: input.workspaceId,
-              idempotencyKey: `${turnId}:tts:xai-fallback:${audioSequence}`,
-              employeeId: input.employeeId,
-              userId: input.humanUserId,
-              roomId: input.roomId,
-              sourceType: "artifact",
-              routeId: "route_call_tts_xai",
-              usage: { ttsCharacters: Array.from(text).length },
-              status: "succeeded",
-              billableToWorkspace: true,
-              capability: "text_to_speech",
-              workType: "call_tts",
-              runtimeMode: "voice_call",
-              metadata: {
-                callId: input.callSessionId,
-                turnId,
-                fallbackFrom: "route_tts_cosyvoice2",
-              },
-            });
-            ttsWh += ledger?.workHoursCharged ?? 0;
-            return;
-          } catch {
-            // Text-only is the final fallback; the Brain turn remains successful.
-          }
-        }
         await input.emit({
           type: "error",
           code: "tts_failed",
@@ -500,19 +523,79 @@ export async function executeEmployeeCallTurn(input: {
 
   // Immediate spoken bridge while the Brain (and any search) starts — keeps the
   // call feeling live instead of silent for several seconds before first audio.
+  // The first provider result is cached by voice identity; cache hits incur no
+  // provider request or customer WH.
   const needsBridge =
     messageLikelyNeedsResearch(stt.text) ||
     isMetaResearchInstruction(stt.text) ||
     isAffirmativeSearchFollowUp(stt.text, ctx.room.messages, humanMessage.id);
   if (needsBridge) {
-    await input.emit({
-      type: "state.changed",
-      turn: "synthesizing",
-      activity: "searching",
+    const bridgeText = "Yeah — give me a sec, I'll pull that up.";
+    const cacheKey = bridgeClipKey({
+      routeId: primaryRouteId,
+      voice: providerVoice ?? voiceProfile.voiceIdentityKey,
+      locale: voiceProfile.locale,
+      pace: voiceProfile.pace,
+      text: bridgeText,
     });
-    enqueueSpeech("Yeah — give me a sec, I'll pull that up.");
+    ttsChain = ttsChain.then(async () => {
+      let clip = getCachedBridgeClip(cacheKey);
+      if (!clip) {
+        const generated = await selected.tts.synthesize({
+          text: bridgeText,
+          voice: providerVoice,
+          locale: voiceProfile.locale,
+          speed: voiceProfile.pace,
+          format: "mp3",
+          signal: input.signal,
+        });
+        clip = {
+          bytes: generated.bytes,
+          mimeType: generated.mimeType,
+          routeId: generated.routeId,
+        };
+        cacheBridgeClip(cacheKey, clip);
+        await recordBrainUsage({
+          client: input.client,
+          workspaceId: input.workspaceId,
+          idempotencyKey: `${turnId}:tts:bridge:${primaryRouteId}`,
+          employeeId: input.employeeId,
+          userId: input.humanUserId,
+          roomId: input.roomId,
+          sourceType: "artifact",
+          routeId: generated.routeId,
+          usage:
+            generated.routeId === "route_call_tts_xai"
+              ? { ttsCharacters: generated.characters }
+              : { ttsUtf8Bytes: generated.utf8Bytes },
+          status: "succeeded",
+          billableToWorkspace: false,
+          capability: "text_to_speech",
+          workType: "call_tts_bridge",
+          runtimeMode: "voice_call",
+          metadata: {
+            callId: input.callSessionId,
+            turnId,
+            voiceIdentityKey: voiceProfile.voiceIdentityKey,
+            cacheMiss: true,
+            treatment: "included_allowance",
+            allowanceBucket: "tts_starter",
+          },
+        });
+      }
+      if (!firstAudioAt) firstAudioAt = new Date().toISOString();
+      await input.emit({
+        type: "employee.audio.delta",
+        audio: clip.bytes.toString("base64"),
+        sequence: audioSequence++,
+        mimeType: clip.mimeType,
+      });
+    }).catch(() => undefined);
   }
 
+  const chunkTimeout = setInterval(() => {
+    for (const chunk of chunker.flushIfTimedOut()) enqueueSpeech(chunk);
+  }, Math.max(40, Math.floor(chunker.maximumWaitMs / 4)));
   let response: Awaited<ReturnType<typeof processEmployeeResponse>>;
   try {
     response = await processEmployeeResponse(
@@ -527,6 +610,7 @@ export async function executeEmployeeCallTurn(input: {
         abortSignal: input.signal,
         onReplyDelta: (delta) => {
           if (!firstTokenAt) firstTokenAt = new Date().toISOString();
+          streamedReplyText += delta;
           // Prefer audio first: enqueue TTS before mirroring text to the side
           // panel so speech leads the transcript instead of trailing it.
           for (const chunk of chunker.push(delta)) enqueueSpeech(chunk);
@@ -534,6 +618,9 @@ export async function executeEmployeeCallTurn(input: {
         },
         onActivity: (activity) => {
           if (activity === "using_tool" || activity === "searching") usedTools = true;
+          // Once voice synthesis starts, keep one coherent speaking phase
+          // instead of bouncing back to thinking between phrase deltas.
+          if (speechStateStarted || firstAudioAt) return;
           void input.emit({
             type: "state.changed",
             turn: activity === "using_tool" ? "using_tools" : "thinking",
@@ -544,6 +631,9 @@ export async function executeEmployeeCallTurn(input: {
     );
   } catch (error) {
     await ttsChain.catch(() => undefined);
+    const session = await ttsSessionPromise.catch(() => null);
+    await session?.interrupt("Brain turn failed.");
+    await audioConsumer.catch(() => undefined);
     await settleReservation(input.client, {
       reservationId: reservation.reservationId,
       workspaceId: input.workspaceId,
@@ -577,20 +667,30 @@ export async function executeEmployeeCallTurn(input: {
       },
     });
     throw error;
+  } finally {
+    clearInterval(chunkTimeout);
   }
   for (const chunk of chunker.finish()) enqueueSpeech(chunk);
   // Structured (non-stream) Brain turns — research/tool path — never call
-  // onReplyDelta, so speak the final reply here. Skip if streaming already
-  // covered the same text (or a prefix) to avoid double-speaking.
-  const alreadySpoken = spokenChunks.join(" ").trim();
+  // onReplyDelta, so speak the final reply here. Any streamed delta means the
+  // primary chunker owns the complete reply, including its final tail.
   const finalReply = response.reply.trim();
-  const streamedPrefix = finalReply.slice(0, Math.min(40, finalReply.length));
-  if (finalReply && !(streamedPrefix && alreadySpoken.includes(streamedPrefix))) {
+  if (finalReply && !streamedReplyText.trim()) {
     const late = new SpeechChunker();
     for (const chunk of late.push(finalReply)) enqueueSpeech(chunk);
     for (const chunk of late.finish()) enqueueSpeech(chunk);
   }
   await ttsChain;
+  const ttsSession = await ttsSessionPromise.catch(() => null);
+  if (ttsSession) {
+    if (input.signal?.aborted) {
+      await ttsSession.interrupt("User interrupted.");
+    } else {
+      await ttsSession.flush();
+    }
+  }
+  await audioConsumer.catch(() => undefined);
+  await ttsSession?.close();
   await input.emit({ type: "employee.text.final", text: response.reply });
   await input.emit({ type: "employee.audio.end" });
 
@@ -674,11 +774,7 @@ export async function executeEmployeeCallTurn(input: {
       unspoken_text: unspokenText,
       interrupted,
       interrupted_at_character: interrupted ? spokenText.length : null,
-      tts_route_id:
-        input.routeContext.premiumVoiceRequested &&
-        input.routeContext.entitlements.premiumVoiceEnabled
-          ? "route_call_tts_xai"
-          : "route_tts_cosyvoice2",
+      tts_route_id: primaryRouteId,
       agent_run_id: response.agentRunId ?? null,
       stt_wh: sttWh,
       brain_wh: brainWh,

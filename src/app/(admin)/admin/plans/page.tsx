@@ -82,12 +82,61 @@ type EditableState = {
   admin_controls_enabled: boolean;
   priority_support: boolean;
   allowed_intelligence_tiers: string[];
+  monthly_live_call_minutes: number | null;
+  standard_tts_internal_usd_per_call: number;
+  standard_tts_treatment: "internal_only" | "platform_absorbed" | "customer_charged";
+  premium_tts_treatment: "internal_only" | "platform_absorbed" | "customer_charged";
+  stt_treatment: "internal_only" | "platform_absorbed" | "customer_charged";
+  transcript_included: boolean;
+  captions_included: boolean;
   entitlements_json: string;
 };
 
 function bytesToGb(bytes: number | null): number | null {
   if (bytes == null || bytes <= 0) return null;
   return Math.round((bytes / BYTES_PER_GB) * 100) / 100;
+}
+
+function voiceEntitlements(plan: PlanRow) {
+  const voice =
+    plan.entitlements?.voice && typeof plan.entitlements.voice === "object"
+      ? (plan.entitlements.voice as Record<string, unknown>)
+      : {};
+  const launchDefault =
+    plan.plan_slug === "enterprise"
+      ? null
+      : ({ free: 0, pro: 120, team: 500, business: 2000 } as Record<string, number>)[
+          plan.plan_slug
+        ] ?? 0;
+  const treatment = (
+    value: unknown,
+    fallback: "internal_only" | "platform_absorbed" | "customer_charged",
+  ) =>
+    value === "internal_only" ||
+    value === "platform_absorbed" ||
+    value === "customer_charged"
+      ? value
+      : fallback;
+  return {
+    monthly_live_call_minutes:
+      voice.monthly_live_call_minutes === null
+        ? null
+        : Number(voice.monthly_live_call_minutes ?? launchDefault),
+    standard_tts_internal_usd_per_call: Number(
+      voice.standard_tts_internal_usd_per_call ?? 0.02,
+    ),
+    standard_tts_treatment: treatment(
+      voice.standard_tts_treatment,
+      "platform_absorbed",
+    ),
+    premium_tts_treatment: treatment(
+      voice.premium_tts_treatment,
+      "customer_charged",
+    ),
+    stt_treatment: treatment(voice.stt_treatment, "platform_absorbed"),
+    transcript_included: voice.transcript_included !== false,
+    captions_included: voice.captions_included !== false,
+  };
 }
 
 const TABS = [
@@ -197,6 +246,7 @@ export default function AdminPlansPage() {
       admin_controls_enabled: plan.admin_controls_enabled,
       priority_support: plan.priority_support,
       allowed_intelligence_tiers: [...(plan.allowed_intelligence_tiers ?? [])],
+      ...voiceEntitlements(plan),
       entitlements_json: JSON.stringify(plan.entitlements ?? {}, null, 2),
     });
   };
@@ -334,7 +384,24 @@ export default function AdminPlansPage() {
       if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
         throw new Error("Entitlements must be a JSON object.");
       }
-      entitlements = parsed as Record<string, unknown>;
+      entitlements = {
+        ...(parsed as Record<string, unknown>),
+        voice: {
+          ...((parsed as Record<string, unknown>).voice &&
+          typeof (parsed as Record<string, unknown>).voice === "object"
+            ? ((parsed as Record<string, unknown>).voice as Record<string, unknown>)
+            : {}),
+          monthly_live_call_minutes: form.monthly_live_call_minutes,
+          standard_tts_internal_usd_per_call:
+            form.standard_tts_internal_usd_per_call,
+          standard_tts_customer_wh_per_call: 0,
+          standard_tts_treatment: form.standard_tts_treatment,
+          premium_tts_treatment: form.premium_tts_treatment,
+          stt_treatment: form.stt_treatment,
+          transcript_included: form.transcript_included,
+          captions_included: form.captions_included,
+        },
+      };
     } catch (err) {
       setSaveError(
         err instanceof Error
@@ -555,6 +622,12 @@ export default function AdminPlansPage() {
                     <li>
                       AI employees:{" "}
                       {plan.ai_employees_unlimited ? "unlimited" : plan.max_ai_employees ?? "—"}
+                    </li>
+                    <li>
+                      Live calls:{" "}
+                      {voiceEntitlements(plan).monthly_live_call_minutes == null
+                        ? "contracted"
+                        : `${voiceEntitlements(plan).monthly_live_call_minutes} min / month`}
                     </li>
                     <li>
                       Catalog v{plan.catalogVersion ?? "—"} ·{" "}
@@ -898,6 +971,71 @@ export default function AdminPlansPage() {
                 </div>
               </Section>
 
+              <Section
+                title="Voice economics & entitlements"
+                hint="Call minutes are per session (not per AI). Standard TTS starter COGS is provider-neutral and customer WH stays zero."
+              >
+                <div className="grid grid-cols-2 gap-4 rounded-xl border border-border-2 p-4">
+                  <Field label="Monthly live-call minutes (blank = contracted)">
+                    <NullableNumberInput
+                      value={form.monthly_live_call_minutes}
+                      onChange={(v) =>
+                        setForm({ ...form, monthly_live_call_minutes: v })
+                      }
+                    />
+                  </Field>
+                  <Field label="Standard TTS included USD / call">
+                    <NumberInput
+                      value={form.standard_tts_internal_usd_per_call}
+                      onChange={(v) =>
+                        setForm({
+                          ...form,
+                          standard_tts_internal_usd_per_call: Math.max(0, v),
+                        })
+                      }
+                    />
+                  </Field>
+                  <Field label="Standard TTS treatment">
+                    <VoiceTreatmentSelect
+                      value={form.standard_tts_treatment}
+                      onChange={(v) =>
+                        setForm({ ...form, standard_tts_treatment: v })
+                      }
+                    />
+                  </Field>
+                  <Field label="Premium TTS treatment">
+                    <VoiceTreatmentSelect
+                      value={form.premium_tts_treatment}
+                      onChange={(v) =>
+                        setForm({ ...form, premium_tts_treatment: v })
+                      }
+                    />
+                  </Field>
+                  <Field label="Speech-to-text treatment">
+                    <VoiceTreatmentSelect
+                      value={form.stt_treatment}
+                      onChange={(v) => setForm({ ...form, stt_treatment: v })}
+                    />
+                  </Field>
+                  <div className="space-y-3">
+                    <ToggleRow
+                      label="Transcript included"
+                      checked={form.transcript_included}
+                      onChange={(v) =>
+                        setForm({ ...form, transcript_included: v })
+                      }
+                    />
+                    <ToggleRow
+                      label="Captions included"
+                      checked={form.captions_included}
+                      onChange={(v) =>
+                        setForm({ ...form, captions_included: v })
+                      }
+                    />
+                  </div>
+                </div>
+              </Section>
+
               <Section title="Allowed intelligence tiers">
                 <div className="flex flex-wrap gap-2">
                   {INTELLIGENCE_TIERS.map((tier) => {
@@ -1073,5 +1211,27 @@ function ToggleRow({
       <span className="text-sm text-ink-2">{label}</span>
       <Toggle checked={checked} onChange={onChange} />
     </div>
+  );
+}
+
+type VoiceTreatment = "internal_only" | "platform_absorbed" | "customer_charged";
+
+function VoiceTreatmentSelect({
+  value,
+  onChange,
+}: {
+  value: VoiceTreatment;
+  onChange: (value: VoiceTreatment) => void;
+}) {
+  return (
+    <select
+      value={value}
+      onChange={(event) => onChange(event.target.value as VoiceTreatment)}
+      className="h-10 w-full rounded-xl border border-border bg-surface px-3 text-sm text-ink"
+    >
+      <option value="internal_only">Internal only</option>
+      <option value="platform_absorbed">Platform absorbed</option>
+      <option value="customer_charged">Customer charged</option>
+    </select>
   );
 }

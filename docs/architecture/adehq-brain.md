@@ -5,7 +5,7 @@
 > **PR-17.5 Brain Reliability Foundation** landed (lifecycle, envelopes, idempotency, cancel, retry, circuit breakers).  
 > **PR-19 Steward shadow** landed: typed `CollaborationPlan` + validation + golden scenarios; `ADEHQ_BRAIN_STEWARD_SHADOW=1` plans only.  
 > **PR-19 Steward execution** landed behind `ADEHQ_BRAIN_STEWARD_V1=1`: work leases, shared findings, DAG advance, progress UI, WH caps/receipts, cancel/fail handling.  
-> **PR-18 Voice** landed behind `ADEHQ_BRAIN_VOICE_V1=1` (+ `NEXT_PUBLIC_ADEHQ_BRAIN_VOICE_V1=1` for UI): STT/TTS routes, voice notes, Listen, async meetings, private `adehq-audio`, metering. CATALOG_VERSION=7.  
+> **PR-18 Voice** landed behind `ADEHQ_BRAIN_VOICE_V1=1` (+ `NEXT_PUBLIC_ADEHQ_BRAIN_VOICE_V1=1` for UI): STT/TTS routes, voice notes, Listen, async meetings, private `adehq-audio`, metering. Realtime xAI/Fish call routes advance CATALOG_VERSION=8.
 > Release baseline: `/api/build-info` + `npm run verify:release`.  
 > Last grounded against the codebase 2026-07-17.
 
@@ -467,7 +467,18 @@ AudioWorklet + browser VAD
 - Groq usage applies the ten-second minimum to every request. Calls send exactly
   one request per completed utterance.
 - `live_streaming` is a separate adapter mode reserved for a true streaming STT
-  provider. Groq remains a final retry route there.
+  provider. The call socket opens one xAI stream per transport connection,
+  forwards only locally detected active speech (200 ms pre-roll plus at most
+  800 ms Smart Turn/VAD trailing silence), emits provider partials, and asks the
+  provider for a final only when the client commits the turn. That final is
+  passed into the employee turn directly; it is not batch-transcribed again.
+  Raw PCM remains transiently buffered for consented recording and Groq batch
+  repair when the stream cannot open, append, finalize, or return a final in
+  time.
+- Streaming routing is provider-neutral at the contract boundary. xAI is the
+  only active managed route; `deepgram` and `moonshine` may be declared as
+  shadow candidates for benchmark/configuration visibility, but no production
+  provider calls are made for those shadow declarations.
 - Call sessions and finalized turns are durable in Supabase. Audio frames,
   listening activity, and provider streams are transient. Raw audio is stored
   only after explicit recording consent.
@@ -475,8 +486,9 @@ AudioWorklet + browser VAD
   types for later multi-party calling.
 - The transport is abstracted behind `CallTransport`; V1 uses Vercel Function
   WebSockets with reconnect tokens and external state.
-- STT, Brain, and TTS settle independently. Failed and interrupted provider work
-  records actual incurred cost; goodwill waivers are separate ledger entries.
+- STT, Brain, and TTS settle independently. STT/media provider cost is
+  platform-absorbed and never consumes customer Work Hours. Failed and
+  interrupted provider work still records actual incurred platform cost.
 - Echo cancellation, noise suppression, sustained-speech barge-in, playback
   ducking, and post-playback suppression prevent employees from hearing themselves.
 

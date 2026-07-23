@@ -29,6 +29,7 @@ import { cn } from "@/lib/utils";
 import { RealtimeBrainCallRoom } from "./RealtimeBrainCallRoom";
 import { HumanCallRoom } from "./HumanCallRoom";
 import { useCallNotifications } from "./IncomingCallProvider";
+import { EmployeeVoiceSettings } from "./EmployeeVoiceSettings";
 
 type ActiveCall =
   | { type: "ai"; room: ProjectRoom; employee: AIEmployee; premium: boolean }
@@ -42,6 +43,25 @@ type CallMetrics = {
   averageTimeToAcceptMs: number | null;
   averageTimeToFirstAudioMs: number | null;
 };
+
+type BrainCallReceipt = {
+  id: string;
+  title: string;
+  status: string;
+  durationSeconds: number | null;
+  liveCallMinutes: number;
+  aiWorkHours: number;
+  transcriptIncluded: boolean;
+  captionsIncluded: boolean;
+  createdAt: string;
+};
+
+function formatCallDuration(seconds: number | null): string {
+  if (seconds == null) return "—";
+  const minutes = Math.floor(seconds / 60);
+  const remainder = String(seconds % 60).padStart(2, "0");
+  return `${minutes}:${remainder}`;
+}
 
 function RealtimeCallsInner() {
   const { state, actions } = useStore();
@@ -60,6 +80,7 @@ function RealtimeCallsInner() {
   );
   const [active, setActive] = useState<ActiveCall | null>(null);
   const [history, setHistory] = useState<CallSessionSummary[]>([]);
+  const [brainHistory, setBrainHistory] = useState<BrainCallReceipt[]>([]);
   const [startingHumanId, setStartingHumanId] = useState<string | null>(null);
   const [metrics, setMetrics] = useState<CallMetrics | null>(null);
   const [callEntitlements, setCallEntitlements] = useState<HumanCallEntitlements | null>(null);
@@ -92,10 +113,13 @@ function RealtimeCallsInner() {
   async function refreshHistory() {
     if (!state.workspace.id) return;
     try {
-      const response = await fetch("/api/calls", {
-        headers: await authHeaders(state.workspace.id),
-        cache: "no-store",
-      });
+      const headers = await authHeaders(state.workspace.id);
+      const [response, brainResponse] = await Promise.all([
+        fetch("/api/calls", { headers, cache: "no-store" }),
+        LIVE_BRAIN_CALLS_ENABLED
+          ? fetch("/api/calls/live/session", { headers, cache: "no-store" })
+          : Promise.resolve(null),
+      ]);
       if (response.ok) {
         const body = (await response.json()) as {
           calls?: CallSessionSummary[];
@@ -103,6 +127,10 @@ function RealtimeCallsInner() {
         };
         setHistory(body.calls ?? []);
         setCallEntitlements(body.entitlements ?? null);
+      }
+      if (brainResponse?.ok) {
+        const body = (await brainResponse.json()) as { calls?: BrainCallReceipt[] };
+        setBrainHistory(body.calls ?? []);
       }
     } catch {
       // The AI call surface remains usable when human calls are not yet migrated.
@@ -447,17 +475,39 @@ function RealtimeCallsInner() {
         )}
       </section>
 
-      {history.length ? (
+      {history.length || brainHistory.length ? (
         <section className="mt-8">
           <div className="mb-2 flex items-center gap-2">
             <History className="h-4 w-4 text-ink-3" />
             <h2 className="text-sm font-semibold text-ink">Recent calls</h2>
           </div>
           <div className="divide-y divide-border border-y border-border">
+            {brainHistory.slice(0, 12).map((item) => (
+              <div key={item.id} className="flex w-full items-center gap-3 py-3 text-left">
+                <Bot className="h-4 w-4 text-ink-3" />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm text-ink">{item.title}</span>
+                  <span className="block truncate text-xs text-ink-3">
+                    {formatCallDuration(item.durationSeconds)} · {item.aiWorkHours.toFixed(3)} AI WH
+                    {item.transcriptIncluded ? " · transcript included" : ""}
+                    {item.captionsIncluded ? " · captions included" : ""}
+                  </span>
+                </span>
+                <span className="text-xs capitalize text-ink-3">{item.status}</span>
+                <time className="text-xs text-ink-3">{new Date(item.createdAt).toLocaleDateString()}</time>
+              </div>
+            ))}
             {history.slice(0, 12).map((item) => (
               <button key={item.id} type="button" onClick={() => setActive({ type: "human", call: item })} className="flex w-full items-center gap-3 py-3 text-left">
                 <Phone className="h-4 w-4 text-ink-3" />
-                <span className="min-w-0 flex-1 truncate text-sm text-ink">{item.title}</span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm text-ink">{item.title}</span>
+                  <span className="block truncate text-xs text-ink-3">
+                    {formatCallDuration(item.durationSeconds)} · {item.aiWorkHours.toFixed(3)} AI WH
+                    {item.transcriptIncluded ? " · transcript included" : ""}
+                    {item.captionsIncluded ? " · captions included" : ""}
+                  </span>
+                </span>
                 <span className={cn("text-xs capitalize", item.status === "active" ? "text-success" : "text-ink-3")}>{item.status}</span>
                 <time className="text-xs text-ink-3">{new Date(item.createdAt).toLocaleDateString()}</time>
               </button>
@@ -539,6 +589,12 @@ function RealtimeCallsInner() {
               })}
             </div>
           </div>
+          {selectedEmployee && (
+            <EmployeeVoiceSettings
+              workspaceId={state.workspace.id}
+              employeeId={selectedEmployee.id}
+            />
+          )}
         </div>
         <div className="flex justify-end gap-2 border-t border-border px-5 py-4">
           <Button variant="ghost" onClick={() => setSetupOpen(false)}>Cancel</Button>

@@ -27,10 +27,22 @@ export const STT_INTENT_LABEL: Record<SttIntent, string> = {
 
 export type EmployeeVoiceProfile = {
   voiceEnabled: boolean;
-  voiceStyle: "professional" | "warm" | "energetic" | "calm";
-  locale?: string;
-  speakingRate?: number;
+  /** Stable AdeHQ identity. Provider bindings may rotate independently. */
+  voiceIdentityKey: string;
+  locale: string;
+  accent?: string;
+  tone: "professional" | "warm" | "energetic" | "calm" | "direct" | "thoughtful";
+  pace: number;
+  routePreference: "auto" | "standard" | "premium" | "local";
+  providerBindings: Array<{
+    provider: string;
+    voiceId: string;
+    qualityTier: "standard" | "premium" | "local";
+  }>;
   premiumVoiceAllowed: boolean;
+  /** Legacy read compatibility; new writes use tone / pace. */
+  voiceStyle?: "professional" | "warm" | "energetic" | "calm";
+  speakingRate?: number;
 };
 
 export type WorkspaceVoiceSettings = {
@@ -99,7 +111,7 @@ export type TranscribeRequest = {
 export type SynthesizeRequest = {
   intent: TtsIntent;
   text: string;
-  voiceStyle?: EmployeeVoiceProfile["voiceStyle"];
+  voiceStyle?: EmployeeVoiceProfile["tone"];
   locale?: string;
   speakingRate?: number;
   confirmed?: boolean;

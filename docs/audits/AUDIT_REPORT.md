@@ -646,6 +646,31 @@ citation/quality tests, and AI caller audit pass. Integration core/permission
 test files still contain pre-existing assertions for removed legacy workspace
 roles and the old hidden-locked-tool prompt behavior.
 
+## Session 2026-07-23 — PR-18.2E voice billing economics
+
+- Added service-only monthly live-call periods and a voice economics ledger with
+  explicit internal COGS, platform-absorbed subsidy, and customer-charge fields.
+- Verified launch allowances and treatment invariants with
+  `npm run test:voice-billing`.
+- Existing `npm run test:brain:voice` and `npm run test:calls:human` suites pass.
+- `npx tsc --noEmit` reaches only three pre-existing voice-worker test fixture
+  errors where mocked `ProcessEnv` objects omit required `NODE_ENV`; no new
+  application TypeScript errors were reported.
+- `supabase migration list --local` could not connect because no local Postgres
+  instance was running. No database push or deployment was attempted.
+
+## Session 2026-07-23 — PR-18.2D whole-pipeline voice benchmark
+
+- Added a deterministic multilingual harness for the managed and self-hosted
+  TTS/STT candidate matrix. It measures client-observed phrase readiness, first
+  decodable audio, playback-ready estimate, complete response, full STT→TTS
+  elapsed time, cost inputs, and bounded concurrency throughput.
+- JSON, CSV, complete blind-named audio, and a listener score sheet are retained.
+  Missing credentials, endpoints, fixture recordings, and rates produce explicit
+  skipped/unpriced rows; no provider result is synthesized.
+- Added an isolated no-credentials contract and operational/decision-gate
+  documentation. No live provider benchmark was claimed in this change.
+
 ## Log
 
 | 2026-07-10 | Hire AI Employee wizard: typed "I need a leasing agent who can screen tenant applicants, answer prospective tenant questions, and schedule property tours" on Step 1 (Role) | Maya proposes real-estate-relevant role(s), e.g. "Leasing Agent" / "Property Manager", and Job Brief step 4 reflects tenant screening, tour scheduling | Step 2 (Context): Maya suggested generic SaaS-startup roles — "Software Engineer, Executive Assistant, Sales Development Rep" — none matching a leasing/property role. Follow-up quick-reply chips were "Daily operations / Customer support / Data analysis / Process automation," again generic. The live-updating "Draft Job Brief" panel showed title **"AI Employee"**, department **"General business"**, and mission **"Help the team succeed as a ai employee in general business."** — completely generic, dropped all my specifics (leasing, tenants, tours), and contains a grammar bug ("as a ai employee" instead of "an AI employee"). | **Critical / Important** (bug: grammar+data-loss is Important; the vertical-blindness is a Critical product-market gap for a real estate customer) | Role-parsing/classification step likely maps free text against a fixed catalog of SaaS/startup role templates (Software Engineer, SDR, EA, etc.) with no real-estate-specific roles (Leasing Agent, Property Manager, Listing Agent, Transaction Coordinator) and a weak fallback that discards the original input instead of using it verbatim in the mission field | Add a "custom/other" path that keeps the user's literal input verbatim in the mission when no catalog role matches well enough, add real-estate role templates, fix the "a ai employee" grammar bug, and use an article-aware template ("an {role}" not "a {role}") | Open | This is the single most damaging finding so far for the real-estate persona specifically: the CEO in this scenario is being funneled toward hiring a generic "AI Employee" instead of a Leasing Agent, on the platform's flagship "hire a teammate in minutes" flow. First impressions of the hiring wizard (UI, step design, live-updating brief) are excellent — the content generation is the weak link. |

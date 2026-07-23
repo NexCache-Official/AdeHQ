@@ -198,7 +198,18 @@ export const POST = adminRoute(async (request, { admin, serviceClient }) => {
     admin_controls_enabled: false,
     priority_support: false,
     allowed_intelligence_tiers: ["cheap", "balanced"],
-    entitlements: {},
+    entitlements: {
+      voice: {
+        monthly_live_call_minutes: 0,
+        standard_tts_internal_usd_per_call: 0.02,
+        standard_tts_customer_wh_per_call: 0,
+        standard_tts_treatment: "platform_absorbed",
+        premium_tts_treatment: "customer_charged",
+        stt_treatment: "platform_absorbed",
+        transcript_included: true,
+        captions_included: true,
+      },
+    },
   };
 
   if (sourceSlug) {

@@ -7,13 +7,17 @@ import {
 import { NextRequest, NextResponse } from "next/server";
 import { createSupabaseSecretClient } from "@/lib/supabase/server";
 import {
+  buildCallVocabulary,
   executeEmployeeCallTurn,
   resolveLiveCallEntitlements,
+  selectSpeechRoutes,
   setCallSessionState,
   SupabaseCallTransientCoordinator,
   verifyCallSessionToken,
   type ClientCallEvent,
+  type FinalTranscript,
   type ServerCallEvent,
+  type StreamingTranscriptionSession,
 } from "@/lib/brain/voice";
 
 export const runtime = "nodejs";
@@ -125,11 +129,55 @@ export async function GET(request: NextRequest) {
       let turnChain = Promise.resolve();
       let turnAbort: AbortController | null = null;
       let idleTimeout: ReturnType<typeof setTimeout> | null = null;
+      const streamingEnabled = call.stt_mode === "live_streaming";
+      const streamAbort = new AbortController();
+      let streamingSession: StreamingTranscriptionSession | null = null;
+      let streamingFailure: Error | null = null;
+      let streamAppendChain = Promise.resolve();
+      const streamingFinals: FinalTranscript[] = [];
+      const streamingWaiters: Array<{
+        resolve: (transcript: FinalTranscript) => void;
+        reject: (error: Error) => void;
+        timeout: ReturnType<typeof setTimeout>;
+      }> = [];
+
+      const failStreaming = (error: unknown) => {
+        if (streamingFailure) return;
+        streamingFailure =
+          error instanceof Error ? error : new Error(String(error));
+        for (const waiter of streamingWaiters.splice(0)) {
+          clearTimeout(waiter.timeout);
+          waiter.reject(streamingFailure);
+        }
+      };
+      const disableStreaming = (reason: string) => {
+        failStreaming(new Error(reason));
+        void streamingSession?.close().catch(() => undefined);
+      };
+      const awaitStreamingFinal = async (): Promise<FinalTranscript> => {
+        const queued = streamingFinals.shift();
+        if (queued) return queued;
+        if (streamingFailure) throw streamingFailure;
+        return new Promise<FinalTranscript>((resolve, reject) => {
+          const waiter = {
+            resolve,
+            reject,
+            timeout: setTimeout(() => {
+              const index = streamingWaiters.indexOf(waiter);
+              if (index >= 0) streamingWaiters.splice(index, 1);
+              reject(new Error("Streaming STT final transcript timed out."));
+            }, 6_000),
+          };
+          streamingWaiters.push(waiter);
+        });
+      };
 
       const closeExpiredCall = (message: string) => {
         if (closed) return;
         closed = true;
         turnAbort?.abort(new Error(message));
+        streamAbort.abort(new Error(message));
+        void streamingSession?.close().catch(() => undefined);
         send(ws, {
           type: "error",
           code: "call_limit_reached",
@@ -149,6 +197,60 @@ export async function GET(request: NextRequest) {
           entitlements.maxIdleMinutes * 60_000,
         );
       };
+
+      if (streamingEnabled) {
+        try {
+          const vocabularyPrompt = await buildCallVocabulary(orchestrationClient, {
+            workspaceId: payload.workspaceId,
+            conversationId: String(call.room_id),
+            humanUserId,
+            employeeId: String(call.primary_employee_id),
+          });
+          const selected = selectSpeechRoutes({
+            callMode: "live_streaming",
+            truePartialsRequired: true,
+            premiumVoiceRequested: call.voice_route_policy === "premium",
+            entitlements,
+          });
+          if (!selected.stt.openStream) {
+            throw new Error("Selected streaming STT route cannot open a stream.");
+          }
+          const openedSession = await selected.stt.openStream({
+            workspaceId: payload.workspaceId,
+            conversationId: String(call.room_id),
+            humanUserId,
+            employeeId: String(call.primary_employee_id),
+            vocabularyPrompt,
+            signal: streamAbort.signal,
+          });
+          streamingSession = openedSession;
+          void (async () => {
+            try {
+              for await (const transcriptEvent of openedSession.events) {
+                if (transcriptEvent.type === "partial") {
+                  send(ws, {
+                    type: "transcript.partial",
+                    text: transcriptEvent.text,
+                    source: "streaming_stt",
+                  });
+                  continue;
+                }
+                const waiter = streamingWaiters.shift();
+                if (waiter) {
+                  clearTimeout(waiter.timeout);
+                  waiter.resolve(transcriptEvent.transcript);
+                } else {
+                  streamingFinals.push(transcriptEvent.transcript);
+                }
+              }
+            } catch (streamError) {
+              failStreaming(streamError);
+            }
+          })();
+        } catch (streamError) {
+          failStreaming(streamError);
+        }
+      }
 
       await coordinator.claim(payload.callId, connectionId, 45);
       await setCallSessionState(orchestrationClient, {
@@ -201,10 +303,19 @@ export async function GET(request: NextRequest) {
             });
             frames = [];
             frameBytes = 0;
+            if (streamingEnabled) {
+              disableStreaming("Streaming STT stopped after the audio limit.");
+            }
             return;
           }
           frames.push(chunk);
           frameBytes += chunk.length;
+          if (streamingSession && !streamingFailure) {
+            const activeSession = streamingSession;
+            streamAppendChain = streamAppendChain
+              .then(() => activeSession.append(chunk))
+              .catch((streamError) => failStreaming(streamError));
+          }
           return;
         }
 
@@ -233,6 +344,45 @@ export async function GET(request: NextRequest) {
                     bytes: utterance.byteLength,
                   });
                 }
+                let finalTranscript: FinalTranscript | undefined;
+                let effectiveCallMode: "fast_turn" | "live_streaming" =
+                  streamingEnabled ? "live_streaming" : "fast_turn";
+                if (streamingEnabled) {
+                  try {
+                    await streamAppendChain;
+                    if (!streamingSession || streamingFailure) {
+                      throw (
+                        streamingFailure ??
+                        new Error("Streaming STT session is unavailable.")
+                      );
+                    }
+                    await streamingSession.commit();
+                    finalTranscript = await awaitStreamingFinal();
+                    // The browser's Smart Turn boundary is authoritative for
+                    // the utterance duration, independent of provider timing.
+                    finalTranscript = {
+                      ...finalTranscript,
+                      actualAudioSeconds: Math.max(0.1, event.durationSeconds),
+                    };
+                  } catch (streamError) {
+                    effectiveCallMode = "fast_turn";
+                    disableStreaming(
+                      streamError instanceof Error
+                        ? streamError.message
+                        : "Streaming STT failed.",
+                    );
+                    if (callDebugEnabled()) {
+                      console.warn("[AdeHQ live-call] streaming STT repair", {
+                        callId: payload.callId,
+                        sequence: turnSequence,
+                        error:
+                          streamError instanceof Error
+                            ? streamError.message
+                            : String(streamError),
+                      });
+                    }
+                  }
+                }
                 await executeEmployeeCallTurn({
                   client: orchestrationClient,
                   workspaceId: payload.workspaceId,
@@ -244,10 +394,11 @@ export async function GET(request: NextRequest) {
                   pcm16: utterance,
                   durationSeconds: Math.max(0.1, event.durationSeconds),
                   routeContext: {
-                    callMode: "fast_turn",
+                    callMode: effectiveCallMode,
                     premiumVoiceRequested: call.voice_route_policy === "premium",
                     entitlements,
                   },
+                  finalTranscript,
                   saveRecording: Boolean(recordingState?.recording_consent_at),
                   emit: (outgoing) => {
                     if (
@@ -328,8 +479,12 @@ export async function GET(request: NextRequest) {
         if (event.type === "mute") {
           muted = event.muted;
           if (muted) {
+            const hadBufferedAudio = frameBytes > 0;
             frames = [];
             frameBytes = 0;
+            if (hadBufferedAudio && streamingEnabled && streamingSession) {
+              disableStreaming("Streaming STT stopped after input was muted.");
+            }
           }
           return;
         }
@@ -338,6 +493,8 @@ export async function GET(request: NextRequest) {
           if (idleTimeout) clearTimeout(idleTimeout);
           clearTimeout(durationTimeout);
           turnAbort?.abort(new Error("Call ended."));
+          streamAbort.abort(new Error("Call ended."));
+          void streamingSession?.close().catch(() => undefined);
           void setCallSessionState(orchestrationClient, {
             workspaceId: payload.workspaceId,
             callId: payload.callId,
@@ -351,6 +508,8 @@ export async function GET(request: NextRequest) {
         if (idleTimeout) clearTimeout(idleTimeout);
         clearTimeout(durationTimeout);
         turnAbort?.abort(new Error("Call transport disconnected."));
+        streamAbort.abort(new Error("Call transport disconnected."));
+        void streamingSession?.close().catch(() => undefined);
         if (!closed) {
           void setCallSessionState(orchestrationClient, {
             workspaceId: payload.workspaceId,

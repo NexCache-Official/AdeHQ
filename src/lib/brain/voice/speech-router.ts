@@ -1,14 +1,18 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
+  FishAudioTtsAdapter,
   GroqWhisperAdapter,
   SiliconFlowStreamingTtsAdapter,
   XaiTtsAdapter,
 } from "./live-adapters";
+import { XaiStreamingSttAdapter } from "./xai-streaming-stt";
+import { resolveStreamingSttRoutes } from "./live-stt-config";
 import type {
   CallSttMode,
   LiveCallEntitlements,
   SpeechToTextAdapter,
   TextToSpeechAdapter,
+  LiveTtsRouteId,
 } from "./live-types";
 
 export type SpeechRouteContext = {
@@ -27,27 +31,50 @@ export type SpeechRouteSelection = {
   tts: TextToSpeechAdapter;
   sttMemberLabel: "Fast transcription" | "Live captions" | "Accurate transcription";
   ttsMemberLabel: "Standard voice" | "Premium voice";
+  ttsRouteId: LiveTtsRouteId;
 };
 
 export function selectSpeechRoutes(context: SpeechRouteContext): SpeechRouteSelection {
-  if (context.truePartialsRequired || context.callMode === "live_streaming") {
-    throw new Error(
-      "Live captions require a configured true-streaming STT adapter; Groq cannot provide partials.",
-    );
-  }
-
   const accurate =
     context.lowConfidence || (context.previousTranscriptionFailures ?? 0) > 0;
   const premium =
     context.premiumVoiceRequested && context.entitlements.premiumVoiceEnabled;
+  const standardProvider = (
+    process.env.ADEHQ_LIVE_TTS_STANDARD_PROVIDER ?? "xai"
+  ).toLowerCase();
+  const useXaiTts =
+    premium ||
+    (standardProvider === "xai" && Boolean(process.env.XAI_API_KEY?.trim()));
+  const useFishTts =
+    !premium &&
+    standardProvider === "fish" &&
+    Boolean(process.env.FISH_AUDIO_API_KEY?.trim());
+  const liveStt =
+    context.truePartialsRequired || context.callMode === "live_streaming";
+  if (liveStt) resolveStreamingSttRoutes();
 
   return {
-    stt: new GroqWhisperAdapter(
-      accurate ? "whisper-large-v3" : "whisper-large-v3-turbo",
-    ),
-    tts: premium ? new XaiTtsAdapter() : new SiliconFlowStreamingTtsAdapter(),
-    sttMemberLabel: accurate ? "Accurate transcription" : "Fast transcription",
+    stt: liveStt
+      ? new XaiStreamingSttAdapter()
+      : new GroqWhisperAdapter(
+          accurate ? "whisper-large-v3" : "whisper-large-v3-turbo",
+        ),
+    tts: useXaiTts
+      ? new XaiTtsAdapter()
+      : useFishTts
+        ? new FishAudioTtsAdapter()
+        : new SiliconFlowStreamingTtsAdapter(),
+    sttMemberLabel: liveStt
+      ? "Live captions"
+      : accurate
+        ? "Accurate transcription"
+        : "Fast transcription",
     ttsMemberLabel: premium ? "Premium voice" : "Standard voice",
+    ttsRouteId: useXaiTts
+      ? "route_call_tts_xai"
+      : useFishTts
+        ? "route_call_tts_fish"
+        : "route_tts_cosyvoice2",
   };
 }
 

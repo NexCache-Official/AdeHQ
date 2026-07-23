@@ -5,6 +5,10 @@ import { isMayaEmployee } from "@/lib/maya-employee";
 import { ensureGeneralTopic } from "@/lib/server/topic-helpers";
 import { upsertWorkGraphEdge } from "@/lib/inbox/work-graph";
 import { uid } from "@/lib/utils";
+import {
+  checkMonthlyLiveCallMinutes,
+  settleHumanLiveCall,
+} from "@/lib/billing/voice/usage";
 import { resolveHumanCallEntitlements } from "./entitlements";
 import { sendIncomingCallPush } from "./push";
 import type {
@@ -65,6 +69,12 @@ function mapCall(row: Record<string, unknown>, participants: Record<string, unkn
     startedAt: row.started_at ? String(row.started_at) : null,
     answeredAt: row.answered_at ? String(row.answered_at) : null,
     endedAt: row.ended_at ? String(row.ended_at) : null,
+    durationSeconds:
+      row.duration_seconds == null ? null : Number(row.duration_seconds),
+    liveCallMinutes: Number(row.live_call_minutes ?? 0),
+    aiWorkHours: Number(row.settled_ai_work_hours ?? 0),
+    transcriptIncluded: true,
+    captionsIncluded: true,
     createdAt: String(row.created_at),
     participants: participants.map((participant) => ({
       id: String(participant.id),
@@ -231,6 +241,25 @@ export async function createHumanCall(
   if (params.video && !entitlements.videoEnabled) {
     throw new AuthError("Video calls are not enabled for this workspace.", 403);
   }
+  const { data: existing, error: existingError } = await service
+    .from("call_sessions")
+    .select("id")
+    .eq("workspace_id", params.workspaceId)
+    .eq("idempotency_key", params.idempotencyKey)
+    .maybeSingle();
+  if (existingError) throw existingError;
+  if (existing) return getCall(service, params.workspaceId, String(existing.id));
+
+  const monthlyUsage = await checkMonthlyLiveCallMinutes(
+    service,
+    params.workspaceId,
+  );
+  if (!monthlyUsage.allowed) {
+    throw new AuthError(
+      "This workspace has used its included live-call minutes for this month.",
+      429,
+    );
+  }
   const { count, error: countError } = await service
     .from("call_sessions")
     .select("id", { count: "exact", head: true })
@@ -240,15 +269,6 @@ export async function createHumanCall(
   if ((count ?? 0) >= entitlements.maxConcurrentCallsPerWorkspace) {
     throw new AuthError("This workspace has reached its concurrent call limit.", 429);
   }
-
-  const { data: existing, error: existingError } = await service
-    .from("call_sessions")
-    .select("id")
-    .eq("workspace_id", params.workspaceId)
-    .eq("idempotency_key", params.idempotencyKey)
-    .maybeSingle();
-  if (existingError) throw existingError;
-  if (existing) return getCall(service, params.workspaceId, String(existing.id));
 
   const now = new Date();
   const callId = uid("call");
@@ -397,6 +417,7 @@ export async function updateCallState(
     throw new AuthError("Call not found.", 404);
   }
   const now = new Date().toISOString();
+  const terminalEndedAt = call.endedAt ?? now;
   const patch: Record<string, unknown> = {
     status: params.status,
     last_activity_at: now,
@@ -404,7 +425,7 @@ export async function updateCallState(
   };
   if (params.status === "active") patch.started_at = call.startedAt ?? now;
   if (["ended", "declined", "cancelled", "failed"].includes(params.status)) {
-    patch.ended_at = now;
+    patch.ended_at = terminalEndedAt;
   }
   const { error } = await service
     .from("call_sessions")
@@ -467,6 +488,11 @@ export async function updateCallState(
           sessionRecordings.map((recording) => recording.id),
         );
     }
+    await settleHumanLiveCall(service, {
+      workspaceId: params.workspaceId,
+      callId: params.callId,
+      endedAt: terminalEndedAt,
+    });
   }
   await insertEvent(service, {
     workspaceId: params.workspaceId,

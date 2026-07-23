@@ -7,7 +7,11 @@ import {
   requireWorkspaceMembership,
 } from "@/lib/supabase/auth-server";
 import { createSupabaseSecretClient } from "@/lib/supabase/server";
-import { cloudflareSfuAdapter, getCall } from "@/lib/calls";
+import {
+  cloudflareSfuAdapter,
+  getCall,
+  resolveSpeakerAttribution,
+} from "@/lib/calls";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -61,6 +65,31 @@ export async function POST(
       parsed.data.tracks,
       parsed.data.sessionDescription,
     );
+    const knownTracks = call.participants.flatMap((item) =>
+      item.publishedTracks.map((track) => ({
+        participantId: item.id,
+        providerSessionId: track.sessionId ?? item.providerSessionId,
+        trackName: track.trackName,
+      })),
+    );
+    for (const track of parsed.data.tracks) {
+      if (track.location === "local") {
+        knownTracks.push({
+          participantId: participant.id,
+          providerSessionId: parsed.data.sessionId,
+          trackName: track.trackName,
+        });
+      }
+    }
+    const stewardAttribution = parsed.data.tracks.map((track) => ({
+      trackName: track.trackName,
+      ...resolveSpeakerAttribution({
+        providerSessionId:
+          track.location === "local" ? parsed.data.sessionId : track.sessionId,
+        trackName: track.trackName,
+        knownTracks,
+      }),
+    }));
     const localTracks = parsed.data.tracks.filter((track) => track.location === "local");
     if (localTracks.length) {
       const now = new Date().toISOString();
@@ -97,7 +126,7 @@ export async function POST(
         .eq("workspace_id", workspaceId)
         .eq("id", params.callId);
     }
-    return NextResponse.json(result);
+    return NextResponse.json({ ...result, stewardAttribution });
   } catch (error) {
     if (error instanceof AuthError) {
       return NextResponse.json({ error: error.message }, { status: error.status });

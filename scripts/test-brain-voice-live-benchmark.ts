@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
 import {
   GROQ_MINIMUM_BILLABLE_SECONDS,
+  LIVE_STT_MEDIA_BOUNDARY,
   SpeechChunker,
   pcm16ToWav,
+  resolveStreamingSttRoutes,
   sanitizeTextForSpeech,
   selectSpeechRoutes,
 } from "../src/lib/brain/voice";
@@ -35,26 +37,75 @@ const routes = selectSpeechRoutes({
 });
 assert.equal(routes.stt.mode, "batch_utterance");
 assert.equal(routes.tts.mode, "streaming_audio");
+const streamingRoutes = selectSpeechRoutes({
+  callMode: "live_streaming",
+  truePartialsRequired: true,
+  entitlements: proEntitlements,
+});
+assert.equal(streamingRoutes.stt.mode, "streaming");
+assert.equal(streamingRoutes.sttMemberLabel, "Live captions");
+assert.equal(LIVE_STT_MEDIA_BOUNDARY.preRollMs, 200);
+assert.equal(LIVE_STT_MEDIA_BOUNDARY.maximumTrailingSilenceMs, 800);
+assert.deepEqual(
+  resolveStreamingSttRoutes({
+    ADEHQ_LIVE_STT_PROVIDER: "xai",
+    ADEHQ_LIVE_STT_SHADOW_PROVIDERS: "deepgram,moonshine,xai",
+  } as NodeJS.ProcessEnv),
+  [
+    {
+      provider: "xai",
+      role: "active",
+      transport: "managed_websocket",
+      emitsPartials: true,
+      localTurnCommit: true,
+    },
+    {
+      provider: "deepgram",
+      role: "shadow",
+      transport: "managed_websocket",
+      emitsPartials: true,
+      localTurnCommit: true,
+    },
+    {
+      provider: "moonshine",
+      role: "shadow",
+      transport: "worker_websocket",
+      emitsPartials: true,
+      localTurnCommit: true,
+    },
+  ],
+);
 assert.throws(
   () =>
-    selectSpeechRoutes({
-      callMode: "live_streaming",
-      truePartialsRequired: true,
-      entitlements: proEntitlements,
-    }),
-  /true-streaming STT adapter/,
+    resolveStreamingSttRoutes({
+      ADEHQ_LIVE_STT_PROVIDER: "deepgram",
+    } as NodeJS.ProcessEnv),
+  /shadow-route contract only/,
 );
 
 const chunker = new SpeechChunker();
-assert.deepEqual(chunker.push("I found three major competitors."), []);
+assert.deepEqual(chunker.push("I found three major competitors."), [
+  "I found three major competitors.",
+]);
 const chunks = chunker.push(
   " The strongest is Acme because it converts mobile traffic more effectively.",
 );
 assert.deepEqual(chunks, [
-  "I found three major competitors.",
   "The strongest is Acme because it converts mobile traffic more effectively.",
 ]);
 assert.deepEqual(chunker.finish(), []);
+
+const timeoutChunker = new SpeechChunker({
+  preferredMinCharacters: 12,
+  maximumCharacters: 160,
+  maximumWaitMs: 320,
+  breakOn: [".", "!", "?"],
+});
+assert.deepEqual(timeoutChunker.push("A stable opening phrase", 1_000), []);
+assert.deepEqual(timeoutChunker.flushIfTimedOut(1_319), []);
+assert.deepEqual(timeoutChunker.flushIfTimedOut(1_320), [
+  "A stable opening phrase",
+]);
 assert.equal(
   sanitizeTextForSpeech(
     "See **details** at https://example.com and [Source](https://example.com).",

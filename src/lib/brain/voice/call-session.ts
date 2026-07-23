@@ -8,6 +8,7 @@ import type {
   CallUsageOutcome,
   LiveCallEntitlements,
 } from "./live-types";
+import { settleBrainLiveCall } from "@/lib/billing/voice/usage";
 
 type SessionTokenPayload = {
   callId: string;
@@ -155,19 +156,38 @@ export async function setCallSessionState(
   },
 ): Promise<void> {
   const terminal = input.state === "ended" || input.state === "failed";
+  let terminalEndedAt: string | null = null;
+  if (terminal) {
+    const { data: existing, error: existingError } = await client
+      .from("calls")
+      .select("ended_at")
+      .eq("workspace_id", input.workspaceId)
+      .eq("id", input.callId)
+      .maybeSingle();
+    if (existingError) throw existingError;
+    terminalEndedAt = existing?.ended_at ? String(existing.ended_at) : null;
+  }
+  const endedAt = terminal ? terminalEndedAt ?? new Date().toISOString() : undefined;
   const { error } = await client
     .from("calls")
     .update({
       session_state: input.state,
       status: terminal ? "ended" : "live",
       last_activity_at: new Date().toISOString(),
-      ended_at: terminal ? new Date().toISOString() : undefined,
+      ended_at: endedAt,
       estimated_wh: input.estimatedWh,
       settled_wh: input.settledWh,
     })
     .eq("workspace_id", input.workspaceId)
     .eq("id", input.callId);
   if (error) throw error;
+  if (terminal) {
+    await settleBrainLiveCall(client, {
+      workspaceId: input.workspaceId,
+      callId: input.callId,
+      endedAt,
+    });
+  }
 }
 
 export async function upsertCallTurn(
@@ -215,6 +235,21 @@ export async function settleCallComponent(
     metadata?: Record<string, unknown>;
   },
 ): Promise<void> {
+  let customerChargedWh = input.customerChargedWh;
+  if (input.component === "stt") {
+    customerChargedWh = 0;
+  } else if (input.component === "tts") {
+    const { data: call, error: callError } = await client
+      .from("calls")
+      .select("voice_route_policy")
+      .eq("workspace_id", input.workspaceId)
+      .eq("id", input.callId)
+      .maybeSingle();
+    if (callError) throw callError;
+    if (String(call?.voice_route_policy ?? "standard") !== "premium") {
+      customerChargedWh = 0;
+    }
+  }
   const { error } = await client.from("call_usage_settlements").upsert(
     {
       workspace_id: input.workspaceId,
@@ -226,7 +261,7 @@ export async function settleCallComponent(
       estimated_wh: input.estimatedWh,
       reserved_wh: input.reservedWh,
       actual_wh: input.actualWh,
-      customer_charged_wh: input.customerChargedWh,
+      customer_charged_wh: customerChargedWh,
       outcome: input.outcome,
       metadata: input.metadata ?? {},
       settled_at: new Date().toISOString(),

@@ -9,6 +9,7 @@ import { LoadingState } from "@/components/States";
 import type { PlatformAdminRole } from "@/lib/admin/types";
 import {
   Activity,
+  AudioLines,
   ArrowLeft,
   BarChart3,
   Bot,
@@ -95,6 +96,12 @@ const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
     items: [
       { href: "/admin/plans", label: "Plans", icon: ListChecks },
       { href: "/admin/economics", label: "Economics", icon: TrendingUp },
+      {
+        href: "/admin/voice-economics",
+        label: "Voice Economics",
+        icon: AudioLines,
+        superAdminOnly: true,
+      },
       { href: "/admin/billing", label: "Billing", icon: CreditCard },
       { href: "/admin/commerce", label: "Commerce ops", icon: Layers },
       { href: "/admin/promo-codes", label: "Promo Codes", icon: Ticket },
