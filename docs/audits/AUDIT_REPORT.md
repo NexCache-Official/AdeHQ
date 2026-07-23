@@ -18,6 +18,13 @@ energy VAD + post-playback suppress, xAI `filler_words=false`, soft-skip for
 silence hallucinations before Brain, and call chrome reduced to Listening /
 Understanding / Working / Speaking.
 
+**Follow-up (same day):** Address lookups like “finding the address for …”
+missed research intent, so no bridge/pre-search ran and MiniMax invented
+`<minimax:tool_call>` XML that was spoken + shown in the transcript. Fixed by
+expanding lookup intent, stripping MiniMax/XML in stream + chat sanitizers,
+speaking bridge fillers while search runs, and falling back to search grounding
+when the model only leaks tools/deferrals.
+
 **Deploy:** App/Vercel only — no Supabase schema change.
 
 ---

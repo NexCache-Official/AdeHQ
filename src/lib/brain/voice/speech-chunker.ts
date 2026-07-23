@@ -1,3 +1,5 @@
+import { stripModelLeakMarkup } from "@/lib/ai/normalize-model-response";
+
 export type SpeechChunkPolicy = {
   preferredMinCharacters: number;
   maximumCharacters: number;
@@ -6,12 +8,11 @@ export type SpeechChunkPolicy = {
 };
 
 export const DEFAULT_SPEECH_CHUNK_POLICY: SpeechChunkPolicy = {
-  // Keep first spoken audio snappy on calls — waiting for ~45 chars added a
-  // noticeable gap where the transcript appeared before any voice.
-  preferredMinCharacters: 28,
-  maximumCharacters: 160,
-  maximumWaitMs: 320,
-  breakOn: [".", "!", "?", ";", ":", ",", "—", "-"],
+  // First spoken audio should start as soon as a short phrase is ready.
+  preferredMinCharacters: 18,
+  maximumCharacters: 140,
+  maximumWaitMs: 220,
+  breakOn: [".", "!", "?", ";", ",", "—"],
 };
 
 const ABBREVIATIONS = new Set([
@@ -27,7 +28,7 @@ const ABBREVIATIONS = new Set([
 ]);
 
 export function sanitizeTextForSpeech(text: string): string {
-  return text
+  return stripModelLeakMarkup(text)
     .replace(/```[\s\S]*?```/g, " I’ve put the code in the transcript. ")
     .replace(/`([^`]+)`/g, "$1")
     .replace(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g, "$1")

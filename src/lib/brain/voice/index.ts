@@ -66,6 +66,7 @@ export * from "./speech-chunker";
 export * from "./turn-detector";
 export * from "./voice-profile";
 export * from "./bridge-clips";
+export * from "./bridge-phrases";
 export * from "./vocabulary";
 export * from "./call-session";
 export * from "./call-transport";

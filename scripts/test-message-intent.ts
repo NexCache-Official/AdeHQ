@@ -123,6 +123,12 @@ assert(
   "must detect a research ask",
 );
 assert(
+  messageLikelyNeedsResearch(
+    "I need help with finding the address for Dubai Shawarma in Canterbury. Can you help me out?",
+  ),
+  "address lookup asks must trigger live-call research / bridge",
+);
+assert(
   messageLikelyNeedsStructuredEffects("Can you perform a quick Google search?"),
   "google search must take the structured / non-stream path",
 );

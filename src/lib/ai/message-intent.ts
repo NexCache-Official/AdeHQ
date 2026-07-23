@@ -49,7 +49,7 @@ const OPERATIONAL_TOOL_NOUN =
  * (empty effects), or the model invents answers / forgets the prior topic.
  */
 const RESEARCH_OR_LOOKUP_INTENT =
-  /\b(?:research|look\s*up|google|bing|search(?:\s+(?:the\s+)?(?:web|online|google))?|find\s+out|pull\s+(?:up|together)|check\s+(?:on\s+)?(?:the\s+)?(?:latest|recent)?|competitive\s+(?:intel(?:ligence)?|analysis|landscape)|market\s+(?:sizing|research|scan)|recent\s+financials?|earnings|10-?k|10-?q|investor\s+(?:deck|update)|web\s+search)\b/i;
+  /\b(?:research|look\s*up|google|bing|search(?:\s+(?:the\s+)?(?:web|online|google))?|find\s+out|find(?:ing)?\s+(?:me\s+)?(?:the\s+)?(?:address|location|phone|number|hours|website|site)|(?:what(?:'s|\s+is)|wheres?|where\s+is)\s+(?:the\s+)?(?:address|location)|address\s+(?:for|of)|locate|pull\s+(?:up|together)|check\s+(?:on\s+)?(?:the\s+)?(?:latest|recent)?|competitive\s+(?:intel(?:ligence)?|analysis|landscape)|market\s+(?:sizing|research|scan)|recent\s+financials?|earnings|10-?k|10-?q|investor\s+(?:deck|update)|web\s+search)\b/i;
 
 /**
  * Short follow-ups that retry a prior tool ask ("try again", "do it", "go ahead").
