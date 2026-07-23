@@ -21,7 +21,6 @@ import {
 import type { MailboxAccessFlags, MessageDTO, ThreadDetailDTO } from "@/lib/inbox/types";
 import { cn } from "@/lib/utils";
 import { EmailWorkPanel } from "@/components/inbox/EmailWorkPanel";
-import { EMAIL_MISSION_LABELS } from "@/lib/inbox/mission-status";
 import { InboxMissionPill } from "@/components/inbox/InboxMissionPill";
 
 const DELIVERY_LABEL: Record<string, string> = {
