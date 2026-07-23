@@ -98,18 +98,27 @@ export function useBlueprintEditor(workspaceId: string | null) {
     };
   }, [workspaceId]);
 
-  // Lock heartbeat while the editor is open.
+  // Lock heartbeat while the editor is open. Ignores responses that arrive
+  // after the admin has moved on to a different blueprint (or left the
+  // editor via "Start over") so a late refresh can't overwrite the new
+  // draft's lockToken and break Approve & Hire.
   useEffect(() => {
     if (phase !== "editor" || !workspaceId || !blueprint) return;
+    const heartbeatBlueprintId = blueprint.id;
+    let cancelled = false;
     const interval = setInterval(async () => {
       try {
-        const refreshed = await acquireLock(workspaceId, blueprint.id);
+        const refreshed = await acquireLock(workspaceId, heartbeatBlueprintId);
+        if (cancelled || blueprintIdRef.current !== heartbeatBlueprintId) return;
         setLockToken(refreshed.lockToken);
       } catch {
         // Best-effort — a failed heartbeat surfaces the next time the user saves.
       }
     }, LOCK_HEARTBEAT_MS);
-    return () => clearInterval(interval);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
   }, [phase, workspaceId, blueprint]);
 
   // Release the lock on unmount.
@@ -139,14 +148,27 @@ export function useBlueprintEditor(workspaceId: string | null) {
   const composeAndEdit = useCallback(async () => {
     if (!workspaceId || !selectedTemplate) return;
     setError(null);
+    // Drop any leftover lock from a prior "Start over" session before we
+    // create/claim a new draft — belt-and-suspenders with backToTemplates.
+    const leftoverId = blueprintIdRef.current;
+    const leftoverToken = lockTokenRef.current;
+    if (leftoverId && leftoverToken) {
+      void releaseLock(workspaceId, leftoverId, leftoverToken);
+      blueprintIdRef.current = null;
+      lockTokenRef.current = null;
+      setLockToken(null);
+    }
     try {
       const created = await createBlueprint(workspaceId, {
         templateKey: selectedTemplate.key,
         name: blueprintName,
         intakeAnswers,
       });
-      const lock = await acquireLock(workspaceId, created.id);
+      // Point the heartbeat guard at the new id before acquire resolves so a
+      // late response from an abandoned draft can't win the setLockToken race.
       blueprintIdRef.current = created.id;
+      const lock = await acquireLock(workspaceId, created.id);
+      if (blueprintIdRef.current !== created.id) return;
       setBlueprint(created);
       setDraftPayload(created.draftPayload);
       setLockToken(lock.lockToken);
@@ -368,16 +390,24 @@ export function useBlueprintEditor(workspaceId: string | null) {
   }, [workspaceId, blueprint, dirty, save]);
 
   const approve = useCallback(async () => {
-    if (!workspaceId || !blueprint || !lockToken) return;
+    if (!workspaceId || !blueprint) return;
     setApproving(true);
     setError(null);
     try {
+      // Re-acquire (or refresh) immediately before approve so a stale client
+      // token — e.g. after Start over → recompose, or a heartbeat race — never
+      // blocks hiring with "Someone else is currently editing this blueprint."
+      const lock = await acquireLock(workspaceId, blueprint.id);
+      if (blueprintIdRef.current !== blueprint.id) return;
+      setLockToken(lock.lockToken);
+
       const approved = await approveBlueprintDraft(workspaceId, blueprint.id, {
-        lockToken,
+        lockToken: lock.lockToken,
         expectedRevision: blueprint.revision,
       });
       setBlueprint(approved);
       setLockToken(null);
+      lockTokenRef.current = null;
 
       const createdPlan = await startProvisioning(workspaceId, approved.id);
       setPlan(createdPlan);
@@ -387,7 +417,7 @@ export function useBlueprintEditor(workspaceId: string | null) {
     } finally {
       setApproving(false);
     }
-  }, [workspaceId, blueprint, lockToken]);
+  }, [workspaceId, blueprint]);
 
   // Poll provisioning progress.
   useEffect(() => {
@@ -450,6 +480,18 @@ export function useBlueprintEditor(workspaceId: string | null) {
     applyNlProposal,
     discardNlProposal,
     backToTemplates: () => {
+      // Release the server-side draft lock before clearing local state.
+      // Without this, "Start over" orphans the lock for up to LOCK_TTL and a
+      // late heartbeat response can still call setLockToken against the next
+      // compose session.
+      const previousId = blueprintIdRef.current;
+      const previousToken = lockTokenRef.current;
+      if (workspaceId && previousId && previousToken) {
+        void releaseLock(workspaceId, previousId, previousToken);
+      }
+      blueprintIdRef.current = null;
+      lockTokenRef.current = null;
+
       setError(null);
       setBlueprint(null);
       setDraftPayload(null);
@@ -464,7 +506,6 @@ export function useBlueprintEditor(workspaceId: string | null) {
       setSaveConflict(null);
       pastRef.current = [];
       futureRef.current = [];
-      blueprintIdRef.current = null;
       setPhase("templates");
     },
   };

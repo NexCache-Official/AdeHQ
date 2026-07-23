@@ -1,5 +1,6 @@
 import {
   messageLikelyNeedsStructuredEffects,
+  messageLikelyNeedsResearch,
   isShortToolRetryMessage,
   conversationLikelyNeedsStructuredEffects,
 } from "@/lib/ai/message-intent";
@@ -112,4 +113,25 @@ assert(
 );
 
 console.log("✓ short retries and status queries route onto the structured tool path");
+
+assert(
+  messageLikelyNeedsResearch("Could you perform some research on Tesla?"),
+  "must detect a research ask",
+);
+assert(
+  messageLikelyNeedsStructuredEffects("Can you perform a quick Google search?"),
+  "google search must take the structured / non-stream path",
+);
+assert(
+  conversationLikelyNeedsStructuredEffects("Yes.", [
+    { senderType: "human", content: "I would like for you to review the recent financials please." },
+    {
+      senderType: "ai",
+      content: "Want me to pull the key figures into a quick summary?",
+    },
+  ]),
+  "'Yes' after a financials ask must keep the structured path",
+);
+
+console.log("✓ research / google / yes-follow-up intents are detected");
 console.log("All message-intent tests passed.");

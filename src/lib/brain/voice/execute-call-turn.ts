@@ -28,6 +28,11 @@ import type {
   ServerCallEvent,
   SpeechContext,
 } from "./live-types";
+import { messageLikelyNeedsResearch } from "@/lib/ai/message-intent";
+import {
+  isAffirmativeSearchFollowUp,
+  isMetaResearchInstruction,
+} from "@/lib/ai/research/resolve-research-query";
 
 type EmitCallEvent = (event: ServerCallEvent) => void | Promise<void>;
 
@@ -316,12 +321,14 @@ export async function executeEmployeeCallTurn(input: {
     topic.id,
     `${turnId}_message`,
   );
+  // Keep more of the live call thread than the default lean chat path so
+  // short follow-ups ("yes", "google that") still resolve the prior topic.
   const ctx = await loadTopicContext(
     input.client,
     input.workspaceId,
     input.roomId,
     topic.id,
-    { lean: true },
+    { lean: false },
   );
 
   const chunker = new SpeechChunker();
@@ -491,6 +498,21 @@ export async function executeEmployeeCallTurn(input: {
     });
   };
 
+  // Immediate spoken bridge while the Brain (and any search) starts — keeps the
+  // call feeling live instead of silent for several seconds before first audio.
+  const needsBridge =
+    messageLikelyNeedsResearch(stt.text) ||
+    isMetaResearchInstruction(stt.text) ||
+    isAffirmativeSearchFollowUp(stt.text, ctx.room.messages, humanMessage.id);
+  if (needsBridge) {
+    await input.emit({
+      type: "state.changed",
+      turn: "synthesizing",
+      activity: "searching",
+    });
+    enqueueSpeech("Yeah — give me a sec, I'll pull that up.");
+  }
+
   let response: Awaited<ReturnType<typeof processEmployeeResponse>>;
   try {
     response = await processEmployeeResponse(
@@ -505,8 +527,10 @@ export async function executeEmployeeCallTurn(input: {
         abortSignal: input.signal,
         onReplyDelta: (delta) => {
           if (!firstTokenAt) firstTokenAt = new Date().toISOString();
-          void input.emit({ type: "employee.text.delta", text: delta });
+          // Prefer audio first: enqueue TTS before mirroring text to the side
+          // panel so speech leads the transcript instead of trailing it.
           for (const chunk of chunker.push(delta)) enqueueSpeech(chunk);
+          void input.emit({ type: "employee.text.delta", text: delta });
         },
         onActivity: (activity) => {
           if (activity === "using_tool" || activity === "searching") usedTools = true;
@@ -555,6 +579,17 @@ export async function executeEmployeeCallTurn(input: {
     throw error;
   }
   for (const chunk of chunker.finish()) enqueueSpeech(chunk);
+  // Structured (non-stream) Brain turns — research/tool path — never call
+  // onReplyDelta, so speak the final reply here. Skip if streaming already
+  // covered the same text (or a prefix) to avoid double-speaking.
+  const alreadySpoken = spokenChunks.join(" ").trim();
+  const finalReply = response.reply.trim();
+  const streamedPrefix = finalReply.slice(0, Math.min(40, finalReply.length));
+  if (finalReply && !(streamedPrefix && alreadySpoken.includes(streamedPrefix))) {
+    const late = new SpeechChunker();
+    for (const chunk of late.push(finalReply)) enqueueSpeech(chunk);
+    for (const chunk of late.finish()) enqueueSpeech(chunk);
+  }
   await ttsChain;
   await input.emit({ type: "employee.text.final", text: response.reply });
   await input.emit({ type: "employee.audio.end" });

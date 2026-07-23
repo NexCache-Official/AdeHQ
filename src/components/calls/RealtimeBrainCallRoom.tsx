@@ -84,14 +84,13 @@ export function RealtimeBrainCallRoom({
   );
 
   return (
-    <div className="flex h-full min-h-0 bg-surface">
-      <main className="relative flex min-w-0 flex-1 flex-col overflow-hidden">
-        <div className="pointer-events-none absolute inset-0 bg-mesh opacity-30" />
-        <header className="relative z-10 flex items-center justify-between border-b border-border bg-surface/85 px-5 py-3 backdrop-blur">
+    <div className="flex h-full min-h-0 bg-canvas">
+      <main className="relative flex min-w-0 flex-1 flex-col overflow-hidden bg-surface">
+        <header className="relative z-10 flex items-center justify-between border-b border-border px-5 py-3">
           <div className="min-w-0">
             <h1 className="truncate text-base font-semibold text-ink">{employee.name}</h1>
             <p className="truncate text-xs text-ink-3">
-              {employee.role} · {connected ? "Connected" : ACTIVITY_LABEL[call.activity]}
+              {employee.role} · {connected ? "On a call" : ACTIVITY_LABEL[call.activity]}
             </p>
           </div>
           <div className="flex items-center gap-4 text-xs tabular-nums text-ink-2">
@@ -106,13 +105,13 @@ export function RealtimeBrainCallRoom({
           <div className="relative">
             <div
               className={cn(
-                "absolute inset-0 rounded-full opacity-20 blur-2xl transition-transform duration-200",
-                call.activity === "speaking" && "scale-150",
+                "absolute inset-0 rounded-full opacity-25 blur-2xl transition-transform duration-500 ease-out",
+                call.activity === "speaking" ? "scale-125" : "scale-100",
               )}
               style={{ backgroundColor: employee.accent }}
             />
             <div
-              className="relative flex h-32 w-32 items-center justify-center rounded-[32px] text-3xl font-semibold text-white"
+              className="relative flex h-28 w-28 items-center justify-center rounded-full text-3xl font-semibold text-white shadow-sm"
               style={{ backgroundColor: employee.accent }}
             >
               {employee.name
@@ -123,20 +122,20 @@ export function RealtimeBrainCallRoom({
             </div>
             {call.activity === "listening" && (
               <div
-                className="absolute inset-[-10px] rounded-[40px] border-2 border-accent-500/40 transition-transform"
+                className="absolute inset-[-8px] rounded-full border border-accent-500/35 transition-transform duration-75"
                 style={{
-                  transform: `scale(${1 + Math.min(call.listeningLevel * 5, 0.18)})`,
+                  transform: `scale(${1 + Math.min(call.listeningLevel * 4, 0.12)})`,
                 }}
               />
             )}
           </div>
-          <h2 className="mt-7 text-lg font-medium text-ink">
+          <h2 className="mt-6 text-lg font-medium text-ink">
             {ACTIVITY_LABEL[call.activity] ?? "Waiting for you…"}
           </h2>
           <p className="mt-2 max-w-sm text-sm text-ink-3">
             {call.pushToTalk
               ? "Hold the talk button, then release to send."
-              : "Speak naturally. AdeHQ sends one utterance after you pause."}
+              : "Talk like you would with a teammate. Pause briefly when you're done."}
           </p>
           {(call.error || startError) && (
             <p className="mt-4 max-w-md rounded-lg bg-danger-soft px-3 py-2 text-xs text-danger">
@@ -210,11 +209,11 @@ export function RealtimeBrainCallRoom({
       </main>
 
       {showTranscript && (
-        <aside className="flex w-full max-w-sm flex-col border-l border-border bg-surface lg:w-[360px]">
-          <div className="flex items-center justify-between border-b border-border px-4 py-3">
+        <aside className="flex w-full max-w-sm flex-col border-l border-border bg-canvas lg:w-[320px]">
+          <div className="flex items-center justify-between border-b border-border bg-surface px-4 py-3">
             <div>
-              <h2 className="text-sm font-semibold text-ink">Conversation</h2>
-              <p className="text-[11px] text-ink-3">Final utterances · private employee DM</p>
+              <h2 className="text-sm font-semibold text-ink">Live transcript</h2>
+              <p className="text-[11px] text-ink-3">Also saved to your DM with {employee.name}</p>
             </div>
             {call.recordingAvailable && (
               <button
@@ -232,14 +231,20 @@ export function RealtimeBrainCallRoom({
               </button>
             )}
           </div>
-          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4">
+          <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
             {call.transcript.length === 0 ? (
               <p className="text-sm text-ink-3">
-                Listening activity appears immediately. Final text appears after each pause.
+                Your words appear after each pause. Their reply fades in as they speak.
               </p>
             ) : (
               call.transcript.map((line) => (
-                <div key={line.id} className={cn(!line.final && "opacity-60")}>
+                <div
+                  key={line.id}
+                  className={cn(
+                    "transition-opacity duration-300 ease-out",
+                    line.final ? "opacity-100" : "opacity-70",
+                  )}
+                >
                   <p className="text-xs font-medium text-ink-2">
                     {line.speaker === "human" ? "You" : employee.name}
                   </p>
@@ -248,7 +253,7 @@ export function RealtimeBrainCallRoom({
               ))
             )}
           </div>
-          <div className="border-t border-border px-4 py-3 text-xs text-ink-3">
+          <div className="border-t border-border bg-surface px-4 py-3 text-xs text-ink-3">
             Estimated {call.estimatedWh.toFixed(2)} WH · Settled {call.settledWh.toFixed(2)} WH
           </div>
         </aside>

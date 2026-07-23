@@ -44,7 +44,7 @@ type CallMetrics = {
 };
 
 function RealtimeCallsInner() {
-  const { state } = useStore();
+  const { state, actions } = useStore();
   const params = useSearchParams();
   const notifications = useCallNotifications();
   const [setupOpen, setSetupOpen] = useState(false);
@@ -54,6 +54,7 @@ function RealtimeCallsInner() {
   const [huddleVideo, setHuddleVideo] = useState(false);
   const [selectedRoomId, setSelectedRoomId] = useState("");
   const [premium, setPremium] = useState(false);
+  const [premiumVoiceAllowed, setPremiumVoiceAllowed] = useState(false);
   const [active, setActive] = useState<ActiveCall | null>(null);
   const [history, setHistory] = useState<CallSessionSummary[]>([]);
   const [startingHumanId, setStartingHumanId] = useState<string | null>(null);
@@ -120,6 +121,33 @@ function RealtimeCallsInner() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.workspace.id]);
 
+  useEffect(() => {
+    if (!state.workspace.id || !LIVE_BRAIN_CALLS_ENABLED) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const response = await fetch("/api/calls/live/entitlements", {
+          headers: await authHeaders(state.workspace.id),
+          cache: "no-store",
+        });
+        if (!response.ok || cancelled) return;
+        const body = (await response.json()) as {
+          premiumVoiceEnabled?: boolean;
+          enabled?: boolean;
+        };
+        if (cancelled) return;
+        const allowed = Boolean(body.enabled && body.premiumVoiceEnabled);
+        setPremiumVoiceAllowed(allowed);
+        if (!allowed) setPremium(false);
+      } catch {
+        // Setup UI still works; Connect will surface entitlement errors.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [state.workspace.id]);
+
   const callableRoomIds = aiRooms.map((room) => room.id).join(",");
   useEffect(() => {
     const roomId = params.get("room");
@@ -168,13 +196,18 @@ function RealtimeCallsInner() {
 
   if (active?.type === "ai") {
     return (
-      <div className="h-[calc(100vh-4rem)] min-h-[560px]">
+      <div className="h-full min-h-0">
         <RealtimeBrainCallRoom
           workspaceId={state.workspace.id}
           roomId={active.room.id}
           employee={active.employee}
           premiumVoice={active.premium}
-          onEnd={() => setActive(null)}
+          onEnd={() => {
+            setActive(null);
+            // Call turns persist to the DM while RoomChat is unmounted — refresh
+            // so the transcript is visible without a full page reload.
+            void actions.refreshWorkspace();
+          }}
         />
       </div>
     );
@@ -394,7 +427,7 @@ function RealtimeCallsInner() {
             })}
           </div>
         ) : (
-          <EmptyState icon={Phone} title="No employee conversations yet" description="Open a private employee conversation before starting a Brain Call." />
+          <EmptyState icon={Phone} title="No employee conversations yet" description="Open a private employee conversation before calling them." />
         )}
       </section>
 
@@ -441,7 +474,12 @@ function RealtimeCallsInner() {
       ) : null}
 
       <Modal open={setupOpen} onClose={() => setSetupOpen(false)} size="md">
-        <ModalHeader title="Start a Brain Call" onClose={() => setSetupOpen(false)} icon={<PhoneCall className="h-5 w-5" />} />
+        <ModalHeader
+          title={selectedEmployee ? `Call ${selectedEmployee.name}` : "Call an employee"}
+          subtitle="Same as calling a teammate — they answer with their usual Brain."
+          onClose={() => setSetupOpen(false)}
+          icon={<PhoneCall className="h-5 w-5" />}
+        />
         <div className="space-y-5 p-5">
           <label className="block space-y-1.5">
             <span className="text-xs font-medium text-ink-3">Employee</span>
@@ -456,11 +494,32 @@ function RealtimeCallsInner() {
             <p className="text-xs font-medium text-ink-3">Voice</p>
             <div className="mt-2 grid grid-cols-2 gap-2">
               {(["standard", "premium"] as const).map((voice) => {
-                const selected = premium === (voice === "premium");
+                const isPremium = voice === "premium";
+                const selected = premium === isPremium;
+                const disabled = isPremium && !premiumVoiceAllowed;
                 return (
-                  <button key={voice} type="button" onClick={() => setPremium(voice === "premium")} className={cn("rounded-xl border p-3 text-left transition-colors", selected ? "border-accent-500 bg-accent-500/10" : "border-border hover:bg-muted")}>
+                  <button
+                    key={voice}
+                    type="button"
+                    disabled={disabled}
+                    onClick={() => {
+                      if (disabled) return;
+                      setPremium(isPremium);
+                    }}
+                    className={cn(
+                      "rounded-xl border p-3 text-left transition-colors",
+                      disabled && "cursor-not-allowed opacity-50",
+                      selected ? "border-accent-500 bg-accent-500/10" : "border-border hover:bg-muted",
+                    )}
+                  >
                     <span className="block text-sm font-medium capitalize text-ink">{voice}</span>
-                    <span className="mt-1 block text-xs text-ink-3">{voice === "standard" ? "Efficient everyday speech" : "Used when your plan permits it"}</span>
+                    <span className="mt-1 block text-xs text-ink-3">
+                      {voice === "standard"
+                        ? "Efficient everyday speech"
+                        : premiumVoiceAllowed
+                          ? "Higher-quality voice for Pro plans and above"
+                          : "Available on Pro and above"}
+                    </span>
                   </button>
                 );
               })}
@@ -469,7 +528,7 @@ function RealtimeCallsInner() {
         </div>
         <div className="flex justify-end gap-2 border-t border-border px-5 py-4">
           <Button variant="ghost" onClick={() => setSetupOpen(false)}>Cancel</Button>
-          <Button onClick={beginAi} disabled={!selectedEmployee || !state.workspace.id}><PhoneCall className="h-4 w-4" /> Connect</Button>
+          <Button onClick={beginAi} disabled={!selectedEmployee || !state.workspace.id}><PhoneCall className="h-4 w-4" /> Call</Button>
         </div>
       </Modal>
 

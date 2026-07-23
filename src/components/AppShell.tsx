@@ -132,7 +132,8 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
 
   const isImmersive =
     (pathname.startsWith("/rooms/") && pathname !== "/rooms") ||
-    pathname.startsWith("/inbox");
+    pathname.startsWith("/inbox") ||
+    pathname.startsWith("/calls");
 
   if (!hydrated) return <LoadingState full />;
   if (workspaceTransitioning) return <LoadingState full label="Switching workspace…" />;
@@ -159,7 +160,10 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
           <main key={pathname} className="min-h-0 flex-1 overflow-hidden">
             <div
               className={cn(
-                "fade-up h-full",
+                "h-full",
+                // Skip the enter animation on immersive surfaces (calls especially) —
+                // fade-up made the call canvas look like it scaled up from a small tile.
+                !isImmersive && "fade-up",
                 isImmersive ? "overflow-hidden" : "overflow-y-auto",
               )}
             >

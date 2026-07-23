@@ -296,18 +296,22 @@ export function useRealtimeBrainCall() {
     }
     if (type === "employee.text.delta") {
       employeeDeltaRef.current += String(event.text ?? "");
-      setTranscript((current) => {
-        const withoutDraft = current.filter((line) => line.id !== "employee-draft");
-        return [
-          ...withoutDraft,
-          {
-            id: "employee-draft",
-            speaker: "employee",
-            text: employeeDeltaRef.current,
-            final: false,
-          },
-        ];
-      });
+      // Hold the employee draft until audio is actually playing so the side
+      // transcript doesn't jump ahead of the voice by a second or two.
+      if (playbackActiveRef.current || playbackQueueRef.current.length > 0) {
+        setTranscript((current) => {
+          const withoutDraft = current.filter((line) => line.id !== "employee-draft");
+          return [
+            ...withoutDraft,
+            {
+              id: "employee-draft",
+              speaker: "employee",
+              text: employeeDeltaRef.current,
+              final: false,
+            },
+          ];
+        });
+      }
       return;
     }
     if (type === "employee.text.final") {
@@ -324,6 +328,22 @@ export function useRealtimeBrainCall() {
         bytes: base64ToBytes(String(event.audio ?? "")),
         mimeType: String(event.mimeType ?? "audio/mpeg"),
       });
+      // Reveal buffered employee text as soon as the first audio chunk arrives.
+      if (employeeDeltaRef.current) {
+        const draft = employeeDeltaRef.current;
+        setTranscript((current) => {
+          const withoutDraft = current.filter((line) => line.id !== "employee-draft");
+          return [
+            ...withoutDraft,
+            {
+              id: "employee-draft",
+              speaker: "employee",
+              text: draft,
+              final: false,
+            },
+          ];
+        });
+      }
       void playNext();
       return;
     }

@@ -28,7 +28,7 @@ const AFFIRMATIVE_ONLY =
   /^(yes|yeah|yep|sure|ok|okay|please|go ahead|do it|go for it)[,.\s!]*$/i;
 
 const AI_OFFERED_SEARCH =
-  /\b(verify|look (that|it) up|search (for|the|up)|outdated|latest (info|data|news|figures)|check (the )?web|I'?d need to (verify|confirm|check)|want me to search)\b/i;
+  /\b(verify|look (that|it) up|search (for|the|up)|outdated|latest (info|data|news|figures)|check (the )?web|I'?d need to (verify|confirm|check)|want me to (search|look|pull|check|summariz)|pull (?:up )?(?:the )?(?:key )?figures|quick summary)\b/i;
 
 const MIN_SUBSTANTIVE_LENGTH = 12;
 

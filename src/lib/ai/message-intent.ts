@@ -41,6 +41,14 @@ const CRM_OR_TASK_DELIVERY_INTENT =
   /\b(?:crm|contacts?|deals?|companies|tasks?|follow[- ]ups?)\b[\s\S]{0,100}\b(?:add|create|log|save|update|new)\b|\b(?:add|create|log|save|update|new)\b[\s\S]{0,100}\b(?:crm|contacts?|deals?|companies|tasks?|follow[- ]ups?)\b/i;
 
 /**
+ * Web research / lookup asks — including voice-call turns like "research Tesla"
+ * or "quick Google search". These must not take the plain-prose stream path
+ * (empty effects), or the model invents answers / forgets the prior topic.
+ */
+const RESEARCH_OR_LOOKUP_INTENT =
+  /\b(?:research|look\s*up|google|bing|search(?:\s+(?:the\s+)?(?:web|online|google))?|find\s+out|pull\s+(?:up|together)|check\s+(?:on\s+)?(?:the\s+)?(?:latest|recent)?|competitive\s+(?:intel(?:ligence)?|analysis|landscape)|market\s+(?:sizing|research|scan)|recent\s+financials?|earnings|10-?k|10-?q|investor\s+(?:deck|update)|web\s+search)\b/i;
+
+/**
  * Short follow-ups that retry a prior tool ask ("try again", "do it", "go ahead").
  * Alone they look conversational — without recent-context lookup they wrongly take
  * the plain-prose stream path (empty effects) and the model doubles down on refusal.
@@ -77,9 +85,15 @@ export function messageLikelyNeedsStructuredEffects(message: string): boolean {
   if (ARTIFACT_DELIVERY_INTENT.test(text)) return true;
   if (EXPLICIT_ARTIFACT_TOOL_INTENT.test(text)) return true;
   if (CRM_OR_TASK_DELIVERY_INTENT.test(text)) return true;
+  if (RESEARCH_OR_LOOKUP_INTENT.test(text)) return true;
   // Shared Drive-file detector (covers "Excel scorecard … save to Drive").
   if (isDriveArtifactAsk(text)) return true;
   return false;
+}
+
+/** True when the user is asking for a web lookup / research (chat or call). */
+export function messageLikelyNeedsResearch(message: string): boolean {
+  return RESEARCH_OR_LOOKUP_INTENT.test(message.trim());
 }
 
 export function isShortToolRetryMessage(message: string): boolean {

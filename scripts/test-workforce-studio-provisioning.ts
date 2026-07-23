@@ -93,6 +93,18 @@ async function runLifecycleTest(service: ReturnType<typeof createSupabaseSecretC
   const lock = await acquireBlueprintLock(service, workspaceId, blueprint.id, userId);
   assert(Boolean(lock.lockToken), "lock acquired");
 
+  // Same-user heartbeat must extend TTL without rotating the token — otherwise
+  // Approve/Save racing a refresh surfaces "Someone else is currently editing".
+  const refreshed = await acquireBlueprintLock(service, workspaceId, blueprint.id, userId);
+  assert(
+    refreshed.lockToken === lock.lockToken,
+    `same-user lock refresh keeps token (was ${lock.lockToken}, got ${refreshed.lockToken})`,
+  );
+  assert(
+    new Date(refreshed.lockExpiresAt).getTime() >= new Date(lock.lockExpiresAt).getTime(),
+    "same-user lock refresh extends or preserves expiry",
+  );
+
   const renamedPayload = { ...blueprint.draftPayload, notes: "Edited via test" };
   const patched = await patchDraftBlueprint(service, {
     workspaceId,

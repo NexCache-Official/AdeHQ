@@ -31,6 +31,16 @@ import {
 } from "@/lib/ai/runtime/hot-path-shadow";
 import { resolveInstantAnswer } from "@/lib/ai/intelligence/instant-answers";
 import { resolveEmployeePromptTier } from "@/lib/ai/employee-prompt-tier";
+import {
+  isShortToolRetryMessage,
+  messageLikelyNeedsResearch,
+} from "@/lib/ai/message-intent";
+import {
+  isAffirmativeSearchFollowUp,
+  isMetaResearchInstruction,
+  resolveResearchQuery,
+} from "@/lib/ai/research/resolve-research-query";
+import { executeSearchAnswer } from "@/lib/ai/search/search-answer";
 
 export type ProcessEmployeeOptions = {
   mode?: "mock" | "live";
@@ -150,10 +160,14 @@ export async function processEmployeeResponse(
       fileContextPrompt,
       [
         "CALL PRESENTATION POLICY (presentation only; all normal permissions, tools, memory, and routing still apply):",
-        "Respond conversationally and lead with the answer.",
-        "Prefer one to three spoken sentences. Avoid markdown, tables, citation identifiers, and raw URLs.",
-        "Say when you are searching or using a tool. Ask before delivering a long spoken explanation.",
-        "Put detailed structure and sources in the durable conversation instead of reading them aloud.",
+        "You are on a live phone call with a teammate — sound human, not scripted.",
+        "Lead with the answer. Prefer one to three spoken sentences unless they ask for more.",
+        "Natural speech is fine: light fillers (yeah, uh, like, okay), contractions, unfinished asides. Do not sound polished or corporate.",
+        "Never reuse a generic check-in opener (e.g. \"Anything on your mind?\") when the user is continuing a prior ask — especially short replies like yes/yeah/sure/ok.",
+        "If they ask to search/research without repeating the topic, infer it from the recent conversation and confirm once if needed (\"Want me to look up Tesla's recent financials?\").",
+        "For public-company / web facts, search or use tools — do not invent numbers, and do not ask them to upload a Drive file unless the data is clearly internal.",
+        "When you need a moment for tools/search, say so briefly (\"Give me a sec — pulling that up.\") then continue with findings.",
+        "Avoid markdown, tables, citation identifiers, and raw URLs in spoken lines. Put detail in the durable chat transcript.",
       ].join("\n"),
     ]
       .filter(Boolean)
@@ -221,6 +235,99 @@ export async function processEmployeeResponse(
       },
     ],
   };
+
+  // Voice calls share this direct path (not the queued intelligence run). When
+  // the user asks to research/look something up — including short follow-ups
+  // like "yes" / "google that" after a prior topic — run a quick web search and
+  // feed findings into the spoken reply so the employee doesn't invent numbers
+  // or ask for a Drive file that does not exist.
+  if (options.voiceCall) {
+    const resolved = resolveResearchQuery({
+      userMessage: content,
+      messages: roomWithMessages.messages,
+      excludeMessageId: options.triggerMessageId,
+    });
+    const affirmativeSearch = isAffirmativeSearchFollowUp(
+      content,
+      roomWithMessages.messages,
+      options.triggerMessageId,
+    );
+    const shouldSearch =
+      Boolean(resolved.query.trim()) &&
+      (messageLikelyNeedsResearch(content) ||
+        isMetaResearchInstruction(content) ||
+        affirmativeSearch ||
+        (isShortToolRetryMessage(content) && messageLikelyNeedsResearch(resolved.query)));
+    if (shouldSearch) {
+      try {
+        options.onActivity?.("searching", "Looking that up");
+        // Refinements like "recent financials" after "research Tesla" should keep
+        // the company/topic from the prior human turn in the search query.
+        let searchQuery = resolved.query.trim();
+        const priorResearchAsk = [...roomWithMessages.messages]
+          .reverse()
+          .find(
+            (message) =>
+              message.senderType === "human" &&
+              message.id !== options.triggerMessageId &&
+              messageLikelyNeedsResearch(message.content) &&
+              message.content.trim().toLowerCase() !== content.trim().toLowerCase(),
+          );
+        const refinementOnly =
+          /^(?:i (?:would like|want).{0,40})?(?:for you to )?(?:review|check|see|get|pull up)\b/i.test(
+            searchQuery,
+          ) ||
+          /^(?:the )?(?:recent )?(?:financials?|earnings|numbers|filings?)\b/i.test(searchQuery);
+        if (priorResearchAsk && refinementOnly) {
+          searchQuery = `${priorResearchAsk.content.trim()} — ${searchQuery}`;
+        }
+        const search = await executeSearchAnswer({
+          client,
+          workspaceId: ctx.workspaceId,
+          roomId: ctx.room.id,
+          topicId,
+          employeeId,
+          employeeName: employee.name,
+          query: searchQuery,
+          agentRunId: undefined,
+        });
+        if (search.answer?.trim()) {
+          const sourceLines = (search.sources ?? [])
+            .slice(0, 4)
+            .map((source, index) => {
+              const title = source.title || source.url || `Source ${index + 1}`;
+              return `- ${title}`;
+            })
+            .join("\n");
+          fileContextPrompt = [
+            fileContextPrompt,
+            [
+              "LIVE WEB SEARCH RESULTS (use these; do not invent figures):",
+              `Query: ${searchQuery}`,
+              search.answer.trim(),
+              sourceLines ? `Sources:\n${sourceLines}` : "",
+              "Speak a concise phone-call summary of the useful findings. Offer to go deeper if helpful.",
+            ]
+              .filter(Boolean)
+              .join("\n"),
+          ]
+            .filter(Boolean)
+            .join("\n\n");
+        }
+      } catch (error) {
+        console.warn(
+          "[AdeHQ voice-call] search skipped",
+          error instanceof Error ? error.message : error,
+        );
+        fileContextPrompt = [
+          fileContextPrompt,
+          "LIVE WEB SEARCH unavailable right now. Be honest that you couldn't reach the web, and ask whether to retry — do not invent financial figures.",
+        ]
+          .filter(Boolean)
+          .join("\n\n");
+      }
+    }
+  }
 
   const isLive = options.mode !== "mock" && employee.provider.toLowerCase() !== "mock";
   const modelMode: ModelMode = employee.modelMode ?? defaultModelModeForRole(employee.roleKey);

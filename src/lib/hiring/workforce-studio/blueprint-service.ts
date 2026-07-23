@@ -189,7 +189,13 @@ export async function listBlueprints(
 }
 
 /** Atomically acquire (or refresh, if already held by the same user) the
- * draft lock. Expired locks are treated as free. */
+ * draft lock. Expired locks are treated as free.
+ *
+ * Same-user heartbeats extend the TTL **without rotating the token**. Rotating
+ * on every refresh previously raced with in-flight Approve/Save calls (and with
+ * a "Start over" → recompose flow, where a late heartbeat from the abandoned
+ * blueprint could overwrite the new draft's client-side token) and surfaced the
+ * misleading "Someone else is currently editing this blueprint." error. */
 export async function acquireBlueprintLock(
   client: SupabaseClient,
   workspaceId: string,
@@ -198,18 +204,43 @@ export async function acquireBlueprintLock(
 ): Promise<{ lockToken: string; lockExpiresAt: string }> {
   const current = await getBlueprint(client, workspaceId, blueprintId);
   const now = Date.now();
+  const expiresAtMs = current.lockExpiresAt ? new Date(current.lockExpiresAt).getTime() : 0;
   const heldByOther =
-    current.lockToken &&
-    current.lockedByUserId &&
+    Boolean(current.lockToken) &&
+    Boolean(current.lockedByUserId) &&
     current.lockedByUserId !== userId &&
-    current.lockExpiresAt &&
-    new Date(current.lockExpiresAt).getTime() > now;
+    expiresAtMs > now;
   if (heldByOther) {
     throw new BlueprintLockConflictError(current.lockedByUserId);
   }
 
-  const lockToken = randomUUID();
   const lockExpiresAt = new Date(now + LOCK_TTL_MS).toISOString();
+
+  // Already ours and still valid — extend TTL in place, keep the same token so
+  // Approve/Save callers holding that token stay valid across heartbeats.
+  if (
+    current.lockToken &&
+    current.lockedByUserId === userId &&
+    expiresAtMs > now
+  ) {
+    const { data, error } = await client
+      .from("workforce_blueprints")
+      .update({ lock_expires_at: lockExpiresAt })
+      .eq("workspace_id", workspaceId)
+      .eq("id", blueprintId)
+      .eq("lock_token", current.lockToken)
+      .eq("locked_by_user_id", userId)
+      .select("id")
+      .maybeSingle();
+    if (error) throw error;
+    if (data) {
+      return { lockToken: current.lockToken, lockExpiresAt };
+    }
+    // Lost a same-user race (another tab refreshed/released). Fall through and
+    // try a full claim against the fresh row.
+  }
+
+  const lockToken = randomUUID();
 
   let query = client
     .from("workforce_blueprints")
@@ -222,10 +253,36 @@ export async function acquireBlueprintLock(
     .eq("workspace_id", workspaceId)
     .eq("id", blueprintId);
 
-  // Conditional claim: either unlocked, expired, or already ours.
-  if (current.lockToken && current.lockedByUserId === userId) {
-    query = query.eq("lock_token", current.lockToken);
-  } else if (current.lockToken) {
+  // Conditional claim: unlocked, expired, or a same-user token we just lost a
+  // race against above (re-read and claim by expiry / null).
+  const fresh = await getBlueprint(client, workspaceId, blueprintId);
+  const freshExpiresMs = fresh.lockExpiresAt ? new Date(fresh.lockExpiresAt).getTime() : 0;
+  if (
+    fresh.lockToken &&
+    fresh.lockedByUserId &&
+    fresh.lockedByUserId !== userId &&
+    freshExpiresMs > now
+  ) {
+    throw new BlueprintLockConflictError(fresh.lockedByUserId);
+  }
+
+  if (fresh.lockToken && fresh.lockedByUserId === userId && freshExpiresMs > now) {
+    // Another same-user refresh won the race and already holds a valid lock —
+    // adopt that token rather than fighting it.
+    const { data, error } = await client
+      .from("workforce_blueprints")
+      .update({ lock_expires_at: lockExpiresAt })
+      .eq("workspace_id", workspaceId)
+      .eq("id", blueprintId)
+      .eq("lock_token", fresh.lockToken)
+      .select("id")
+      .maybeSingle();
+    if (error) throw error;
+    if (data) return { lockToken: fresh.lockToken, lockExpiresAt };
+    throw new BlueprintLockConflictError(fresh.lockedByUserId);
+  }
+
+  if (fresh.lockToken) {
     query = query.lt("lock_expires_at", new Date(now).toISOString());
   } else {
     query = query.is("lock_token", null);
@@ -233,7 +290,7 @@ export async function acquireBlueprintLock(
 
   const { data, error } = await query.select("id").maybeSingle();
   if (error) throw error;
-  if (!data) throw new BlueprintLockConflictError(current.lockedByUserId);
+  if (!data) throw new BlueprintLockConflictError(fresh.lockedByUserId);
 
   return { lockToken, lockExpiresAt };
 }

@@ -40,6 +40,7 @@ import { streamSiliconFlowText } from "@/lib/ai/siliconflow-call";
 import { estimateCost, resolveModel } from "@/lib/ai/model-catalog";
 import { sanitizeReplyForChat } from "@/lib/ai/normalize-model-response";
 import { isEmployeeReplyStreamingEnabled } from "@/lib/config/features";
+import { conversationLikelyNeedsStructuredEffects } from "@/lib/ai/message-intent";
 
 export type EmployeeDirectRuntimeDispatch = "old" | "shadow" | "legacy-guarded" | "runtime-on";
 
@@ -324,11 +325,30 @@ async function callLegacyEmployeeRoute(
   };
 }
 
+function directCapabilityAllowsStreaming(input: EmployeeDirectRouteInput): boolean {
+  if (input.artifactIntent) return false;
+  // Match the queued runtime gate: research / CRM / email / retries must stay
+  // on the structured path. Plain streaming hardcodes empty effects, which is
+  // why voice calls were inventing Tesla numbers and forgetting prior topics.
+  if (
+    conversationLikelyNeedsStructuredEffects(
+      input.message,
+      input.room?.messages as Array<{ senderType?: string; content?: string }> | undefined,
+    )
+  ) {
+    return false;
+  }
+  return true;
+}
+
 async function streamEmployeeDirectResponse(
   input: EmployeeDirectRouteInput,
   options: EmployeeDirectRouteOptions,
   streaming: EmployeeDirectReplyStreaming,
 ): Promise<EmployeeDirectRouteResult> {
+  if (!directCapabilityAllowsStreaming(input)) {
+    throw new Error("This call turn requires the structured Brain path.");
+  }
   const modelMode = resolveDirectEmployeeModelMode(
     (options.modelMode ?? input.employee.modelMode) as ModelMode | undefined,
     input.employee.roleKey,

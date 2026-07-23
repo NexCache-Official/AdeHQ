@@ -6,10 +6,12 @@ export type SpeechChunkPolicy = {
 };
 
 export const DEFAULT_SPEECH_CHUNK_POLICY: SpeechChunkPolicy = {
-  preferredMinCharacters: 45,
-  maximumCharacters: 180,
-  maximumWaitMs: 450,
-  breakOn: [".", "!", "?", ";", ":"],
+  // Keep first spoken audio snappy on calls — waiting for ~45 chars added a
+  // noticeable gap where the transcript appeared before any voice.
+  preferredMinCharacters: 28,
+  maximumCharacters: 160,
+  maximumWaitMs: 320,
+  breakOn: [".", "!", "?", ";", ":", ",", "—", "-"],
 };
 
 const ABBREVIATIONS = new Set([
