@@ -334,7 +334,7 @@ export function OnboardingFlow({
   };
 
   const finishAndLeave = async (
-    destination: "__first_room__" | "__maya_dm__" | string,
+    destination: "__first_room__" | "__hire__" | string,
     label = "Opening your workspace…",
   ) => {
     setBusyLabel(label);
@@ -345,12 +345,17 @@ export function OnboardingFlow({
       // Seal + persist before navigation so AppShell cannot bounce back to /onboarding.
       markOnboardingLaunchPending();
       await actions.completeOnboarding();
-      const target =
-        destination === "__first_room__"
-          ? `/rooms/${result.firstRoomId}`
-          : destination === "__maya_dm__"
-            ? `/rooms/${result.mayaDmRoomId || liveMayaDmId}`
-            : destination;
+      // Hire CTA must open HireFlow (onboarding mode), not a Maya DM / empty /rooms URL
+      // that bounces people onto workspace home.
+      const hireTarget = `/hire?onboarding=1&fresh=${Date.now()}`;
+      let target = hireTarget;
+      if (destination === "__first_room__") {
+        target = `/rooms/${result.firstRoomId}`;
+      } else if (destination.startsWith("/")) {
+        target = destination;
+      } else if (destination === "__hire__" || destination === "__maya_dm__") {
+        target = hireTarget;
+      }
       clearOnboardingLaunchPending();
       router.replace(target);
     } catch (e) {
@@ -380,7 +385,7 @@ export function OnboardingFlow({
     }
   };
 
-  const openMayaHiringJourney = () => finishAndLeave("__maya_dm__", "Opening Maya…");
+  const openMayaHiringJourney = () => finishAndLeave("__hire__", "Opening Maya…");
 
   const goToWorkspaceFromLaunch = () => finishAndLeave("__first_room__", "Opening your workspace…");
 
@@ -931,7 +936,7 @@ export function OnboardingFlow({
               ) : (
                 <>
                   <Rocket className="h-[17px] w-[17px]" />
-                  Open Maya
+                  Hire with Maya
                 </>
               )}
             </button>
