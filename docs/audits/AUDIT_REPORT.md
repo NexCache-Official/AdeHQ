@@ -6,6 +6,47 @@ Scope of this pass: Phase 1 (partial), Phase 2/3 (partial via Maya/Elena/David),
 
 ---
 
+## Session 2026-07-24 — Workforce Studio team hire quality
+
+**Reported:** Accounting-firm prompt composed a software team (PM/engineers/QA);
+clarify Mix(specify) had no text box; no question Back; UI lacked Maya AdeOrb /
+role briefs / candidates; WH bands felt fake; diagnose felt hung.
+
+**Root cause:** LLM diagnoses often set `operatingModel: "service"`; ambiguous
+`software_agency` terms (`client work`, `bespoke`, bare `agency`) +
+`legacyKeyFor` mapped to `software_house`. Goldens only covered the heuristic path.
+
+**Fixed (branch `cursor/bc-ee4ba19a-71a8-435e-900f-26ff0b0d0aa1-d0b3`):**
+- `normalizeDiagnosis` + forced `accounting_firm` / property packs; tightened
+  software match terms; accounting pack leans proposals (`sales_pipeline`).
+- Clarify: Mix free-text, Back, AdeOrb; diagnose progress copy; Team Reveal
+  role briefs, seat include/exclude, optional candidates; honest WH labels.
+- Offline tests: `test:workforce-studio:pack-selection`,
+  `test:workforce-studio:architect-flow`, goldens (all green).
+
+**Offline flow proof (no SiliconFlow):**
+- Accounting → Bookkeeping, Client Ops, EA, Proposals & Pipeline (no eng).
+- Vacation-rental property manager → `property_management` seats (ops/support/books).
+
+**Live browser E2E:**
+- **Production accounting** (`app.adehq.com`, test account): Team Reveal seats
+  Bookkeeping / Client Ops / EA / Customer Support (not software). Clarify had
+  no Mix(specify) on that path; AdeOrb not on prod.
+- **Production vacation-rental** same account: diagnosis under-classified as
+  “Independent business / Other · General” (45% confidence) → lean
+  Ops + Bookkeeping only (sensible but thin; missing guest-support seat).
+  Branch forces `property_management` for this prompt (ops/support/books).
+- **Localhost real login:** blocked — Supabase `"Unregistered API key"`; no
+  `.env.local`. Demo cannot open `/hire/team`. Vercel Preview SSO-protected.
+- **Branch vs prod:** hardens LLM→`software_house`; accounting → Proposals &
+  Pipeline; property packs for vacation rentals; AdeOrb / Mix / Back / role
+  briefs / seat trim persist / optional candidates / honest WH labels.
+- **Also:** `test:workforce-studio:composition` green after pack changes;
+  reveal→studio now PATCHes pruned seats immediately.
+
+**Console noise:** `contentscript.js` MaxListeners / ObjectMultiplex — browser
+extension, not AdeHQ.
+
 ## Session 2026-07-23 — Voice Brain Fast Path (PR-18.2A5–A10)
 
 **Finding:** TTS (~110–400 ms) is no longer the live-call bottleneck; Brain first

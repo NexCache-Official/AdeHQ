@@ -660,12 +660,13 @@ function SimulationPanel({ report }: { report: SimulationReport | null }) {
       </div>
 
       <div className="rounded-xl border border-border bg-canvas px-3 py-2.5">
-        <p className="text-[11px] uppercase tracking-wide text-ink-3">Expected weekly capacity</p>
+        <p className="text-[11px] uppercase tracking-wide text-ink-3">Estimated weekly capacity</p>
         <p className="mt-0.5 text-[18px] font-semibold tabular-nums text-ink">
           {lowWh}–{highWh} <span className="text-[13px] font-medium text-ink-3">WH</span>
         </p>
         <p className="mt-1 text-[11px] leading-relaxed text-ink-3">
-          Light ~{lowWh} · Typical ~{typicalWh} · Busy ~{highWh} WH/week
+          Forecast from seniority + authority — Light ~{lowWh} · Typical ~{typicalWh} · Busy ~
+          {highWh} WH/week. Coverage and permission checks below are the hard gates.
         </p>
       </div>
 

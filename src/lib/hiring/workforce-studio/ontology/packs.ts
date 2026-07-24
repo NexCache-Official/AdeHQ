@@ -203,11 +203,13 @@ export const CURATED_PACKS: CuratedPack[] = [
     key: "accounting_firm",
     version: "1.0.0",
     name: "Accounting Firm",
-    description: "Client ops, books, and delivery admin for an accounting practice.",
+    description: "Client ops, books, proposals, and partner follow-ups for an accounting practice.",
     category: "professional",
     industry: "professional_services",
     archetypeId: "professional_services",
-    moduleIds: ["finance_reporting", "general_operations", "executive_ops", "customer_support"],
+    // sales_pipeline covers proposal/BD work partners typically drown in;
+    // generic customer_support is a weaker fit for a 3-partner firm.
+    moduleIds: ["finance_reporting", "general_operations", "executive_ops", "sales_pipeline"],
     adaptationId: "adapt_professional_services",
     intakeQuestions: [TEAM_SIZE, PRIMARY_OPS],
     intakeDefaults: { primary_ops_focus: "financial_hygiene" },

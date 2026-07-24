@@ -199,6 +199,7 @@ export function WorkforceStudioShell({ workspaceId }: { workspaceId: string }) {
       {editor.phase === "architect_entry" ? (
         <BusinessEntryPanel
           busy={editor.architectBusy}
+          diagnoseStatus={editor.diagnoseStatus}
           onDiagnose={editor.runDiagnose}
           onBrowseStartingPoints={editor.openStartingPoints}
           onStartBlank={editor.startBlankTeam}
@@ -221,7 +222,9 @@ export function WorkforceStudioShell({ workspaceId }: { workspaceId: string }) {
           askedCount={editor.clarifyAskedCount}
           remainingEstimate={editor.clarifyRemaining}
           busy={editor.architectBusy}
+          canGoBack={editor.clarifyAnswers.length > 0}
           onAnswer={(optionId, freeText) => void editor.answerClarify(optionId, freeText)}
+          onBack={() => void editor.backClarify()}
         />
       ) : null}
 
@@ -233,7 +236,9 @@ export function WorkforceStudioShell({ workspaceId }: { workspaceId: string }) {
           expectedWeeklyWhHigh={editor.revealWhHigh}
           mappingReason={editor.mappingReason ?? undefined}
           assumptions={editor.diagnosis?.assumptions}
-          onOpenStudio={editor.openStudioFromReveal}
+          workspaceId={workspaceId}
+          onOpenStudio={(ids) => void editor.openStudioFromReveal(ids)}
+          onSelectCandidate={editor.selectRevealCandidate}
         />
       ) : null}
 

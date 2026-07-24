@@ -30,6 +30,10 @@ function blobOf(diagnosis: BusinessOperatingDiagnosis): string {
     .toLowerCase();
 }
 
+/** Industries that must never fall through to legacy software_house. */
+const PROFESSIONAL_SERVICES_BLOB =
+  /\b(accounting|bookkeeping|tax\b|audit|law firm|legal services|consultancy|consulting|advisory|professional services?)\b/;
+
 export function selectArchetype(diagnosis: BusinessOperatingDiagnosis): BusinessArchetype {
   const blob = blobOf(diagnosis);
   let best = ARCHETYPES.find((a) => a.id === "general_business")!;
@@ -37,14 +41,20 @@ export function selectArchetype(diagnosis: BusinessOperatingDiagnosis): Business
   for (const archetype of ARCHETYPES) {
     let score = 0;
     let longestHit = 0;
+    let termHits = 0;
     if (archetype.operatingModel === diagnosis.operatingModel) score += 4;
     for (const term of archetype.matchTerms) {
       if (blob.includes(term)) {
         // Longer phrases beat short ambiguous ones (e.g. "marketing agency" > "agency").
+        // Industry keyword hits outweigh operating-model alone so a mislabeled
+        // operatingModel:"service" accounting firm still lands on professional_services.
         score += 3 + Math.min(4, Math.floor(term.length / 6));
         longestHit = Math.max(longestHit, term.length);
+        termHits += 1;
       }
     }
+    // Extra weight when multiple concrete industry terms fire.
+    if (termHits >= 2) score += 2;
     const tieBreak = score + longestHit / 100;
     if (tieBreak > bestScore) {
       bestScore = tieBreak;
@@ -61,7 +71,7 @@ function painBoost(lookup: Record<string, string>): "support" | "growth" | "ops"
     "";
   if (raw === "support" || raw === "growth" || raw === "ops" || raw === "mixed") return raw;
   if (/support|inbox|customer|refund/.test(raw)) return "support";
-  if (/growth|market|ads|acquis/.test(raw)) return "growth";
+  if (/growth|market|ads|acquis|proposal|pipeline|follow-?up/.test(raw)) return "growth";
   if (/ops|supplier|admin|fulfill/.test(raw)) return "ops";
   return "mixed";
 }
@@ -97,7 +107,10 @@ function modulesFor(
   if (/\b(support|inbox|refund|ticket)\b/.test(blob) && !ids.includes("customer_support")) {
     ids.push("customer_support");
   }
-  if (/\b(sales|pipeline|outbound|sdr)\b/.test(blob) && !ids.includes("sales_pipeline")) {
+  if (
+    /\b(sales|pipeline|outbound|sdr|proposal|follow-?ups?)\b/.test(blob) &&
+    !ids.includes("sales_pipeline")
+  ) {
     ids.push("sales_pipeline");
   }
   if (/\b(marketing|campaign|content|ads)\b/.test(blob) && !ids.includes("marketing_content")) {
@@ -145,7 +158,15 @@ function bestPackFor(archetypeId: string, moduleIds: string[]): CuratedPack | nu
  * Industry archetypes always use ontology packs / ephemeral module compile.
  */
 function legacyKeyFor(archetype: BusinessArchetype, blob: string): string | null {
-  if (archetype.id === "software_agency" && /\b(agency|software house|dev shop|client work|bespoke)\b/.test(blob)) {
+  // Never send professional firms into the software seat graph.
+  if (PROFESSIONAL_SERVICES_BLOB.test(blob)) return null;
+
+  if (
+    archetype.id === "software_agency" &&
+    /\b(software agency|software house|dev shop|development house|development studio|development agency|client software|client mobile apps|msp|managed service|it support)\b/.test(
+      blob,
+    )
+  ) {
     return "software_house";
   }
   if (archetype.id === "software_product" && /\b(saas|b2b software|subscription|product-led)\b/.test(blob)) {
@@ -154,6 +175,38 @@ function legacyKeyFor(archetype: BusinessArchetype, blob: string): string | null
   if (archetype.id === "general_business" && !/\b(shopify|restaurant|retail|tutoring|property)\b/.test(blob)) {
     return "general_ops";
   }
+  return null;
+}
+
+function resolveForcedPackKey(blob: string): string | null {
+  if (/\bsales department\b/.test(blob)) return "sales_department";
+  if (/\bcustomer support department\b|\bsupport department\b/.test(blob)) {
+    return "customer_support_department";
+  }
+  if (/\bfinance and reporting\b|\bfinance team\b/.test(blob)) return "finance_reporting_team";
+  if (/\bexecutive office\b/.test(blob)) return "executive_office";
+  if (/\b(it support|msp|managed service)\b/.test(blob)) return "it_support_provider";
+  if (/\b(tutoring|tutor)\b/.test(blob)) return "tutoring_business";
+  if (/\bnewsletter\b/.test(blob)) return "newsletter_media";
+  if (/\b(multi-location retail|retail fashion)\b/.test(blob)) return "multi_location_retail";
+  if (/\bconvenience store/.test(blob)) return "physical_retail_store";
+  if (/\b(wholesale|distribution)\b/.test(blob)) return "wholesale_distribution";
+  if (/\b(hotel|guesthouse)\b/.test(blob)) return "hotel_guesthouse";
+  if (/\bmarketing agency\b/.test(blob)) return "marketing_agency";
+  if (/\brecruitment\b/.test(blob)) return "recruitment_agency";
+  if (/\breal estate agency\b/.test(blob)) return "real_estate_agency";
+  if (
+    /\b(vacation.?rental|short.?term rental|airbnb|property manager|property management)\b/.test(
+      blob,
+    )
+  ) {
+    return "property_management";
+  }
+  // Accounting / tax / bookkeeping before generic consultancy.
+  if (/\b(accounting|bookkeeping|tax firm|tax prep|cpa)\b/.test(blob)) return "accounting_firm";
+  if (/\b(law firm|legal services|lawyer)\b/.test(blob)) return "legal_services";
+  if (/\b(consultancy|consulting)\b/.test(blob)) return "consultancy";
+  if (/\b(nonprofit|charity|community nonprofit)\b/.test(blob)) return "nonprofit_ops";
   return null;
 }
 
@@ -167,26 +220,7 @@ export function selectArchetypeAndPack(
   const size = teamSize(lookup, diagnosis);
   const blob = blobOf(diagnosis);
   const moduleIds = modulesFor(archetype, pain, blob);
-  // Prefer department packs when the description is explicitly departmental.
-  let forcedPackKey: string | null = null;
-  if (/\bsales department\b/.test(blob)) forcedPackKey = "sales_department";
-  else if (/\bcustomer support department\b|\bsupport department\b/.test(blob)) {
-    forcedPackKey = "customer_support_department";
-  } else if (/\bfinance and reporting\b|\bfinance team\b/.test(blob)) {
-    forcedPackKey = "finance_reporting_team";
-  } else if (/\bexecutive office\b/.test(blob)) forcedPackKey = "executive_office";
-  else if (/\b(it support|msp|managed service)\b/.test(blob)) forcedPackKey = "it_support_provider";
-  else if (/\b(tutoring|tutor)\b/.test(blob)) forcedPackKey = "tutoring_business";
-  else if (/\bnewsletter\b/.test(blob)) forcedPackKey = "newsletter_media";
-  else if (/\b(multi-location retail|retail fashion)\b/.test(blob)) forcedPackKey = "multi_location_retail";
-  else if (/\bconvenience store/.test(blob)) forcedPackKey = "physical_retail_store";
-  else if (/\b(wholesale|distribution)\b/.test(blob)) forcedPackKey = "wholesale_distribution";
-  else if (/\b(hotel|guesthouse)\b/.test(blob)) forcedPackKey = "hotel_guesthouse";
-  else if (/\bmarketing agency\b/.test(blob)) forcedPackKey = "marketing_agency";
-  else if (/\brecruitment\b/.test(blob)) forcedPackKey = "recruitment_agency";
-  else if (/\breal estate agency\b/.test(blob)) forcedPackKey = "real_estate_agency";
-  else if (/\b(consultancy|consulting)\b/.test(blob)) forcedPackKey = "consultancy";
-  else if (/\b(nonprofit|charity|community nonprofit)\b/.test(blob)) forcedPackKey = "nonprofit_ops";
+  const forcedPackKey = resolveForcedPackKey(blob);
 
   const legacyKey = forcedPackKey ? null : legacyKeyFor(archetype, blob);
   const pack = forcedPackKey

@@ -38,38 +38,48 @@ export async function POST(request: NextRequest) {
     const websiteSnippet = websiteUrl ? await fetchWebsiteSnippet(websiteUrl) : null;
     const diagnosis = await diagnoseBusiness({ description, websiteSnippet });
 
-    const service = createSupabaseSecretClient();
-    const existing = await getCompanyOperatingProfile(service, workspaceId);
-    const profile = await upsertCompanyOperatingProfile(service, {
-      workspaceId,
-      updatedBy: user.id,
-      profile: {
-        ...(existing
-          ? {
-              companyName: existing.companyName || diagnosis.businessType,
-              industry: diagnosis.industry,
-              businessModel: diagnosis.operatingModel,
-              stage: existing.stage,
-              headcountHumans: existing.headcountHumans,
-              primaryOutcomes: diagnosis.growthPriorities.map((p) => p.title).slice(0, 5),
-              existingDepartments: diagnosis.proposedDepartments.map((d) => d.name),
-              riskTolerance: existing.riskTolerance,
-              complianceNotes: existing.complianceNotes,
-              workingHoursNote: existing.workingHoursNote,
-            }
-          : {
-              ...EMPTY_COMPANY_PROFILE,
-              companyName: diagnosis.businessType,
-              industry: diagnosis.industry,
-              businessModel: diagnosis.operatingModel,
-              primaryOutcomes: diagnosis.growthPriorities.map((p) => p.title).slice(0, 5),
-              existingDepartments: diagnosis.proposedDepartments.map((d) => d.name),
-            }),
-        businessDescription: description,
-        websiteUrl,
-        diagnosis,
-      },
-    });
+    // Persist profile when the secret client is available. Diagnosis itself must
+    // still succeed without it so Maya can continue the architect flow.
+    let profile = null;
+    try {
+      const service = createSupabaseSecretClient();
+      const existing = await getCompanyOperatingProfile(service, workspaceId);
+      profile = await upsertCompanyOperatingProfile(service, {
+        workspaceId,
+        updatedBy: user.id,
+        profile: {
+          ...(existing
+            ? {
+                companyName: existing.companyName || diagnosis.businessType,
+                industry: diagnosis.industry,
+                businessModel: diagnosis.operatingModel,
+                stage: existing.stage,
+                headcountHumans: existing.headcountHumans,
+                primaryOutcomes: diagnosis.growthPriorities.map((p) => p.title).slice(0, 5),
+                existingDepartments: diagnosis.proposedDepartments.map((d) => d.name),
+                riskTolerance: existing.riskTolerance,
+                complianceNotes: existing.complianceNotes,
+                workingHoursNote: existing.workingHoursNote,
+              }
+            : {
+                ...EMPTY_COMPANY_PROFILE,
+                companyName: diagnosis.businessType,
+                industry: diagnosis.industry,
+                businessModel: diagnosis.operatingModel,
+                primaryOutcomes: diagnosis.growthPriorities.map((p) => p.title).slice(0, 5),
+                existingDepartments: diagnosis.proposedDepartments.map((d) => d.name),
+              }),
+          businessDescription: description,
+          websiteUrl,
+          diagnosis,
+        },
+      });
+    } catch (persistError) {
+      console.warn(
+        "[workforce-studio/architect/diagnose] profile persist skipped",
+        persistError instanceof Error ? persistError.message : persistError,
+      );
+    }
 
     return NextResponse.json({ diagnosis, profile });
   } catch (error) {

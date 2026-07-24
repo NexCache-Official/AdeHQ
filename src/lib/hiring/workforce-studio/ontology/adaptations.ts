@@ -141,17 +141,22 @@ export const ADAPTATIONS: IndustryAdaptation[] = [
     seatOverlays: [
       {
         templateSeatId: "ops_1",
-        missionTemplate: "Coordinate client delivery admin, proposals follow-ups, and scheduling.",
+        missionTemplate: "Coordinate client delivery admin, proposal packaging, and scheduling.",
         operationalVariant: "Client Ops",
       },
       {
         templateSeatId: "finance_1",
-        missionTemplate: "Keep invoices, retainers, and expense categorization current.",
+        missionTemplate: "Keep invoices, retainers, and expense categorization current for client engagements.",
       },
       {
         templateSeatId: "sales_1",
-        missionTemplate: "Qualify inbound client leads and keep the pipeline tidy.",
-        operationalVariant: "Business Development",
+        missionTemplate:
+          "Draft proposal outlines, chase client follow-ups, and keep the engagement pipeline tidy.",
+        operationalVariant: "Proposals & Pipeline",
+      },
+      {
+        templateSeatId: "ea_1",
+        missionTemplate: "Protect partner time — triage follow-ups, briefings, and meeting prep.",
       },
     ],
   },
