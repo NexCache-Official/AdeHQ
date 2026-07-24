@@ -34,6 +34,9 @@ import type {
   WorkforceBlueprintPayload,
   WorkforceBlueprintRecord,
 } from "@/lib/hiring/workforce-studio/types";
+import { pruneSeatsFromPayload } from "@/lib/hiring/workforce-studio/seat-brief";
+import type { AiEmployeeApplicant } from "@/lib/hiring/types";
+import { forecastWorkHours } from "@/lib/hiring/workforce-studio/simulation";
 
 export type StudioPhase =
   | "loading"
@@ -89,6 +92,7 @@ export function useBlueprintEditor(workspaceId: string | null) {
   const [clarifyAskedCount, setClarifyAskedCount] = useState(0);
   const [clarifyRemaining, setClarifyRemaining] = useState(0);
   const [architectBusy, setArchitectBusy] = useState(false);
+  const [diagnoseStatus, setDiagnoseStatus] = useState<string | null>(null);
   const [designReasons, setDesignReasons] = useState<string[]>([]);
   const [revealWhLow, setRevealWhLow] = useState(0);
   const [revealWhHigh, setRevealWhHigh] = useState(0);
@@ -192,6 +196,11 @@ export function useBlueprintEditor(workspaceId: string | null) {
     async (description: string, siteUrl: string) => {
       if (!workspaceId) return;
       setArchitectBusy(true);
+      setDiagnoseStatus(
+        siteUrl.trim()
+          ? "Reading your description and website…"
+          : "Reading your description…",
+      );
       setError(null);
       setBusinessDescription(description);
       setWebsiteUrl(siteUrl);
@@ -208,6 +217,7 @@ export function useBlueprintEditor(workspaceId: string | null) {
         setError(err instanceof Error ? err.message : "Maya couldn't diagnose that business.");
       } finally {
         setArchitectBusy(false);
+        setDiagnoseStatus(null);
       }
     },
     [workspaceId],
@@ -316,8 +326,73 @@ export function useBlueprintEditor(workspaceId: string | null) {
     [workspaceId, diagnosis, currentQuestion, clarifyAnswers, composeArchitectTeam],
   );
 
-  const openStudioFromReveal = useCallback(() => {
-    setPhase("editor");
+  const backClarify = useCallback(async () => {
+    if (!workspaceId || !diagnosis || clarifyAnswers.length === 0) return;
+    const previous = clarifyAnswers.slice(0, -1);
+    setClarifyAnswers(previous);
+    setArchitectBusy(true);
+    setError(null);
+    try {
+      const next = await nextArchitectQuestion(workspaceId, {
+        diagnosis,
+        answers: previous,
+      });
+      if (next.done) {
+        // Shouldn't happen with fewer answers, but recover gracefully.
+        setPhase("architect_diagnosis");
+        setCurrentQuestion(null);
+        return;
+      }
+      setCurrentQuestion(next.question);
+      setClarifyAskedCount(next.askedCount);
+      setClarifyRemaining(next.remainingEstimate);
+      setPhase("architect_clarify");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Couldn't go back.");
+    } finally {
+      setArchitectBusy(false);
+    }
+  }, [workspaceId, diagnosis, clarifyAnswers]);
+
+  const openStudioFromReveal = useCallback(
+    (includedSeatIds?: string[]) => {
+      if (draftPayload && includedSeatIds && includedSeatIds.length > 0) {
+        const keep = new Set(includedSeatIds);
+        if (keep.size < draftPayload.seats.length) {
+          const pruned = pruneSeatsFromPayload(draftPayload, keep);
+          const bands = forecastWorkHours(pruned.seats);
+          setDraftPayload(pruned);
+          setRevealWhLow(Math.round(bands.reduce((sum, b) => sum + b.lowWh, 0)));
+          setRevealWhHigh(Math.round(bands.reduce((sum, b) => sum + b.highWh, 0)));
+          setDirty(true);
+        }
+      }
+      setPhase("editor");
+    },
+    [draftPayload],
+  );
+
+  const selectRevealCandidate = useCallback((seatId: string, candidate: AiEmployeeApplicant) => {
+    setDraftPayload((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        seats: prev.seats.map((s) =>
+          s.id === seatId
+            ? {
+                ...s,
+                preferredCandidateName: candidate.name,
+                personalityTraits:
+                  candidate.personalityTags?.length > 0
+                    ? candidate.personalityTags.slice(0, 4)
+                    : s.personalityTraits,
+                communicationStyle: candidate.communicationStyle || s.communicationStyle,
+              }
+            : s,
+        ),
+      };
+    });
+    setDirty(true);
   }, []);
 
   const setAnswer = useCallback((questionId: string, value: unknown) => {
@@ -698,9 +773,11 @@ export function useBlueprintEditor(workspaceId: string | null) {
     businessDescription,
     websiteUrl,
     currentQuestion,
+    clarifyAnswers,
     clarifyAskedCount,
     clarifyRemaining,
     architectBusy,
+    diagnoseStatus,
     designReasons,
     revealWhLow,
     revealWhHigh,
@@ -708,7 +785,9 @@ export function useBlueprintEditor(workspaceId: string | null) {
     runDiagnose,
     beginClarify,
     answerClarify,
+    backClarify,
     openStudioFromReveal,
+    selectRevealCandidate,
     openStartingPoints,
     startBlankTeam,
     backToTemplates: () => {

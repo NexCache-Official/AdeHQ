@@ -2,6 +2,8 @@
 
 import { ArrowRight, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui";
+import { AdeOrb } from "@/components/hiring/HireChrome";
+import { MAYA_EMPLOYEE_NAME } from "@/lib/hiring/maya";
 import type { BusinessOperatingDiagnosis } from "@/lib/hiring/workforce-studio/diagnosis-types";
 
 function Card({ title, children }: { title: string; children: React.ReactNode }) {
@@ -28,12 +30,17 @@ export function DiagnosisPanel({
 }) {
   return (
     <div className="studio-fade-up mx-auto max-w-3xl space-y-6">
-      <div>
-        <p className="text-[12px] font-medium uppercase tracking-[0.08em] text-ink-3">Maya</p>
-        <h1 className="mt-1 text-[26px] font-semibold tracking-tight text-ink">
-          Here&apos;s how I understand your business
-        </h1>
-        <p className="mt-3 text-[15px] leading-relaxed text-ink-2">{diagnosis.narrative}</p>
+      <div className="flex items-start gap-3">
+        <AdeOrb size={40} initials="M" />
+        <div className="min-w-0 flex-1">
+          <p className="text-[12px] font-medium uppercase tracking-[0.08em] text-ink-3">
+            {MAYA_EMPLOYEE_NAME}
+          </p>
+          <h1 className="mt-1 text-[26px] font-semibold tracking-tight text-ink">
+            Here&apos;s how I understand your business
+          </h1>
+          <p className="mt-3 text-[15px] leading-relaxed text-ink-2">{diagnosis.narrative}</p>
+        </div>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2">

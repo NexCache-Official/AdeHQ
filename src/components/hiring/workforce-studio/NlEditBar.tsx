@@ -98,7 +98,7 @@ export function NlEditBar({
           value={instruction}
           onChange={(e) => setInstruction(e.target.value)}
           rows={3}
-          placeholder='e.g. "add a second backend engineer for mobile"'
+          placeholder='e.g. "add a client follow-up specialist" or "make the team leaner"'
           className="input-field text-[13px]"
           aria-label="Ask Maya to adjust the team"
         />

@@ -6,11 +6,10 @@ import { z } from "zod";
 import { getTimeoutMs, resolveModel } from "@/lib/ai/model-catalog";
 import { siliconFlowChatModel, siliconFlowProviderOptions } from "@/lib/ai/siliconflow-client";
 import { isSiliconFlowConfigured } from "@/lib/config/features";
-import type {
-  BusinessOperatingDiagnosis,
-  ClarificationQuestion,
-  OperatingModel,
-} from "./diagnosis-types";
+import type { BusinessOperatingDiagnosis, OperatingModel } from "./diagnosis-types";
+import { enrichClarificationQuestions } from "./clarification-ui";
+
+export { clarificationNeedsFreeText } from "./clarification-ui";
 
 const MODEL_MODE = "strong" as const;
 const TIMEOUT_MS = getTimeoutMs("strong");
@@ -120,28 +119,6 @@ const diagnosisSchema = z.object({
     .max(4)
     .describe("Short reasons for the eventual team design."),
 });
-
-const SPECIFY_OPTION_RE = /\b(specify|other|mix|custom|describe|write.?in)\b/i;
-
-/** Options like "Mix (specify)" must collect free text even if the model forgot allowFreeText. */
-export function clarificationNeedsFreeText(question: ClarificationQuestion, optionId?: string | null): boolean {
-  if (question.allowFreeText) return true;
-  if (!optionId) return false;
-  const option = question.options.find((o) => o.id === optionId);
-  if (!option) return false;
-  return SPECIFY_OPTION_RE.test(option.label) || SPECIFY_OPTION_RE.test(option.id);
-}
-
-function enrichClarificationQuestions(
-  questions: ClarificationQuestion[],
-): ClarificationQuestion[] {
-  return questions.map((q) => {
-    const needsText = q.options.some(
-      (o) => SPECIFY_OPTION_RE.test(o.label) || SPECIFY_OPTION_RE.test(o.id),
-    );
-    return needsText ? { ...q, allowFreeText: true } : q;
-  });
-}
 
 /**
  * Post-process LLM/heuristic diagnoses so professional firms are never left as

@@ -6,7 +6,7 @@ import { mapDiagnosisToTemplate } from "../src/lib/hiring/workforce-studio/map-d
 import { composeBlueprintFromTemplate } from "../src/lib/hiring/workforce-studio/composer";
 import { selectArchetypeAndPack } from "../src/lib/hiring/workforce-studio/ontology/select-pack";
 import type { BusinessOperatingDiagnosis } from "../src/lib/hiring/workforce-studio/diagnosis-types";
-import { clarificationNeedsFreeText } from "../src/lib/hiring/workforce-studio/diagnose-business";
+import { clarificationNeedsFreeText } from "../src/lib/hiring/workforce-studio/clarification-ui";
 
 let failures = 0;
 

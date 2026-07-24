@@ -86,6 +86,8 @@ export type WorkforceSeat = {
   memberOfRoomIds: string[];
   /** Set by the template/composition rules; freely editable after. */
   source: "template" | "manual" | "nl_edit";
+  /** Optional preferred candidate name from Team Reveal shortlist (advisory). */
+  preferredCandidateName?: string;
 };
 
 export type WorkforceRoomKind = "department" | "project" | "leadership";
