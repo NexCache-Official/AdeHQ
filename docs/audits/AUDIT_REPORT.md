@@ -6,6 +6,36 @@ Scope of this pass: Phase 1 (partial), Phase 2/3 (partial via Maya/Elena/David),
 
 ---
 
+## Session 2026-07-24 — Workforce Studio team hire quality
+
+**Reported:** Accounting-firm prompt composed a software team (PM/engineers/QA);
+clarify Mix(specify) had no text box; no question Back; UI lacked Maya AdeOrb /
+role briefs / candidates; WH bands felt fake; diagnose felt hung.
+
+**Root cause:** LLM diagnoses often set `operatingModel: "service"`; ambiguous
+`software_agency` terms (`client work`, `bespoke`, bare `agency`) +
+`legacyKeyFor` mapped to `software_house`. Goldens only covered the heuristic path.
+
+**Fixed (branch `cursor/bc-ee4ba19a-71a8-435e-900f-26ff0b0d0aa1-d0b3`):**
+- `normalizeDiagnosis` + forced `accounting_firm` / property packs; tightened
+  software match terms; accounting pack leans proposals (`sales_pipeline`).
+- Clarify: Mix free-text, Back, AdeOrb; diagnose progress copy; Team Reveal
+  role briefs, seat include/exclude, optional candidates; honest WH labels.
+- Offline tests: `test:workforce-studio:pack-selection`,
+  `test:workforce-studio:architect-flow`, goldens (all green).
+
+**Offline flow proof (no SiliconFlow):**
+- Accounting → Bookkeeping, Client Ops, EA, Proposals & Pipeline (no eng).
+- Vacation-rental property manager → `property_management` seats (ops/support/books).
+
+**Live browser E2E:** Blocked in this cloud VM — no `.env.local` /
+`SUPABASE_SECRET_KEY` / `SILICONFLOW_API_KEY`. Compose/provision cannot persist
+without the secret client. Recommend re-run on Vercel Preview for the PR or
+local `.env.local` with the provided test account.
+
+**Console noise:** `contentscript.js` MaxListeners / ObjectMultiplex — browser
+extension, not AdeHQ.
+
 ## Session 2026-07-23 — Voice Brain Fast Path (PR-18.2A5–A10)
 
 **Finding:** TTS (~110–400 ms) is no longer the live-call bottleneck; Brain first
