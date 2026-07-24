@@ -122,10 +122,14 @@
     "expectedArchetypeId": "professional_services",
     "expectedPackKey": "accounting_firm",
     "requiredRoleKeys": [
-      "bookkeeping_assistant"
+      "bookkeeping_assistant",
+      "sales_development_rep"
     ],
     "forbiddenRoleKeys": [
-      "software_engineer"
+      "software_engineer",
+      "full_stack_developer",
+      "product_manager",
+      "qa_test_engineer"
     ],
     "maxSeats": 8
   },

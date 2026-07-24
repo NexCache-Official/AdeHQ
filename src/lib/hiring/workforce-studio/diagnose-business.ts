@@ -6,7 +6,11 @@ import { z } from "zod";
 import { getTimeoutMs, resolveModel } from "@/lib/ai/model-catalog";
 import { siliconFlowChatModel, siliconFlowProviderOptions } from "@/lib/ai/siliconflow-client";
 import { isSiliconFlowConfigured } from "@/lib/config/features";
-import type { BusinessOperatingDiagnosis } from "./diagnosis-types";
+import type {
+  BusinessOperatingDiagnosis,
+  ClarificationQuestion,
+  OperatingModel,
+} from "./diagnosis-types";
 
 const MODEL_MODE = "strong" as const;
 const TIMEOUT_MS = getTimeoutMs("strong");
@@ -19,23 +23,32 @@ const clarificationQuestionSchema = z.object({
     .array(z.object({ id: z.string(), label: z.string() }))
     .min(2)
     .max(5),
-  allowFreeText: z.boolean().optional(),
+  allowFreeText: z
+    .boolean()
+    .optional()
+    .describe(
+      "Set true whenever an option needs the user to specify details (Mix, Other, Specify, Custom, etc.).",
+    ),
 });
 
 const diagnosisSchema = z.object({
-  businessType: z.string().describe("Short label, e.g. 'DTC Shopify brand'"),
+  businessType: z.string().describe("Short label, e.g. 'DTC Shopify brand' or 'Accounting firm'"),
   industry: z.string(),
-  operatingModel: z.enum([
-    "service",
-    "commerce",
-    "software",
-    "marketplace",
-    "hospitality",
-    "professional_services",
-    "education",
-    "nonprofit",
-    "other",
-  ]),
+  operatingModel: z
+    .enum([
+      "service",
+      "commerce",
+      "software",
+      "marketplace",
+      "hospitality",
+      "professional_services",
+      "education",
+      "nonprofit",
+      "other",
+    ])
+    .describe(
+      "Use professional_services for accounting, legal, consulting, tax, and advisory firms — not generic service.",
+    ),
   narrative: z
     .string()
     .describe("2–4 sentences Maya would say aloud: how she understands the business."),
@@ -108,6 +121,75 @@ const diagnosisSchema = z.object({
     .describe("Short reasons for the eventual team design."),
 });
 
+const SPECIFY_OPTION_RE = /\b(specify|other|mix|custom|describe|write.?in)\b/i;
+
+/** Options like "Mix (specify)" must collect free text even if the model forgot allowFreeText. */
+export function clarificationNeedsFreeText(question: ClarificationQuestion, optionId?: string | null): boolean {
+  if (question.allowFreeText) return true;
+  if (!optionId) return false;
+  const option = question.options.find((o) => o.id === optionId);
+  if (!option) return false;
+  return SPECIFY_OPTION_RE.test(option.label) || SPECIFY_OPTION_RE.test(option.id);
+}
+
+function enrichClarificationQuestions(
+  questions: ClarificationQuestion[],
+): ClarificationQuestion[] {
+  return questions.map((q) => {
+    const needsText = q.options.some(
+      (o) => SPECIFY_OPTION_RE.test(o.label) || SPECIFY_OPTION_RE.test(o.id),
+    );
+    return needsText ? { ...q, allowFreeText: true } : q;
+  });
+}
+
+/**
+ * Post-process LLM/heuristic diagnoses so professional firms are never left as
+ * generic `service` (which previously routed them into software_house).
+ */
+export function normalizeDiagnosis(
+  diagnosis: BusinessOperatingDiagnosis,
+  sourceDescription = "",
+): BusinessOperatingDiagnosis {
+  const blob = [
+    sourceDescription,
+    diagnosis.businessType,
+    diagnosis.industry,
+    diagnosis.narrative,
+    ...diagnosis.productsAndServices,
+  ]
+    .join(" ")
+    .toLowerCase();
+
+  let operatingModel: OperatingModel = diagnosis.operatingModel;
+  let businessType = diagnosis.businessType;
+  let industry = diagnosis.industry;
+
+  if (/\b(accounting|bookkeeping|tax firm|tax prep|cpa)\b/.test(blob)) {
+    operatingModel = "professional_services";
+    if (!/account/i.test(businessType)) businessType = "Accounting firm";
+    if (!/account|tax|book/i.test(industry)) industry = "accounting";
+  } else if (/\b(law firm|legal services|lawyer)\b/.test(blob)) {
+    operatingModel = "professional_services";
+    if (!/legal|law/i.test(businessType)) businessType = "Legal services";
+    if (!/legal|law/i.test(industry)) industry = "legal";
+  } else if (/\b(consultan|advisory|professional services)\b/.test(blob)) {
+    operatingModel = "professional_services";
+    if (!/consult|advisor|professional/i.test(businessType)) {
+      businessType = "Consultancy";
+    }
+    if (!/consult|advisor|professional/i.test(industry)) industry = "consulting";
+  }
+
+  return {
+    ...diagnosis,
+    businessType,
+    industry,
+    operatingModel,
+    clarificationQuestions: enrichClarificationQuestions(diagnosis.clarificationQuestions),
+  };
+}
+
 /** Offline-safe diagnosis used when SiliconFlow is unavailable and for golden evals. */
 export function diagnoseBusinessHeuristic(description: string): BusinessOperatingDiagnosis {
   const text = description.trim();
@@ -139,7 +221,11 @@ export function diagnoseBusinessHeuristic(description: string): BusinessOperatin
     operatingModel = "software";
     businessType = "SaaS product";
     industry = "saas";
-  } else if (/\b(agency|software house|dev shop|client work|bespoke)\b/.test(lower)) {
+  } else if (
+    /\b(software agency|software house|dev shop|development studio|development agency|msp|managed service)\b/.test(
+      lower,
+    )
+  ) {
     operatingModel = "service";
     businessType = "Software agency";
     industry = "software";
@@ -197,7 +283,7 @@ export function diagnoseBusinessHeuristic(description: string): BusinessOperatin
     industry = "software";
   }
 
-  return {
+  const raw: BusinessOperatingDiagnosis = {
     businessType,
     industry,
     operatingModel,
@@ -283,6 +369,7 @@ export function diagnoseBusinessHeuristic(description: string): BusinessOperatin
       "Leave room to grow the team as volume increases.",
     ],
   };
+  return normalizeDiagnosis(raw, text);
 }
 
 export async function diagnoseBusiness(input: {
@@ -307,6 +394,8 @@ export async function diagnoseBusiness(input: {
         "You are Maya, AdeHQ's workforce architect.",
         "Diagnose how this business operates from the founder's description.",
         "Be specific to their industry — never force a SaaS framing onto a restaurant, shop, or professional firm.",
+        "Accounting, legal, tax, bookkeeping, and consulting firms use operatingModel professional_services — never generic service.",
+        "When an answer option is Mix / Other / Specify / Custom, set allowFreeText true so the founder can type details.",
         "Ask only high-information clarification questions (2–5).",
         "confidence is 0–1; leave room to ask when uncertain.",
         "designReasons should be concrete and non-generic.",
@@ -322,7 +411,7 @@ export async function diagnoseBusiness(input: {
       abortSignal: AbortSignal.timeout(TIMEOUT_MS),
       providerOptions: siliconFlowProviderOptions(modelId),
     });
-    return object as BusinessOperatingDiagnosis;
+    return normalizeDiagnosis(object as BusinessOperatingDiagnosis, description);
   } catch (error) {
     console.warn("[AdeHQ workforce-studio] diagnoseBusiness failed", error);
     return diagnoseBusinessHeuristic(description);

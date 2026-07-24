@@ -120,6 +120,7 @@
     "test:workforce-studio:composition": "tsx scripts/test-workforce-studio-composition.ts",
     "test:workforce-studio:architect": "tsx scripts/test-workforce-architect.ts",
     "test:workforce-studio:goldens": "tsx scripts/test-workforce-architect-goldens.ts",
+    "test:workforce-studio:pack-selection": "tsx scripts/test-workforce-pack-selection.ts",
     "test:workforce-studio:pack-score": "tsx scripts/score-workforce-packs.ts",
     "test:workforce-studio:provisioning": "tsx -r dotenv/config scripts/test-workforce-studio-provisioning.ts dotenv_config_path=.env.local",
     "test:workforce-studio:promptfoo": "promptfoo eval -c promptfoo/workforce-studio/promptfooconfig.yaml --no-cache"
