@@ -33,6 +33,19 @@ lanes so ordinary conversation does not traverse the full workforce Brain.
 - Progressive fillers (`intelligent-fillers.ts`) speak short thinking/searching
   beats while Brain/tools run, then stop when the first real answer phrase is ready.
 
+## Capacity on calls = Work Hours
+
+Live calls are gated by **workspace Work Hours**, not chat daily token caps.
+
+- `beginAiRun` on `voiceCall` sets `skipDailyBudgets` (legacy chat token/cost
+  hard-blocks do not apply)
+- Voice reservations still use the short call output cap (~280) and expire stale
+  `reserved` rows so chat metering stays healthy
+- When Work Hours are **low**, the employee speaks a one-time natural warning
+  and offers to wrap up or reschedule after a top-up
+- When Work Hours are **exhausted**, the employee apologizes, asks the human to
+  renew capacity, emits `session.ended`, and the client hangs up after audio
+
 ## Benchmark
 
 ```bash

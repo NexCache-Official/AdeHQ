@@ -18,6 +18,7 @@
     "test:runtime:siliconflow": "tsx scripts/test-runtime-siliconflow.ts",
     "test:runtime:integration": "tsx scripts/test-runtime-integration.ts",
     "test:runtime:db": "tsx scripts/test-ai-runtime-db.ts",
+    "test:ai-usage-reservations": "tsx scripts/test-ai-usage-reservations.ts",
     "verify:release": "node scripts/verify-release-baseline.mjs",
     "test:brain:reliability": "tsx scripts/test-brain-reliability-foundation.ts",
     "test:brain:steward-shadow": "tsx scripts/test-brain-steward-shadow.ts",

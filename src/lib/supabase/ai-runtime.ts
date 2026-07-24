@@ -442,17 +442,116 @@ export async function linkArtifact(
   if (error) throw error;
 }
 
+/**
+ * Reserved rows older than this are treated as abandoned (interrupted call
+ * turns, crashed workers) and must not keep blocking the daily token budget.
+ */
+export const RESERVED_USAGE_MAX_AGE_MS = 15 * 60 * 1000;
+
+export type UsageSumRow = {
+  status?: unknown;
+  created_at?: unknown;
+  input_tokens?: unknown;
+  output_tokens?: unknown;
+  estimated_cost_usd?: unknown;
+  actual_cost_usd?: unknown;
+  estimated_input_tokens?: unknown;
+  estimated_max_output_tokens?: unknown;
+};
+
+export function accumulateTodayUsage(
+  rows: UsageSumRow[],
+  options: {
+    includeReserved?: boolean;
+    reservedMaxAgeMs?: number;
+    nowMs?: number;
+  } = {},
+): { tokens: number; cost: number } {
+  const includeReserved = Boolean(options.includeReserved);
+  const reservedMaxAgeMs = options.reservedMaxAgeMs ?? RESERVED_USAGE_MAX_AGE_MS;
+  const nowMs = options.nowMs ?? Date.now();
+
+  let tokens = 0;
+  let cost = 0;
+
+  for (const row of rows) {
+    const status = String(row.status ?? "");
+    if (status === "blocked") continue;
+    if (status === "reserved" && !includeReserved) continue;
+
+    if (status === "reserved") {
+      const createdAtMs = Date.parse(String(row.created_at ?? ""));
+      if (
+        Number.isFinite(createdAtMs) &&
+        nowMs - createdAtMs > reservedMaxAgeMs
+      ) {
+        continue;
+      }
+      tokens +=
+        Number(row.estimated_input_tokens ?? 0) +
+        Number(row.estimated_max_output_tokens ?? 0);
+      cost += Number(row.estimated_cost_usd ?? 0);
+      continue;
+    }
+
+    tokens += Number(row.input_tokens ?? 0) + Number(row.output_tokens ?? 0);
+    cost += Number(row.actual_cost_usd ?? row.estimated_cost_usd ?? 0);
+  }
+
+  return { tokens, cost };
+}
+
+/**
+ * Best-effort cleanup so abandoned `reserved` rows stop inflating budgets.
+ * Safe to call frequently; only touches rows past the TTL.
+ */
+export async function expireStaleReservedUsage(
+  client: SupabaseClient,
+  workspaceId: string,
+  options: { employeeId?: string; maxAgeMs?: number } = {},
+): Promise<void> {
+  const maxAgeMs = options.maxAgeMs ?? RESERVED_USAGE_MAX_AGE_MS;
+  const cutoff = new Date(Date.now() - maxAgeMs).toISOString();
+  let query = client
+    .from("ai_usage_events")
+    .update({
+      status: "failed",
+      input_tokens: 0,
+      output_tokens: 0,
+      error_message: "Reservation expired (stale reserved usage).",
+      finalized_at: nowISO(),
+    })
+    .eq("workspace_id", workspaceId)
+    .eq("status", "reserved")
+    .lt("created_at", cutoff);
+
+  if (options.employeeId) {
+    query = query.eq("employee_id", options.employeeId);
+  }
+
+  const { error } = await query;
+  if (error) {
+    console.warn("[AdeHQ cost guard] expireStaleReservedUsage failed", error);
+  }
+}
+
 export async function sumTodayUsage(
   client: SupabaseClient,
   workspaceId: string,
-  options: { employeeId?: string; includeReserved?: boolean } = {},
+  options: {
+    employeeId?: string;
+    includeReserved?: boolean;
+    reservedMaxAgeMs?: number;
+  } = {},
 ): Promise<{ tokens: number; cost: number }> {
   const startOfDay = new Date();
   startOfDay.setUTCHours(0, 0, 0, 0);
 
   let query = client
     .from("ai_usage_events")
-    .select("input_tokens, output_tokens, estimated_cost_usd, actual_cost_usd, status, estimated_input_tokens, estimated_max_output_tokens")
+    .select(
+      "input_tokens, output_tokens, estimated_cost_usd, actual_cost_usd, status, estimated_input_tokens, estimated_max_output_tokens, created_at",
+    )
     .eq("workspace_id", workspaceId)
     .gte("created_at", startOfDay.toISOString());
 
@@ -463,26 +562,10 @@ export async function sumTodayUsage(
   const { data, error } = await query;
   if (error) throw error;
 
-  let tokens = 0;
-  let cost = 0;
-
-  for (const row of (data as DbRow[] | null) ?? []) {
-    const status = String(row.status);
-    if (status === "blocked") continue;
-    if (status === "reserved" && !options.includeReserved) continue;
-
-    if (status === "reserved") {
-      tokens +=
-        Number(row.estimated_input_tokens ?? 0) +
-        Number(row.estimated_max_output_tokens ?? 0);
-      cost += Number(row.estimated_cost_usd ?? 0);
-    } else {
-      tokens += Number(row.input_tokens ?? 0) + Number(row.output_tokens ?? 0);
-      cost += Number(row.actual_cost_usd ?? row.estimated_cost_usd ?? 0);
-    }
-  }
-
-  return { tokens, cost };
+  return accumulateTodayUsage((data as UsageSumRow[] | null) ?? [], {
+    includeReserved: options.includeReserved,
+    reservedMaxAgeMs: options.reservedMaxAgeMs,
+  });
 }
 
 export function newAgentRunId(): string {

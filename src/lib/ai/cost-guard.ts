@@ -6,6 +6,7 @@ import {
   finalizeUsage,
   completeAgentRun,
   sumTodayUsage,
+  expireStaleReservedUsage,
   newAgentRunId,
   newUsageId,
   buildRunEstimate,
@@ -29,6 +30,17 @@ export type BeginAiRunContext = {
   modelMode: ModelMode;
   promptLength: number;
   explicitModel?: string;
+  /**
+   * When set (e.g. live voice turns cap at ~280), reserve/estimate against this
+   * instead of the full workspace/model output cap so interrupted calls cannot
+   * strand multi-k token reservations per turn.
+   */
+  maxOutputTokensOverride?: number;
+  /**
+   * Live calls are gated by workspace Work Hours. Skip legacy chat daily
+   * token/cost hard-blocks so a call cannot die on the employee token cap.
+   */
+  skipDailyBudgets?: boolean;
 };
 
 export type BeginAiRunResult =
@@ -67,12 +79,16 @@ export async function beginAiRun(ctx: BeginAiRunContext): Promise<BeginAiRunResu
   }
 
   const modeCap = getOutputTokenCap(ctx.modelMode);
-  const maxOutputTokens = Math.min(modeCap, settings.maxOutputTokens);
+  const maxOutputTokens = Math.min(
+    modeCap,
+    settings.maxOutputTokens,
+    ctx.maxOutputTokensOverride ?? Number.POSITIVE_INFINITY,
+  );
   const estimate = buildRunEstimate(
     ctx.provider,
     ctx.modelMode,
     ctx.promptLength,
-    settings.maxOutputTokens,
+    maxOutputTokens,
   );
 
   // CostPolicy hard block at plan time (PR-6). Soft confirm/manager paths are UI-gated.
@@ -88,22 +104,30 @@ export async function beginAiRun(ctx: BeginAiRunContext): Promise<BeginAiRunResu
     };
   }
 
-  const workspaceUsage = await sumTodayUsage(ctx.client, ctx.workspaceId, {
-    includeReserved: true,
-  });
-  if (workspaceUsage.tokens + estimate.tokens > settings.dailyTokenLimit) {
-    return { ok: false, reason: "Workspace daily token limit exceeded." };
-  }
-  if (workspaceUsage.cost + estimate.cost > settings.dailyCostLimitUsd) {
-    return { ok: false, reason: "Workspace daily cost limit exceeded." };
-  }
-
-  const employeeUsage = await sumTodayUsage(ctx.client, ctx.workspaceId, {
+  // Drop abandoned reservations before budgeting so interrupted turns cannot
+  // permanently exhaust chat daily token caps.
+  await expireStaleReservedUsage(ctx.client, ctx.workspaceId, {
     employeeId: ctx.employeeId,
-    includeReserved: true,
   });
-  if (employeeUsage.tokens + estimate.tokens > settings.employeeDailyTokenLimit) {
-    return { ok: false, reason: "Employee daily token limit exceeded." };
+
+  if (!ctx.skipDailyBudgets) {
+    const workspaceUsage = await sumTodayUsage(ctx.client, ctx.workspaceId, {
+      includeReserved: true,
+    });
+    if (workspaceUsage.tokens + estimate.tokens > settings.dailyTokenLimit) {
+      return { ok: false, reason: "Workspace daily token limit exceeded." };
+    }
+    if (workspaceUsage.cost + estimate.cost > settings.dailyCostLimitUsd) {
+      return { ok: false, reason: "Workspace daily cost limit exceeded." };
+    }
+
+    const employeeUsage = await sumTodayUsage(ctx.client, ctx.workspaceId, {
+      employeeId: ctx.employeeId,
+      includeReserved: true,
+    });
+    if (employeeUsage.tokens + estimate.tokens > settings.employeeDailyTokenLimit) {
+      return { ok: false, reason: "Employee daily token limit exceeded." };
+    }
   }
 
   const runId = newAgentRunId();

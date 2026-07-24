@@ -384,6 +384,10 @@ export async function processEmployeeResponse(
   let usageId: string | undefined;
   let maxOutputTokens: number | undefined;
 
+  // Live voice replies are capped well below chat output caps — reserve the
+  // same amount so aborted turns cannot strand ~4k-token reservations.
+  const voiceMaxOutputTokens = 280;
+
   if (isLive && !options.skipCostGuard && options.triggerMessageId) {
     const begun = await beginAiRun({
       client,
@@ -396,13 +400,20 @@ export async function processEmployeeResponse(
       modelMode,
       promptLength: content.length,
       explicitModel: employee.model,
+      maxOutputTokensOverride: options.voiceCall
+        ? voiceMaxOutputTokens
+        : undefined,
+      // Calls meter Work Hours; do not hard-block on chat daily token budgets.
+      skipDailyBudgets: Boolean(options.voiceCall),
     });
 
     if (!begun.ok) {
       const blockedReply: EmployeeResponse = {
         employeeId: employee.id,
         employeeName: employee.name,
-        reply: `I couldn't run right now.\n\n**Reason:** ${begun.reason}`,
+        reply: options.voiceCall
+          ? `I couldn't finish that just now. ${begun.reason}`
+          : `I couldn't run right now.\n\n**Reason:** ${begun.reason}`,
         effect: {
           workLog: [{ action: "Run blocked", summary: begun.reason, status: "failed" }],
           tasks: [],
@@ -412,8 +423,11 @@ export async function processEmployeeResponse(
         },
       };
 
+      // Voice calls keep the blocked reason in the call transcript / spoken
+      // path (and may fall back to voice_fast). Avoid writing a chat "couldn't
+      // run" message that races a successful spoken fallback.
       const aiMessage =
-        options.persistToRoom === false
+        options.persistToRoom === false || options.voiceCall
           ? { id: `private:${employee.id}:${Date.now()}` }
           : (
               await persistEmployeeEffects(
@@ -557,7 +571,7 @@ export async function processEmployeeResponse(
     // Live calls need first spoken tokens fast — keep replies short and fail
     // closed on long Brain stalls instead of sitting in silence.
     maxOutputTokens: options.voiceCall
-      ? Math.min(maxOutputTokens ?? 280, 280)
+      ? Math.min(maxOutputTokens ?? voiceMaxOutputTokens, voiceMaxOutputTokens)
       : (maxOutputTokens ?? getOutputTokenCap(modelMode)),
     timeoutMs: options.voiceCall ? 12_000 : getTimeoutMs(modelMode),
     voiceCall: options.voiceCall,
@@ -570,173 +584,205 @@ export async function processEmployeeResponse(
     },
   };
 
-  const {
-    response,
-    aiMode,
-    metrics,
-    failed,
-    errorMessage,
-    usedRuntime,
-  } = await dispatchEmployeeDirectResponse(
-    routeInput,
-    routeOptions,
-    options.onReplyDelta
-      ? {
-          onReplyDelta: options.onReplyDelta,
-          abortSignal: options.abortSignal,
-        }
-      : undefined,
-  );
-  if ((response.effect.toolCalls?.length ?? 0) > 0) {
-    options.onActivity?.("using_tool", "Using workspace tools");
-  }
-  options.onActivity?.("speaking");
+  try {
+    const {
+      response,
+      aiMode,
+      metrics,
+      failed,
+      errorMessage,
+      usedRuntime,
+    } = await dispatchEmployeeDirectResponse(
+      routeInput,
+      routeOptions,
+      options.onReplyDelta
+        ? {
+            onReplyDelta: options.onReplyDelta,
+            abortSignal: options.abortSignal,
+          }
+        : undefined,
+    );
+    if ((response.effect.toolCalls?.length ?? 0) > 0) {
+      options.onActivity?.("using_tool", "Using workspace tools");
+    }
+    options.onActivity?.("speaking");
 
-  await recordEmployeeReplyShadowResult({
-    client,
-    workspaceId: ctx.workspaceId,
-    employeeId: employee.id,
-    employeeName: employee.name,
-    roleKey: employee.roleKey,
-    roomId: ctx.room.id,
-    topicId,
-    dmId,
-    messageId: options.triggerMessageId,
-    userMessage: content,
-    oldProvider,
-    oldModel,
-    oldModelMode,
-    resolvedRunModelMode: shadowResolvedModelMode,
-    artifactIntent: artifactIntent ?? undefined,
-    agentRunId: runId,
-    workUnitId: shadowPlan?.workUnitId,
-    routing: shadowPlan?.routing,
-    actualProvider: metrics ? (usedRuntime ? "runtime-v2" : oldProvider) : undefined,
-    actualModel: metrics?.model,
-    actualModelMode: modelMode,
-    actualCostUsd: metrics?.estimatedCostUsd,
-    inputTokens: metrics?.inputTokens,
-    outputTokens: metrics?.outputTokens,
-    durationMs: metrics?.durationMs,
-    aiMode,
-    failed: failed || aiMode === "error",
-    source: "employee_direct_response_shadow",
-  });
-
-  const effect = enforceEmployeePermissions(employee, response.effect);
-
-  const inferred = inferArtifactsFromReply(
-    content,
-    response.reply,
-    effect.artifacts ?? [],
-    effect.emailDrafts ?? [],
-  );
-  const mergedEffect = {
-    ...effect,
-    artifacts: inferred.artifacts,
-    emailDrafts: inferred.emailDrafts,
-  };
-  const finalReply = inferred.reply;
-
-  if (runId && effect.memory.length) {
-    await appendRunStep(client, {
-      workspaceId: ctx.workspaceId,
-      agentRunId: runId,
-      roomId: ctx.room.id,
-      topicId,
-      employeeId,
-      stepType: "memory_write",
-      title: "Saving memory",
-      summary: `${effect.memory.length} entr${effect.memory.length === 1 ? "y" : "ies"}`,
-      status: "success",
-    });
-  }
-  if (runId && effect.tasks.length) {
-    await appendRunStep(client, {
-      workspaceId: ctx.workspaceId,
-      agentRunId: runId,
-      roomId: ctx.room.id,
-      topicId,
-      employeeId,
-      stepType: "task_create",
-      title: "Creating tasks",
-      summary: `${effect.tasks.length} task(s)`,
-      status: "success",
-    });
-  }
-  if (runId && effect.approvals.length) {
-    await appendRunStep(client, {
-      workspaceId: ctx.workspaceId,
-      agentRunId: runId,
-      roomId: ctx.room.id,
-      topicId,
-      employeeId,
-      stepType: "approval_request",
-      title: "Requesting approval",
-      summary: effect.approvals.map((a) => a.title).join(", "),
-      status: "success",
-    });
-  }
-
-  const aiMessage =
-    options.persistToRoom === false
-      ? { id: `private:${employee.id}:${runId ?? Date.now()}` }
-      : (
-          await persistEmployeeEffects(
-            client,
-            ctx.workspaceId,
-            ctx.room.id,
-            topicId,
-            employee,
-            finalReply,
-            mergedEffect,
-            options.triggerMessageId,
-            runId,
-            {
-              fileContext: fileContextBundle,
-              usedFileContext,
-            },
-          )
-        ).aiMessage;
-
-  if (isLive && runId && usageId && !options.skipCostGuard) {
-    await finalizeAiRun({
+    await recordEmployeeReplyShadowResult({
       client,
       workspaceId: ctx.workspaceId,
-      runId,
-      usageId,
-      responseMessageId: options.persistToRoom === false ? undefined : aiMessage.id,
+      employeeId: employee.id,
+      employeeName: employee.name,
+      roleKey: employee.roleKey,
+      roomId: ctx.room.id,
+      topicId,
+      dmId,
+      messageId: options.triggerMessageId,
+      userMessage: content,
+      oldProvider,
+      oldModel,
+      oldModelMode,
+      resolvedRunModelMode: shadowResolvedModelMode,
+      artifactIntent: artifactIntent ?? undefined,
+      agentRunId: runId,
+      workUnitId: shadowPlan?.workUnitId,
+      routing: shadowPlan?.routing,
+      actualProvider: metrics ? (usedRuntime ? "runtime-v2" : oldProvider) : undefined,
+      actualModel: metrics?.model,
+      actualModelMode: modelMode,
+      actualCostUsd: metrics?.estimatedCostUsd,
       inputTokens: metrics?.inputTokens,
       outputTokens: metrics?.outputTokens,
-      cachedTokens: metrics?.cachedTokens,
-      actualCostUsd: metrics?.estimatedCostUsd,
-      latencyMs: metrics?.durationMs,
-      fallbackUsed: metrics?.fallbackUsed,
+      durationMs: metrics?.durationMs,
+      aiMode,
       failed: failed || aiMode === "error",
-      errorMessage,
+      source: "employee_direct_response_shadow",
     });
-  }
 
-  if (brainRunId) {
-    try {
-      const { finishBrainRun } = await import("@/lib/brain/reliability/lifecycle");
-      await finishBrainRun(
-        client,
-        brainRunId,
-        failed || aiMode === "error" ? "failed" : "completed",
-      );
-    } catch (err) {
-      console.warn("[AdeHQ brain reliability] finishBrainRun", err);
+    const effect = enforceEmployeePermissions(employee, response.effect);
+
+    const inferred = inferArtifactsFromReply(
+      content,
+      response.reply,
+      effect.artifacts ?? [],
+      effect.emailDrafts ?? [],
+    );
+    const mergedEffect = {
+      ...effect,
+      artifacts: inferred.artifacts,
+      emailDrafts: inferred.emailDrafts,
+    };
+    const finalReply = inferred.reply;
+
+    if (runId && effect.memory.length) {
+      await appendRunStep(client, {
+        workspaceId: ctx.workspaceId,
+        agentRunId: runId,
+        roomId: ctx.room.id,
+        topicId,
+        employeeId,
+        stepType: "memory_write",
+        title: "Saving memory",
+        summary: `${effect.memory.length} entr${effect.memory.length === 1 ? "y" : "ies"}`,
+        status: "success",
+      });
     }
-  }
+    if (runId && effect.tasks.length) {
+      await appendRunStep(client, {
+        workspaceId: ctx.workspaceId,
+        agentRunId: runId,
+        roomId: ctx.room.id,
+        topicId,
+        employeeId,
+        stepType: "task_create",
+        title: "Creating tasks",
+        summary: `${effect.tasks.length} task(s)`,
+        status: "success",
+      });
+    }
+    if (runId && effect.approvals.length) {
+      await appendRunStep(client, {
+        workspaceId: ctx.workspaceId,
+        agentRunId: runId,
+        roomId: ctx.room.id,
+        topicId,
+        employeeId,
+        stepType: "approval_request",
+        title: "Requesting approval",
+        summary: effect.approvals.map((a) => a.title).join(", "),
+        status: "success",
+      });
+    }
 
-  return {
-    ...response,
-    reply: finalReply,
-    effect: mergedEffect,
-    aiMessageId: aiMessage.id,
-    aiMode,
-    agentRunId: runId,
-    ...(voiceGroundingAnswer ? { voiceGroundingAnswer } : {}),
-  };
+    const aiMessage =
+      options.persistToRoom === false
+        ? { id: `private:${employee.id}:${runId ?? Date.now()}` }
+        : (
+            await persistEmployeeEffects(
+              client,
+              ctx.workspaceId,
+              ctx.room.id,
+              topicId,
+              employee,
+              finalReply,
+              mergedEffect,
+              options.triggerMessageId,
+              runId,
+              {
+                fileContext: fileContextBundle,
+                usedFileContext,
+              },
+            )
+          ).aiMessage;
+
+    if (isLive && runId && usageId && !options.skipCostGuard) {
+      await finalizeAiRun({
+        client,
+        workspaceId: ctx.workspaceId,
+        runId,
+        usageId,
+        responseMessageId: options.persistToRoom === false ? undefined : aiMessage.id,
+        inputTokens: metrics?.inputTokens,
+        outputTokens: metrics?.outputTokens,
+        cachedTokens: metrics?.cachedTokens,
+        actualCostUsd: metrics?.estimatedCostUsd,
+        latencyMs: metrics?.durationMs,
+        fallbackUsed: metrics?.fallbackUsed,
+        failed: failed || aiMode === "error",
+        errorMessage,
+      });
+    }
+
+    if (brainRunId) {
+      try {
+        const { finishBrainRun } = await import("@/lib/brain/reliability/lifecycle");
+        await finishBrainRun(
+          client,
+          brainRunId,
+          failed || aiMode === "error" ? "failed" : "completed",
+        );
+      } catch (err) {
+        console.warn("[AdeHQ brain reliability] finishBrainRun", err);
+      }
+    }
+
+    return {
+      ...response,
+      reply: finalReply,
+      effect: mergedEffect,
+      aiMessageId: aiMessage.id,
+      aiMode,
+      agentRunId: runId,
+      ...(voiceGroundingAnswer ? { voiceGroundingAnswer } : {}),
+    };
+  } catch (error) {
+    // Interrupted/failed live turns must release the reservation; otherwise
+    // estimated max-output tokens keep counting against the daily cap.
+    if (isLive && runId && usageId && !options.skipCostGuard) {
+      try {
+        await finalizeAiRun({
+          client,
+          workspaceId: ctx.workspaceId,
+          runId,
+          usageId,
+          failed: true,
+          errorMessage:
+            error instanceof Error ? error.message : String(error),
+        });
+      } catch (finalizeError) {
+        console.warn(
+          "[AdeHQ cost guard] finalizeAiRun after failed employee response",
+          finalizeError,
+        );
+      }
+    }
+    if (brainRunId) {
+      try {
+        const { finishBrainRun } = await import("@/lib/brain/reliability/lifecycle");
+        await finishBrainRun(client, brainRunId, "failed");
+      } catch (err) {
+        console.warn("[AdeHQ brain reliability] finishBrainRun", err);
+      }
+    }
+    throw error;
+  }
 }

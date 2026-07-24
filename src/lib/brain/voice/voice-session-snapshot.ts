@@ -32,6 +32,8 @@ export type VoiceSessionSnapshot = {
   permissionsDigest: string;
   availableToolNames: string[];
   promptCacheKey?: string;
+  /** One soft Work Hours warning spoken per call when capacity is low. */
+  workHoursLowWarnedAt?: number | null;
   version: number;
   builtAt: number;
   lastUpdatedAt: number;
@@ -55,6 +57,21 @@ export function setVoiceSessionSnapshot(
 
 export function clearVoiceSessionSnapshot(callId: string): void {
   snapshots.delete(callId);
+}
+
+export function markVoiceWorkHoursLowWarned(
+  callId: string,
+): VoiceSessionSnapshot | null {
+  const current = snapshots.get(callId);
+  if (!current) return null;
+  const next: VoiceSessionSnapshot = {
+    ...current,
+    workHoursLowWarnedAt: Date.now(),
+    version: current.version + 1,
+    lastUpdatedAt: Date.now(),
+  };
+  snapshots.set(callId, next);
+  return next;
 }
 
 function compactSummary(turns: VoiceTurn[]): string {
@@ -215,6 +232,7 @@ export async function buildVoiceSessionSnapshot(input: {
       "Standard AdeHQ member permissions. Fast path cannot mutate CRM/Drive/email.",
     availableToolNames: toolNames,
     promptCacheKey: `voice:${input.employeeId}:v1`,
+    workHoursLowWarnedAt: null,
     version: 1,
     builtAt: Date.now(),
     lastUpdatedAt: Date.now(),

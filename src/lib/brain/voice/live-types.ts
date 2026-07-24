@@ -204,4 +204,9 @@ export type ServerCallEvent =
       turn?: CallTurnState;
       activity?: EmployeeCallActivity;
     }
+  | {
+      type: "session.ended";
+      reason: "work_hours_exhausted" | "call_ended";
+      message: string;
+    }
   | { type: "error"; code: string; message: string; recoverable: boolean };

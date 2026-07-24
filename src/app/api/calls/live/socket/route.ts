@@ -28,6 +28,11 @@ import {
   type StreamingTranscriptionSession,
 } from "@/lib/brain/voice";
 import { ensureGeneralTopic } from "@/lib/server/topic-helpers";
+import {
+  looksLikeInternalErrorMessage,
+  safeApiErrorMessage,
+} from "@/lib/server/api-error";
+import { postgrestErrorMessage } from "@/lib/server/supabase-errors";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -478,14 +483,24 @@ export async function GET(request: NextRequest) {
                   signal: turnAbort.signal,
                 });
               } catch (turnError) {
+                const rawMessage =
+                  turnError instanceof Error
+                    ? turnError.message
+                    : postgrestErrorMessage(turnError);
+                const clientMessage =
+                  rawMessage &&
+                  rawMessage !== "Unknown error" &&
+                  !looksLikeInternalErrorMessage(rawMessage)
+                    ? rawMessage
+                    : safeApiErrorMessage(
+                        turnError,
+                        "The employee could not complete this turn.",
+                      );
                 if (callDebugEnabled()) {
                   console.warn("[AdeHQ live-call] turn failed", {
                     callId: payload.callId,
                     sequence: turnSequence,
-                    error:
-                      turnError instanceof Error
-                        ? turnError.message
-                        : String(turnError),
+                    error: rawMessage,
                   });
                 }
                 send(ws, {
@@ -494,10 +509,7 @@ export async function GET(request: NextRequest) {
                     turnError instanceof Error && turnError.name === "AbortError"
                       ? "turn_interrupted"
                       : "turn_failed",
-                  message:
-                    turnError instanceof Error
-                      ? turnError.message
-                      : "The employee could not complete this turn.",
+                  message: clientMessage,
                   recoverable: true,
                 });
               } finally {
