@@ -41,7 +41,7 @@ export const RELEASE_MANIFEST: ReleaseManifest = {
   releaseId: "baseline-pr25-playbook-artifact-runtime",
   appVersion: "20.2.0",
   catalogVersion: 8,
-  requiredMigrationVersion: "20260723200000",
+  requiredMigrationVersion: "20260723210000",
   baselineCommits: {
     pr14Search: "49b8c5a444624d2152e833aeac9baa95ae283f9c",
     pr15Vision: "3ea98a1ef6b7458cbaf1c8d4839a043ce371e463",
