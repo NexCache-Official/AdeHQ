@@ -237,7 +237,7 @@ export function WorkforceStudioShell({ workspaceId }: { workspaceId: string }) {
           mappingReason={editor.mappingReason ?? undefined}
           assumptions={editor.diagnosis?.assumptions}
           workspaceId={workspaceId}
-          onOpenStudio={(ids) => editor.openStudioFromReveal(ids)}
+          onOpenStudio={(ids) => void editor.openStudioFromReveal(ids)}
           onSelectCandidate={editor.selectRevealCandidate}
         />
       ) : null}

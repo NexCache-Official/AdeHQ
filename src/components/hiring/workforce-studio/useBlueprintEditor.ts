@@ -355,21 +355,49 @@ export function useBlueprintEditor(workspaceId: string | null) {
   }, [workspaceId, diagnosis, clarifyAnswers]);
 
   const openStudioFromReveal = useCallback(
-    (includedSeatIds?: string[]) => {
+    async (includedSeatIds?: string[]) => {
+      let nextPayload = draftPayload;
       if (draftPayload && includedSeatIds && includedSeatIds.length > 0) {
         const keep = new Set(includedSeatIds);
         if (keep.size < draftPayload.seats.length) {
-          const pruned = pruneSeatsFromPayload(draftPayload, keep);
-          const bands = forecastWorkHours(pruned.seats);
-          setDraftPayload(pruned);
+          nextPayload = pruneSeatsFromPayload(draftPayload, keep);
+          const bands = forecastWorkHours(nextPayload.seats);
+          setDraftPayload(nextPayload);
           setRevealWhLow(Math.round(bands.reduce((sum, b) => sum + b.lowWh, 0)));
           setRevealWhHigh(Math.round(bands.reduce((sum, b) => sum + b.highWh, 0)));
-          setDirty(true);
+          // Persist immediately with the pruned payload (don't rely on save()
+          // closing over stale React state from before this setState).
+          if (workspaceId && blueprint && lockToken && nextPayload) {
+            setSaving(true);
+            try {
+              const updated = await patchBlueprintDraft(workspaceId, blueprint.id, {
+                lockToken,
+                expectedRevision: blueprint.revision,
+                payload: nextPayload,
+                changeSummary: "Trimmed seats from team reveal",
+                name: blueprintName,
+              });
+              setBlueprint(updated);
+              setDraftPayload(updated.draftPayload);
+              setDirty(false);
+            } catch (err) {
+              setDirty(true);
+              setError(
+                err instanceof Error
+                  ? err.message
+                  : "Couldn't save the trimmed team — review seats before approving.",
+              );
+            } finally {
+              setSaving(false);
+            }
+          } else {
+            setDirty(true);
+          }
         }
       }
       setPhase("editor");
     },
-    [draftPayload],
+    [draftPayload, workspaceId, blueprint, lockToken, blueprintName],
   );
 
   const selectRevealCandidate = useCallback((seatId: string, candidate: AiEmployeeApplicant) => {

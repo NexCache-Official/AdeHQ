@@ -7,6 +7,7 @@ import { composeBlueprintFromTemplate } from "../src/lib/hiring/workforce-studio
 import { selectArchetypeAndPack } from "../src/lib/hiring/workforce-studio/ontology/select-pack";
 import type { BusinessOperatingDiagnosis } from "../src/lib/hiring/workforce-studio/diagnosis-types";
 import { clarificationNeedsFreeText } from "../src/lib/hiring/workforce-studio/clarification-ui";
+import { pruneSeatsFromPayload } from "../src/lib/hiring/workforce-studio/seat-brief";
 
 let failures = 0;
 
@@ -110,6 +111,26 @@ assert(
   };
   assert(clarificationNeedsFreeText(q, "mix"), "Mix (specify) needs free text");
   assert(!clarificationNeedsFreeText(q, "tax"), "plain option does not force free text");
+}
+
+{
+  const h = diagnoseBusinessHeuristic(
+    "We are a small accounting firm with three partners. Proposal writing and client follow-ups eat most of our week.",
+  );
+  h.narrative = "accounting firm proposals";
+  const { mapping } = rolesFor(h);
+  const payload = composeBlueprintFromTemplate(mapping.manifest, mapping.intakeAnswers, null);
+  const keep = new Set(payload.seats.slice(0, 2).map((s) => s.id));
+  const pruned = pruneSeatsFromPayload(payload, keep);
+  assert(pruned.seats.length === 2, `prune keeps 2 seats (got ${pruned.seats.length})`);
+  assert(
+    pruned.rooms.every((r) => r.memberSeatIds.every((id) => keep.has(id))),
+    "prune rooms only reference kept seats",
+  );
+  assert(
+    pruned.edges.every((e) => keep.has(e.fromSeatId) && keep.has(e.toSeatId)),
+    "prune edges only reference kept seats",
+  );
 }
 
 console.log(`\n=== Done: ${failures === 0 ? "ALL PASSED" : `${failures} FAILURE(S)`} ===`);
