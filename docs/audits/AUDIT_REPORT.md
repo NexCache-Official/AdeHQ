@@ -29,18 +29,20 @@ role briefs / candidates; WH bands felt fake; diagnose felt hung.
 - Vacation-rental property manager → `property_management` seats (ops/support/books).
 
 **Live browser E2E:**
-- **Production (`app.adehq.com`)** with `shubhamzinbox@gmail.com`: full architect
-  path for the accounting prompt → Team Reveal + Studio seats were
-  Bookkeeping / Client Ops / EA / Customer Support (not software). Diagnosis
-  quality good. Clarify had no Mix(specify) on this path; AdeOrb not on prod.
-- **Localhost real login:** blocked — Supabase `"Unregistered API key"` with
-  baked-in publishable key; no `.env.local`. Demo mode cannot open `/hire/team`
-  (email gate requires real session). Vercel Preview for the PR is
-  SSO-protected.
-- **Branch value vs prod today:** hardens the intermittent LLM→`software_house`
-  failure mode; accounting pack swaps CX for Proposals & Pipeline; AdeOrb,
-  Mix free-text, clarify Back, role-brief Team Reveal, seat include/exclude,
-  optional candidates, honest WH labels.
+- **Production accounting** (`app.adehq.com`, test account): Team Reveal seats
+  Bookkeeping / Client Ops / EA / Customer Support (not software). Clarify had
+  no Mix(specify) on that path; AdeOrb not on prod.
+- **Production vacation-rental** same account: diagnosis under-classified as
+  “Independent business / Other · General” (45% confidence) → lean
+  Ops + Bookkeeping only (sensible but thin; missing guest-support seat).
+  Branch forces `property_management` for this prompt (ops/support/books).
+- **Localhost real login:** blocked — Supabase `"Unregistered API key"`; no
+  `.env.local`. Demo cannot open `/hire/team`. Vercel Preview SSO-protected.
+- **Branch vs prod:** hardens LLM→`software_house`; accounting → Proposals &
+  Pipeline; property packs for vacation rentals; AdeOrb / Mix / Back / role
+  briefs / seat trim persist / optional candidates / honest WH labels.
+- **Also:** `test:workforce-studio:composition` green after pack changes;
+  reveal→studio now PATCHes pruned seats immediately.
 
 **Console noise:** `contentscript.js` MaxListeners / ObjectMultiplex — browser
 extension, not AdeHQ.
