@@ -76,12 +76,11 @@ export type SendPayload = {
 
 const TEXT_COLORS = [
   { label: "Default", value: "" },
-  { label: "Ink", value: "#1a1a1a" },
-  { label: "Blue", value: "#2F6FED" },
-  { label: "Green", value: "#1B7A4A" },
-  { label: "Amber", value: "#B45309" },
-  { label: "Red", value: "#C0392B" },
-  { label: "Gray", value: "#6B7280" },
+  { label: "Ink", value: "#241e1a" },
+  { label: "Green", value: "#439458" },
+  { label: "Amber", value: "#a45e00" },
+  { label: "Red", value: "#D9483B" },
+  { label: "Gray", value: "#8f8c88" },
 ];
 
 const MAX_ATTACHMENT_BYTES = 8 * 1024 * 1024;
@@ -127,12 +126,19 @@ export function Composer({
   onSend,
   onClose,
   onDraftChange,
+  demoMode = false,
+  hideChrome = false,
+  onStatusChange,
 }: {
   workspaceId: string;
   initial: ComposerInitial;
   onSend: (payload: SendPayload) => void;
   onClose: () => void;
   onDraftChange?: (draft: DraftDTO | null) => void;
+  demoMode?: boolean;
+  /** When true, skip the built-in title bar (used inside ComposerWindow). */
+  hideChrome?: boolean;
+  onStatusChange?: (status: string) => void;
 }) {
   const [to, setTo] = useState((initial.to ?? []).join(", "));
   const [cc, setCc] = useState((initial.cc ?? []).join(", "));
@@ -208,6 +214,10 @@ export function Composer({
   }, [to, cc, bcc, subject, readEditor]);
 
   const persist = useCallback(async () => {
+    if (demoMode) {
+      setSaveState("saved");
+      return;
+    }
     const data = snapshot();
     const isEmpty =
       data.to.length === 0 &&
@@ -252,7 +262,7 @@ export function Composer({
     } finally {
       savingRef.current = false;
     }
-  }, [snapshot, workspaceId, threadId, onDraftChange, attachments.length]);
+  }, [snapshot, workspaceId, threadId, onDraftChange, attachments.length, demoMode]);
 
   const schedulePersist = useCallback(() => {
     if (saveTimer.current) clearTimeout(saveTimer.current);
@@ -460,7 +470,7 @@ export function Composer({
   };
 
   const handleDiscard = async () => {
-    if (draftIdRef.current) {
+    if (draftIdRef.current && !demoMode) {
       await discardDraftReq({ draftId: draftIdRef.current, workspaceId }).catch(() => {});
       onDraftChange?.(null);
     }
@@ -484,26 +494,46 @@ export function Composer({
     (requiresApproval || originType === "ai_employee") &&
     approvalStatus !== "approved";
 
+  const statusLabel = demoMode
+    ? "Demo draft"
+    : saveState === "saving"
+      ? "Saving…"
+      : saveState === "saved"
+        ? "Draft saved"
+        : originType === "ai_employee"
+          ? initial.canApprove
+            ? "AI draft · review & send"
+            : "AI draft · needs approval"
+          : "";
+
+  useEffect(() => {
+    onStatusChange?.(statusLabel);
+  }, [onStatusChange, statusLabel]);
+
   return (
     <div className="flex h-full min-h-0 flex-col bg-surface">
-      <div className="flex shrink-0 items-center justify-between border-b border-border-2 px-4 py-2">
-        <span className="text-sm font-medium text-ink">
-          {threadId ? "Reply" : "New message"}
-          {originType === "ai_employee" && (
-            <span className="ml-2 text-xs font-normal text-ink-3">
-              {initial.canApprove ? "AI draft · review & send" : "AI draft · needs approval"}
-            </span>
-          )}
-        </span>
-        <div className="flex items-center gap-3">
-          <span className="text-xs text-ink-3">
-            {saveState === "saving" ? "Saving…" : saveState === "saved" ? "Draft saved" : ""}
+      {!hideChrome && (
+        <div className="flex shrink-0 items-center justify-between border-b border-border px-[18px] py-3.5">
+          <span className="text-[14px] font-semibold tracking-[-0.01em] text-ink">
+            {threadId ? "Reply" : "New message"}
+            {originType === "ai_employee" && (
+              <span className="ml-2 text-xs font-normal text-ink-3">
+                {initial.canApprove ? "AI draft · review & send" : "AI draft · needs approval"}
+              </span>
+            )}
           </span>
-          <button onClick={onClose} className="rounded p-1 text-ink-3 hover:bg-muted" type="button">
-            <X className="h-4 w-4" />
-          </button>
+          <div className="flex items-center gap-3">
+            <span className="font-mono text-[11.5px] text-green">{statusLabel}</span>
+            <button
+              onClick={onClose}
+              className="flex h-[26px] w-[26px] items-center justify-center rounded-[7px] text-ink-3 transition-colors hover:bg-muted"
+              type="button"
+            >
+              <X className="h-[15px] w-[15px]" strokeWidth={2.2} />
+            </button>
+          </div>
         </div>
-      </div>
+      )}
 
       {isStale && (
         <div className="flex items-start gap-2 border-b border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-900">
@@ -656,29 +686,28 @@ export function Composer({
       </div>
 
       {/* Formatting toolbar */}
-      <div className="flex shrink-0 flex-wrap items-center gap-0.5 border-b border-border-2 px-2 py-1.5">
+      <div className="flex shrink-0 flex-wrap items-center gap-0.5 border-b border-[rgb(241_240_238)] px-3.5 py-2">
         <ToolBtn label="Bold" onClick={() => exec("bold")}>
-          <Bold className="h-3.5 w-3.5" />
+          <Bold className="h-4 w-4" />
         </ToolBtn>
         <ToolBtn label="Italic" onClick={() => exec("italic")}>
-          <Italic className="h-3.5 w-3.5" />
+          <Italic className="h-4 w-4" />
         </ToolBtn>
         <ToolBtn label="Underline" onClick={() => exec("underline")}>
-          <Underline className="h-3.5 w-3.5" />
+          <Underline className="h-4 w-4" />
         </ToolBtn>
-        <span className="mx-1 h-4 w-px bg-border" />
         <ToolBtn label="Bulleted list" onClick={() => exec("insertUnorderedList")}>
-          <List className="h-3.5 w-3.5" />
+          <List className="h-4 w-4" />
         </ToolBtn>
         <ToolBtn label="Numbered list" onClick={() => exec("insertOrderedList")}>
-          <ListOrdered className="h-3.5 w-3.5" />
+          <ListOrdered className="h-4 w-4" />
         </ToolBtn>
         <ToolBtn label="Link" onClick={applyLink}>
-          <LinkIcon className="h-3.5 w-3.5" />
+          <LinkIcon className="h-4 w-4" />
         </ToolBtn>
         <div className="relative">
           <ToolBtn label="Text color" onClick={() => setColorOpen((o) => !o)}>
-            <Palette className="h-3.5 w-3.5" />
+            <Palette className="h-4 w-4" />
           </ToolBtn>
           {colorOpen && (
             <div className="absolute left-0 top-full z-20 mt-1 flex gap-1 rounded-lg border border-border bg-surface p-2 shadow-md">
@@ -700,11 +729,10 @@ export function Composer({
           )}
         </div>
         <ToolBtn label="Clear formatting" onClick={() => exec("removeFormat")}>
-          <RemoveFormatting className="h-3.5 w-3.5" />
+          <RemoveFormatting className="h-4 w-4" />
         </ToolBtn>
-        <span className="mx-1 h-4 w-px bg-border" />
         <ToolBtn label="Attach file" onClick={() => fileInputRef.current?.click()}>
-          <Paperclip className="h-3.5 w-3.5" />
+          <Paperclip className="h-4 w-4" />
         </ToolBtn>
         <input
           ref={fileInputRef}
@@ -753,8 +781,8 @@ export function Composer({
           }
         }}
         className={cn(
-          "min-h-[200px] flex-1 overflow-y-auto px-4 py-3 text-sm leading-relaxed text-ink outline-none",
-          "[&_a]:text-accent [&_a]:underline",
+          "min-h-0 flex-1 overflow-y-auto px-[18px] py-[18px] text-[15px] leading-[1.7] text-ink outline-none",
+          "[&_a]:text-ink [&_a]:underline",
           "empty:before:pointer-events-none empty:before:text-ink-3 empty:before:content-[attr(data-placeholder)]",
         )}
         style={{ whiteSpace: "pre-wrap" }}
@@ -786,20 +814,34 @@ export function Composer({
       {attachError && <p className="px-4 pb-1 text-xs text-rose-600">{attachError}</p>}
       {gateError && <p className="px-4 pb-1 text-xs text-rose-600">{gateError}</p>}
 
-      <div className="flex shrink-0 items-center justify-between border-t border-border-2 px-4 py-2.5">
+      <div className="flex shrink-0 items-center justify-between border-t border-border px-[18px] py-3.5">
         <button
           type="button"
           onClick={() => {
+            if (demoMode) {
+              onClose();
+              return;
+            }
             if (showApproveAndSend) void handleApproveAndSend();
             else handleSend();
           }}
-          disabled={sendBlocked}
-          className="flex items-center gap-2 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white transition hover:opacity-90 disabled:opacity-40"
+          disabled={demoMode ? false : sendBlocked}
+          className="flex items-center gap-2 rounded-[9px] bg-ink px-[18px] py-2.5 text-[13.5px] font-semibold text-white transition-colors hover:bg-accent-d disabled:opacity-40"
         >
-          <Send className="h-4 w-4" />
-          {approvalBusy ? "Working…" : showApproveAndSend ? "Approve & send" : "Send"}
+          <Send className="h-[15px] w-[15px]" strokeWidth={2.1} />
+          {demoMode
+            ? "Send"
+            : approvalBusy
+              ? "Working…"
+              : showApproveAndSend
+                ? "Approve & send"
+                : "Send"}
         </button>
-        <button type="button" onClick={handleDiscard} className="text-xs text-ink-3 hover:text-rose-600">
+        <button
+          type="button"
+          onClick={handleDiscard}
+          className="px-1.5 py-2 text-[13px] font-medium text-ink-3 transition-colors hover:text-danger"
+        >
           Discard
         </button>
       </div>
@@ -809,8 +851,8 @@ export function Composer({
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="flex items-center gap-2 border-b border-border-2 px-4 py-2">
-      <span className="w-12 shrink-0 text-xs font-medium text-ink-3">{label}</span>
+    <div className="flex items-center gap-3.5 border-b border-[rgb(241_240_238)] px-[18px] py-3">
+      <span className="w-[52px] shrink-0 font-mono text-[12.5px] text-ink-3">{label}</span>
       {children}
     </div>
   );
@@ -832,7 +874,7 @@ function ToolBtn({
       aria-label={label}
       onMouseDown={(e) => e.preventDefault()}
       onClick={onClick}
-      className="flex h-7 w-7 items-center justify-center rounded text-ink-3 transition hover:bg-muted hover:text-ink"
+      className="flex h-[30px] w-[30px] items-center justify-center rounded-[7px] text-ink-3 transition hover:bg-muted hover:text-ink"
     >
       {children}
     </button>
