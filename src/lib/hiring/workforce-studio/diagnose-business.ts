@@ -218,9 +218,15 @@ export function diagnoseBusinessHeuristic(description: string): BusinessOperatin
     operatingModel = "professional_services";
     businessType = "Consultancy";
     industry = "consulting";
-  } else if (/\b(real estate|property management|leasing|tenant)\b/.test(lower)) {
+  } else if (
+    /\b(real estate|property management|property manager|vacation.?rental|short.?term rental|airbnb|leasing|tenant|listings)\b/.test(
+      lower,
+    )
+  ) {
     operatingModel = "service";
-    businessType = "Property business";
+    businessType = /\b(vacation|short.?term|airbnb)\b/.test(lower)
+      ? "Vacation rental business"
+      : "Property business";
     industry = "real_estate";
   } else if (/\b(tutoring|tutor|course|school|training|student)\b/.test(lower)) {
     operatingModel = "education";

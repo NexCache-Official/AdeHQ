@@ -195,6 +195,13 @@ function resolveForcedPackKey(blob: string): string | null {
   if (/\bmarketing agency\b/.test(blob)) return "marketing_agency";
   if (/\brecruitment\b/.test(blob)) return "recruitment_agency";
   if (/\breal estate agency\b/.test(blob)) return "real_estate_agency";
+  if (
+    /\b(vacation.?rental|short.?term rental|airbnb|property manager|property management)\b/.test(
+      blob,
+    )
+  ) {
+    return "property_management";
+  }
   // Accounting / tax / bookkeeping before generic consultancy.
   if (/\b(accounting|bookkeeping|tax firm|tax prep|cpa)\b/.test(blob)) return "accounting_firm";
   if (/\b(law firm|legal services|lawyer)\b/.test(blob)) return "legal_services";
