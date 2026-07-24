@@ -28,10 +28,19 @@ role briefs / candidates; WH bands felt fake; diagnose felt hung.
 - Accounting → Bookkeeping, Client Ops, EA, Proposals & Pipeline (no eng).
 - Vacation-rental property manager → `property_management` seats (ops/support/books).
 
-**Live browser E2E:** Blocked in this cloud VM — no `.env.local` /
-`SUPABASE_SECRET_KEY` / `SILICONFLOW_API_KEY`. Compose/provision cannot persist
-without the secret client. Recommend re-run on Vercel Preview for the PR or
-local `.env.local` with the provided test account.
+**Live browser E2E:**
+- **Production (`app.adehq.com`)** with `shubhamzinbox@gmail.com`: full architect
+  path for the accounting prompt → Team Reveal + Studio seats were
+  Bookkeeping / Client Ops / EA / Customer Support (not software). Diagnosis
+  quality good. Clarify had no Mix(specify) on this path; AdeOrb not on prod.
+- **Localhost real login:** blocked — Supabase `"Unregistered API key"` with
+  baked-in publishable key; no `.env.local`. Demo mode cannot open `/hire/team`
+  (email gate requires real session). Vercel Preview for the PR is
+  SSO-protected.
+- **Branch value vs prod today:** hardens the intermittent LLM→`software_house`
+  failure mode; accounting pack swaps CX for Proposals & Pipeline; AdeOrb,
+  Mix free-text, clarify Back, role-brief Team Reveal, seat include/exclude,
+  optional candidates, honest WH labels.
 
 **Console noise:** `contentscript.js` MaxListeners / ObjectMultiplex — browser
 extension, not AdeHQ.
